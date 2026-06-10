@@ -15,6 +15,7 @@ export interface Agent {
   llm_api_key: string;
   llm_model: string;
   engine: string;
+  realtime_model: string;
 }
 
 export interface Business {

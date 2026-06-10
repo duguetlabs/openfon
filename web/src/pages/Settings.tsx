@@ -232,6 +232,24 @@ export default function Settings() {
                 </span>
               </label>
             </div>
+            {agent.engine === 'realtime' && (
+              <label className="mt-3 block">
+                <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.12em] text-ink-soft">Realtime model</span>
+                <select
+                  className="w-full rounded-xl border border-line bg-white/70 px-4 py-2.5 text-sm"
+                  value={agent.realtime_model}
+                  onChange={(e) => setA({ realtime_model: e.target.value })}
+                >
+                  <option value="">Instance default</option>
+                  <option value="kataleptic-realtime-hd">kataleptic-realtime-hd — best noise filtering, HD voices, ~1 s</option>
+                  <option value="kataleptic-realtime">kataleptic-realtime — fastest (~0.4 s) and cheapest; weaker in noisy rooms</option>
+                  <option value="gpt-realtime-2">gpt-realtime-2 — native speech-to-speech; caller transcripts missing from call log</option>
+                </select>
+                <span className="mt-1 block text-xs text-ink-soft">
+                  Takes effect on the next call — handy for comparing tiers back-to-back.
+                </span>
+              </label>
+            )}
           </div>
           <Field label="Base URL" value={agent.llm_base_url} onChange={(e) => setA({ llm_base_url: e.target.value })} placeholder="https://api.kataleptic.com/v1" />
           <div className="grid gap-4 sm:grid-cols-2">

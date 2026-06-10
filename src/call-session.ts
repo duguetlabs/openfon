@@ -291,7 +291,9 @@ export class CallSession implements DurableObject {
 
   private startRealtime(systemPrompt: string, greeting: string): Promise<boolean> {
     const key = this.env.REALTIME_API_KEY || this.env.DEFAULT_LLM_API_KEY || '';
-    const url = `${this.env.REALTIME_BASE_URL}?model=${encodeURIComponent(this.env.REALTIME_MODEL)}&token=${encodeURIComponent(key)}`;
+    const model = this.settings?.realtime_model || this.env.REALTIME_MODEL;
+    console.log(`call ${this.callId}: realtime engine, model ${model}`);
+    const url = `${this.env.REALTIME_BASE_URL}?model=${encodeURIComponent(model)}&token=${encodeURIComponent(key)}`;
     return new Promise<boolean>((resolve) => {
       let settled = false;
       const settle = (ok: boolean) => {

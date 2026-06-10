@@ -49,6 +49,7 @@ export interface AgentSettings {
   llm_api_key: string;
   llm_model: string;
   engine: string; // 'pipeline' | 'realtime'
+  realtime_model: string; // empty = instance default (REALTIME_MODEL)
 }
 
 export interface LlmConfig {
