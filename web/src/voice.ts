@@ -254,7 +254,7 @@ export class VoiceCall {
       let sum = 0;
       for (let i = 0; i < input.length; i += 8) sum += input[i] * input[i];
       this.emit({ type: 'level', value: Math.min(1, Math.sqrt(sum / (input.length / 8)) * 18) });
-      this.ws.send(downsampleToPcm16(input, fromRate, 16000).buffer);
+      this.ws.send(downsampleToPcm16(input, fromRate, 24000).buffer);
     };
   }
 

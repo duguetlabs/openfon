@@ -280,11 +280,17 @@ export class CallSession implements DurableObject {
             instructions: `${systemPrompt}\n\nYou already opened the call by saying: "${greeting}". Continue the conversation from there.`,
             audio: {
               input: {
-                format: { type: 'audio/pcm', rate: 16000 },
+                // 24 kHz: the lowest rate every tier accepts (native S2S models reject 16 kHz)
+                format: { type: 'audio/pcm', rate: 24000 },
                 turn_detection: { type: 'server_vad', silence_duration_ms: 550 },
                 transcription: { model: this.env.DEFAULT_STT_MODEL },
               },
-              output: { format: { type: 'audio/pcm', rate: 24000 } },
+              // Only pin a voice when the business configured one — otherwise the
+              // engine's voice follows the caller's language automatically.
+              output: {
+                format: { type: 'audio/pcm', rate: 24000 },
+                ...(this.settings?.voice ? { voice: this.settings.voice } : {}),
+              },
             },
           },
         });
