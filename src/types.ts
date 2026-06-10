@@ -15,6 +15,10 @@ export interface Env {
   AZURE_SPEECH_KEY?: string;
   AZURE_SPEECH_REGION: string;
   DEFAULT_TTS_VOICE: string;
+  // Realtime engine (any OpenAI Realtime-compatible WebSocket endpoint)
+  REALTIME_BASE_URL: string;
+  REALTIME_MODEL: string;
+  REALTIME_API_KEY?: string; // falls back to DEFAULT_LLM_API_KEY
 }
 
 export interface Business {
@@ -44,6 +48,7 @@ export interface AgentSettings {
   llm_base_url: string;
   llm_api_key: string;
   llm_model: string;
+  engine: string; // 'pipeline' | 'realtime'
 }
 
 export interface LlmConfig {

@@ -32,6 +32,9 @@
     "DEFAULT_STT_MODEL": "whisper-large-v3-turbo",
     "DEFAULT_TTS_PROVIDER": "azure",
     "AZURE_SPEECH_REGION": "westeurope",
-    "DEFAULT_TTS_VOICE": "en-US-JennyNeural"
+    "DEFAULT_TTS_VOICE": "en-US-JennyNeural",
+    "REALTIME_BASE_URL": "wss://api.kataleptic.com/v1/realtime",
+    // Any Kataleptic chat model id works here; the cascade keeps realtime latency.
+    "REALTIME_MODEL": "llama-3.3-70b"
   }
 }

@@ -96,9 +96,10 @@ export function voiceForReply(env: Env, lang: string, defaultLang: string, custo
   return SUPPORTED_LANGUAGES[lang]?.voice ?? env.DEFAULT_TTS_VOICE;
 }
 
-// Azure Speech TTS via REST. Returns MP3 bytes, or null when TTS is configured
-// for browser mode (client falls back to speechSynthesis).
-export async function synthesize(env: Env, text: string, voice: string): Promise<ArrayBuffer | null> {
+// Azure Speech TTS via REST. Returns audio bytes (MP3 for the pipeline player,
+// raw PCM16@24kHz for the realtime stream), or null when TTS is configured for
+// browser mode (client falls back to speechSynthesis).
+export async function synthesize(env: Env, text: string, voice: string, format: 'mp3' | 'pcm24' = 'mp3'): Promise<ArrayBuffer | null> {
   if (env.DEFAULT_TTS_PROVIDER !== 'azure' || !env.AZURE_SPEECH_KEY) return null;
   const v = voice || env.DEFAULT_TTS_VOICE;
   const lang = v.split('-').slice(0, 2).join('-') || 'en-US';
@@ -108,7 +109,7 @@ export async function synthesize(env: Env, text: string, voice: string): Promise
     headers: {
       'Ocp-Apim-Subscription-Key': env.AZURE_SPEECH_KEY,
       'Content-Type': 'application/ssml+xml',
-      'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
+      'X-Microsoft-OutputFormat': format === 'pcm24' ? 'raw-24khz-16bit-mono-pcm' : 'audio-24khz-48kbitrate-mono-mp3',
       'User-Agent': 'openfon',
     },
     body: ssml,

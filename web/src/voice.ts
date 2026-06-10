@@ -18,6 +18,17 @@ const SILENCE_MS = 900; // stop the utterance after this much silence
 const MIN_UTTERANCE_MS = 350; // ignore blips shorter than this
 const MAX_UTTERANCE_MS = 12_000; // force-stop runaway recordings (constant background noise)
 
+function downsampleToPcm16(input: Float32Array, fromRate: number, toRate: number): Int16Array {
+  const ratio = fromRate / toRate;
+  const outLen = Math.floor(input.length / ratio);
+  const out = new Int16Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const v = input[Math.floor(i * ratio)];
+    out[i] = Math.max(-32768, Math.min(32767, Math.round(v * 32767)));
+  }
+  return out;
+}
+
 export class VoiceCall {
   private ws: WebSocket | null = null;
   private stream: MediaStream | null = null;
@@ -35,6 +46,13 @@ export class VoiceCall {
   private player: HTMLAudioElement | null = null;
   private listeners: Listener[] = [];
   ended = false;
+  // realtime engine mode: continuous streaming, server-side VAD, barge-in
+  private mode: 'pipeline' | 'realtime' = 'pipeline';
+  private captureCtx: AudioContext | null = null;
+  private processor: ScriptProcessorNode | null = null;
+  private playCtx: AudioContext | null = null;
+  private nextPlayTime = 0;
+  private liveSources = new Set<AudioBufferSourceNode>();
 
   on(fn: Listener): void {
     this.listeners.push(fn);
@@ -76,17 +94,38 @@ export class VoiceCall {
     };
     ws.onmessage = (ev) => {
       if (typeof ev.data !== 'string') {
-        this.playAudio(ev.data as ArrayBuffer);
+        if (this.mode === 'realtime') this.playPcm(ev.data as ArrayBuffer);
+        else this.playAudio(ev.data as ArrayBuffer);
         return;
       }
-      const msg = JSON.parse(ev.data) as { type: string; text?: string; greeting?: string; ttsMode?: string; message?: string };
+      const msg = JSON.parse(ev.data) as {
+        type: string;
+        text?: string;
+        greeting?: string;
+        ttsMode?: string;
+        message?: string;
+        mode?: string;
+        who?: 'caller' | 'agent' | 'none';
+      };
       switch (msg.type) {
         case 'ready':
+          this.mode = msg.mode === 'realtime' ? 'realtime' : 'pipeline';
           this.ttsMode = msg.ttsMode === 'server' ? 'server' : 'browser';
           this.emit({ type: 'status', status: 'live' });
-          this.emit({ type: 'agent_text', text: msg.greeting ?? '' });
-          if (this.ttsMode === 'browser' && msg.greeting) this.speakLocally(msg.greeting);
-          if (this.stream) this.startVad();
+          if (msg.greeting) {
+            this.emit({ type: 'agent_text', text: msg.greeting });
+            if (this.ttsMode === 'browser') this.speakLocally(msg.greeting);
+          }
+          if (this.stream) {
+            if (this.mode === 'realtime') this.startRealtimeCapture();
+            else this.startVad();
+          }
+          break;
+        case 'flush': // barge-in: stop agent playback immediately
+          this.flushPlayback();
+          break;
+        case 'speaking':
+          if (msg.who) this.emit({ type: 'speaking', who: msg.who });
           break;
         case 'transcript':
           this.emit({ type: 'transcript', text: msg.text ?? '' });
@@ -196,6 +235,65 @@ export class VoiceCall {
     this.ws.send(await blob.arrayBuffer());
   }
 
+  // ---- realtime engine: continuous capture + streamed PCM playback ----
+
+  private startRealtimeCapture(): void {
+    if (!this.stream) return;
+    this.captureCtx = new AudioContext();
+    const src = this.captureCtx.createMediaStreamSource(this.stream);
+    this.processor = this.captureCtx.createScriptProcessor(2048, 1, 1);
+    const mute = this.captureCtx.createGain();
+    mute.gain.value = 0; // processor must reach destination to run, but stay silent
+    src.connect(this.processor);
+    this.processor.connect(mute);
+    mute.connect(this.captureCtx.destination);
+    const fromRate = this.captureCtx.sampleRate;
+    this.processor.onaudioprocess = (e) => {
+      if (this.ended || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+      const input = e.inputBuffer.getChannelData(0);
+      let sum = 0;
+      for (let i = 0; i < input.length; i += 8) sum += input[i] * input[i];
+      this.emit({ type: 'level', value: Math.min(1, Math.sqrt(sum / (input.length / 8)) * 18) });
+      this.ws.send(downsampleToPcm16(input, fromRate, 16000).buffer);
+    };
+  }
+
+  private playPcm(buf: ArrayBuffer): void {
+    if (buf.byteLength < 2) return;
+    if (!this.playCtx) this.playCtx = new AudioContext({ sampleRate: 24000 });
+    const ctx = this.playCtx;
+    void ctx.resume();
+    const i16 = new Int16Array(buf.byteLength % 2 === 0 ? buf : buf.slice(0, buf.byteLength - 1));
+    const audio = ctx.createBuffer(1, i16.length, 24000);
+    const ch = audio.getChannelData(0);
+    for (let i = 0; i < i16.length; i++) ch[i] = i16[i] / 32768;
+    const node = ctx.createBufferSource();
+    node.buffer = audio;
+    node.connect(ctx.destination);
+    const startAt = Math.max(ctx.currentTime + 0.04, this.nextPlayTime);
+    node.start(startAt);
+    this.nextPlayTime = startAt + audio.duration;
+    if (this.liveSources.size === 0) this.emit({ type: 'speaking', who: 'agent' });
+    this.liveSources.add(node);
+    node.onended = () => {
+      this.liveSources.delete(node);
+      if (this.liveSources.size === 0) this.emit({ type: 'speaking', who: 'none' });
+    };
+  }
+
+  private flushPlayback(): void {
+    for (const node of this.liveSources) {
+      node.onended = null;
+      try {
+        node.stop();
+      } catch {
+        /* already stopped */
+      }
+    }
+    this.liveSources.clear();
+    this.nextPlayTime = 0;
+  }
+
   // ---- agent audio playback ----
   private playAudio(buf: ArrayBuffer): void {
     this.agentSpeaking = true;
@@ -232,6 +330,10 @@ export class VoiceCall {
     }
     this.stream?.getTracks().forEach((t) => t.stop());
     void this.audioCtx?.close();
+    this.flushPlayback();
+    this.processor?.disconnect();
+    void this.captureCtx?.close();
+    void this.playCtx?.close();
     this.player?.pause();
     speechSynthesis.cancel();
     try {

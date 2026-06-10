@@ -203,6 +203,36 @@ export default function Settings() {
           AI provider
         </SectionTitle>
         <Card className="space-y-4">
+          <div>
+            <span className="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-ink-soft">Voice engine</span>
+            <div className="space-y-2">
+              <label className="flex items-start gap-2.5 text-sm">
+                <input
+                  type="radio"
+                  className="mt-1"
+                  checked={agent.engine !== 'realtime'}
+                  onChange={() => setA({ engine: 'pipeline' })}
+                />
+                <span>
+                  <strong>Pipeline</strong> <span className="text-ink-soft">— transcribe → think → speak. Works with any provider, cheapest, ~2–4 s per reply.</span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2.5 text-sm">
+                <input
+                  type="radio"
+                  className="mt-1"
+                  checked={agent.engine === 'realtime'}
+                  onChange={() => setA({ engine: 'realtime' })}
+                />
+                <span>
+                  <strong>Realtime</strong>{' '}
+                  <span className="text-ink-soft">
+                    — streams audio both ways, sub-second replies, callers can interrupt the agent. Needs a realtime-capable provider; falls back to Pipeline if unavailable.
+                  </span>
+                </span>
+              </label>
+            </div>
+          </div>
           <Field label="Base URL" value={agent.llm_base_url} onChange={(e) => setA({ llm_base_url: e.target.value })} placeholder="https://api.kataleptic.com/v1" />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Model" value={agent.llm_model} onChange={(e) => setA({ llm_model: e.target.value })} placeholder="llama-3.3-70b" />

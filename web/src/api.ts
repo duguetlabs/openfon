@@ -14,6 +14,7 @@ export interface Agent {
   llm_base_url: string;
   llm_api_key: string;
   llm_model: string;
+  engine: string;
 }
 
 export interface Business {

@@ -16,6 +16,34 @@ import type { Env, Business, AgentSettings, ChatMessage } from './types';
 import { buildSystemPrompt, defaultGreeting, SUMMARY_PROMPT } from './prompt';
 import { chatComplete, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
 
+// WebSocket binary payloads vary by runtime: ArrayBuffer, ArrayBufferView, or Blob.
+async function toArrayBuffer(data: unknown): Promise<ArrayBuffer> {
+  if (data instanceof ArrayBuffer) return data;
+  if (ArrayBuffer.isView(data)) {
+    const v = data as ArrayBufferView;
+    return v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength) as ArrayBuffer;
+  }
+  if (data && typeof (data as Blob).arrayBuffer === 'function') return (data as Blob).arrayBuffer();
+  throw new Error('unsupported binary frame type');
+}
+
+function b64encode(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let s = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    s += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(s);
+}
+
+function b64decode(s: string): ArrayBuffer {
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out.buffer;
+}
+
 interface SummaryResult {
   summary?: string | null;
   intent?: string | null;
@@ -65,6 +93,8 @@ export class CallSession implements DurableObject {
   private busy = false;
   private ended = false;
   private lang = 'en'; // follows the caller; starts as the business default
+  private mode: 'pipeline' | 'realtime' = 'pipeline';
+  private upstream: WebSocket | null = null; // realtime engine connection
 
   constructor(
     private state: DurableObjectState,
@@ -85,6 +115,7 @@ export class CallSession implements DurableObject {
       this.onMessage(ev).catch((err) => this.sendError(`${err}`));
     });
     server.addEventListener('close', () => {
+      this.closeUpstream();
       this.finalize().catch((err) => console.error('finalize failed', err));
     });
     return new Response(null, { status: 101, webSocket: client });
@@ -120,7 +151,12 @@ export class CallSession implements DurableObject {
   private async onMessage(ev: MessageEvent): Promise<void> {
     if (this.ended) return;
     if (typeof ev.data !== 'string') {
-      await this.handleUtterance(ev.data as ArrayBuffer);
+      const audio = await toArrayBuffer(ev.data);
+      if (this.mode === 'realtime') {
+        this.sendUpstream({ type: 'input_audio_buffer.append', audio: b64encode(audio) });
+      } else {
+        await this.handleUtterance(audio);
+      }
       return;
     }
     const msg = JSON.parse(ev.data) as { type: string; text?: string; contentType?: string };
@@ -129,10 +165,14 @@ export class CallSession implements DurableObject {
         await this.handleStart();
         break;
       case 'text':
-        if (msg.text?.trim()) await this.respond(msg.text.trim());
+        if (msg.text?.trim()) {
+          if (this.mode === 'realtime') this.sendCallerText(msg.text.trim());
+          else await this.respond(msg.text.trim());
+        }
         break;
       case 'hangup':
         this.send({ type: 'ended' });
+        this.closeUpstream();
         this.ws?.close(1000, 'hangup');
         await this.finalize();
         break;
@@ -147,14 +187,178 @@ export class CallSession implements DurableObject {
     await this.loadCall();
     this.lang = this.settings!.language in SUPPORTED_LANGUAGES ? this.settings!.language : 'en';
     const greeting = defaultGreeting(this.biz!, this.settings!);
+    const systemPrompt = buildSystemPrompt(this.biz!, this.settings!, new Date());
+
+    if (this.settings!.engine === 'realtime') {
+      const ok = await this.startRealtime(systemPrompt, greeting).catch((err) => {
+        console.error('realtime engine failed, falling back to pipeline:', err);
+        return false;
+      });
+      if (ok) {
+        this.mode = 'realtime';
+        this.history = [
+          { role: 'system', content: systemPrompt },
+          { role: 'assistant', content: greeting },
+        ];
+        const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
+        this.send({ type: 'ready', mode: 'realtime', ttsMode, greeting });
+        await this.saveTurn('agent', greeting);
+        // The greeting is ours, not the model's: synthesize it deterministically
+        // and stream it as PCM so it matches the realtime audio path.
+        const voice = voiceForReply(this.env, this.lang, this.settings!.language, this.settings!.voice || '');
+        const audio = await synthesize(this.env, greeting, voice, 'pcm24');
+        if (audio && this.ws) {
+          try {
+            this.ws.send(audio);
+          } catch {
+            /* caller gone */
+          }
+        }
+        return;
+      }
+    }
+
+    this.mode = 'pipeline';
     this.history = [
-      { role: 'system', content: buildSystemPrompt(this.biz!, this.settings!, new Date()) },
+      { role: 'system', content: systemPrompt },
       { role: 'assistant', content: greeting },
     ];
     const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-    this.send({ type: 'ready', ttsMode, greeting });
+    this.send({ type: 'ready', mode: 'pipeline', ttsMode, greeting });
     await this.saveTurn('agent', greeting);
     await this.speak(greeting);
+  }
+
+  // ---- realtime engine bridge (OpenAI Realtime wire protocol) ----
+
+  private sendUpstream(obj: unknown): void {
+    try {
+      this.upstream?.send(JSON.stringify(obj));
+    } catch {
+      /* upstream gone */
+    }
+  }
+
+  private closeUpstream(): void {
+    try {
+      this.upstream?.close(1000, 'call ended');
+    } catch {
+      /* noop */
+    }
+    this.upstream = null;
+  }
+
+  private startRealtime(systemPrompt: string, greeting: string): Promise<boolean> {
+    const key = this.env.REALTIME_API_KEY || this.env.DEFAULT_LLM_API_KEY || '';
+    const url = `${this.env.REALTIME_BASE_URL}?model=${encodeURIComponent(this.env.REALTIME_MODEL)}&token=${encodeURIComponent(key)}`;
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const settle = (ok: boolean) => {
+        if (!settled) {
+          settled = true;
+          resolve(ok);
+        }
+      };
+      const timer = setTimeout(() => settle(false), 5000);
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(url);
+      } catch (err) {
+        clearTimeout(timer);
+        settle(false);
+        return;
+      }
+      this.upstream = ws;
+      ws.addEventListener('open', () => {
+        clearTimeout(timer);
+        this.sendUpstream({
+          type: 'session.update',
+          session: {
+            type: 'realtime',
+            // Generated first responses on an empty conversation hallucinate;
+            // we speak the greeting ourselves and seed it as already-said.
+            instructions: `${systemPrompt}\n\nYou already opened the call by saying: "${greeting}". Continue the conversation from there.`,
+            audio: {
+              input: {
+                format: { type: 'audio/pcm', rate: 16000 },
+                turn_detection: { type: 'server_vad', silence_duration_ms: 550 },
+                transcription: { model: this.env.DEFAULT_STT_MODEL },
+              },
+              output: { format: { type: 'audio/pcm', rate: 24000 } },
+            },
+          },
+        });
+        settle(true);
+      });
+      ws.addEventListener('message', (ev) => {
+        this.onUpstreamMessage(ev).catch((err) => console.error('upstream handler error', err));
+      });
+      ws.addEventListener('error', () => {
+        clearTimeout(timer);
+        settle(false);
+        if (this.mode === 'realtime' && !this.ended) this.sendError('Voice engine connection lost');
+      });
+      ws.addEventListener('close', () => {
+        clearTimeout(timer);
+        settle(false);
+        if (this.mode === 'realtime' && !this.ended) {
+          this.send({ type: 'ended' });
+          this.ws?.close(1000, 'engine closed');
+          void this.finalize();
+        }
+      });
+    });
+  }
+
+  private async onUpstreamMessage(ev: MessageEvent): Promise<void> {
+    if (typeof ev.data !== 'string') return;
+    const msg = JSON.parse(ev.data) as { type: string; delta?: string; transcript?: string; error?: { message?: string } };
+    switch (msg.type) {
+      case 'response.output_audio.delta':
+        if (msg.delta && this.ws) {
+          try {
+            this.ws.send(b64decode(msg.delta));
+          } catch {
+            /* caller gone */
+          }
+        }
+        break;
+      case 'input_audio_buffer.speech_started':
+        // Barge-in: the server cancels its in-flight response; we flush caller playback.
+        this.send({ type: 'flush' });
+        this.send({ type: 'speaking', who: 'caller' });
+        break;
+      case 'conversation.item.input_audio_transcription.completed':
+        if (msg.transcript?.trim()) {
+          const text = msg.transcript.trim();
+          this.send({ type: 'transcript', text });
+          this.history.push({ role: 'user', content: text });
+          await this.saveTurn('caller', text);
+        }
+        break;
+      case 'response.output_audio_transcript.done':
+        if (msg.transcript?.trim()) {
+          const text = msg.transcript.trim();
+          this.send({ type: 'agent_text', text });
+          this.history.push({ role: 'assistant', content: text });
+          await this.saveTurn('agent', text);
+        }
+        break;
+      case 'error':
+        console.error('realtime engine error:', JSON.stringify(msg.error ?? msg).slice(0, 300));
+        break;
+    }
+  }
+
+  private sendCallerText(text: string): void {
+    this.sendUpstream({
+      type: 'conversation.item.create',
+      item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] },
+    });
+    this.sendUpstream({ type: 'response.create' });
+    this.send({ type: 'transcript', text });
+    this.history.push({ role: 'user', content: text });
+    void this.saveTurn('caller', text);
   }
 
   private async handleUtterance(audio: ArrayBuffer): Promise<void> {

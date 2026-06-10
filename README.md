@@ -21,6 +21,7 @@ Transcripts, summaries, and messages land in your dashboard (D1/SQLite). When a 
 ## Features
 
 - 🗣 **Browser voice calls** — WebSocket + voice-activity detection, live captions, text fallback for callers without a mic
+- ⚡ **Two voice engines** — the default *Pipeline* (STT → LLM → TTS, works with any provider) or opt-in *Realtime* (continuous audio streaming to an OpenAI Realtime-compatible endpoint: sub-second replies and callers can interrupt the agent mid-sentence); switchable per business in Settings
 - 🧠 **Bring your own AI** — defaults to [Kataleptic](https://api.kataleptic.com), works with OpenAI, Groq, Ollama, vLLM, or anything OpenAI-compatible; configurable per business from the dashboard
 - 📋 **Grounded answers** — the agent only answers from your business facts (hours, services, prices, FAQ); unknown questions become messages
 - 📞 **Call log** — transcripts, summaries, intent badges, messages with caller name & phone
@@ -69,6 +70,9 @@ Defaults live in `wrangler.jsonc` under `vars`; secrets via `wrangler secret put
 | `AZURE_SPEECH_KEY` | *(secret)* Azure Speech key (only for `azure` TTS) | — |
 | `AZURE_SPEECH_REGION` | Azure Speech region | `westeurope` |
 | `DEFAULT_TTS_VOICE` | Azure neural voice | `en-US-JennyNeural` |
+| `REALTIME_BASE_URL` | OpenAI Realtime-compatible WebSocket endpoint (realtime engine) | `wss://api.kataleptic.com/v1/realtime` |
+| `REALTIME_MODEL` | Model/tier for the realtime engine | `llama-3.3-70b` |
+| `REALTIME_API_KEY` | *(secret)* key for the realtime endpoint; falls back to `DEFAULT_LLM_API_KEY` | — |
 
 Each business can additionally override the LLM (base URL, model, API key) from **Settings → AI provider** in the dashboard.
 
