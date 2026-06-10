@@ -14,7 +14,7 @@
 //   server JSON  {type:"thinking"} | {type:"error", message} | {type:"ended"}
 import type { Env, Business, AgentSettings, ChatMessage } from './types';
 import { buildSystemPrompt, defaultGreeting, SUMMARY_PROMPT } from './prompt';
-import { chatComplete, resolveLlm, synthesize, transcribe } from './providers';
+import { chatComplete, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
 
 interface SummaryResult {
   summary?: string | null;
@@ -64,6 +64,7 @@ export class CallSession implements DurableObject {
   private history: ChatMessage[] = [];
   private busy = false;
   private ended = false;
+  private lang = 'en'; // follows the caller; starts as the business default
 
   constructor(
     private state: DurableObjectState,
@@ -144,6 +145,7 @@ export class CallSession implements DurableObject {
 
   private async handleStart(): Promise<void> {
     await this.loadCall();
+    this.lang = this.settings!.language in SUPPORTED_LANGUAGES ? this.settings!.language : 'en';
     const greeting = defaultGreeting(this.biz!, this.settings!);
     this.history = [
       { role: 'system', content: buildSystemPrompt(this.biz!, this.settings!, new Date()) },
@@ -160,11 +162,12 @@ export class CallSession implements DurableObject {
     this.busy = true;
     try {
       this.send({ type: 'thinking' });
-      const text = await transcribe(this.env, audio, this.pendingContentType, this.settings!.language || undefined);
+      const { text, language } = await transcribe(this.env, audio, this.pendingContentType);
       if (!text) {
         this.busy = false;
         return;
       }
+      if (language) this.lang = language; // follow the caller's language
       this.send({ type: 'transcript', text });
       await this.respondInner(text);
     } finally {
@@ -195,7 +198,8 @@ export class CallSession implements DurableObject {
   }
 
   private async speak(text: string): Promise<void> {
-    const audio = await synthesize(this.env, text, this.settings?.voice || '');
+    const voice = voiceForReply(this.env, this.lang, this.settings?.language ?? 'en', this.settings?.voice || '');
+    const audio = await synthesize(this.env, text, voice);
     if (audio && this.ws) {
       try {
         this.ws.send(audio);
@@ -233,7 +237,10 @@ export class CallSession implements DurableObject {
         const raw = await chatComplete(
           llm,
           [
-            { role: 'system', content: SUMMARY_PROMPT },
+            {
+              role: 'system',
+              content: `${SUMMARY_PROMPT}\nWrite the "summary" and "message" values in ${SUPPORTED_LANGUAGES[this.settings?.language ?? 'en']?.name ?? 'English'}.`,
+            },
             { role: 'user', content: transcript },
           ],
           { maxTokens: 300, temperature: 0 }

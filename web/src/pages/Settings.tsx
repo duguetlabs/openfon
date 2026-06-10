@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type Agent, type Business } from '../api';
 import { useSession } from '../App';
-import { Button, Card, Field, SectionTitle, TextArea } from '../ui';
+import { Button, Card, Field, SectionTitle, TextArea, LANGUAGES } from '../ui';
 import { ListEditor } from './Onboarding';
 
 interface Hour {
@@ -169,10 +169,11 @@ export default function Settings() {
                 value={agent.language}
                 onChange={(e) => setA({ language: e.target.value })}
               >
-                <option value="en">English</option>
-                <option value="de">Deutsch</option>
-                <option value="es">Español</option>
-                <option value="fr">Français</option>
+                {LANGUAGES.map(([code, name]) => (
+                  <option key={code} value={code}>
+                    {name}
+                  </option>
+                ))}
               </select>
             </label>
           </div>
@@ -182,7 +183,7 @@ export default function Settings() {
             label="Voice (Azure TTS)"
             value={agent.voice}
             onChange={(e) => setA({ voice: e.target.value })}
-            hint="e.g. en-US-JennyNeural, de-AT-IngridNeural. Empty = instance default."
+            hint="Applies to your default language only — other languages use a matching neural voice automatically. e.g. en-US-JennyNeural, de-AT-IngridNeural."
           />
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={!!agent.take_messages} onChange={(e) => setA({ take_messages: e.target.checked ? 1 : 0 })} />

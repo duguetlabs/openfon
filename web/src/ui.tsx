@@ -90,6 +90,19 @@ export function Spinner() {
   );
 }
 
+export const LANGUAGES: [string, string][] = [
+  ['en', 'English'],
+  ['de', 'Deutsch'],
+  ['fr', 'Français'],
+  ['es', 'Español'],
+  ['nl', 'Nederlands'],
+  ['sv', 'Svenska'],
+  ['da', 'Dansk'],
+  ['it', 'Italiano'],
+  ['fi', 'Suomi'],
+  ['ru', 'Русский'],
+];
+
 export function fmtDuration(s: number | null): string {
   if (s == null) return '—';
   const m = Math.floor(s / 60);

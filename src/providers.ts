@@ -35,12 +35,47 @@ export async function chatComplete(
   return data.choices[0]?.message?.content ?? '';
 }
 
-export async function transcribe(env: Env, audio: ArrayBuffer, contentType: string, language?: string): Promise<string> {
+// Languages OpenFon speaks. Keys are ISO 639-1; values are Azure neural voices.
+export const SUPPORTED_LANGUAGES: Record<string, { name: string; voice: string }> = {
+  en: { name: 'English', voice: 'en-US-JennyNeural' },
+  de: { name: 'German', voice: 'de-DE-KatjaNeural' },
+  fr: { name: 'French', voice: 'fr-FR-DeniseNeural' },
+  es: { name: 'Spanish', voice: 'es-ES-ElviraNeural' },
+  nl: { name: 'Dutch', voice: 'nl-NL-FennaNeural' },
+  sv: { name: 'Swedish', voice: 'sv-SE-SofieNeural' },
+  da: { name: 'Danish', voice: 'da-DK-ChristelNeural' },
+  it: { name: 'Italian', voice: 'it-IT-ElsaNeural' },
+  fi: { name: 'Finnish', voice: 'fi-FI-NooraNeural' },
+  ru: { name: 'Russian', voice: 'ru-RU-SvetlanaNeural' },
+};
+
+// STT backends report language as ISO codes ("de") or names ("german").
+const LANG_ALIASES: Record<string, string> = {
+  english: 'en', german: 'de', french: 'fr', spanish: 'es', dutch: 'nl',
+  swedish: 'sv', danish: 'da', italian: 'it', finnish: 'fi', russian: 'ru',
+};
+
+export function normalizeLang(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  const l = raw.toLowerCase().trim();
+  if (l in SUPPORTED_LANGUAGES) return l;
+  if (l in LANG_ALIASES) return LANG_ALIASES[l];
+  const short = l.slice(0, 2);
+  return short in SUPPORTED_LANGUAGES ? short : null;
+}
+
+export interface Transcription {
+  text: string;
+  language: string | null;
+}
+
+// Language is auto-detected per utterance so callers can speak any supported
+// language regardless of the business's configured default.
+export async function transcribe(env: Env, audio: ArrayBuffer, contentType: string): Promise<Transcription> {
   const form = new FormData();
   const ext = contentType.includes('mp4') ? 'mp4' : contentType.includes('wav') ? 'wav' : 'webm';
   form.append('file', new Blob([audio], { type: contentType }), `utterance.${ext}`);
   form.append('model', env.DEFAULT_STT_MODEL);
-  if (language) form.append('language', language);
   const res = await fetch(`${env.DEFAULT_STT_BASE_URL}/audio/transcriptions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.DEFAULT_STT_API_KEY || ''}` },
@@ -50,8 +85,15 @@ export async function transcribe(env: Env, audio: ArrayBuffer, contentType: stri
     const body = await res.text();
     throw new Error(`STT error ${res.status}: ${body.slice(0, 300)}`);
   }
-  const data = (await res.json()) as { text: string };
-  return (data.text ?? '').trim();
+  const data = (await res.json()) as { text: string; language?: string };
+  return { text: (data.text ?? '').trim(), language: normalizeLang(data.language) };
+}
+
+// Pick the voice for a reply: the business's custom voice only applies to its
+// own default language; replies in other languages get the matching neural voice.
+export function voiceForReply(env: Env, lang: string, defaultLang: string, customVoice: string): string {
+  if (customVoice && lang === defaultLang) return customVoice;
+  return SUPPORTED_LANGUAGES[lang]?.voice ?? env.DEFAULT_TTS_VOICE;
 }
 
 // Azure Speech TTS via REST. Returns MP3 bytes, or null when TTS is configured

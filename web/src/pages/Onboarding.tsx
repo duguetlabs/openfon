@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api';
 import { useSession } from '../App';
-import { Button, Card, Field, Logo, TextArea } from '../ui';
+import { Button, Card, Field, Logo, TextArea, LANGUAGES } from '../ui';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -202,10 +202,11 @@ export default function Onboarding() {
                     value={language}
                     onChange={(e) => setLanguage(e.target.value)}
                   >
-                    <option value="en">English</option>
-                    <option value="de">Deutsch</option>
-                    <option value="es">Español</option>
-                    <option value="fr">Français</option>
+                    {LANGUAGES.map(([code, name]) => (
+                      <option key={code} value={code}>
+                        {name}
+                      </option>
+                    ))}
                   </select>
                 </label>
               </div>
