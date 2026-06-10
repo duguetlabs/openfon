@@ -1,0 +1,37 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "openfon",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-01",
+  "assets": {
+    "directory": "dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/ws/*"]
+  },
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "openfon",
+      // Self-hosters: replace with the id from `npx wrangler d1 create openfon`
+      "database_id": "c45afdaa-c04e-4401-af5c-801bb79fc88c",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "CALL_SESSION", "class_name": "CallSession" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CallSession"] }],
+  "vars": {
+    // Non-secret defaults. Override secrets with `wrangler secret put`:
+    //   DEFAULT_LLM_API_KEY, DEFAULT_STT_API_KEY, AZURE_SPEECH_KEY
+    "DEFAULT_LLM_BASE_URL": "https://api.kataleptic.com/v1",
+    "DEFAULT_LLM_MODEL": "llama-3.3-70b",
+    "DEFAULT_STT_BASE_URL": "https://api.kataleptic.com/v1",
+    "DEFAULT_STT_MODEL": "whisper-large-v3-turbo",
+    "DEFAULT_TTS_PROVIDER": "azure",
+    "AZURE_SPEECH_REGION": "westeurope",
+    "DEFAULT_TTS_VOICE": "en-US-JennyNeural"
+  }
+}

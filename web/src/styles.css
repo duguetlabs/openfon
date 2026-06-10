@@ -1,0 +1,119 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-paper: #faf6ef;
+  --color-paper-2: #f3ecdd;
+  --color-ink: #1c2b27;
+  --color-ink-soft: #51635c;
+  --color-pine: #1f4d3a;
+  --color-pine-deep: #14352a;
+  --color-pine-night: #0d241c;
+  --color-ring: #e8603c;
+  --color-ring-soft: #f7d9cf;
+  --color-brass: #c99b2f;
+  --color-line: #e3dac6;
+  --color-ok: #2e7d4f;
+
+  --font-display: 'Fraunces', 'Georgia', serif;
+  --font-sans: 'Schibsted Grotesk', 'Helvetica Neue', sans-serif;
+  --font-mono: 'Spline Sans Mono', ui-monospace, monospace;
+
+  --shadow-lift: 0 1px 2px rgb(28 43 39 / 0.06), 0 8px 24px -12px rgb(28 43 39 / 0.25);
+  --shadow-deep: 0 24px 64px -24px rgb(0 0 0 / 0.55);
+}
+
+html {
+  font-family: var(--font-sans);
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+::selection {
+  background: var(--color-ring);
+  color: var(--color-paper);
+}
+
+/* dotted "call line" separator */
+.callline {
+  background-image: radial-gradient(circle, var(--color-line) 1.5px, transparent 1.5px);
+  background-size: 12px 3px;
+  background-repeat: repeat-x;
+  background-position: center;
+  height: 3px;
+}
+
+/* paper grain for atmosphere */
+.grain {
+  position: relative;
+}
+.grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* page-load stagger */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rise {
+  animation: rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.rise-1 { animation-delay: 0.05s; }
+.rise-2 { animation-delay: 0.12s; }
+.rise-3 { animation-delay: 0.19s; }
+.rise-4 { animation-delay: 0.26s; }
+
+/* ringing pulse for the widget dial */
+@keyframes ringpulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+.ringpulse {
+  animation: ringpulse 1.8s ease-out infinite;
+}
+.ringpulse2 {
+  animation: ringpulse 1.8s ease-out 0.6s infinite;
+}
+
+@keyframes wobble {
+  0%, 100% { transform: rotate(-4deg); }
+  50% { transform: rotate(4deg); }
+}
+.wobble {
+  animation: wobble 0.4s ease-in-out infinite;
+}
+
+/* live waveform bars */
+@keyframes wave {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+.wavebar {
+  animation: wave 1s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+.blink {
+  animation: blink 1.4s ease-in-out infinite;
+}
