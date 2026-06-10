@@ -87,6 +87,14 @@ const GREETINGS: Record<string, (biz: string, agent: string) => string> = {
   ru: (b, a) => `Спасибо за звонок в ${b}! Это ${a}. Чем я могу вам помочь?`,
 };
 
+// Vocabulary hint for speech recognition: biases ambiguous audio toward names
+// the caller is likely to say ("Riverside Dental", not "Riverside Bentall").
+export function sttVocab(biz: Business, settings: AgentSettings): string {
+  const services = parse<Service[]>(biz.services_json, []).map((s) => s.name);
+  const parts = [biz.name, settings.agent_name, ...services, biz.address];
+  return parts.filter(Boolean).join(', ').slice(0, 400);
+}
+
 export function defaultGreeting(biz: Business, settings: AgentSettings): string {
   if (settings.greeting) return settings.greeting;
   const make = GREETINGS[settings.language] ?? GREETINGS.en;

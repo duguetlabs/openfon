@@ -69,13 +69,56 @@ export interface Transcription {
   language: string | null;
 }
 
+// Tiny stop-word language detector for realtime mode, where the engine's
+// transcription events carry no language field. Returns null when unsure —
+// callers should then keep the current language.
+const STOPWORDS: Record<string, string[]> = {
+  en: ['the', 'is', 'and', 'you', 'what', 'how', 'can', 'do', 'have', 'hello', 'hi', 'thanks', 'please', 'would', 'like', 'want', 'much', 'when', 'are', 'this'],
+  de: ['ich', 'nicht', 'und', 'sie', 'das', 'ist', 'ein', 'eine', 'bitte', 'haben', 'wir', 'mit', 'für', 'auf', 'danke', 'gerne', 'termin', 'uhr', 'wie', 'kann', 'möchte', 'noch', 'auch', 'guten'],
+  fr: ['je', 'vous', 'est', 'le', 'la', 'les', 'une', 'et', 'bonjour', 'merci', 'avez', 'pour', 'avec', 'que', 'des', 'nous', 'votre', 'oui', 'quel', 'rendez-vous'],
+  es: ['el', 'los', 'las', 'es', 'una', 'hola', 'gracias', 'tiene', 'para', 'con', 'que', 'cómo', 'cuánto', 'quiero', 'usted', 'por', 'sí', 'cita', 'buenos', 'días'],
+  it: ['il', 'è', 'una', 'ciao', 'grazie', 'avete', 'per', 'con', 'che', 'come', 'quanto', 'vorrei', 'voi', 'sono', 'buongiorno', 'appuntamento', 'quali', 'della'],
+  nl: ['ik', 'het', 'een', 'en', 'niet', 'hallo', 'dank', 'hebben', 'voor', 'met', 'wat', 'hoe', 'kan', 'kunt', 'graag', 'jullie', 'bent', 'bedankt', 'afspraak', 'goedemorgen'],
+  sv: ['jag', 'det', 'ett', 'och', 'är', 'inte', 'hej', 'tack', 'har', 'för', 'med', 'vad', 'hur', 'kan', 'vill', 'ni', 'gärna', 'finns', 'tid', 'boka'],
+  da: ['jeg', 'det', 'et', 'og', 'er', 'ikke', 'hej', 'tak', 'har', 'for', 'med', 'hvad', 'hvordan', 'kan', 'vil', 'gerne', 'findes', 'tid', 'bestille', 'jeres'],
+  fi: ['minä', 'on', 'ja', 'ei', 'hei', 'kiitos', 'onko', 'voinko', 'haluan', 'teillä', 'kuinka', 'paljonko', 'mitä', 'milloin', 'aika', 'varata', 'hyvää', 'päivää', 'se', 'että'],
+};
+
+export function detectLang(text: string): string | null {
+  const cyrillic = (text.match(/[а-яё]/gi) ?? []).length;
+  if (cyrillic > text.length * 0.3) return 'ru';
+  const words = text
+    .toLowerCase()
+    .replace(/[.,!?;:"']/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!words.length) return null;
+  let best: string | null = null;
+  let bestScore = 0;
+  let secondScore = 0;
+  for (const [lang, stops] of Object.entries(STOPWORDS)) {
+    const set = new Set(stops);
+    const score = words.reduce((n, w) => n + (set.has(w) ? 1 : 0), 0);
+    if (score > bestScore) {
+      secondScore = bestScore;
+      bestScore = score;
+      best = lang;
+    } else if (score > secondScore) {
+      secondScore = score;
+    }
+  }
+  return bestScore >= 2 && bestScore > secondScore ? best : null;
+}
+
 // Language is auto-detected per utterance so callers can speak any supported
-// language regardless of the business's configured default.
-export async function transcribe(env: Env, audio: ArrayBuffer, contentType: string): Promise<Transcription> {
+// language regardless of the business's configured default. `prompt` biases
+// recognition toward business-specific vocabulary.
+export async function transcribe(env: Env, audio: ArrayBuffer, contentType: string, prompt?: string): Promise<Transcription> {
   const form = new FormData();
   const ext = contentType.includes('mp4') ? 'mp4' : contentType.includes('wav') ? 'wav' : 'webm';
   form.append('file', new Blob([audio], { type: contentType }), `utterance.${ext}`);
   form.append('model', env.DEFAULT_STT_MODEL);
+  if (prompt) form.append('prompt', prompt);
   const res = await fetch(`${env.DEFAULT_STT_BASE_URL}/audio/transcriptions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.DEFAULT_STT_API_KEY || ''}` },

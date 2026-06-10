@@ -13,8 +13,8 @@
 //   server BINARY <mp3>                         spoken version of the last agent_text (azure mode)
 //   server JSON  {type:"thinking"} | {type:"error", message} | {type:"ended"}
 import type { Env, Business, AgentSettings, ChatMessage } from './types';
-import { buildSystemPrompt, defaultGreeting, SUMMARY_PROMPT } from './prompt';
-import { chatComplete, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
+import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './prompt';
+import { chatComplete, detectLang, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
 
 // WebSocket binary payloads vary by runtime: ArrayBuffer, ArrayBufferView, or Blob.
 async function toArrayBuffer(data: unknown): Promise<ArrayBuffer> {
@@ -248,6 +248,47 @@ export class CallSession implements DurableObject {
     this.upstream = null;
   }
 
+  private realtimeInstructions = '';
+
+  // Full session payload, resent whenever the voice changes — partial updates
+  // are not guaranteed to preserve transcription config.
+  private realtimeSessionPayload(voice: string): unknown {
+    return {
+      type: 'session.update',
+      session: {
+        type: 'realtime',
+        instructions: this.realtimeInstructions,
+        audio: {
+          input: {
+            // 24 kHz: the lowest rate every tier accepts (native S2S models reject 16 kHz)
+            format: { type: 'audio/pcm', rate: 24000 },
+            turn_detection: { type: 'server_vad', silence_duration_ms: 550 },
+            transcription: {
+              model: this.env.DEFAULT_STT_MODEL,
+              prompt: this.biz && this.settings ? sttVocab(this.biz, this.settings) : undefined,
+            },
+          },
+          output: {
+            format: { type: 'audio/pcm', rate: 24000 },
+            voice,
+          },
+        },
+      },
+    };
+  }
+
+  // The engine is supposed to follow the caller's language with a matching
+  // voice, but the HD tier keeps the initial voice — so we detect language
+  // switches from transcripts and hot-swap the voice ourselves.
+  private maybeSwitchVoice(callerText: string): void {
+    const detected = detectLang(callerText);
+    if (!detected || detected === this.lang) return;
+    this.lang = detected;
+    const voice = voiceForReply(this.env, detected, this.settings?.language ?? 'en', this.settings?.voice || '');
+    console.log(`call ${this.callId}: language switch -> ${detected}, voice -> ${voice}`);
+    this.sendUpstream(this.realtimeSessionPayload(voice));
+  }
+
   private startRealtime(systemPrompt: string, greeting: string): Promise<boolean> {
     const key = this.env.REALTIME_API_KEY || this.env.DEFAULT_LLM_API_KEY || '';
     const url = `${this.env.REALTIME_BASE_URL}?model=${encodeURIComponent(this.env.REALTIME_MODEL)}&token=${encodeURIComponent(key)}`;
@@ -271,29 +312,12 @@ export class CallSession implements DurableObject {
       this.upstream = ws;
       ws.addEventListener('open', () => {
         clearTimeout(timer);
-        this.sendUpstream({
-          type: 'session.update',
-          session: {
-            type: 'realtime',
-            // Generated first responses on an empty conversation hallucinate;
-            // we speak the greeting ourselves and seed it as already-said.
-            instructions: `${systemPrompt}\n\nYou already opened the call by saying: "${greeting}". Continue the conversation from there.`,
-            audio: {
-              input: {
-                // 24 kHz: the lowest rate every tier accepts (native S2S models reject 16 kHz)
-                format: { type: 'audio/pcm', rate: 24000 },
-                turn_detection: { type: 'server_vad', silence_duration_ms: 550 },
-                transcription: { model: this.env.DEFAULT_STT_MODEL },
-              },
-              // Only pin a voice when the business configured one — otherwise the
-              // engine's voice follows the caller's language automatically.
-              output: {
-                format: { type: 'audio/pcm', rate: 24000 },
-                ...(this.settings?.voice ? { voice: this.settings.voice } : {}),
-              },
-            },
-          },
-        });
+        // We speak the greeting ourselves (generated first responses on an
+        // empty conversation hallucinate, and response.create takes 3-7 s to
+        // first audio) and seed it as already-said.
+        this.realtimeInstructions = `${systemPrompt}\n\nYou already opened the call by saying: "${greeting}". Continue the conversation from there.`;
+        const initialVoice = voiceForReply(this.env, this.lang, this.settings?.language ?? 'en', this.settings?.voice || '');
+        this.sendUpstream(this.realtimeSessionPayload(initialVoice));
         settle(true);
       });
       ws.addEventListener('message', (ev) => {
@@ -337,6 +361,7 @@ export class CallSession implements DurableObject {
       case 'conversation.item.input_audio_transcription.completed':
         if (msg.transcript?.trim()) {
           const text = msg.transcript.trim();
+          this.maybeSwitchVoice(text);
           this.send({ type: 'transcript', text });
           this.history.push({ role: 'user', content: text });
           await this.saveTurn('caller', text);
@@ -357,6 +382,7 @@ export class CallSession implements DurableObject {
   }
 
   private sendCallerText(text: string): void {
+    this.maybeSwitchVoice(text);
     this.sendUpstream({
       type: 'conversation.item.create',
       item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] },
@@ -372,7 +398,8 @@ export class CallSession implements DurableObject {
     this.busy = true;
     try {
       this.send({ type: 'thinking' });
-      const { text, language } = await transcribe(this.env, audio, this.pendingContentType);
+      const vocab = this.biz && this.settings ? sttVocab(this.biz, this.settings) : undefined;
+      const { text, language } = await transcribe(this.env, audio, this.pendingContentType, vocab);
       if (!text) {
         this.busy = false;
         return;
