@@ -16,6 +16,7 @@ type Listener = (ev: VoiceEvent) => void;
 const SPEECH_THRESHOLD = 0.018; // RMS above this counts as speech
 const SILENCE_MS = 900; // stop the utterance after this much silence
 const MIN_UTTERANCE_MS = 350; // ignore blips shorter than this
+const MAX_UTTERANCE_MS = 12_000; // force-stop runaway recordings (constant background noise)
 
 export class VoiceCall {
   private ws: WebSocket | null = null;
@@ -150,6 +151,9 @@ export class VoiceCall {
         this.lastVoiceAt = now;
         if (!this.recording) this.beginUtterance(now);
       } else if (this.recording && now - this.lastVoiceAt > SILENCE_MS) {
+        this.endUtterance(now);
+      }
+      if (this.recording && now - this.speechStartedAt > MAX_UTTERANCE_MS) {
         this.endUtterance(now);
       }
     }, 60);
