@@ -56,6 +56,7 @@ export class VoiceCall {
   private liveSources = new Set<AudioBufferSourceNode>();
   private pcmCarry: Uint8Array | null = null; // odd trailing byte awaiting its other half
   private pingTimer: number | null = null;
+  private hangupWhenDone = false; // agent said goodbye: end once playback drains
 
   on(fn: Listener): void {
     this.listeners.push(fn);
@@ -135,6 +136,12 @@ export class VoiceCall {
           break;
         case 'flush': // barge-in: stop agent playback immediately
           this.flushPlayback();
+          break;
+        case 'ending': // agent is hanging up: let the goodbye finish, then end
+          this.hangupWhenDone = true;
+          if (!this.agentSpeaking && this.liveSources.size === 0) {
+            setTimeout(() => this.hangup(), 1200);
+          }
           break;
         case 'speaking':
           if (msg.who) this.emit({ type: 'speaking', who: msg.who });
@@ -305,7 +312,10 @@ export class VoiceCall {
     this.liveSources.add(node);
     node.onended = () => {
       this.liveSources.delete(node);
-      if (this.liveSources.size === 0) this.emit({ type: 'speaking', who: 'none' });
+      if (this.liveSources.size === 0) {
+        this.emit({ type: 'speaking', who: 'none' });
+        if (this.hangupWhenDone) setTimeout(() => this.hangup(), 600);
+      }
     };
   }
 
@@ -333,6 +343,7 @@ export class VoiceCall {
       URL.revokeObjectURL(url);
       this.agentSpeaking = false;
       this.emit({ type: 'speaking', who: 'none' });
+      if (this.hangupWhenDone) setTimeout(() => this.hangup(), 600);
     };
     void this.player.play();
   }
@@ -344,6 +355,7 @@ export class VoiceCall {
     u.onend = u.onerror = () => {
       this.agentSpeaking = false;
       this.emit({ type: 'speaking', who: 'none' });
+      if (this.hangupWhenDone) setTimeout(() => this.hangup(), 600);
     };
     speechSynthesis.speak(u);
   }

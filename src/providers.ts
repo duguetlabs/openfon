@@ -149,6 +149,17 @@ export function isVocabEcho(transcript: string, vocab: string): boolean {
   return t.length >= 2 && overlap / t.length >= 0.7;
 }
 
+// Did the caller just say goodbye? Used on tiers without function calling to
+// end the call after the agent's sign-off reply.
+// \b is ASCII-only in JS and fails around Cyrillic/accented letters — use
+// Unicode-aware letter boundaries instead.
+const FAREWELL_RE =
+  /(?<!\p{L})(good\s?bye|bye\s?bye|bye now|bye|see you|that('|’)s all|auf wiederh(ö|oe?)ren|auf wiedersehen|tsch(ü|ue?)ss|au revoir|bonne journ(é|e)e|adi(ó|o)s|hasta luego|arrivederci|buona giornata|tot ziens|doei|hej d(å|a)|vi ses|farvel|n(ä|a)kemiin|heippa|до свидания|всего доброго)(?!\p{L})/iu;
+
+export function isFarewell(text: string): boolean {
+  return FAREWELL_RE.test(text);
+}
+
 export function detectLang(text: string): string | null {
   const cyrillic = (text.match(/[а-яё]/gi) ?? []).length;
   if (cyrillic > text.length * 0.3) return 'ru';

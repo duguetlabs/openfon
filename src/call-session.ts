@@ -14,7 +14,7 @@
 //   server JSON  {type:"thinking"} | {type:"error", message} | {type:"ended"}
 import type { Env, Business, AgentSettings, ChatMessage } from './types';
 import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './prompt';
-import { chatComplete, detectLang, isVocabEcho, normalizeLang, piperVoiceFor, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
+import { chatComplete, detectLang, isFarewell, isVocabEcho, normalizeLang, piperVoiceFor, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
 
 // WebSocket binary payloads vary by runtime: ArrayBuffer, ArrayBufferView, or Blob.
 async function toArrayBuffer(data: unknown): Promise<ArrayBuffer> {
@@ -232,7 +232,11 @@ export class CallSession implements DurableObject {
 
     this.mode = 'pipeline';
     this.history = [
-      { role: 'system', content: systemPrompt },
+      {
+        role: 'system',
+        // Pipeline only: we strip the marker before TTS, so it is never spoken.
+        content: `${systemPrompt}\n- When the conversation is finished and you have said your goodbye, append the marker <END_CALL> at the very end of your reply.`,
+      },
       { role: 'assistant', content: greeting },
     ];
     const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
@@ -272,6 +276,7 @@ export class CallSession implements DurableObject {
   private voiceManaged = false; // true when we own language->voice switching (HD default)
   private reconnects = 0;
   private greetingGuardUntil = 0; // ignore barge-in flushes while our greeting plays
+  private endPending = false; // caller said farewell; hang up after the agent's sign-off
 
   // Full session payload, resent whenever the voice changes — partial updates
   // are not guaranteed to preserve transcription config.
@@ -281,6 +286,21 @@ export class CallSession implements DurableObject {
       session: {
         type: 'realtime',
         instructions,
+        // Only native S2S tiers do real function calling — cascade/HD models
+        // leak the tool syntax into spoken text ("End_call()" said aloud).
+        ...(this.realtimeModel.startsWith('gpt-realtime')
+          ? {
+              tools: [
+                {
+                  type: 'function',
+                  name: 'end_call',
+                  description: 'Hang up the phone call. Call this right after saying goodbye, when the conversation is finished.',
+                  parameters: { type: 'object', properties: {} },
+                },
+              ],
+              tool_choice: 'auto',
+            }
+          : {}),
         audio: {
           input: {
             // 24 kHz: the lowest rate every tier accepts (native S2S models reject 16 kHz)
@@ -340,6 +360,26 @@ export class CallSession implements DurableObject {
     return this.realtimeModel !== 'kataleptic-realtime-hd' && !this.realtimeModel.startsWith('gpt-realtime');
   }
 
+  // Agent-initiated hangup: tell the client to end once playback drains, with
+  // a server-side safety net if it never does.
+  private beginHangup(): void {
+    if (this.ended) return;
+    console.log(`call ${this.callId}: agent ending the call`);
+    this.send({ type: 'ending' });
+    setTimeout(() => {
+      if (!this.ended) {
+        this.send({ type: 'ended' });
+        this.closeUpstream();
+        try {
+          this.ws?.close(1000, 'agent hangup');
+        } catch {
+          /* gone */
+        }
+        void this.finalize();
+      }
+    }, 15_000);
+  }
+
   private async startRealtime(systemPrompt: string, greeting: string): Promise<boolean> {
     const key = this.env.REALTIME_API_KEY || this.env.DEFAULT_LLM_API_KEY || '';
     const model = this.settings?.realtime_model || this.env.REALTIME_MODEL;
@@ -359,9 +399,13 @@ export class CallSession implements DurableObject {
         : isCascade
           ? await piperVoiceFor(this.env, this.lang)
           : '');
-    this.realtimeInstructions = this.engineGreets()
-      ? systemPrompt
-      : `${systemPrompt}\n\nYou already opened the call by saying: "${greeting}". Continue the conversation from there.`;
+    const toolNote = model.startsWith('gpt-realtime')
+      ? '\n\nWhen the conversation is finished and you have said goodbye, call the end_call function.'
+      : '';
+    this.realtimeInstructions =
+      (this.engineGreets()
+        ? systemPrompt
+        : `${systemPrompt}\n\nYou already opened the call by saying: "${greeting}". Continue the conversation from there.`) + toolNote;
     return this.openUpstream(this.realtimeInstructions, this.engineGreets() ? greeting : null);
   }
 
@@ -445,7 +489,14 @@ export class CallSession implements DurableObject {
 
   private async onUpstreamMessage(ev: MessageEvent): Promise<void> {
     if (typeof ev.data !== 'string') return;
-    const msg = JSON.parse(ev.data) as { type: string; delta?: string; transcript?: string; language?: string; error?: { message?: string } };
+    const msg = JSON.parse(ev.data) as {
+      type: string;
+      delta?: string;
+      transcript?: string;
+      language?: string;
+      item?: { type?: string; name?: string };
+      error?: { message?: string };
+    };
     switch (msg.type) {
       case 'response.output_audio.delta':
         if (msg.delta && this.ws) {
@@ -481,6 +532,9 @@ export class CallSession implements DurableObject {
           this.maybeSwitchVoice(text, normalizeLang(msg.language));
           this.send({ type: 'transcript', text });
           this.history.push({ role: 'user', content: text });
+          // Tiers without function calling: a caller farewell (after at least
+          // one real exchange) arms ending the call after the agent's sign-off.
+          this.endPending = !this.realtimeModel.startsWith('gpt-realtime') && this.history.length > 3 && isFarewell(text);
           await this.saveTurn('caller', text);
         }
         break;
@@ -490,7 +544,11 @@ export class CallSession implements DurableObject {
           this.send({ type: 'agent_text', text });
           this.history.push({ role: 'assistant', content: text });
           await this.saveTurn('agent', text);
+          if (this.endPending) this.beginHangup();
         }
+        break;
+      case 'response.output_item.done':
+        if (msg.item?.type === 'function_call' && msg.item?.name === 'end_call') this.beginHangup();
         break;
       case 'session.expiring':
         // Vendor extension: the engine warns a minute before its hard session
@@ -551,11 +609,14 @@ export class CallSession implements DurableObject {
     await this.saveTurn('caller', callerText);
     this.history.push({ role: 'user', content: callerText });
     const llm = resolveLlm(this.env, this.settings);
-    const reply = (await chatComplete(llm, this.history, { maxTokens: 200, temperature: 0.6 })).trim();
+    const raw = (await chatComplete(llm, this.history, { maxTokens: 200, temperature: 0.6 })).trim();
+    const wantsEnd = /<?END_CALL>?/i.test(raw);
+    const reply = raw.replace(/\s*<?END_CALL>?\s*/gi, ' ').trim();
     this.history.push({ role: 'assistant', content: reply });
     this.send({ type: 'agent_text', text: reply });
     await this.saveTurn('agent', reply);
     await this.speak(reply);
+    if (wantsEnd) this.beginHangup();
   }
 
   private async speak(text: string): Promise<void> {

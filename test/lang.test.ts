@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { detectLang, isVocabEcho, normalizeLang } from '../src/providers';
+import { detectLang, isFarewell, isVocabEcho, normalizeLang } from '../src/providers';
+
+describe('isFarewell', () => {
+  it('matches farewells across languages', () => {
+    expect(isFarewell("That was everything, thank you, goodbye!")).toBe(true);
+    expect(isFarewell('Okay, danke, auf Wiederhören!')).toBe(true);
+    expect(isFarewell('Merci beaucoup, au revoir.')).toBe(true);
+    expect(isFarewell('Tack så mycket, hej då!')).toBe(true);
+    expect(isFarewell('Спасибо, до свидания.')).toBe(true);
+  });
+
+  it('does not match ordinary turns', () => {
+    expect(isFarewell('Do you have time on Friday?')).toBe(false);
+    expect(isFarewell('Guten Tag, ich hätte gerne einen Termin.')).toBe(false);
+    expect(isFarewell('Can you check the schedule by the way?')).toBe(false);
+  });
+});
 import { buildCalendar } from '../src/prompt';
 
 describe('buildCalendar', () => {
