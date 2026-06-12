@@ -58,11 +58,14 @@ export const SUPPORTED_LANGUAGES: Record<string, { name: string; voice: string }
 // correct initial pronunciation (greeting, first reply); detection-based
 // following continues afterwards. Unknown ids degrade gracefully upstream,
 // with the lang_REGION prefix still selecting the language.
+// (We deliberately do NOT use transcription.language seeding: as of
+// 2026-06-13 the seed is echoed back as the detected language of the first
+// utterance, which mislabels English callers as the seeded language.)
 export const PIPER_BY_LANG: Record<string, string> = {
   en: 'en_US-lessac-medium',
   de: 'de_DE-thorsten-medium',
   fr: 'fr_FR-siwis-medium',
-  es: 'es_ES-davefx-medium',
+  es: 'es_ES-sharvard-medium',
   nl: 'nl_NL-mls-medium',
   sv: 'sv_SE-nst-medium',
   da: 'da_DK-talesyntese-medium',
@@ -70,6 +73,29 @@ export const PIPER_BY_LANG: Record<string, string> = {
   fi: 'fi_FI-harri-medium',
   ru: 'ru_RU-irina-medium',
 };
+
+// Live per-language voice map from the engine's public catalog endpoint
+// (<realtime base>/voices), cached per isolate; PIPER_BY_LANG is the fallback
+// when the endpoint is missing (self-hosters pointing at other providers).
+let piperCatalog: { map: Record<string, string>; fetchedAt: number } | null = null;
+
+export async function piperVoiceFor(env: Env, lang: string): Promise<string> {
+  const fallback = PIPER_BY_LANG[lang] ?? '';
+  try {
+    if (!piperCatalog || Date.now() - piperCatalog.fetchedAt > 3_600_000) {
+      const url = env.REALTIME_BASE_URL.replace(/^ws/, 'http') + '/voices';
+      const res = await fetch(url, { signal: AbortSignal.timeout(1500) });
+      if (res.ok) {
+        const data = (await res.json()) as { 'kataleptic-realtime'?: { voices_by_language?: Record<string, string> } };
+        const map = data['kataleptic-realtime']?.voices_by_language;
+        if (map && typeof map === 'object') piperCatalog = { map, fetchedAt: Date.now() };
+      }
+    }
+    return piperCatalog?.map[lang] ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 // STT backends report language as ISO codes ("de") or names ("german").
 const LANG_ALIASES: Record<string, string> = {

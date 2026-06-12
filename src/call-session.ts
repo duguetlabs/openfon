@@ -14,7 +14,7 @@
 //   server JSON  {type:"thinking"} | {type:"error", message} | {type:"ended"}
 import type { Env, Business, AgentSettings, ChatMessage } from './types';
 import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './prompt';
-import { chatComplete, detectLang, isVocabEcho, normalizeLang, resolveLlm, synthesize, transcribe, voiceForReply, PIPER_BY_LANG, SUPPORTED_LANGUAGES } from './providers';
+import { chatComplete, detectLang, isVocabEcho, normalizeLang, piperVoiceFor, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
 
 // WebSocket binary payloads vary by runtime: ArrayBuffer, ArrayBufferView, or Blob.
 async function toArrayBuffer(data: unknown): Promise<ArrayBuffer> {
@@ -323,7 +323,7 @@ export class CallSession implements DurableObject {
     return this.realtimeModel === 'kataleptic-realtime' || this.realtimeModel.startsWith('gpt-realtime');
   }
 
-  private startRealtime(systemPrompt: string, greeting: string): Promise<boolean> {
+  private async startRealtime(systemPrompt: string, greeting: string): Promise<boolean> {
     const key = this.env.REALTIME_API_KEY || this.env.DEFAULT_LLM_API_KEY || '';
     const model = this.settings?.realtime_model || this.env.REALTIME_MODEL;
     this.realtimeModel = model;
@@ -340,7 +340,7 @@ export class CallSession implements DurableObject {
       (isHd
         ? voiceForReply(this.env, this.lang, this.settings?.language ?? 'en', this.settings?.voice || '')
         : isCascade
-          ? (PIPER_BY_LANG[this.lang] ?? '')
+          ? await piperVoiceFor(this.env, this.lang)
           : '');
     this.realtimeInstructions = this.engineGreets()
       ? systemPrompt
