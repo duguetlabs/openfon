@@ -216,6 +216,9 @@ export class CallSession implements DurableObject {
         const voice = voiceForReply(this.env, this.lang, this.settings!.language, this.settings!.voice || '');
         const audio = await synthesize(this.env, greeting, voice, 'pcm24');
         if (audio && this.ws) {
+          // PCM16 @ 24 kHz = 48000 bytes/s; shield the greeting from
+          // noise-triggered barge-in flushes for its playback duration.
+          this.greetingGuardUntil = Date.now() + (audio.byteLength / 48000) * 1000 + 500;
           try {
             this.ws.send(audio);
           } catch {
@@ -261,6 +264,7 @@ export class CallSession implements DurableObject {
   private sessionVoice = ''; // voice sent upstream; '' = let the tier pick
   private voiceManaged = false; // true when we own language->voice switching (HD default)
   private reconnects = 0;
+  private greetingGuardUntil = 0; // ignore barge-in flushes while our greeting plays
 
   // Full session payload, resent whenever the voice changes — partial updates
   // are not guaranteed to preserve transcription config.
@@ -274,7 +278,9 @@ export class CallSession implements DurableObject {
           input: {
             // 24 kHz: the lowest rate every tier accepts (native S2S models reject 16 kHz)
             format: { type: 'audio/pcm', rate: 24000 },
-            turn_detection: { type: 'server_vad', silence_duration_ms: 550 },
+            // Higher threshold: ambient noise was triggering barge-ins that cut
+            // off the greeting; prefix padding keeps word onsets unclipped.
+            turn_detection: { type: 'server_vad', threshold: 0.7, prefix_padding_ms: 300, silence_duration_ms: 550 },
             transcription: {
               // Native S2S tiers only support their own transcription models;
               // forcing ours silently disables caller transcripts there.
@@ -427,7 +433,10 @@ export class CallSession implements DurableObject {
         }
         break;
       case 'input_audio_buffer.speech_started':
-        // Barge-in: the server cancels its in-flight response; we flush caller playback.
+        // Barge-in: the server cancels its in-flight response; we flush caller
+        // playback — except while our own greeting is playing, where a noise
+        // blip would cut off the agent's opening line for nothing.
+        if (Date.now() < this.greetingGuardUntil) break;
         this.send({ type: 'flush' });
         this.send({ type: 'speaking', who: 'caller' });
         break;

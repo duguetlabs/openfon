@@ -279,7 +279,7 @@ export default function Settings() {
                     value={agent.realtime_voice}
                     onChange={(e) => setA({ realtime_voice: e.target.value })}
                     placeholder="Tier default"
-                    hint="Voice id passed to the chosen tier — each tier has its own catalog (HD accepts Azure neural voices; other tiers use their own ids). Empty = tier default."
+                    hint="Voice id passed to the chosen tier. HD: any Azure neural voice (de-DE-SeraphinaMultilingualNeural). Cascade: Piper ids (de_DE-thorsten-medium) — empty lets the voice follow the caller's language automatically. gpt-realtime-2: OpenAI voices (marin, cedar, alloy). Catalog: kataleptic.com/docs/realtime#voices"
                   />
                 </div>
               </label>

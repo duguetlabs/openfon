@@ -141,10 +141,27 @@ const GREETINGS: Record<string, (biz: string, agent: string) => string> = {
 
 // Vocabulary hint for speech recognition: biases ambiguous audio toward names
 // the caller is likely to say ("Riverside Dental", not "Riverside Bentall").
+// The carrier phrase is written in the business's default language — a Whisper
+// bias prompt's language also nudges which language it detects, so an
+// English-only prompt makes German callers come back as English transcripts.
+const VOCAB_CARRIERS: Record<string, string> = {
+  en: 'Phone call regarding: ',
+  de: 'Telefonat bezüglich: ',
+  fr: 'Appel téléphonique concernant : ',
+  es: 'Llamada telefónica sobre: ',
+  nl: 'Telefoongesprek over: ',
+  sv: 'Telefonsamtal angående: ',
+  da: 'Telefonopkald vedrørende: ',
+  it: 'Telefonata riguardo: ',
+  fi: 'Puhelu koskien: ',
+  ru: 'Телефонный звонок по поводу: ',
+};
+
 export function sttVocab(biz: Business, settings: AgentSettings): string {
   const services = parse<Service[]>(biz.services_json, []).map((s) => s.name);
   const parts = [biz.name, settings.agent_name, ...services, biz.address];
-  return parts.filter(Boolean).join(', ').slice(0, 400);
+  const carrier = VOCAB_CARRIERS[settings.language] ?? VOCAB_CARRIERS.en;
+  return (carrier + parts.filter(Boolean).join(', ')).slice(0, 400);
 }
 
 export function defaultGreeting(biz: Business, settings: AgentSettings): string {
