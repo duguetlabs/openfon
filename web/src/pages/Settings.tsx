@@ -241,9 +241,9 @@ export default function Settings() {
                   onChange={(e) => setA({ realtime_model: e.target.value })}
                 >
                   <option value="">Instance default</option>
-                  <option value="kataleptic-realtime-hd">kataleptic-realtime-hd — best noise filtering, HD voices, ~1 s</option>
-                  <option value="kataleptic-realtime">kataleptic-realtime — fastest (~0.4 s) and cheapest; weaker in noisy rooms</option>
-                  <option value="gpt-realtime-2">gpt-realtime-2 — native speech-to-speech; caller transcripts missing from call log</option>
+                  <option value="kataleptic-realtime">kataleptic-realtime — fastest (~0.5 s) and cheapest</option>
+                  <option value="kataleptic-realtime-hd">kataleptic-realtime-hd — HD voices (Azure Voice Live), ~1 s</option>
+                  <option value="gpt-realtime-2">gpt-realtime-2 — native speech-to-speech with built-in reasoning; not EU-hosted</option>
                 </select>
                 <span className="mt-1 block text-xs text-ink-soft">
                   Takes effect on the next call — handy for comparing tiers back-to-back.

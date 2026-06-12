@@ -14,7 +14,7 @@
 //   server JSON  {type:"thinking"} | {type:"error", message} | {type:"ended"}
 import type { Env, Business, AgentSettings, ChatMessage } from './types';
 import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './prompt';
-import { chatComplete, detectLang, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
+import { chatComplete, detectLang, normalizeLang, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
 
 // WebSocket binary payloads vary by runtime: ArrayBuffer, ArrayBufferView, or Blob.
 async function toArrayBuffer(data: unknown): Promise<ArrayBuffer> {
@@ -249,6 +249,7 @@ export class CallSession implements DurableObject {
   }
 
   private realtimeInstructions = '';
+  private realtimeModel = '';
 
   // Full session payload, resent whenever the voice changes — partial updates
   // are not guaranteed to preserve transcription config.
@@ -264,7 +265,9 @@ export class CallSession implements DurableObject {
             format: { type: 'audio/pcm', rate: 24000 },
             turn_detection: { type: 'server_vad', silence_duration_ms: 550 },
             transcription: {
-              model: this.env.DEFAULT_STT_MODEL,
+              // Native S2S tiers only support their own transcription models;
+              // forcing ours silently disables caller transcripts there.
+              model: this.realtimeModel.startsWith('gpt-realtime') ? 'whisper-1' : this.env.DEFAULT_STT_MODEL,
               prompt: this.biz && this.settings ? sttVocab(this.biz, this.settings) : undefined,
             },
           },
@@ -280,8 +283,8 @@ export class CallSession implements DurableObject {
   // The engine is supposed to follow the caller's language with a matching
   // voice, but the HD tier keeps the initial voice — so we detect language
   // switches from transcripts and hot-swap the voice ourselves.
-  private maybeSwitchVoice(callerText: string): void {
-    const detected = detectLang(callerText);
+  private maybeSwitchVoice(callerText: string, langHint?: string | null): void {
+    const detected = langHint ?? detectLang(callerText);
     if (!detected || detected === this.lang) return;
     const before = voiceForReply(this.env, this.lang, this.settings?.language ?? 'en', this.settings?.voice || '');
     this.lang = detected;
@@ -294,6 +297,7 @@ export class CallSession implements DurableObject {
   private startRealtime(systemPrompt: string, greeting: string): Promise<boolean> {
     const key = this.env.REALTIME_API_KEY || this.env.DEFAULT_LLM_API_KEY || '';
     const model = this.settings?.realtime_model || this.env.REALTIME_MODEL;
+    this.realtimeModel = model;
     console.log(`call ${this.callId}: realtime engine, model ${model}`);
     const url = `${this.env.REALTIME_BASE_URL}?model=${encodeURIComponent(model)}&token=${encodeURIComponent(key)}`;
     return new Promise<boolean>((resolve) => {
@@ -346,7 +350,7 @@ export class CallSession implements DurableObject {
 
   private async onUpstreamMessage(ev: MessageEvent): Promise<void> {
     if (typeof ev.data !== 'string') return;
-    const msg = JSON.parse(ev.data) as { type: string; delta?: string; transcript?: string; error?: { message?: string } };
+    const msg = JSON.parse(ev.data) as { type: string; delta?: string; transcript?: string; language?: string; error?: { message?: string } };
     switch (msg.type) {
       case 'response.output_audio.delta':
         if (msg.delta && this.ws) {
@@ -365,7 +369,9 @@ export class CallSession implements DurableObject {
       case 'conversation.item.input_audio_transcription.completed':
         if (msg.transcript?.trim()) {
           const text = msg.transcript.trim();
-          this.maybeSwitchVoice(text);
+          // Standard tier sends a detected language with each transcript;
+          // prefer it over our own text-based heuristic.
+          this.maybeSwitchVoice(text, normalizeLang(msg.language));
           this.send({ type: 'transcript', text });
           this.history.push({ role: 'user', content: text });
           await this.saveTurn('caller', text);
