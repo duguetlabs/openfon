@@ -1,5 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import { detectLang, isVocabEcho, normalizeLang } from '../src/providers';
+import { buildCalendar } from '../src/prompt';
+
+describe('buildCalendar', () => {
+  const hours = [
+    { day: 'Monday', open: '09:00', close: '17:00' },
+    { day: 'Tuesday', open: '09:00', close: '17:00' },
+    { day: 'Wednesday', open: '09:00', close: '17:00' },
+    { day: 'Thursday', open: '09:00', close: '17:00' },
+    { day: 'Friday', open: '09:00', close: '14:00' },
+    { day: 'Saturday', open: '', close: '', closed: true },
+    { day: 'Sunday', open: '', close: '', closed: true },
+  ];
+  const now = new Date('2026-06-12T10:00:00Z'); // a Friday
+
+  it('maps every date to its weekday and open/closed status', () => {
+    const cal = buildCalendar(hours, [], now, 'Europe/Vienna');
+    expect(cal).toContain('Fri 2026-06-12 (today): open 09:00–14:00');
+    expect(cal).toContain('Sat 2026-06-13 (tomorrow): CLOSED');
+    expect(cal).toContain('Fri 2026-06-26: open 09:00–14:00');
+  });
+
+  it('overrides open weekdays with special closures (holidays)', () => {
+    const cal = buildCalendar(hours, [{ date: '2026-06-26', reason: 'Public holiday' }], now, 'Europe/Vienna');
+    expect(cal).toContain('Fri 2026-06-26: CLOSED (Public holiday)');
+  });
+});
 
 const VOCAB = 'Riverside Dental, Alex, Checkup, Cleaning, 12 River St, Vienna';
 

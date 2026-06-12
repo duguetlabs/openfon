@@ -1,11 +1,15 @@
 import type { Business, AgentSettings } from './types';
 import { SUPPORTED_LANGUAGES } from './providers';
 
-interface Hours {
+export interface Hours {
   day: string;
   open: string;
   close: string;
   closed?: boolean;
+}
+export interface Closure {
+  date: string; // YYYY-MM-DD
+  reason?: string;
 }
 interface Service {
   name: string;
@@ -26,6 +30,30 @@ function parse<T>(json: string, fallback: T): T {
   }
 }
 
+// LLMs cannot reliably map dates to weekdays, so pre-compute a calendar:
+// every date for the next `days` days with weekday and open/closed status,
+// including special closures (holidays) on top of weekly hours.
+export function buildCalendar(hours: Hours[], closures: Closure[], now: Date, timezone: string, days = 21): string {
+  const lines: string[] = [];
+  const weekdayOf = (d: Date) => new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'long' }).format(d);
+  const isoOf = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  for (let i = 0; i < days; i++) {
+    const d = new Date(now.getTime() + i * 86_400_000);
+    const weekday = weekdayOf(d);
+    const iso = isoOf(d);
+    const closure = closures.find((c) => c.date === iso);
+    const h = hours.find((x) => x.day === weekday);
+    const status = closure
+      ? `CLOSED (${closure.reason || 'special closure'})`
+      : !h || h.closed
+        ? 'CLOSED'
+        : `open ${h.open}–${h.close}`;
+    const marker = i === 0 ? ' (today)' : i === 1 ? ' (tomorrow)' : '';
+    lines.push(`${weekday.slice(0, 3)} ${iso}${marker}: ${status}`);
+  }
+  return lines.join('\n');
+}
+
 export function buildSystemPrompt(biz: Business, settings: AgentSettings, now: Date): string {
   const hours = parse<Hours[]>(biz.hours_json, []);
   const services = parse<Service[]>(biz.services_json, []);
@@ -35,6 +63,13 @@ export function buildSystemPrompt(biz: Business, settings: AgentSettings, now: D
     ? hours.map((h) => `${h.day}: ${h.closed ? 'CLOSED' : `${h.open}–${h.close}`}`).join('\n')
     : 'Not specified.';
   const closedDays = hours.filter((h) => h.closed).map((h) => h.day);
+  const closures = parse<Closure[]>(biz.closures_json ?? '[]', []);
+  let calendarText = '';
+  try {
+    calendarText = buildCalendar(hours, closures, now, biz.timezone || 'UTC');
+  } catch {
+    /* keep prompt usable without a calendar */
+  }
 
   // LLMs are bad at deriving weekdays from timestamps — spell it out.
   let dateText: string;
@@ -70,8 +105,9 @@ ${biz.phone ? `Phone: ${biz.phone}` : ''}
 ${biz.website ? `Website: ${biz.website}` : ''}
 ${dateText}
 
-OPENING HOURS:
+OPENING HOURS (weekly):
 ${hoursText}
+${calendarText ? `\nCALENDAR (next 21 days — the single source of truth for dates, weekdays, holidays):\n${calendarText}` : ''}
 
 SERVICES:
 ${servicesText}
@@ -81,7 +117,8 @@ ${faqText}
 
 BEHAVIOR:
 - Answer questions using only the facts above. If you don't know, say so and offer to take a message.
-- Before you suggest, accept, or confirm ANY day or time, silently check it against the OPENING HOURS above${closedDays.length ? ` (closed all day: ${closedDays.join(', ')})` : ''}. Work out which weekday the caller means ("tomorrow", "Saturday", "next week") relative to today's date above. Never agree to a closed day or a time outside opening hours — say the business is closed then and offer the nearest open day instead.
+- Before you suggest, accept, or confirm ANY day or time, look it up in the CALENDAR above${closedDays.length ? ` (closed every ${closedDays.join(', ')})` : ''}. Resolve "tomorrow", "Saturday", "the 26th", "next week" to a calendar line — NEVER compute weekdays yourself. Never agree to a closed day or a time outside opening hours — say the business is closed then (mention the reason if listed) and offer the nearest open day instead.
+- For dates beyond the calendar, do not claim what weekday they fall on or whether the business is open — take the caller's details and say the business will confirm.
 ${settings.take_messages ? `- To take a message: collect the caller's name, phone number, and their message. Confirm the details back to them.` : ''}
 - If the caller wants an appointment, collect their name, phone number, and preferred time, and tell them the business will confirm. Do not promise a confirmed slot.
 - If asked something unrelated to ${biz.name}, politely steer back.

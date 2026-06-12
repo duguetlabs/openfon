@@ -34,6 +34,7 @@ export interface Business {
   hours_json: string;
   services_json: string;
   faqs_json: string;
+  closures_json: string;
 }
 
 export interface AgentSettings {

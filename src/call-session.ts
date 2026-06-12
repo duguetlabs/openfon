@@ -401,7 +401,15 @@ export class CallSession implements DurableObject {
       .map((m) => `${m.role === 'user' ? 'Caller' : 'You'}: ${m.content}`)
       .join('\n');
     const resumed = `${this.realtimeInstructions}\n\nThe call audio was briefly interrupted; the caller is still on the line. Do NOT greet again. Conversation so far:\n${transcript}`;
+    const old = this.upstream;
     const ok = await this.openUpstream(resumed, null).catch(() => false);
+    if (ok && old && old !== this.upstream) {
+      try {
+        old.close(1000, 'rotated');
+      } catch {
+        /* already closed */
+      }
+    }
     if (!ok) await this.recoverUpstream();
   }
 
@@ -450,6 +458,13 @@ export class CallSession implements DurableObject {
           this.history.push({ role: 'assistant', content: text });
           await this.saveTurn('agent', text);
         }
+        break;
+      case 'session.expiring':
+        // Vendor extension: the engine warns a minute before its hard session
+        // cutoff — reconnect proactively instead of dropping mid-sentence.
+        console.log(`call ${this.callId}: upstream session expiring, rotating connection`);
+        this.reconnects = 0; // each warned rotation gets its own retry budget
+        void this.recoverUpstream();
         break;
       case 'error':
         console.error('realtime engine error:', JSON.stringify(msg.error ?? msg).slice(0, 300));

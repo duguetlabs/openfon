@@ -25,6 +25,7 @@ export default function Settings() {
   const [hours, setHours] = useState<Hour[]>([]);
   const [services, setServices] = useState<{ name: string; price: string }[]>([]);
   const [faqs, setFaqs] = useState<{ q: string; a: string }[]>([]);
+  const [closures, setClosures] = useState<{ date: string; reason: string }[]>([]);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [saved, setSaved] = useState('');
   const [error, setError] = useState('');
@@ -35,6 +36,7 @@ export default function Settings() {
       setHours(parse(business.hours_json, []));
       setServices(parse(business.services_json, []));
       setFaqs(parse(business.faqs_json, []));
+      setClosures(parse(business.closures_json, []));
       setAgent(business.agent ? { ...business.agent } : null);
     }
   }, [business]);
@@ -50,6 +52,7 @@ export default function Settings() {
         hours_json: JSON.stringify(hours),
         services_json: JSON.stringify(services.filter((s) => s.name.trim())),
         faqs_json: JSON.stringify(faqs.filter((f) => f.q.trim() && f.a.trim())),
+        closures_json: JSON.stringify(closures.filter((c) => c.date.trim())),
       });
       await api.updateAgent(biz!.id, agent!);
       await refresh();
@@ -128,6 +131,28 @@ export default function Settings() {
                   placeholder="Price"
                   value={row.price}
                   onChange={(e) => setR({ ...row, price: e.target.value })}
+                />
+              </>
+            )}
+          />
+          <ListEditor
+            title="Holidays & special closures"
+            rows={closures}
+            onChange={setClosures}
+            empty={{ date: '', reason: '' }}
+            render={(row, setR) => (
+              <>
+                <input
+                  type="date"
+                  className="rounded-lg border border-line bg-white/70 px-3 py-1.5 font-mono text-sm"
+                  value={row.date}
+                  onChange={(e) => setR({ ...row, date: e.target.value })}
+                />
+                <input
+                  className="flex-1 rounded-lg border border-line bg-white/70 px-3 py-1.5 text-sm"
+                  placeholder="Public holiday"
+                  value={row.reason}
+                  onChange={(e) => setR({ ...row, reason: e.target.value })}
                 />
               </>
             )}

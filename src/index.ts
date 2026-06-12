@@ -95,8 +95,8 @@ app.post('/api/me/business', async (c) => {
   const id = newId();
   const slug = slugify(body.name);
   await c.env.DB.prepare(
-    `INSERT INTO businesses (id, user_id, slug, name, description, address, phone, website, timezone, hours_json, services_json, faqs_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO businesses (id, user_id, slug, name, description, address, phone, website, timezone, hours_json, services_json, faqs_json, closures_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       id,
@@ -110,7 +110,8 @@ app.post('/api/me/business', async (c) => {
       body.timezone ?? 'Europe/Vienna',
       body.hours_json ?? '[]',
       body.services_json ?? '[]',
-      body.faqs_json ?? '[]'
+      body.faqs_json ?? '[]',
+      body.closures_json ?? '[]'
     )
     .run();
   await c.env.DB.prepare('INSERT INTO agent_settings (business_id) VALUES (?)').bind(id).run();
@@ -123,7 +124,7 @@ app.put('/api/me/business/:id', async (c) => {
   if (!biz) return c.json({ error: 'Not found' }, 404);
   const b = await c.req.json<Partial<Business>>();
   await c.env.DB.prepare(
-    `UPDATE businesses SET name=?, description=?, address=?, phone=?, website=?, timezone=?, hours_json=?, services_json=?, faqs_json=? WHERE id=?`
+    `UPDATE businesses SET name=?, description=?, address=?, phone=?, website=?, timezone=?, hours_json=?, services_json=?, faqs_json=?, closures_json=? WHERE id=?`
   )
     .bind(
       b.name?.trim() || biz.name,
@@ -135,6 +136,7 @@ app.put('/api/me/business/:id', async (c) => {
       b.hours_json ?? biz.hours_json,
       b.services_json ?? biz.services_json,
       b.faqs_json ?? biz.faqs_json,
+      b.closures_json ?? biz.closures_json,
       biz.id
     )
     .run();
