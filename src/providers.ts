@@ -58,9 +58,9 @@ export const SUPPORTED_LANGUAGES: Record<string, { name: string; voice: string }
 // correct initial pronunciation (greeting, first reply); detection-based
 // following continues afterwards. Unknown ids degrade gracefully upstream,
 // with the lang_REGION prefix still selecting the language.
-// (We deliberately do NOT use transcription.language seeding: as of
-// 2026-06-13 the seed is echoed back as the detected language of the first
-// utterance, which mislabels English callers as the seeded language.)
+// transcription.language seeding is layered on top since Kataleptic's
+// 2026-06-13 fix (seed = greeting + STT hint; per-utterance detection wins);
+// the voice pin stays as belt-and-braces and for non-Kataleptic providers.
 export const PIPER_BY_LANG: Record<string, string> = {
   en: 'en_US-lessac-medium',
   de: 'de_DE-thorsten-medium',

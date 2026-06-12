@@ -293,6 +293,12 @@ export class CallSession implements DurableObject {
               // forcing ours silently disables caller transcripts there.
               model: this.realtimeModel.startsWith('gpt-realtime') ? 'whisper-1' : this.env.DEFAULT_STT_MODEL,
               prompt: this.biz && this.settings ? sttVocab(this.biz, this.settings) : undefined,
+              // On cascade tiers this is a greeting seed + STT accuracy hint,
+              // not a pin: per-utterance detection overrides it once the caller
+              // speaks (verified 2026-06-13 after Kataleptic's fix).
+              ...(this.isCascade() && this.settings && this.settings.language in SUPPORTED_LANGUAGES
+                ? { language: this.settings.language }
+                : {}),
             },
           },
           output: {
@@ -330,13 +336,17 @@ export class CallSession implements DurableObject {
     return this.realtimeModel === 'kataleptic-realtime' || this.realtimeModel.startsWith('gpt-realtime');
   }
 
+  private isCascade(): boolean {
+    return this.realtimeModel !== 'kataleptic-realtime-hd' && !this.realtimeModel.startsWith('gpt-realtime');
+  }
+
   private async startRealtime(systemPrompt: string, greeting: string): Promise<boolean> {
     const key = this.env.REALTIME_API_KEY || this.env.DEFAULT_LLM_API_KEY || '';
     const model = this.settings?.realtime_model || this.env.REALTIME_MODEL;
     this.realtimeModel = model;
     console.log(`call ${this.callId}: realtime engine, model ${model}`);
     const isHd = model === 'kataleptic-realtime-hd';
-    const isCascade = !isHd && !model.startsWith('gpt-realtime');
+    const isCascade = this.isCascade();
     // Explicit per-business realtime voice wins; on the Azure-backed HD tier we
     // manage the voice (matches the synthesized greeting); Piper cascades get a
     // default-language initial voice (they'd otherwise start English until the
