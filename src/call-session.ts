@@ -283,8 +283,10 @@ export class CallSession implements DurableObject {
   private maybeSwitchVoice(callerText: string): void {
     const detected = detectLang(callerText);
     if (!detected || detected === this.lang) return;
+    const before = voiceForReply(this.env, this.lang, this.settings?.language ?? 'en', this.settings?.voice || '');
     this.lang = detected;
     const voice = voiceForReply(this.env, detected, this.settings?.language ?? 'en', this.settings?.voice || '');
+    if (voice === before) return; // multilingual voices cover all languages — nothing to swap
     console.log(`call ${this.callId}: language switch -> ${detected}, voice -> ${voice}`);
     this.sendUpstream(this.realtimeSessionPayload(voice));
   }

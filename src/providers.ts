@@ -36,17 +36,20 @@ export async function chatComplete(
 }
 
 // Languages OpenFon speaks. Keys are ISO 639-1; values are Azure neural voices.
+// One multilingual voice for all languages by default: the agent keeps a single,
+// natural-sounding persona even when the caller switches language mid-call.
+const MULTILINGUAL_VOICE = 'en-US-AvaMultilingualNeural';
 export const SUPPORTED_LANGUAGES: Record<string, { name: string; voice: string }> = {
-  en: { name: 'English', voice: 'en-US-JennyNeural' },
-  de: { name: 'German', voice: 'de-DE-KatjaNeural' },
-  fr: { name: 'French', voice: 'fr-FR-DeniseNeural' },
-  es: { name: 'Spanish', voice: 'es-ES-ElviraNeural' },
-  nl: { name: 'Dutch', voice: 'nl-NL-FennaNeural' },
-  sv: { name: 'Swedish', voice: 'sv-SE-SofieNeural' },
-  da: { name: 'Danish', voice: 'da-DK-ChristelNeural' },
-  it: { name: 'Italian', voice: 'it-IT-ElsaNeural' },
-  fi: { name: 'Finnish', voice: 'fi-FI-NooraNeural' },
-  ru: { name: 'Russian', voice: 'ru-RU-SvetlanaNeural' },
+  en: { name: 'English', voice: MULTILINGUAL_VOICE },
+  de: { name: 'German', voice: MULTILINGUAL_VOICE },
+  fr: { name: 'French', voice: MULTILINGUAL_VOICE },
+  es: { name: 'Spanish', voice: MULTILINGUAL_VOICE },
+  nl: { name: 'Dutch', voice: MULTILINGUAL_VOICE },
+  sv: { name: 'Swedish', voice: MULTILINGUAL_VOICE },
+  da: { name: 'Danish', voice: MULTILINGUAL_VOICE },
+  it: { name: 'Italian', voice: MULTILINGUAL_VOICE },
+  fi: { name: 'Finnish', voice: MULTILINGUAL_VOICE },
+  ru: { name: 'Russian', voice: MULTILINGUAL_VOICE },
 };
 
 // STT backends report language as ISO codes ("de") or names ("german").

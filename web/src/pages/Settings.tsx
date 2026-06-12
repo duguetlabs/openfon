@@ -183,7 +183,7 @@ export default function Settings() {
             label="Voice (Azure TTS)"
             value={agent.voice}
             onChange={(e) => setA({ voice: e.target.value })}
-            hint="Applies to your default language only — other languages use a matching neural voice automatically. e.g. en-US-JennyNeural, de-AT-IngridNeural."
+            hint="Default is en-US-AvaMultilingualNeural, one natural voice for all languages. A custom voice applies to your default language only. e.g. de-AT-IngridNeural."
           />
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={!!agent.take_messages} onChange={(e) => setA({ take_messages: e.target.checked ? 1 : 0 })} />

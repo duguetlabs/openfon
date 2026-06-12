@@ -53,6 +53,7 @@ export class VoiceCall {
   private playCtx: AudioContext | null = null;
   private nextPlayTime = 0;
   private liveSources = new Set<AudioBufferSourceNode>();
+  private pcmCarry: Uint8Array | null = null; // odd trailing byte awaiting its other half
 
   on(fn: Listener): void {
     this.listeners.push(fn);
@@ -259,18 +260,34 @@ export class VoiceCall {
   }
 
   private playPcm(buf: ArrayBuffer): void {
-    if (buf.byteLength < 2) return;
+    // The PCM stream is split into chunks at arbitrary byte offsets; a chunk
+    // boundary can land mid-sample. Carry the odd byte into the next chunk —
+    // playing misaligned PCM16 sounds like a burst of white noise.
+    let bytes = new Uint8Array(buf);
+    if (this.pcmCarry) {
+      const joined = new Uint8Array(this.pcmCarry.length + bytes.length);
+      joined.set(this.pcmCarry);
+      joined.set(bytes, this.pcmCarry.length);
+      bytes = joined;
+      this.pcmCarry = null;
+    }
+    if (bytes.length % 2 === 1) {
+      this.pcmCarry = bytes.slice(bytes.length - 1);
+      bytes = bytes.subarray(0, bytes.length - 1);
+    }
+    if (bytes.length < 2) return;
     if (!this.playCtx) this.playCtx = new AudioContext({ sampleRate: 24000 });
     const ctx = this.playCtx;
     void ctx.resume();
-    const i16 = new Int16Array(buf.byteLength % 2 === 0 ? buf : buf.slice(0, buf.byteLength - 1));
+    const i16 = new Int16Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length));
     const audio = ctx.createBuffer(1, i16.length, 24000);
     const ch = audio.getChannelData(0);
     for (let i = 0; i < i16.length; i++) ch[i] = i16[i] / 32768;
     const node = ctx.createBufferSource();
     node.buffer = audio;
     node.connect(ctx.destination);
-    const startAt = Math.max(ctx.currentTime + 0.04, this.nextPlayTime);
+    // 150 ms jitter cushion when starting fresh; back-to-back while streaming.
+    const startAt = Math.max(ctx.currentTime + (this.liveSources.size === 0 ? 0.15 : 0.005), this.nextPlayTime);
     node.start(startAt);
     this.nextPlayTime = startAt + audio.duration;
     if (this.liveSources.size === 0) this.emit({ type: 'speaking', who: 'agent' });
@@ -292,6 +309,7 @@ export class VoiceCall {
     }
     this.liveSources.clear();
     this.nextPlayTime = 0;
+    this.pcmCarry = null;
   }
 
   // ---- agent audio playback ----
