@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, type Agent, type Business } from '../api';
+import { api, type Agent, type Business, type EngineProfile, type VoiceCatalog } from '../api';
 import { useSession } from '../App';
 import { Button, Card, Field, SectionTitle, TextArea, LANGUAGES } from '../ui';
 import { ListEditor } from './Onboarding';
@@ -29,6 +29,9 @@ export default function Settings() {
   const [agent, setAgent] = useState<Agent | null>(null);
   const [saved, setSaved] = useState('');
   const [error, setError] = useState('');
+  const [profiles, setProfiles] = useState<EngineProfile[]>([]);
+  const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
+  const [newProfileName, setNewProfileName] = useState('');
 
   useEffect(() => {
     if (business) {
@@ -38,6 +41,8 @@ export default function Settings() {
       setFaqs(parse(business.faqs_json, []));
       setClosures(parse(business.closures_json, []));
       setAgent(business.agent ? { ...business.agent } : null);
+      void api.profiles(business.id).then(setProfiles).catch(() => {});
+      void api.voices().then(setVoiceCatalog).catch(() => {});
     }
   }, [business]);
 
@@ -208,8 +213,16 @@ export default function Settings() {
             label="Voice (Azure TTS)"
             value={agent.voice}
             onChange={(e) => setA({ voice: e.target.value })}
-            hint="Default is en-US-AvaMultilingualNeural, one natural voice for all languages. A custom voice applies to your default language only. e.g. de-AT-IngridNeural."
+            list="azure-voice-options"
+            hint="Default is en-US-AvaMultilingualNeural, one natural voice for all languages. A custom voice applies to your default language only."
           />
+          <datalist id="azure-voice-options">
+            {(voiceCatalog?.azure ?? []).map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.label}
+              </option>
+            ))}
+          </datalist>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={!!agent.take_messages} onChange={(e) => setA({ take_messages: e.target.checked ? 1 : 0 })} />
             Take messages when the agent can't help
@@ -220,6 +233,80 @@ export default function Settings() {
             onChange={(e) => setA({ custom_instructions: e.target.value })}
             placeholder="Anything else your receptionist should know or do."
           />
+        </Card>
+      </section>
+
+      <section className="rise rise-2">
+        <SectionTitle sub="Saved combinations of engine, model, language, and voices — apply one to switch the whole setup at once.">
+          Engine profiles
+        </SectionTitle>
+        <Card className="space-y-3">
+          {profiles.length === 0 && <p className="text-sm text-ink-soft">No profiles yet. Configure the engine below, then save it here under a name.</p>}
+          {profiles.map((p) => (
+            <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-white/50 px-3 py-2">
+              <input
+                className="min-w-32 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-ink hover:border-line focus:border-pine focus:bg-white"
+                value={p.name}
+                onChange={(e) => setProfiles(profiles.map((x) => (x.id === p.id ? { ...x, name: e.target.value } : x)))}
+                onBlur={(e) => void api.updateProfile(p.id, { name: e.target.value })}
+              />
+              <span className="font-mono text-[11px] text-ink-soft">
+                {p.engine === 'realtime' ? `realtime · ${p.realtime_model || 'default'}` : 'pipeline'} · {p.language}
+                {(p.realtime_voice || p.voice) && ` · ${p.realtime_voice || p.voice}`}
+              </span>
+              <button
+                className="rounded-full bg-pine px-3 py-1 text-xs font-bold text-paper hover:bg-pine-deep"
+                onClick={() =>
+                  void api.applyProfile(p.id).then(async () => {
+                    await refresh();
+                    setSaved(`Applied "${p.name}".`);
+                    setTimeout(() => setSaved(''), 2500);
+                  })
+                }
+              >
+                Apply
+              </button>
+              <button
+                className="px-1 text-ink-soft hover:text-ring"
+                aria-label="Delete profile"
+                onClick={() => void api.deleteProfile(p.id).then(() => setProfiles(profiles.filter((x) => x.id !== p.id)))}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <div className="flex gap-2 pt-1">
+            <input
+              className="flex-1 rounded-xl border border-line bg-white/70 px-4 py-2 text-sm"
+              placeholder='Save current setup as… e.g. "Realtime HD English (Emma)"'
+              value={newProfileName}
+              onChange={(e) => setNewProfileName(e.target.value)}
+            />
+            <Button
+              variant="ghost"
+              disabled={!newProfileName.trim()}
+              onClick={() =>
+                void api
+                  .createProfile(biz.id, {
+                    name: newProfileName.trim(),
+                    engine: agent.engine,
+                    realtime_model: agent.realtime_model,
+                    realtime_voice: agent.realtime_voice,
+                    language: agent.language,
+                    voice: agent.voice,
+                    llm_base_url: agent.llm_base_url,
+                    llm_api_key: agent.llm_api_key,
+                    llm_model: agent.llm_model,
+                  })
+                  .then((p) => {
+                    setProfiles([...profiles, p]);
+                    setNewProfileName('');
+                  })
+              }
+            >
+              Save profile
+            </Button>
+          </div>
         </Card>
       </section>
 
@@ -279,8 +366,23 @@ export default function Settings() {
                     value={agent.realtime_voice}
                     onChange={(e) => setA({ realtime_voice: e.target.value })}
                     placeholder="Tier default"
-                    hint="Voice id passed to the chosen tier. HD: any Azure neural voice (de-DE-SeraphinaMultilingualNeural). Cascade: Piper ids (de_DE-thorsten-medium) — empty lets the voice follow the caller's language automatically. gpt-realtime-2: OpenAI voices (marin, cedar, alloy). Catalog: kataleptic.com/docs/realtime#voices"
+                    list="rt-voice-options"
+                    hint="Pick from the chosen tier's live catalog or type any voice id. Empty = tier default (cascade voices follow the caller's language automatically)."
                   />
+                  <datalist id="rt-voice-options">
+                    {(voiceCatalog
+                      ? agent.realtime_model === 'kataleptic-realtime-hd'
+                        ? voiceCatalog.azure
+                        : agent.realtime_model === 'gpt-realtime-2'
+                          ? voiceCatalog.native
+                          : voiceCatalog.cascade
+                      : []
+                    ).map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.label}
+                      </option>
+                    ))}
+                  </datalist>
                 </div>
               </label>
             )}

@@ -196,12 +196,13 @@ export class CallSession implements DurableObject {
       });
       if (ok) {
         this.mode = 'realtime';
+        const engineLabel = `realtime · ${this.realtimeModel}`;
         if (this.engineGreets()) {
           // Engine speaks the greeting in its own voice; the greeting text and
           // transcript turn arrive through the normal event stream.
           this.history = [{ role: 'system', content: systemPrompt }];
           const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-          this.send({ type: 'ready', mode: 'realtime', ttsMode, greeting: '' });
+          this.send({ type: 'ready', mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
           return;
         }
         this.history = [
@@ -209,7 +210,7 @@ export class CallSession implements DurableObject {
           { role: 'assistant', content: greeting },
         ];
         const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-        this.send({ type: 'ready', mode: 'realtime', ttsMode, greeting });
+        this.send({ type: 'ready', mode: 'realtime', ttsMode, greeting, engine: engineLabel });
         await this.saveTurn('agent', greeting);
         // The greeting is ours, not the model's: synthesize it deterministically
         // and stream it as PCM so it matches the realtime audio path.
@@ -235,7 +236,13 @@ export class CallSession implements DurableObject {
       { role: 'assistant', content: greeting },
     ];
     const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-    this.send({ type: 'ready', mode: 'pipeline', ttsMode, greeting });
+    this.send({
+      type: 'ready',
+      mode: 'pipeline',
+      ttsMode,
+      greeting,
+      engine: `pipeline · ${resolveLlm(this.env, this.settings).model}`,
+    });
     await this.saveTurn('agent', greeting);
     await this.speak(greeting);
   }

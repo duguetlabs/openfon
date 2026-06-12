@@ -23,6 +23,7 @@ export default function Widget() {
   const [level, setLevel] = useState(0);
   const [textInput, setTextInput] = useState('');
   const [hasMic, setHasMic] = useState(true);
+  const [engine, setEngine] = useState('');
   const callRef = useRef<VoiceCall | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -69,6 +70,9 @@ export default function Widget() {
         break;
       case 'level':
         setLevel(ev.value);
+        break;
+      case 'engine':
+        setEngine(ev.label);
         break;
     }
   }
@@ -120,7 +124,16 @@ export default function Widget() {
 
       <header className="relative z-10 flex items-center justify-between px-6 py-5">
         <Logo dark />
-        <span className="font-mono text-xs text-paper/40">{live ? <span className="text-ring">● LIVE</span> : 'web call'}</span>
+        <span className="font-mono text-xs text-paper/40">
+          {live ? (
+            <>
+              <span className="text-ring">● LIVE</span>
+              {engine && <span className="ml-3 text-paper/50">{engine}</span>}
+            </>
+          ) : (
+            'web call'
+          )}
+        </span>
       </header>
 
       <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 pb-10">

@@ -5,6 +5,7 @@
 
 export type VoiceEvent =
   | { type: 'status'; status: 'connecting' | 'live' | 'ended' | 'error'; detail?: string }
+  | { type: 'engine'; label: string }
   | { type: 'transcript'; text: string }
   | { type: 'agent_text'; text: string }
   | { type: 'thinking' }
@@ -115,12 +116,14 @@ export class VoiceCall {
         message?: string;
         mode?: string;
         who?: 'caller' | 'agent' | 'none';
+        engine?: string;
       };
       switch (msg.type) {
         case 'ready':
           this.mode = msg.mode === 'realtime' ? 'realtime' : 'pipeline';
           this.ttsMode = msg.ttsMode === 'server' ? 'server' : 'browser';
           this.emit({ type: 'status', status: 'live' });
+          if (msg.engine) this.emit({ type: 'engine', label: msg.engine });
           if (msg.greeting) {
             this.emit({ type: 'agent_text', text: msg.greeting });
             if (this.ttsMode === 'browser') this.speakLocally(msg.greeting);

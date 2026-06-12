@@ -52,6 +52,31 @@ export interface CallDetail extends CallRow {
   turns: { role: 'caller' | 'agent'; text: string; ts: string }[];
 }
 
+export interface EngineProfile {
+  id: string;
+  name: string;
+  engine: string;
+  realtime_model: string;
+  realtime_voice: string;
+  language: string;
+  voice: string;
+  llm_base_url: string;
+  llm_api_key: string;
+  llm_model: string;
+}
+
+export interface VoiceOption {
+  id: string;
+  label: string;
+}
+
+export interface VoiceCatalog {
+  cascade: VoiceOption[];
+  native: VoiceOption[];
+  azure: VoiceOption[];
+  hdDefault: string;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -83,4 +108,10 @@ export const api = {
   updateAgent: (id: string, a: Partial<Agent>) => req<{ ok: true }>('PUT', `/api/me/business/${id}/agent`, a),
   calls: (id: string) => req<CallRow[]>('GET', `/api/me/business/${id}/calls`),
   call: (callId: string) => req<CallDetail>('GET', `/api/me/calls/${callId}`),
+  profiles: (bizId: string) => req<EngineProfile[]>('GET', `/api/me/business/${bizId}/profiles`),
+  createProfile: (bizId: string, p: Partial<EngineProfile>) => req<EngineProfile>('POST', `/api/me/business/${bizId}/profiles`, p),
+  updateProfile: (pid: string, p: Partial<EngineProfile>) => req<{ ok: true }>('PUT', `/api/me/profiles/${pid}`, p),
+  deleteProfile: (pid: string) => req<{ ok: true }>('DELETE', `/api/me/profiles/${pid}`),
+  applyProfile: (pid: string) => req<{ ok: true }>('POST', `/api/me/profiles/${pid}/apply`),
+  voices: () => req<VoiceCatalog>('GET', '/api/me/voices'),
 };

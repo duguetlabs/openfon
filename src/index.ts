@@ -215,6 +215,159 @@ function maskSettings(s: AgentSettings): AgentSettings {
   return { ...s, llm_api_key: s.llm_api_key ? '••••••••' : '' };
 }
 
+// ---------- engine profiles (named voice-engine presets) ----------
+const PROFILE_FIELDS = ['engine', 'realtime_model', 'realtime_voice', 'language', 'voice', 'llm_base_url', 'llm_api_key', 'llm_model'] as const;
+type ProfileFields = Record<(typeof PROFILE_FIELDS)[number], string> & { id: string; name: string; business_id: string };
+
+function maskProfile(p: ProfileFields): ProfileFields {
+  return { ...p, llm_api_key: p.llm_api_key ? '••••••••' : '' };
+}
+
+app.get('/api/me/business/:id/profiles', async (c) => {
+  const biz = await ownedBusiness(c.env, c.get('userId'), c.req.param('id'));
+  if (!biz) return c.json({ error: 'Not found' }, 404);
+  const { results } = await c.env.DB.prepare('SELECT * FROM engine_profiles WHERE business_id = ? ORDER BY created_at')
+    .bind(biz.id)
+    .all<ProfileFields>();
+  return c.json(results.map(maskProfile));
+});
+
+app.post('/api/me/business/:id/profiles', async (c) => {
+  const biz = await ownedBusiness(c.env, c.get('userId'), c.req.param('id'));
+  if (!biz) return c.json({ error: 'Not found' }, 404);
+  const b = await c.req.json<Partial<ProfileFields>>();
+  if (!b.name?.trim()) return c.json({ error: 'Profile name required' }, 400);
+  const id = newId();
+  // '••••' means "snapshot the key currently in agent_settings"
+  let llmKey = b.llm_api_key ?? '';
+  if (/^•+$/.test(llmKey)) {
+    const cur = await c.env.DB.prepare('SELECT llm_api_key FROM agent_settings WHERE business_id = ?')
+      .bind(biz.id)
+      .first<{ llm_api_key: string }>();
+    llmKey = cur?.llm_api_key ?? '';
+  }
+  await c.env.DB.prepare(
+    `INSERT INTO engine_profiles (id, business_id, name, engine, realtime_model, realtime_voice, language, voice, llm_base_url, llm_api_key, llm_model)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(
+      id,
+      biz.id,
+      b.name.trim(),
+      b.engine === 'realtime' ? 'realtime' : 'pipeline',
+      b.realtime_model ?? '',
+      b.realtime_voice ?? '',
+      b.language ?? 'en',
+      b.voice ?? '',
+      b.llm_base_url ?? '',
+      llmKey,
+      b.llm_model ?? ''
+    )
+    .run();
+  const row = await c.env.DB.prepare('SELECT * FROM engine_profiles WHERE id = ?').bind(id).first<ProfileFields>();
+  return c.json(maskProfile(row!), 201);
+});
+
+async function ownedProfile(env: Env, userId: string, pid: string): Promise<ProfileFields | null> {
+  return env.DB.prepare(
+    `SELECT engine_profiles.* FROM engine_profiles
+     JOIN businesses ON businesses.id = engine_profiles.business_id
+     WHERE engine_profiles.id = ? AND businesses.user_id = ?`
+  )
+    .bind(pid, userId)
+    .first<ProfileFields>();
+}
+
+app.put('/api/me/profiles/:pid', async (c) => {
+  const p = await ownedProfile(c.env, c.get('userId'), c.req.param('pid'));
+  if (!p) return c.json({ error: 'Not found' }, 404);
+  const b = await c.req.json<Partial<ProfileFields>>();
+  const llmKey = b.llm_api_key !== undefined && !/^•+$/.test(b.llm_api_key) ? b.llm_api_key : p.llm_api_key;
+  await c.env.DB.prepare(
+    `UPDATE engine_profiles SET name=?, engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_base_url=?, llm_api_key=?, llm_model=? WHERE id=?`
+  )
+    .bind(
+      b.name?.trim() || p.name,
+      b.engine ?? p.engine,
+      b.realtime_model ?? p.realtime_model,
+      b.realtime_voice ?? p.realtime_voice,
+      b.language ?? p.language,
+      b.voice ?? p.voice,
+      b.llm_base_url ?? p.llm_base_url,
+      llmKey,
+      b.llm_model ?? p.llm_model,
+      p.id
+    )
+    .run();
+  return c.json({ ok: true });
+});
+
+app.delete('/api/me/profiles/:pid', async (c) => {
+  const p = await ownedProfile(c.env, c.get('userId'), c.req.param('pid'));
+  if (!p) return c.json({ error: 'Not found' }, 404);
+  await c.env.DB.prepare('DELETE FROM engine_profiles WHERE id = ?').bind(p.id).run();
+  return c.json({ ok: true });
+});
+
+// Copy a profile's engine fields onto the live agent settings in one action.
+app.post('/api/me/profiles/:pid/apply', async (c) => {
+  const p = await ownedProfile(c.env, c.get('userId'), c.req.param('pid'));
+  if (!p) return c.json({ error: 'Not found' }, 404);
+  await c.env.DB.prepare(
+    `UPDATE agent_settings SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_base_url=?, llm_api_key=?, llm_model=? WHERE business_id=?`
+  )
+    .bind(p.engine, p.realtime_model, p.realtime_voice, p.language, p.voice, p.llm_base_url, p.llm_api_key, p.llm_model, p.business_id)
+    .run();
+  return c.json({ ok: true });
+});
+
+// ---------- voice catalogs (aggregated per tier, cached per isolate) ----------
+let voicesCache: { data: unknown; at: number } | null = null;
+
+app.get('/api/me/voices', async (c) => {
+  if (voicesCache && Date.now() - voicesCache.at < 3_600_000) return c.json(voicesCache.data);
+  const out: {
+    cascade: { id: string; label: string }[];
+    native: { id: string; label: string }[];
+    azure: { id: string; label: string }[];
+    hdDefault: string;
+  } = { cascade: [], native: [], azure: [], hdDefault: '' };
+  try {
+    const res = await fetch(c.env.REALTIME_BASE_URL.replace(/^ws/, 'http') + '/voices', { signal: AbortSignal.timeout(3000) });
+    if (res.ok) {
+      const cat = (await res.json()) as {
+        'kataleptic-realtime'?: { voices_by_language?: Record<string, string> };
+        'kataleptic-realtime-hd'?: { default?: string };
+        'gpt-realtime-2'?: { voices?: string[] };
+      };
+      out.cascade = Object.entries(cat['kataleptic-realtime']?.voices_by_language ?? {}).map(([lang, id]) => ({
+        id,
+        label: `${id} (${lang})`,
+      }));
+      out.native = (cat['gpt-realtime-2']?.voices ?? []).map((id) => ({ id, label: id }));
+      out.hdDefault = cat['kataleptic-realtime-hd']?.default ?? '';
+    }
+  } catch {
+    /* catalog unavailable — dropdowns degrade to free text */
+  }
+  try {
+    if (c.env.AZURE_SPEECH_KEY) {
+      const res = await fetch(`https://${c.env.AZURE_SPEECH_REGION}.tts.speech.microsoft.com/cognitiveservices/voices/list`, {
+        headers: { 'Ocp-Apim-Subscription-Key': c.env.AZURE_SPEECH_KEY },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) {
+        const list = (await res.json()) as { ShortName: string; LocaleName: string }[];
+        out.azure = list.map((v) => ({ id: v.ShortName, label: `${v.ShortName} — ${v.LocaleName}` }));
+      }
+    }
+  } catch {
+    /* same: free text fallback */
+  }
+  voicesCache = { data: out, at: Date.now() };
+  return c.json(out);
+});
+
 // ---------- public widget API ----------
 app.get('/api/public/agent/:slug', async (c) => {
   const biz = await c.env.DB.prepare('SELECT id, name, slug FROM businesses WHERE slug = ?')
