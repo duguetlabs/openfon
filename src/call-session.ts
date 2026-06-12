@@ -14,7 +14,7 @@
 //   server JSON  {type:"thinking"} | {type:"error", message} | {type:"ended"}
 import type { Env, Business, AgentSettings, ChatMessage } from './types';
 import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './prompt';
-import { chatComplete, detectLang, isVocabEcho, normalizeLang, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
+import { chatComplete, detectLang, isVocabEcho, normalizeLang, resolveLlm, synthesize, transcribe, voiceForReply, PIPER_BY_LANG, SUPPORTED_LANGUAGES } from './providers';
 
 // WebSocket binary payloads vary by runtime: ArrayBuffer, ArrayBufferView, or Blob.
 async function toArrayBuffer(data: unknown): Promise<ArrayBuffer> {
@@ -329,12 +329,19 @@ export class CallSession implements DurableObject {
     this.realtimeModel = model;
     console.log(`call ${this.callId}: realtime engine, model ${model}`);
     const isHd = model === 'kataleptic-realtime-hd';
+    const isCascade = !isHd && !model.startsWith('gpt-realtime');
     // Explicit per-business realtime voice wins; on the Azure-backed HD tier we
-    // manage the voice (matches the synthesized greeting); other tiers default.
+    // manage the voice (matches the synthesized greeting); Piper cascades get a
+    // default-language initial voice (they'd otherwise start English until the
+    // caller's language is first detected); native S2S tiers pick their own.
     this.voiceManaged = isHd && !this.settings?.realtime_voice;
     this.sessionVoice =
       this.settings?.realtime_voice ||
-      (isHd ? voiceForReply(this.env, this.lang, this.settings?.language ?? 'en', this.settings?.voice || '') : '');
+      (isHd
+        ? voiceForReply(this.env, this.lang, this.settings?.language ?? 'en', this.settings?.voice || '')
+        : isCascade
+          ? (PIPER_BY_LANG[this.lang] ?? '')
+          : '');
     this.realtimeInstructions = this.engineGreets()
       ? systemPrompt
       : `${systemPrompt}\n\nYou already opened the call by saying: "${greeting}". Continue the conversation from there.`;

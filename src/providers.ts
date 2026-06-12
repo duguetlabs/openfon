@@ -52,6 +52,25 @@ export const SUPPORTED_LANGUAGES: Record<string, { name: string; voice: string }
   ru: { name: 'Russian', voice: MULTILINGUAL_VOICE },
 };
 
+// Initial voice per language for Piper-based cascade tiers. The cascade
+// follows the *detected* caller language, but before anyone has spoken it
+// falls back to English — pinning a language-prefixed voice id sets the
+// correct initial pronunciation (greeting, first reply); detection-based
+// following continues afterwards. Unknown ids degrade gracefully upstream,
+// with the lang_REGION prefix still selecting the language.
+export const PIPER_BY_LANG: Record<string, string> = {
+  en: 'en_US-lessac-medium',
+  de: 'de_DE-thorsten-medium',
+  fr: 'fr_FR-siwis-medium',
+  es: 'es_ES-davefx-medium',
+  nl: 'nl_NL-mls-medium',
+  sv: 'sv_SE-nst-medium',
+  da: 'da_DK-talesyntese-medium',
+  it: 'it_IT-paola-medium',
+  fi: 'fi_FI-harri-medium',
+  ru: 'ru_RU-irina-medium',
+};
+
 // STT backends report language as ISO codes ("de") or names ("german").
 const LANG_ALIASES: Record<string, string> = {
   english: 'en', german: 'de', french: 'fr', spanish: 'es', dutch: 'nl',
