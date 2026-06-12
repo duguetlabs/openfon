@@ -34,10 +34,12 @@
     "AZURE_SPEECH_REGION": "westeurope",
     "DEFAULT_TTS_VOICE": "en-US-AvaMultilingualNeural",
     "REALTIME_BASE_URL": "wss://api.kataleptic.com/v1/realtime",
-    // Fast cascade with a strong chat model (~0.5 s replies; noise-robust VAD
-    // since Kataleptic's 2026-06-12 fix). "kataleptic-realtime-hd" is the
-    // Azure Voice Live tier (HD voices, ~1 s); "gpt-realtime-2" is native
-    // speech-to-speech. Per-business override in Settings.
+    // Cascade with a strong chat model: ~0.5 s replies and reliable grounded
+    // reasoning (the "kataleptic-realtime" default model answered English
+    // callers in German and got weekday math wrong in testing — it greets
+    // faster, but correctness wins). "kataleptic-realtime-hd" = Azure Voice
+    // Live (HD voices); "gpt-realtime-2" = native speech-to-speech.
+    // Per-business override in Settings.
     "REALTIME_MODEL": "llama-3.3-70b"
   }
 }

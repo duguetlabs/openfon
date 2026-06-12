@@ -32,8 +32,22 @@ export function buildSystemPrompt(biz: Business, settings: AgentSettings, now: D
   const faqs = parse<Faq[]>(biz.faqs_json, []);
 
   const hoursText = hours.length
-    ? hours.map((h) => `${h.day}: ${h.closed ? 'closed' : `${h.open}–${h.close}`}`).join('\n')
+    ? hours.map((h) => `${h.day}: ${h.closed ? 'CLOSED' : `${h.open}–${h.close}`}`).join('\n')
     : 'Not specified.';
+  const closedDays = hours.filter((h) => h.closed).map((h) => h.day);
+
+  // LLMs are bad at deriving weekdays from timestamps — spell it out.
+  let dateText: string;
+  try {
+    const fmt = (opts: Intl.DateTimeFormatOptions, d: Date) =>
+      new Intl.DateTimeFormat('en-US', { timeZone: biz.timezone || 'UTC', ...opts }).format(d);
+    const today = fmt({ weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }, now);
+    const time = fmt({ hour: '2-digit', minute: '2-digit', hour12: false }, now);
+    const tomorrow = fmt({ weekday: 'long' }, new Date(now.getTime() + 86_400_000));
+    dateText = `Today is ${today}, ${time} (${biz.timezone}). Tomorrow is ${tomorrow}.`;
+  } catch {
+    dateText = `Current date/time: ${now.toISOString()} (${biz.timezone})`;
+  }
   const servicesText = services.length
     ? services
         .map((s) => `- ${s.name}${s.price ? ` (${s.price})` : ''}${s.duration ? `, ${s.duration}` : ''}${s.notes ? ` — ${s.notes}` : ''}`)
@@ -54,7 +68,7 @@ ${biz.description ? `About: ${biz.description}` : ''}
 ${biz.address ? `Address: ${biz.address}` : ''}
 ${biz.phone ? `Phone: ${biz.phone}` : ''}
 ${biz.website ? `Website: ${biz.website}` : ''}
-Current date/time: ${now.toISOString()} (${biz.timezone})
+${dateText}
 
 OPENING HOURS:
 ${hoursText}
@@ -67,6 +81,7 @@ ${faqText}
 
 BEHAVIOR:
 - Answer questions using only the facts above. If you don't know, say so and offer to take a message.
+- Before you suggest, accept, or confirm ANY day or time, silently check it against the OPENING HOURS above${closedDays.length ? ` (closed all day: ${closedDays.join(', ')})` : ''}. Work out which weekday the caller means ("tomorrow", "Saturday", "next week") relative to today's date above. Never agree to a closed day or a time outside opening hours — say the business is closed then and offer the nearest open day instead.
 ${settings.take_messages ? `- To take a message: collect the caller's name, phone number, and their message. Confirm the details back to them.` : ''}
 - If the caller wants an appointment, collect their name, phone number, and preferred time, and tell them the business will confirm. Do not promise a confirmed slot.
 - If asked something unrelated to ${biz.name}, politely steer back.

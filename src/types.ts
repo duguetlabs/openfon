@@ -50,6 +50,7 @@ export interface AgentSettings {
   llm_model: string;
   engine: string; // 'pipeline' | 'realtime'
   realtime_model: string; // empty = instance default (REALTIME_MODEL)
+  realtime_voice: string; // tier-specific voice id, passed verbatim; empty = tier default
 }
 
 export interface LlmConfig {

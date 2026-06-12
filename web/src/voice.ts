@@ -54,6 +54,7 @@ export class VoiceCall {
   private nextPlayTime = 0;
   private liveSources = new Set<AudioBufferSourceNode>();
   private pcmCarry: Uint8Array | null = null; // odd trailing byte awaiting its other half
+  private pingTimer: number | null = null;
 
   on(fn: Listener): void {
     this.listeners.push(fn);
@@ -88,7 +89,14 @@ export class VoiceCall {
     ws.binaryType = 'arraybuffer';
     this.ws = ws;
 
-    ws.onopen = () => ws.send(JSON.stringify({ type: 'start' }));
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'start' }));
+      // Cloudflare drops WebSockets idle for ~100 s; pipeline-mode calls go
+      // silent between utterances, so keep the line warm.
+      this.pingTimer = window.setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }));
+      }, 20_000);
+    };
     ws.onerror = () => this.emit({ type: 'status', status: 'error', detail: 'Connection failed' });
     ws.onclose = () => {
       if (!this.ended) this.teardown('ended');
@@ -341,6 +349,7 @@ export class VoiceCall {
     if (this.ended) return;
     this.ended = true;
     if (this.vadTimer) clearInterval(this.vadTimer);
+    if (this.pingTimer) clearInterval(this.pingTimer);
     try {
       this.recorder?.state !== 'inactive' && this.recorder?.stop();
     } catch {

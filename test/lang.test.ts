@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { detectLang, normalizeLang } from '../src/providers';
+import { detectLang, isVocabEcho, normalizeLang } from '../src/providers';
+
+const VOCAB = 'Riverside Dental, Alex, Checkup, Cleaning, 12 River St, Vienna';
+
+describe('isVocabEcho', () => {
+  it('drops STT hallucinations of the vocabulary prompt', () => {
+    expect(isVocabEcho('Checkup, Cleaning, 12 River St, Vienna', VOCAB)).toBe(true);
+    expect(isVocabEcho('Riverside Dental Alex', VOCAB)).toBe(true);
+  });
+
+  it('keeps real speech that merely mentions business terms', () => {
+    expect(isVocabEcho('I would like to book a checkup for tomorrow morning please', VOCAB)).toBe(false);
+    expect(isVocabEcho('How much is a cleaning?', VOCAB)).toBe(false);
+    expect(isVocabEcho('Do you have time on Friday?', VOCAB)).toBe(false);
+  });
+});
 
 describe('detectLang', () => {
   it('detects the ten supported languages', () => {

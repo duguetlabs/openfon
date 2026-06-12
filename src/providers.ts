@@ -87,6 +87,23 @@ const STOPWORDS: Record<string, string[]> = {
   fi: ['minä', 'on', 'ja', 'ei', 'hei', 'kiitos', 'onko', 'voinko', 'haluan', 'teillä', 'kuinka', 'paljonko', 'mitä', 'milloin', 'aika', 'varata', 'hyvää', 'päivää', 'se', 'että'],
 };
 
+// Whisper-style STT, when fed a vocabulary bias prompt and a (near-)silent
+// audio segment, often hallucinates the prompt itself back as "speech".
+// Detect transcripts that are mostly vocabulary tokens and drop them.
+export function isVocabEcho(transcript: string, vocab: string): boolean {
+  const tokens = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .split(/\s+/)
+      .filter(Boolean);
+  const t = tokens(transcript);
+  if (t.length === 0) return false;
+  const v = new Set(tokens(vocab));
+  const overlap = t.filter((w) => v.has(w)).length;
+  return t.length >= 2 && overlap / t.length >= 0.7;
+}
+
 export function detectLang(text: string): string | null {
   const cyrillic = (text.match(/[а-яё]/gi) ?? []).length;
   if (cyrillic > text.length * 0.3) return 'ru';

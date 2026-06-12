@@ -248,6 +248,15 @@ export default function Settings() {
                 <span className="mt-1 block text-xs text-ink-soft">
                   Takes effect on the next call — handy for comparing tiers back-to-back.
                 </span>
+                <div className="mt-3">
+                  <Field
+                    label="Realtime voice (optional)"
+                    value={agent.realtime_voice}
+                    onChange={(e) => setA({ realtime_voice: e.target.value })}
+                    placeholder="Tier default"
+                    hint="Voice id passed to the chosen tier — each tier has its own catalog (HD accepts Azure neural voices; other tiers use their own ids). Empty = tier default."
+                  />
+                </div>
               </label>
             )}
           </div>

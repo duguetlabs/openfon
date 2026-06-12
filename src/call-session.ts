@@ -14,7 +14,7 @@
 //   server JSON  {type:"thinking"} | {type:"error", message} | {type:"ended"}
 import type { Env, Business, AgentSettings, ChatMessage } from './types';
 import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './prompt';
-import { chatComplete, detectLang, normalizeLang, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
+import { chatComplete, detectLang, isVocabEcho, normalizeLang, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
 
 // WebSocket binary payloads vary by runtime: ArrayBuffer, ArrayBufferView, or Blob.
 async function toArrayBuffer(data: unknown): Promise<ArrayBuffer> {
@@ -196,6 +196,14 @@ export class CallSession implements DurableObject {
       });
       if (ok) {
         this.mode = 'realtime';
+        if (this.engineGreets()) {
+          // Engine speaks the greeting in its own voice; the greeting text and
+          // transcript turn arrive through the normal event stream.
+          this.history = [{ role: 'system', content: systemPrompt }];
+          const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
+          this.send({ type: 'ready', mode: 'realtime', ttsMode, greeting: '' });
+          return;
+        }
         this.history = [
           { role: 'system', content: systemPrompt },
           { role: 'assistant', content: greeting },
@@ -250,15 +258,18 @@ export class CallSession implements DurableObject {
 
   private realtimeInstructions = '';
   private realtimeModel = '';
+  private sessionVoice = ''; // voice sent upstream; '' = let the tier pick
+  private voiceManaged = false; // true when we own language->voice switching (HD default)
+  private reconnects = 0;
 
   // Full session payload, resent whenever the voice changes — partial updates
   // are not guaranteed to preserve transcription config.
-  private realtimeSessionPayload(voice: string): unknown {
+  private realtimeSessionPayload(voice: string, instructions: string): unknown {
     return {
       type: 'session.update',
       session: {
         type: 'realtime',
-        instructions: this.realtimeInstructions,
+        instructions,
         audio: {
           input: {
             // 24 kHz: the lowest rate every tier accepts (native S2S models reject 16 kHz)
@@ -273,7 +284,9 @@ export class CallSession implements DurableObject {
           },
           output: {
             format: { type: 'audio/pcm', rate: 24000 },
-            voice,
+            // Each tier has its own voice catalog — only pass a voice we have
+            // reason to believe it understands ('' = tier default).
+            ...(voice ? { voice } : {}),
           },
         },
       },
@@ -286,12 +299,22 @@ export class CallSession implements DurableObject {
   private maybeSwitchVoice(callerText: string, langHint?: string | null): void {
     const detected = langHint ?? detectLang(callerText);
     if (!detected || detected === this.lang) return;
-    const before = voiceForReply(this.env, this.lang, this.settings?.language ?? 'en', this.settings?.voice || '');
+    const before = this.lang;
     this.lang = detected;
+    if (!this.voiceManaged) return; // tier picks its own voices
+    const prevVoice = voiceForReply(this.env, before, this.settings?.language ?? 'en', this.settings?.voice || '');
     const voice = voiceForReply(this.env, detected, this.settings?.language ?? 'en', this.settings?.voice || '');
-    if (voice === before) return; // multilingual voices cover all languages — nothing to swap
+    if (voice === prevVoice) return; // multilingual voices cover all languages — nothing to swap
     console.log(`call ${this.callId}: language switch -> ${detected}, voice -> ${voice}`);
-    this.sendUpstream(this.realtimeSessionPayload(voice));
+    this.sessionVoice = voice;
+    this.sendUpstream(this.realtimeSessionPayload(voice, this.realtimeInstructions));
+  }
+
+  // True when the engine should speak the greeting itself: its reply voice is
+  // not an Azure voice (so our synthesized greeting would not match), and its
+  // first-token latency is low enough for an instant pickup.
+  private engineGreets(): boolean {
+    return this.realtimeModel === 'kataleptic-realtime' || this.realtimeModel.startsWith('gpt-realtime');
   }
 
   private startRealtime(systemPrompt: string, greeting: string): Promise<boolean> {
@@ -299,7 +322,22 @@ export class CallSession implements DurableObject {
     const model = this.settings?.realtime_model || this.env.REALTIME_MODEL;
     this.realtimeModel = model;
     console.log(`call ${this.callId}: realtime engine, model ${model}`);
-    const url = `${this.env.REALTIME_BASE_URL}?model=${encodeURIComponent(model)}&token=${encodeURIComponent(key)}`;
+    const isHd = model === 'kataleptic-realtime-hd';
+    // Explicit per-business realtime voice wins; on the Azure-backed HD tier we
+    // manage the voice (matches the synthesized greeting); other tiers default.
+    this.voiceManaged = isHd && !this.settings?.realtime_voice;
+    this.sessionVoice =
+      this.settings?.realtime_voice ||
+      (isHd ? voiceForReply(this.env, this.lang, this.settings?.language ?? 'en', this.settings?.voice || '') : '');
+    this.realtimeInstructions = this.engineGreets()
+      ? systemPrompt
+      : `${systemPrompt}\n\nYou already opened the call by saying: "${greeting}". Continue the conversation from there.`;
+    return this.openUpstream(this.realtimeInstructions, this.engineGreets() ? greeting : null);
+  }
+
+  private openUpstream(instructions: string, greetWith: string | null): Promise<boolean> {
+    const key = this.env.REALTIME_API_KEY || this.env.DEFAULT_LLM_API_KEY || '';
+    const url = `${this.env.REALTIME_BASE_URL}?model=${encodeURIComponent(this.realtimeModel)}&token=${encodeURIComponent(key)}`;
     return new Promise<boolean>((resolve) => {
       let settled = false;
       const settle = (ok: boolean) => {
@@ -312,7 +350,7 @@ export class CallSession implements DurableObject {
       let ws: WebSocket;
       try {
         ws = new WebSocket(url);
-      } catch (err) {
+      } catch {
         clearTimeout(timer);
         settle(false);
         return;
@@ -320,12 +358,13 @@ export class CallSession implements DurableObject {
       this.upstream = ws;
       ws.addEventListener('open', () => {
         clearTimeout(timer);
-        // We speak the greeting ourselves (generated first responses on an
-        // empty conversation hallucinate, and response.create takes 3-7 s to
-        // first audio) and seed it as already-said.
-        this.realtimeInstructions = `${systemPrompt}\n\nYou already opened the call by saying: "${greeting}". Continue the conversation from there.`;
-        const initialVoice = voiceForReply(this.env, this.lang, this.settings?.language ?? 'en', this.settings?.voice || '');
-        this.sendUpstream(this.realtimeSessionPayload(initialVoice));
+        this.sendUpstream(this.realtimeSessionPayload(this.sessionVoice, instructions));
+        if (greetWith) {
+          this.sendUpstream({
+            type: 'response.create',
+            response: { instructions: `Greet the caller by saying exactly this, then wait for them to speak: "${greetWith}"` },
+          });
+        }
         settle(true);
       });
       ws.addEventListener('message', (ev) => {
@@ -334,18 +373,36 @@ export class CallSession implements DurableObject {
       ws.addEventListener('error', () => {
         clearTimeout(timer);
         settle(false);
-        if (this.mode === 'realtime' && !this.ended) this.sendError('Voice engine connection lost');
       });
       ws.addEventListener('close', () => {
         clearTimeout(timer);
         settle(false);
-        if (this.mode === 'realtime' && !this.ended) {
-          this.send({ type: 'ended' });
-          this.ws?.close(1000, 'engine closed');
-          void this.finalize();
+        if (this.mode === 'realtime' && !this.ended && this.upstream === ws) {
+          void this.recoverUpstream();
         }
       });
     });
+  }
+
+  // The engine dropped the session mid-call: reconnect once with the
+  // conversation so far folded into the instructions, instead of hanging up.
+  private async recoverUpstream(): Promise<void> {
+    if (this.reconnects >= 1) {
+      this.sendError('Voice engine connection lost');
+      this.send({ type: 'ended' });
+      this.ws?.close(1000, 'engine closed');
+      await this.finalize();
+      return;
+    }
+    this.reconnects++;
+    console.log(`call ${this.callId}: upstream dropped, reconnecting`);
+    const transcript = this.history
+      .filter((m) => m.role !== 'system')
+      .map((m) => `${m.role === 'user' ? 'Caller' : 'You'}: ${m.content}`)
+      .join('\n');
+    const resumed = `${this.realtimeInstructions}\n\nThe call audio was briefly interrupted; the caller is still on the line. Do NOT greet again. Conversation so far:\n${transcript}`;
+    const ok = await this.openUpstream(resumed, null).catch(() => false);
+    if (!ok) await this.recoverUpstream();
   }
 
   private async onUpstreamMessage(ev: MessageEvent): Promise<void> {
@@ -369,6 +426,15 @@ export class CallSession implements DurableObject {
       case 'conversation.item.input_audio_transcription.completed':
         if (msg.transcript?.trim()) {
           const text = msg.transcript.trim();
+          // STT echoes the vocabulary bias prompt back on silence-committed
+          // turns; cancel the response it triggered and pretend it never happened.
+          const vocab = this.biz && this.settings ? sttVocab(this.biz, this.settings) : '';
+          if (vocab && isVocabEcho(text, vocab)) {
+            console.log(`call ${this.callId}: dropped vocab-echo transcript: ${text.slice(0, 80)}`);
+            this.sendUpstream({ type: 'response.cancel' });
+            this.send({ type: 'flush' });
+            break;
+          }
           // Standard tier sends a detected language with each transcript;
           // prefer it over our own text-based heuristic.
           this.maybeSwitchVoice(text, normalizeLang(msg.language));

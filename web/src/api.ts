@@ -16,6 +16,7 @@ export interface Agent {
   llm_model: string;
   engine: string;
   realtime_model: string;
+  realtime_voice: string;
 }
 
 export interface Business {

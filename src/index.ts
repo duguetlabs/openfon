@@ -153,8 +153,9 @@ app.put('/api/me/business/:id/agent', async (c) => {
   const llmKey = s.llm_api_key !== undefined && !/^•+$/.test(s.llm_api_key) ? s.llm_api_key : cur.llm_api_key;
   const engine = s.engine === 'realtime' ? 'realtime' : s.engine === 'pipeline' ? 'pipeline' : cur.engine;
   const realtimeModel = s.realtime_model !== undefined ? s.realtime_model : cur.realtime_model;
+  const realtimeVoice = s.realtime_voice !== undefined ? s.realtime_voice : cur.realtime_voice;
   await c.env.DB.prepare(
-    `UPDATE agent_settings SET agent_name=?, greeting=?, persona=?, language=?, voice=?, take_messages=?, custom_instructions=?, llm_base_url=?, llm_api_key=?, llm_model=?, engine=?, realtime_model=? WHERE business_id=?`
+    `UPDATE agent_settings SET agent_name=?, greeting=?, persona=?, language=?, voice=?, take_messages=?, custom_instructions=?, llm_base_url=?, llm_api_key=?, llm_model=?, engine=?, realtime_model=?, realtime_voice=? WHERE business_id=?`
   )
     .bind(
       s.agent_name ?? cur.agent_name,
@@ -169,6 +170,7 @@ app.put('/api/me/business/:id/agent', async (c) => {
       s.llm_model ?? cur.llm_model,
       engine,
       realtimeModel,
+      realtimeVoice,
       biz.id
     )
     .run();
