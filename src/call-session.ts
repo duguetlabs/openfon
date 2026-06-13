@@ -505,6 +505,7 @@ export class CallSession implements DurableObject {
       transcript?: string;
       language?: string;
       item?: { type?: string; name?: string };
+      name?: string;
       error?: { message?: string };
     };
     switch (msg.type) {
@@ -547,6 +548,13 @@ export class CallSession implements DurableObject {
           // least one real exchange. beginHangup is idempotent, so this firing
           // alongside end_call is harmless.
           this.endPending = !this.realtimeModel.startsWith('gpt-realtime') && this.history.length > 3 && isFarewell(text);
+          if (this.endPending) {
+            // Event ordering isn't guaranteed: if the sign-off reply's
+            // transcript never arrives (cancelled response, race), end anyway.
+            setTimeout(() => {
+              if (this.endPending && !this.ended) this.beginHangup();
+            }, 8000);
+          }
           await this.saveTurn('caller', text);
         }
         break;
@@ -561,6 +569,11 @@ export class CallSession implements DurableObject {
         break;
       case 'response.output_item.done':
         if (msg.item?.type === 'function_call' && msg.item?.name === 'end_call') this.beginHangup();
+        break;
+      case 'response.function_call_arguments.done':
+        // Some paths (e.g. narration-to-call conversion) synthesize only this
+        // event without a function_call output item.
+        if (msg.name === 'end_call') this.beginHangup();
         break;
       case 'session.expiring':
         // Vendor extension: the engine warns a minute before its hard session
