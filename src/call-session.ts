@@ -358,13 +358,13 @@ export class CallSession implements DurableObject {
     return this.realtimeModel !== 'kataleptic-realtime-hd' && !this.realtimeModel.startsWith('gpt-realtime');
   }
 
-  // Tiers where end_call function calling is verified to work: native S2S and
-  // all cascades (incl. the default model since Kataleptic's narration-to-
-  // function-call conversion, verified 2026-06-13). HD still narrates tool
-  // calls as prose in BOTH tool shapes (flat and nested) with no
-  // function_call event — it relies on the caller-farewell fallback.
+  // end_call function calling is verified on every tier (HD since its brain
+  // moved to gpt-4.1-mini, 2026-06-13 — 2/2 clean structural invocations; the
+  // upstream narration net converts any remaining prose-shaped calls). The
+  // caller-farewell heuristic stays armed on non-native tiers as
+  // belt-and-braces, since no cascaded LLM is 100% invocation-disciplined.
   private toolsSupported(): boolean {
-    return this.realtimeModel.startsWith('gpt-realtime') || this.isCascade();
+    return true;
   }
 
   // Agent-initiated hangup: tell the client to end once playback drains, with
