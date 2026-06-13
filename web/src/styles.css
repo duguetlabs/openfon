@@ -1,44 +1,84 @@
 @import 'tailwindcss';
 
 @theme {
+  /* ——— light side: "Quiet Operator" ——— */
+  --color-base: #faf9fc;
+  --color-surface: #ffffff;
+  --color-wash-iris: #f3f0fa;
+  --color-wash-rose: #fbf4f7;
+  --color-ink: #232136;
+  --color-ink-soft: #5f5b79;
+  --color-ink-faint: #757093;
+  --color-iris: #5849be;
+  --color-iris-deep: #46389b;
+  --color-rose: #b43a66;
+  --color-line: #e8e5f1;
+  --color-line-strong: #d8d4e8;
+  --color-ok: #1f7a53;
+  --color-midnight: #1a1532;
+
+  /* ——— dark call widget (unchanged) ——— */
   --color-paper: #faf6ef;
   --color-paper-2: #f3ecdd;
-  --color-ink: #1c2b27;
-  --color-ink-soft: #51635c;
   --color-pine: #1f4d3a;
   --color-pine-deep: #14352a;
   --color-pine-night: #0d241c;
   --color-ring: #e8603c;
   --color-ring-soft: #f7d9cf;
-  --color-brass: #c99b2f;
-  --color-line: #e3dac6;
-  --color-ok: #2e7d4f;
 
   --font-display: 'Fraunces', 'Georgia', serif;
   --font-sans: 'Schibsted Grotesk', 'Helvetica Neue', sans-serif;
   --font-mono: 'Spline Sans Mono', ui-monospace, monospace;
 
-  --shadow-lift: 0 1px 2px rgb(28 43 39 / 0.06), 0 8px 24px -12px rgb(28 43 39 / 0.25);
+  --shadow-lift: 0 1px 2px rgb(35 33 54 / 0.04), 0 4px 14px -6px rgb(35 33 54 / 0.08);
+  --shadow-raise: 0 1px 2px rgb(35 33 54 / 0.05), 0 12px 32px -16px rgb(70 56 155 / 0.18);
   --shadow-deep: 0 24px 64px -24px rgb(0 0 0 / 0.55);
 }
 
 html {
   font-family: var(--font-sans);
-  background: var(--color-paper);
+  background: var(--color-base);
   color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-  background: var(--color-ring);
-  color: var(--color-paper);
+  background: var(--color-iris);
+  color: #fff;
+}
+
+/* very light iris + rose washes over the clear base */
+.atmosphere {
+  position: relative;
+  isolation: isolate;
+}
+.atmosphere::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 420px at 12% -8%, rgb(88 73 190 / 0.07), transparent 70%),
+    radial-gradient(800px 380px at 88% -6%, rgb(180 58 102 / 0.055), transparent 70%),
+    linear-gradient(to bottom, rgb(243 240 250 / 0.6), transparent 420px);
 }
 
 /* dotted "call line" separator */
 .callline {
-  background-image: radial-gradient(circle, var(--color-line) 1.5px, transparent 1.5px);
+  background-image: radial-gradient(circle, var(--color-line-strong) 1.5px, transparent 1.5px);
   background-size: 12px 3px;
   background-repeat: repeat-x;
   background-position: center;
+  height: 3px;
+}
+
+/* short accent callline in iris, for headings */
+.callline-accent {
+  background-image: radial-gradient(circle, rgb(88 73 190 / 0.45) 1.5px, transparent 1.5px);
+  background-size: 11px 3px;
+  background-repeat: repeat-x;
+  background-position: left center;
   height: 3px;
 }
 
