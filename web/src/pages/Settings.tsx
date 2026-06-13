@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type Agent, type Business, type EngineProfile, type VoiceCatalog } from '../api';
 import { useSession } from '../App';
-import { Button, Card, Field, SectionTitle, TextArea, LANGUAGES } from '../ui';
+import { Button, Card, Field, FieldLabel, SectionTitle, TextArea, LANGUAGES, inputClassSm } from '../ui';
 import { ListEditor } from './Onboarding';
 
 interface Hour {
@@ -72,7 +72,12 @@ export default function Settings() {
   const setA = (patch: Partial<Agent>) => setAgent({ ...agent, ...patch });
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
+    <div className="mx-auto max-w-2xl space-y-10">
+      <div className="rise">
+        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-ink-faint">Configuration</p>
+        <h1 className="mt-1 font-display text-4xl font-semibold tracking-tight text-ink">Settings</h1>
+        <div className="callline-accent mt-3 w-16" />
+      </div>
       <section className="rise">
         <SectionTitle sub="The facts your agent answers from.">Business</SectionTitle>
         <Card className="space-y-4">
@@ -85,30 +90,31 @@ export default function Settings() {
             <Field label="Timezone" value={biz.timezone} onChange={(e) => set({ timezone: e.target.value })} />
           </div>
           <div>
-            <span className="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-ink-soft">Opening hours</span>
-            <div className="space-y-1.5">
+            <FieldLabel>Opening hours</FieldLabel>
+            <div className="mt-2 space-y-1.5">
               {hours.map((h, i) => (
                 <div key={h.day} className="flex items-center gap-3 text-sm">
-                  <span className="w-24 font-mono text-xs">{h.day.slice(0, 3)}</span>
+                  <span className="w-12 font-mono text-xs text-ink-soft">{h.day.slice(0, 3)}</span>
                   <input
                     type="checkbox"
+                    className="accent-iris"
                     checked={!h.closed}
                     onChange={(e) => setHours(hours.map((x, j) => (j === i ? { ...x, closed: !e.target.checked } : x)))}
                   />
                   {h.closed ? (
-                    <span className="text-ink-soft">Closed</span>
+                    <span className="text-ink-faint">Closed</span>
                   ) : (
                     <>
                       <input
                         type="time"
-                        className="rounded-lg border border-line bg-white/70 px-2 py-1 font-mono text-xs"
+                        className={`${inputClassSm} px-2 py-1 font-mono text-xs`}
                         value={h.open}
                         onChange={(e) => setHours(hours.map((x, j) => (j === i ? { ...x, open: e.target.value } : x)))}
                       />
-                      <span className="text-ink-soft">–</span>
+                      <span className="text-ink-faint">–</span>
                       <input
                         type="time"
-                        className="rounded-lg border border-line bg-white/70 px-2 py-1 font-mono text-xs"
+                        className={`${inputClassSm} px-2 py-1 font-mono text-xs`}
                         value={h.close}
                         onChange={(e) => setHours(hours.map((x, j) => (j === i ? { ...x, close: e.target.value } : x)))}
                       />
@@ -126,13 +132,13 @@ export default function Settings() {
             render={(row, setR) => (
               <>
                 <input
-                  className="flex-1 rounded-lg border border-line bg-white/70 px-3 py-1.5 text-sm"
+                  className={`${inputClassSm} flex-1`}
                   placeholder="Service"
                   value={row.name}
                   onChange={(e) => setR({ ...row, name: e.target.value })}
                 />
                 <input
-                  className="w-28 rounded-lg border border-line bg-white/70 px-3 py-1.5 text-sm"
+                  className={`${inputClassSm} w-28`}
                   placeholder="Price"
                   value={row.price}
                   onChange={(e) => setR({ ...row, price: e.target.value })}
@@ -149,12 +155,12 @@ export default function Settings() {
               <>
                 <input
                   type="date"
-                  className="rounded-lg border border-line bg-white/70 px-3 py-1.5 font-mono text-sm"
+                  className={`${inputClassSm} font-mono`}
                   value={row.date}
                   onChange={(e) => setR({ ...row, date: e.target.value })}
                 />
                 <input
-                  className="flex-1 rounded-lg border border-line bg-white/70 px-3 py-1.5 text-sm"
+                  className={`${inputClassSm} flex-1`}
                   placeholder="Public holiday"
                   value={row.reason}
                   onChange={(e) => setR({ ...row, reason: e.target.value })}
@@ -170,13 +176,13 @@ export default function Settings() {
             render={(row, setR) => (
               <div className="flex-1 space-y-1.5">
                 <input
-                  className="w-full rounded-lg border border-line bg-white/70 px-3 py-1.5 text-sm"
+                  className={`${inputClassSm} w-full`}
                   placeholder="Question"
                   value={row.q}
                   onChange={(e) => setR({ ...row, q: e.target.value })}
                 />
                 <input
-                  className="w-full rounded-lg border border-line bg-white/70 px-3 py-1.5 text-sm"
+                  className={`${inputClassSm} w-full`}
                   placeholder="Answer"
                   value={row.a}
                   onChange={(e) => setR({ ...row, a: e.target.value })}
@@ -193,9 +199,9 @@ export default function Settings() {
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Agent name" value={agent.agent_name} onChange={(e) => setA({ agent_name: e.target.value })} />
             <label className="block">
-              <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.12em] text-ink-soft">Language</span>
+              <FieldLabel>Language</FieldLabel>
               <select
-                className="w-full rounded-xl border border-line bg-white/70 px-4 py-2.5 text-sm"
+                className="w-full rounded-[10px] border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-ink outline-none focus:border-iris focus:ring-[3px] focus:ring-iris/15"
                 value={agent.language}
                 onChange={(e) => setA({ language: e.target.value })}
               >
@@ -224,7 +230,7 @@ export default function Settings() {
             ))}
           </datalist>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={!!agent.take_messages} onChange={(e) => setA({ take_messages: e.target.checked ? 1 : 0 })} />
+            <input type="checkbox" className="accent-iris" checked={!!agent.take_messages} onChange={(e) => setA({ take_messages: e.target.checked ? 1 : 0 })} />
             Take messages when the agent can't help
           </label>
           <TextArea
@@ -243,9 +249,9 @@ export default function Settings() {
         <Card className="space-y-3">
           {profiles.length === 0 && <p className="text-sm text-ink-soft">No profiles yet. Configure the engine below, then save it here under a name.</p>}
           {profiles.map((p) => (
-            <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-white/50 px-3 py-2">
+            <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-wash-iris/50 px-3 py-2">
               <input
-                className="min-w-32 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-ink hover:border-line focus:border-pine focus:bg-white"
+                className="min-w-32 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-ink outline-none hover:border-line-strong focus:border-iris focus:bg-surface focus:ring-[3px] focus:ring-iris/15"
                 value={p.name}
                 onChange={(e) => setProfiles(profiles.map((x) => (x.id === p.id ? { ...x, name: e.target.value } : x)))}
                 onBlur={(e) => void api.updateProfile(p.id, { name: e.target.value })}
@@ -255,7 +261,7 @@ export default function Settings() {
                 {(p.realtime_voice || p.voice) && ` · ${p.realtime_voice || p.voice}`}
               </span>
               <button
-                className="rounded-full bg-pine px-3 py-1 text-xs font-bold text-paper hover:bg-pine-deep"
+                className="rounded-lg bg-iris px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-iris-deep"
                 onClick={() =>
                   void api.applyProfile(p.id).then(async () => {
                     await refresh();
@@ -267,7 +273,7 @@ export default function Settings() {
                 Apply
               </button>
               <button
-                className="px-1 text-ink-soft hover:text-ring"
+                className="px-1 text-ink-faint transition-colors hover:text-rose"
                 aria-label="Delete profile"
                 onClick={() => void api.deleteProfile(p.id).then(() => setProfiles(profiles.filter((x) => x.id !== p.id)))}
               >
@@ -277,7 +283,7 @@ export default function Settings() {
           ))}
           <div className="flex gap-2 pt-1">
             <input
-              className="flex-1 rounded-xl border border-line bg-white/70 px-4 py-2 text-sm"
+              className={`${inputClassSm} flex-1 px-3.5 py-2`}
               placeholder='Save current setup as… e.g. "Realtime HD English (Emma)"'
               value={newProfileName}
               onChange={(e) => setNewProfileName(e.target.value)}
@@ -316,12 +322,12 @@ export default function Settings() {
         </SectionTitle>
         <Card className="space-y-4">
           <div>
-            <span className="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-ink-soft">Voice engine</span>
-            <div className="space-y-2">
+            <FieldLabel>Voice engine</FieldLabel>
+            <div className="mt-2 space-y-2">
               <label className="flex items-start gap-2.5 text-sm">
                 <input
                   type="radio"
-                  className="mt-1"
+                  className="mt-1 accent-iris"
                   checked={agent.engine !== 'realtime'}
                   onChange={() => setA({ engine: 'pipeline' })}
                 />
@@ -332,7 +338,7 @@ export default function Settings() {
               <label className="flex items-start gap-2.5 text-sm">
                 <input
                   type="radio"
-                  className="mt-1"
+                  className="mt-1 accent-iris"
                   checked={agent.engine === 'realtime'}
                   onChange={() => setA({ engine: 'realtime' })}
                 />
@@ -345,10 +351,10 @@ export default function Settings() {
               </label>
             </div>
             {agent.engine === 'realtime' && (
-              <label className="mt-3 block">
-                <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.12em] text-ink-soft">Realtime model</span>
+              <label className="mt-4 block rounded-xl border border-line bg-wash-iris/40 p-4">
+                <FieldLabel>Realtime model</FieldLabel>
                 <select
-                  className="w-full rounded-xl border border-line bg-white/70 px-4 py-2.5 text-sm"
+                  className="w-full rounded-[10px] border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-ink outline-none focus:border-iris focus:ring-[3px] focus:ring-iris/15"
                   value={agent.realtime_model}
                   onChange={(e) => setA({ realtime_model: e.target.value })}
                 >
@@ -357,7 +363,7 @@ export default function Settings() {
                   <option value="kataleptic-realtime-hd">kataleptic-realtime-hd — HD voices (Azure Voice Live), ~1 s</option>
                   <option value="gpt-realtime-2">gpt-realtime-2 — native speech-to-speech with built-in reasoning; not EU-hosted</option>
                 </select>
-                <span className="mt-1 block text-xs text-ink-soft">
+                <span className="mt-1.5 block text-xs leading-relaxed text-ink-soft">
                   Takes effect on the next call — handy for comparing tiers back-to-back.
                 </span>
                 <div className="mt-3">
@@ -395,10 +401,15 @@ export default function Settings() {
         </Card>
       </section>
 
-      <div className="rise rise-3 flex items-center gap-4 pb-8">
-        <Button onClick={() => void save()}>Save changes</Button>
-        {saved && <span className="text-sm font-semibold text-ok">{saved}</span>}
-        {error && <span className="text-sm text-ring">{error}</span>}
+      <div className="rise rise-3 sticky bottom-4 flex items-center justify-between gap-4 rounded-xl border border-line bg-surface/95 px-4 py-3 shadow-raise backdrop-blur-md">
+        <p className="hidden font-mono text-[11px] uppercase tracking-[0.14em] text-ink-faint sm:block">
+          Changes apply on the next call
+        </p>
+        <div className="flex items-center gap-3">
+          {saved && <span className="text-sm font-semibold text-ok">{saved}</span>}
+          {error && <span className="text-sm text-rose">{error}</span>}
+          <Button onClick={() => void save()}>Save changes</Button>
+        </div>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api';
 import { useSession } from '../App';
-import { Button, Card, Field, Logo, TextArea, LANGUAGES } from '../ui';
+import { Button, Card, Field, FieldLabel, Logo, TextArea, LANGUAGES, inputClassSm } from '../ui';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -64,16 +64,20 @@ export default function Onboarding() {
   const steps = ['Your business', 'Hours & offerings', 'Your receptionist'];
 
   return (
-    <div className="grain min-h-screen bg-paper">
+    <div className="atmosphere min-h-screen bg-base">
       <div className="mx-auto max-w-2xl px-5 py-10">
-        <div className="rise mb-8 flex items-center justify-between">
+        <div className="rise mb-10 flex items-center justify-between">
           <Logo />
-          <ol className="flex items-center gap-2 font-mono text-xs text-ink-soft">
+          <ol className="flex items-center gap-2.5 font-mono text-[11px] text-ink-faint">
             {steps.map((s, i) => (
-              <li key={s} className={`flex items-center gap-2 ${i === step ? 'font-bold text-pine' : ''}`}>
+              <li key={s} className={`flex items-center gap-1.5 ${i === step ? 'text-iris' : ''}`}>
                 <span
-                  className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${
-                    i < step ? 'bg-ok text-paper' : i === step ? 'bg-pine text-paper' : 'bg-paper-2'
+                  className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold ${
+                    i < step
+                      ? 'bg-ok text-white'
+                      : i === step
+                        ? 'bg-iris text-white'
+                        : 'bg-wash-iris text-ink-faint shadow-[inset_0_0_0_1px_rgb(88_73_190/0.12)]'
                   }`}
                 >
                   {i < step ? '✓' : i + 1}
@@ -84,14 +88,19 @@ export default function Onboarding() {
           </ol>
         </div>
 
-        <h1 className="rise rise-1 mb-2 font-display text-4xl font-semibold text-pine">{steps[step]}</h1>
-        <p className="rise rise-2 mb-6 text-sm text-ink-soft">
+        <p className="rise rise-1 font-mono text-[11px] uppercase tracking-[0.2em] text-ink-faint">
+          Step {step + 1} of {steps.length}
+        </p>
+        <h1 className="rise rise-1 mt-1 mb-2 font-display text-4xl font-semibold tracking-tight text-ink">
+          {steps[step]}
+        </h1>
+        <p className="rise rise-2 mb-7 max-w-md text-sm leading-relaxed text-ink-soft">
           {step === 0 && 'Tell your receptionist who it works for. You can edit everything later.'}
           {step === 1 && 'The agent only answers from facts you give it — no made-up prices or hours.'}
           {step === 2 && 'Give your agent a name and a voice. It greets every caller with this.'}
         </p>
 
-        <Card className="rise rise-3 space-y-4">
+        <Card className="rise rise-3 space-y-5 shadow-raise sm:p-7">
           {step === 0 && (
             <>
               <Field label="Business name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Riverside Dental" />
@@ -111,30 +120,31 @@ export default function Onboarding() {
           {step === 1 && (
             <>
               <div>
-                <span className="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-ink-soft">Opening hours</span>
-                <div className="space-y-1.5">
+                <FieldLabel>Opening hours</FieldLabel>
+                <div className="mt-2 space-y-1.5">
                   {hours.map((h, i) => (
                     <div key={h.day} className="flex items-center gap-3 text-sm">
-                      <span className="w-24 font-mono text-xs">{h.day.slice(0, 3)}</span>
+                      <span className="w-12 font-mono text-xs text-ink-soft">{h.day.slice(0, 3)}</span>
                       <input
                         type="checkbox"
+                        className="accent-iris"
                         checked={!h.closed}
                         onChange={(e) => setHours(hours.map((x, j) => (j === i ? { ...x, closed: !e.target.checked } : x)))}
                       />
                       {h.closed ? (
-                        <span className="text-ink-soft">Closed</span>
+                        <span className="text-ink-faint">Closed</span>
                       ) : (
                         <>
                           <input
                             type="time"
-                            className="rounded-lg border border-line bg-white/70 px-2 py-1 font-mono text-xs"
+                            className={`${inputClassSm} px-2 py-1 font-mono text-xs`}
                             value={h.open}
                             onChange={(e) => setHours(hours.map((x, j) => (j === i ? { ...x, open: e.target.value } : x)))}
                           />
-                          <span className="text-ink-soft">–</span>
+                          <span className="text-ink-faint">–</span>
                           <input
                             type="time"
-                            className="rounded-lg border border-line bg-white/70 px-2 py-1 font-mono text-xs"
+                            className={`${inputClassSm} px-2 py-1 font-mono text-xs`}
                             value={h.close}
                             onChange={(e) => setHours(hours.map((x, j) => (j === i ? { ...x, close: e.target.value } : x)))}
                           />
@@ -152,13 +162,13 @@ export default function Onboarding() {
                 render={(row, set) => (
                   <>
                     <input
-                      className="flex-1 rounded-lg border border-line bg-white/70 px-3 py-1.5 text-sm"
+                      className={`${inputClassSm} flex-1`}
                       placeholder="Service (e.g. Checkup)"
                       value={row.name}
                       onChange={(e) => set({ ...row, name: e.target.value })}
                     />
                     <input
-                      className="w-28 rounded-lg border border-line bg-white/70 px-3 py-1.5 text-sm"
+                      className={`${inputClassSm} w-28`}
                       placeholder="€80"
                       value={row.price}
                       onChange={(e) => set({ ...row, price: e.target.value })}
@@ -174,13 +184,13 @@ export default function Onboarding() {
                 render={(row, set) => (
                   <div className="flex-1 space-y-1.5">
                     <input
-                      className="w-full rounded-lg border border-line bg-white/70 px-3 py-1.5 text-sm"
+                      className={`${inputClassSm} w-full`}
                       placeholder="Do you take walk-ins?"
                       value={row.q}
                       onChange={(e) => set({ ...row, q: e.target.value })}
                     />
                     <input
-                      className="w-full rounded-lg border border-line bg-white/70 px-3 py-1.5 text-sm"
+                      className={`${inputClassSm} w-full`}
                       placeholder="Yes, weekdays before noon."
                       value={row.a}
                       onChange={(e) => set({ ...row, a: e.target.value })}
@@ -196,9 +206,9 @@ export default function Onboarding() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Agent name" value={agentName} onChange={(e) => setAgentName(e.target.value)} />
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.12em] text-ink-soft">Language</span>
+                  <FieldLabel>Language</FieldLabel>
                   <select
-                    className="w-full rounded-xl border border-line bg-white/70 px-4 py-2.5 text-sm"
+                    className="w-full rounded-[10px] border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-ink outline-none focus:border-iris focus:ring-[3px] focus:ring-iris/15"
                     value={language}
                     onChange={(e) => setLanguage(e.target.value)}
                   >
@@ -225,9 +235,9 @@ export default function Onboarding() {
             </>
           )}
 
-          {error && <p className="rounded-lg bg-ring-soft px-3 py-2 text-sm text-ring">{error}</p>}
+          {error && <p className="rounded-[10px] border border-rose/20 bg-wash-rose px-3 py-2 text-sm text-rose">{error}</p>}
 
-          <div className="flex justify-between pt-2">
+          <div className="flex justify-between border-t border-line pt-5">
             <Button variant="ghost" disabled={step === 0 || busy} onClick={() => setStep(step - 1)}>
               ← Back
             </Button>
@@ -262,14 +272,14 @@ export function ListEditor<T>({
 }) {
   return (
     <div>
-      <span className="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-ink-soft">{title}</span>
-      <div className="space-y-2">
+      <FieldLabel>{title}</FieldLabel>
+      <div className="mt-2 space-y-2">
         {rows.map((row, i) => (
           <div key={i} className="flex items-start gap-2">
             {render(row, (r) => onChange(rows.map((x, j) => (j === i ? r : x))))}
             <button
               type="button"
-              className="mt-1 px-1 text-ink-soft hover:text-ring"
+              className="mt-1.5 rounded px-1 text-ink-faint transition-colors hover:text-rose"
               onClick={() => onChange(rows.filter((_, j) => j !== i))}
               aria-label="Remove"
             >
@@ -278,7 +288,11 @@ export function ListEditor<T>({
           </div>
         ))}
       </div>
-      <button type="button" className="mt-2 text-sm font-semibold text-pine underline" onClick={() => onChange([...rows, empty])}>
+      <button
+        type="button"
+        className="mt-2.5 text-sm font-semibold text-iris underline decoration-iris/30 underline-offset-2 hover:decoration-iris"
+        onClick={() => onChange([...rows, empty])}
+      >
         + Add another
       </button>
     </div>
