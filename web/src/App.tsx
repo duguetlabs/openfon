@@ -40,7 +40,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-paper">
+      <div className="flex min-h-screen items-center justify-center bg-base">
         <Spinner />
       </div>
     );
@@ -82,17 +82,19 @@ function Shell({ children }: { children: React.ReactNode }) {
   const tab = (path: string, label: string) => (
     <Link
       to={path}
-      className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
-        loc.pathname === path ? 'bg-pine text-paper' : 'text-ink-soft hover:bg-paper-2 hover:text-pine'
+      className={`rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-colors ${
+        loc.pathname === path
+          ? 'bg-wash-iris text-iris shadow-[inset_0_0_0_1px_rgb(88_73_190/0.18)]'
+          : 'text-ink-soft hover:bg-wash-iris/60 hover:text-ink'
       }`}
     >
       {label}
     </Link>
   );
   return (
-    <div className="grain min-h-screen bg-paper">
-      <header className="sticky top-0 z-10 border-b border-line bg-paper/90 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-3">
+    <div className="atmosphere flex min-h-screen flex-col bg-base">
+      <header className="sticky top-0 z-10 border-b border-line bg-base/85 backdrop-blur-md">
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-5 py-3">
           <Link to="/">
             <Logo />
           </Link>
@@ -104,7 +106,7 @@ function Shell({ children }: { children: React.ReactNode }) {
                 href={`/call/${business.slug}`}
                 target="_blank"
                 rel="noreferrer"
-                className="ml-2 rounded-full border border-ring/40 px-4 py-1.5 text-sm font-semibold text-ring transition-colors hover:bg-ring hover:text-paper"
+                className="ml-2 hidden rounded-lg border border-iris/30 bg-surface px-3.5 py-1.5 text-sm font-semibold text-iris shadow-lift transition-colors hover:border-iris hover:bg-iris hover:text-white sm:block"
               >
                 Test call ↗
               </a>
@@ -114,22 +116,30 @@ function Shell({ children }: { children: React.ReactNode }) {
                 void api.logout().then(refresh);
                 nav('/auth');
               }}
-              className="ml-1 px-3 py-1.5 text-sm text-ink-soft hover:text-ink"
+              className="ml-1 rounded-lg px-3 py-1.5 text-sm text-ink-soft transition-colors hover:text-ink"
             >
               Sign out
             </button>
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-5 py-8">{children}</main>
-      <footer className="mx-auto max-w-5xl px-5 pb-8">
-        <div className="callline mb-4" />
-        <p className="text-xs text-ink-soft">
-          OpenFon — open-source AI phone agent.{' '}
-          <a className="underline hover:text-pine" href="https://github.com/duguetlabs/openfon" target="_blank" rel="noreferrer">
-            github.com/duguetlabs/openfon
-          </a>
-        </p>
+      <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-10">{children}</main>
+      <footer className="mx-auto w-full max-w-5xl px-5 pb-8">
+        <div className="callline mb-5" />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-ink-soft">
+            OpenFon — open-source AI phone agent.{' '}
+            <a
+              className="font-medium text-ink-soft underline decoration-line-strong underline-offset-2 transition-colors hover:text-iris"
+              href="https://github.com/duguetlabs/openfon"
+              target="_blank"
+              rel="noreferrer"
+            >
+              github.com/duguetlabs/openfon
+            </a>
+          </p>
+          <p className="font-mono text-[11px] text-ink-faint">self-hosted · MIT licensed</p>
+        </div>
       </footer>
     </div>
   );
