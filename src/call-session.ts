@@ -286,9 +286,7 @@ export class CallSession implements DurableObject {
       session: {
         type: 'realtime',
         instructions,
-        // Only native S2S tiers do real function calling — cascade/HD models
-        // leak the tool syntax into spoken text ("End_call()" said aloud).
-        ...(this.realtimeModel.startsWith('gpt-realtime')
+        ...(this.toolsSupported()
           ? {
               tools: [
                 {
@@ -360,10 +358,21 @@ export class CallSession implements DurableObject {
     return this.realtimeModel !== 'kataleptic-realtime-hd' && !this.realtimeModel.startsWith('gpt-realtime');
   }
 
+  // Tiers where end_call function calling is verified to work. The small
+  // 'kataleptic-realtime' default model and the HD tier still narrate tool
+  // calls as prose into the transcript (probed 2026-06-13) — they use the
+  // caller-farewell fallback instead.
+  private toolsSupported(): boolean {
+    return this.realtimeModel.startsWith('gpt-realtime') || (this.isCascade() && this.realtimeModel !== 'kataleptic-realtime');
+  }
+
   // Agent-initiated hangup: tell the client to end once playback drains, with
   // a server-side safety net if it never does.
+  private endingSent = false;
+
   private beginHangup(): void {
-    if (this.ended) return;
+    if (this.ended || this.endingSent) return;
+    this.endingSent = true;
     console.log(`call ${this.callId}: agent ending the call`);
     this.send({ type: 'ending' });
     setTimeout(() => {
@@ -399,7 +408,7 @@ export class CallSession implements DurableObject {
         : isCascade
           ? await piperVoiceFor(this.env, this.lang)
           : '');
-    const toolNote = model.startsWith('gpt-realtime')
+    const toolNote = this.toolsSupported()
       ? '\n\nWhen the conversation is finished and you have said goodbye, call the end_call function.'
       : '';
     this.realtimeInstructions =
@@ -534,7 +543,7 @@ export class CallSession implements DurableObject {
           this.history.push({ role: 'user', content: text });
           // Tiers without function calling: a caller farewell (after at least
           // one real exchange) arms ending the call after the agent's sign-off.
-          this.endPending = !this.realtimeModel.startsWith('gpt-realtime') && this.history.length > 3 && isFarewell(text);
+          this.endPending = !this.toolsSupported() && this.history.length > 3 && isFarewell(text);
           await this.saveTurn('caller', text);
         }
         break;
