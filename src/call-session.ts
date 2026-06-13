@@ -358,12 +358,13 @@ export class CallSession implements DurableObject {
     return this.realtimeModel !== 'kataleptic-realtime-hd' && !this.realtimeModel.startsWith('gpt-realtime');
   }
 
-  // Tiers where end_call function calling is verified to work. The small
-  // 'kataleptic-realtime' default model and the HD tier still narrate tool
-  // calls as prose into the transcript (probed 2026-06-13) — they use the
-  // caller-farewell fallback instead.
+  // Tiers where end_call function calling is verified to work: native S2S and
+  // all cascades (incl. the default model since Kataleptic's narration-to-
+  // function-call conversion, verified 2026-06-13). HD still narrates tool
+  // calls as prose in BOTH tool shapes (flat and nested) with no
+  // function_call event — it relies on the caller-farewell fallback.
   private toolsSupported(): boolean {
-    return this.realtimeModel.startsWith('gpt-realtime') || (this.isCascade() && this.realtimeModel !== 'kataleptic-realtime');
+    return this.realtimeModel.startsWith('gpt-realtime') || this.isCascade();
   }
 
   // Agent-initiated hangup: tell the client to end once playback drains, with
@@ -541,9 +542,11 @@ export class CallSession implements DurableObject {
           this.maybeSwitchVoice(text, normalizeLang(msg.language));
           this.send({ type: 'transcript', text });
           this.history.push({ role: 'user', content: text });
-          // Tiers without function calling: a caller farewell (after at least
-          // one real exchange) arms ending the call after the agent's sign-off.
-          this.endPending = !this.toolsSupported() && this.history.length > 3 && isFarewell(text);
+          // Caller-farewell backstop (primary mechanism on HD, belt-and-braces
+          // on cascades whose models might not call the tool): armed after at
+          // least one real exchange. beginHangup is idempotent, so this firing
+          // alongside end_call is harmless.
+          this.endPending = !this.realtimeModel.startsWith('gpt-realtime') && this.history.length > 3 && isFarewell(text);
           await this.saveTurn('caller', text);
         }
         break;
