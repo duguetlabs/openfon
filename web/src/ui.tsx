@@ -48,6 +48,8 @@ export function FieldLabel({ children }: { children: ReactNode }) {
 export const inputClass =
   'w-full rounded-[10px] border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-ink shadow-[inset_0_1px_2px_rgb(35_33_54/0.03)] outline-none transition-[border-color,box-shadow] placeholder:text-ink-faint focus:border-iris focus:ring-[3px] focus:ring-iris/15';
 
+export const selectClass = `${'w-full rounded-[10px] border border-line-strong bg-surface py-2.5 pl-3.5 pr-10 text-sm text-ink shadow-[inset_0_1px_2px_rgb(35_33_54/0.03)] outline-none transition-[border-color,box-shadow] focus:border-iris focus:ring-[3px] focus:ring-iris/15'} select-chrome`;
+
 export const inputClassSm =
   'rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm text-ink outline-none transition-[border-color,box-shadow] placeholder:text-ink-faint focus:border-iris focus:ring-[3px] focus:ring-iris/15';
 
