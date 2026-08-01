@@ -65,6 +65,16 @@ describe('resolveLlm', () => {
     }
   });
 
+  it('does not lend the instance key to a re-routed query string', () => {
+    // A gateway that routes on the query is still a different endpoint: with
+    // the default pointing at ?target=trusted, ?target=attacker must not
+    // inherit the instance key and have the gateway forward it onward.
+    const gateway = { ...env, DEFAULT_LLM_BASE_URL: 'https://gw.example.com/v1?target=trusted' } as Env;
+    const rerouted = settings({ llm_base_url: 'https://gw.example.com/v1?target=attacker' });
+    expect(() => resolveLlm(gateway, rerouted)).toThrow(LlmConfigError);
+    expect(resolveLlm(gateway, settings({ llm_base_url: 'https://gw.example.com/v1?target=trusted' })).apiKey).toBe(INSTANCE_KEY);
+  });
+
   it('overrides the model alone without touching the endpoint or key', () => {
     const cfg = resolveLlm(env, settings({ llm_model: 'mixtral' }));
     expect(cfg).toEqual({ baseUrl: 'https://api.kataleptic.com/v1', apiKey: INSTANCE_KEY, model: 'mixtral' });
@@ -136,6 +146,16 @@ describe('validateLlmBaseUrl', () => {
     }
   });
 
+  it('sees through the DNS root dot', () => {
+    // "localhost." is the same host as "localhost" to any resolver.
+    expect(validateLlmBaseUrl('https://localhost./v1')).toMatch(/loopback/);
+    expect(validateLlmBaseUrl('https://foo.internal./v1')).toMatch(/loopback/);
+    expect(validateLlmBaseUrl('https://foo.localhost./v1')).toMatch(/loopback/);
+    expect(validateLlmBaseUrl('https://127.0.0.1./v1')).toMatch(/loopback/);
+    // …and it cuts the other way too: an allowlisted host stays allowlisted.
+    expect(validateLlmBaseUrl('https://api.openai.com./v1', 'api.openai.com')).toBeNull();
+  });
+
   it('sees through obfuscated IPv4 forms', () => {
     // The URL parser normalizes these to 127.0.0.1 before we inspect them.
     expect(validateLlmBaseUrl('https://2130706433/v1')).toMatch(/loopback/);
@@ -161,5 +181,20 @@ describe('sameLlmEndpoint', () => {
   it('keeps embedded credentials in the comparison', () => {
     expect(sameLlmEndpoint('https://user:pass@api.example.com/v1', 'https://api.example.com/v1')).toBe(false);
     expect(sameLlmEndpoint('https://token@api.example.com/v1', 'https://api.example.com/v1')).toBe(false);
+  });
+
+  it('keeps the query string in the comparison, verbatim', () => {
+    expect(sameLlmEndpoint('https://gw.example.com/v1?target=a', 'https://gw.example.com/v1?target=b')).toBe(false);
+    expect(sameLlmEndpoint('https://gw.example.com/v1', 'https://gw.example.com/v1?target=b')).toBe(false);
+    expect(sameLlmEndpoint('https://gw.example.com/v1?a=1&b=2', 'https://gw.example.com/v1?a=1&b=2')).toBe(true);
+    // Reordered parameters read as a different endpoint — the safe direction.
+    expect(sameLlmEndpoint('https://gw.example.com/v1?a=1&b=2', 'https://gw.example.com/v1?b=2&a=1')).toBe(false);
+  });
+
+  it('ignores the DNS root dot and the fragment', () => {
+    expect(sameLlmEndpoint('https://api.example.com./v1', 'https://api.example.com/v1')).toBe(true);
+    expect(sameLlmEndpoint('https://api.example.com:8443/v1', 'https://api.example.com.:8443/v1')).toBe(true);
+    // fetch never sends a fragment, so it cannot change where the call lands.
+    expect(sameLlmEndpoint('https://api.example.com/v1#x', 'https://api.example.com/v1')).toBe(true);
   });
 });

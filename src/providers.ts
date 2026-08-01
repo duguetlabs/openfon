@@ -9,15 +9,25 @@ export class LlmConfigError extends Error {}
 
 // Two base URLs mean the same endpoint if only a trailing slash or host casing
 // differs — otherwise "https://api.host/v1/" would count as a custom endpoint
-// and lose the instance key for no reason. Embedded credentials stay in the
-// normalized form: "https://user:pass@<default host>/v1" must NOT compare equal
-// to the clean instance URL, or it would skip the checks below entirely.
+// and lose the instance key for no reason. Everything else fetch actually puts
+// on the wire is part of the identity:
+//   - credentials, so "https://user:pass@<default host>/v1" can't pose as the
+//     clean instance URL and skip the checks below;
+//   - the query string, since a gateway can route on it — with
+//     DEFAULT_LLM_BASE_URL="https://gw/v1?target=trusted", a business saving
+//     "?target=attacker" would otherwise inherit the instance key and have the
+//     gateway forward it wherever they point it.
+// Query strings are compared verbatim, not canonicalized: "?b=2&a=1" then reads
+// as a different endpoint than "?a=1&b=2" and merely needs its own key, which
+// is the safe direction to be wrong in. The fragment is left out — fetch never
+// sends it, so it cannot change where the request lands.
 export function sameLlmEndpoint(a: string, b: string): boolean {
   const norm = (u: string) => {
     try {
       const p = new URL(u.trim());
       const cred = p.username || p.password ? `${p.username}:${p.password}@` : '';
-      return `${p.protocol}//${cred}${p.host}${p.pathname.replace(/\/+$/, '')}`;
+      const port = p.port ? `:${p.port}` : '';
+      return `${p.protocol}//${cred}${normalizeHost(p.hostname)}${port}${p.pathname.replace(/\/+$/, '')}${p.search}`;
     } catch {
       return u.trim().replace(/\/+$/, '');
     }
@@ -49,12 +59,20 @@ export function resolveLlm(env: Env, settings: AgentSettings | null): LlmConfig 
   return { baseUrl: custom, apiKey: settings.llm_api_key, model };
 }
 
+// The URL parser already folds case, punycodes IDNs, and canonicalizes IP
+// literals for us, but it keeps the DNS root dot: "localhost." and
+// "svc.internal." are the same host to every resolver, so they must not read
+// as different ones here. Brackets come off IPv6 literals for the same reason.
+function normalizeHost(hostname: string): string {
+  return hostname.replace(/^\[|\]$/g, '').replace(/\.+$/, '').toLowerCase();
+}
+
 // Literal-IP inspection only: Workers have no DNS resolver, so a hostname that
 // *resolves* into private space still gets through. This stops the direct
 // http://169.254.169.254/ style probe and keeps honest misconfiguration out;
 // it is not a complete SSRF defence.
 function isInternalHost(host: string): boolean {
-  const h = host.replace(/^\[|\]$/g, '').toLowerCase();
+  const h = normalizeHost(host);
   if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) return true;
   const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
   if (v4) {
@@ -98,10 +116,12 @@ export function validateLlmBaseUrl(raw: string, allowedHosts?: string): string |
   // Scheme sanity first: fetch only speaks http(s), and a typo like "htt://"
   // parses fine, so an allowlisted host must not smuggle one through.
   if (url.protocol !== 'https:' && url.protocol !== 'http:') return 'must be an http(s) URL';
-  const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  const host = normalizeHost(url.hostname);
+  // Allowlist entries go through the same normalization, so an operator's
+  // "api.example.com" also covers the equivalent "api.example.com." spelling.
   const allow = (allowedHosts ?? '')
     .split(',')
-    .map((h) => h.trim().toLowerCase())
+    .map((h) => normalizeHost(h.trim()))
     .filter(Boolean);
   // An allowlist entry is the operator's own decision, so it also unlocks the
   // one case self-hosters need: plain http to a model running next to
