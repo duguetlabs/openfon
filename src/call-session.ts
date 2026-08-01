@@ -195,7 +195,7 @@ export class CallSession implements DurableObject {
       this.sendError(`Agent misconfigured — ${err.message} Fix it in Settings → AI provider.`);
       this.send({ type: 'ended' });
       this.ws?.close(1000, 'agent misconfigured');
-      await this.finalize();
+      await this.finalize('failed');
       return;
     }
     this.lang = this.settings!.language in SUPPORTED_LANGUAGES ? this.settings!.language : 'en';
@@ -675,7 +675,11 @@ export class CallSession implements DurableObject {
       .run();
   }
 
-  private async finalize(): Promise<void> {
+  // `status` is the schema's own vocabulary (active | completed | failed).
+  // A call that never got past pickup must not count as a conversation: the
+  // dashboard's stats read 'completed', so a business with a broken provider
+  // config sees the failures instead of a wall of two-second "calls".
+  private async finalize(status: 'completed' | 'failed' = 'completed'): Promise<void> {
     if (this.ended || !this.callId) return;
     this.ended = true;
     const call = await this.env.DB.prepare('SELECT started_at FROM calls WHERE id = ? AND status = ?')
@@ -725,9 +729,9 @@ export class CallSession implements DurableObject {
       summary = firstUser ? `Caller: "${firstUser.content.slice(0, 120)}"` : null;
     }
     await this.env.DB.prepare(
-      `UPDATE calls SET status = 'completed', ended_at = datetime('now'), duration_s = ?, summary = ?, intent = ?, message_json = ? WHERE id = ?`
+      `UPDATE calls SET status = ?, ended_at = datetime('now'), duration_s = ?, summary = ?, intent = ?, message_json = ? WHERE id = ?`
     )
-      .bind(duration, summary, intent, messageJson, this.callId)
+      .bind(status, duration, summary, intent, messageJson, this.callId)
       .run();
   }
 }

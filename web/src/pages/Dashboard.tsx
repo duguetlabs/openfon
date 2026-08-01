@@ -71,10 +71,14 @@ export default function Dashboard() {
                   i > 0 ? 'border-t border-line' : ''
                 }`}
               >
-                <span className={`h-2 w-2 shrink-0 rounded-full ${c.status === 'active' ? 'blink bg-rose' : 'bg-ok/70'}`} />
+                <span
+                  className={`h-2 w-2 shrink-0 rounded-full ${
+                    c.status === 'active' ? 'blink bg-rose' : c.status === 'failed' ? 'bg-rose/70' : 'bg-ok/70'
+                  }`}
+                />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-ink">
-                    {c.summary ?? (c.status === 'active' ? 'Call in progress…' : 'Call')}
+                    {c.summary ?? (c.status === 'active' ? 'Call in progress…' : c.status === 'failed' ? "Call didn't connect" : 'Call')}
                   </p>
                   <p className="mt-1 font-mono text-[11px] text-ink-faint">
                     {fmtTime(c.started_at)} · {fmtDuration(c.duration_s)} · {c.channel}
