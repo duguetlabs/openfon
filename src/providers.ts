@@ -44,7 +44,12 @@ export function resolveLlm(env: Env, settings: AgentSettings | null): LlmConfig 
   const model = settings?.llm_model || env.DEFAULT_LLM_MODEL;
   if (!custom || sameLlmEndpoint(custom, env.DEFAULT_LLM_BASE_URL)) {
     return {
-      baseUrl: custom || env.DEFAULT_LLM_BASE_URL,
+      // The operator's own URL, never the business's spelling of it. The two
+      // are equivalent by the check above — but only as far as that check is
+      // injective, and no normalizer is. Returning the trusted string makes
+      // the property structural: a collision in sameLlmEndpoint can cost a
+      // business its custom endpoint, never send the instance key elsewhere.
+      baseUrl: env.DEFAULT_LLM_BASE_URL,
       apiKey: settings?.llm_api_key || env.DEFAULT_LLM_API_KEY || '',
       model,
     };
@@ -65,6 +70,20 @@ export function resolveLlm(env: Env, settings: AgentSettings | null): LlmConfig 
 // as different ones here. Brackets come off IPv6 literals for the same reason.
 function normalizeHost(hostname: string): string {
   return hostname.replace(/^\[|\]$/g, '').replace(/\.+$/, '').toLowerCase();
+}
+
+// Allowlist entries are hand-written, so they go through the same parser as the
+// endpoint before comparison: url.hostname always reports punycode, and an
+// operator who writes "bücher.example" means "xn--bcher-kva.example". A scheme
+// or port in the entry is tolerated rather than silently never matching.
+function canonicalHost(entry: string): string {
+  const bare = entry.trim().replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
+  if (!bare) return '';
+  try {
+    return normalizeHost(new URL(`https://${bare}`).hostname);
+  } catch {
+    return normalizeHost(bare);
+  }
 }
 
 // Literal-IP inspection only: Workers have no DNS resolver, so a hostname that
@@ -117,11 +136,9 @@ export function validateLlmBaseUrl(raw: string, allowedHosts?: string): string |
   // parses fine, so an allowlisted host must not smuggle one through.
   if (url.protocol !== 'https:' && url.protocol !== 'http:') return 'must be an http(s) URL';
   const host = normalizeHost(url.hostname);
-  // Allowlist entries go through the same normalization, so an operator's
-  // "api.example.com" also covers the equivalent "api.example.com." spelling.
   const allow = (allowedHosts ?? '')
     .split(',')
-    .map((h) => normalizeHost(h.trim()))
+    .map(canonicalHost)
     .filter(Boolean);
   // An allowlist entry is the operator's own decision, so it also unlocks the
   // one case self-hosters need: plain http to a model running next to
@@ -139,7 +156,10 @@ export async function chatComplete(
   messages: ChatMessage[],
   opts: { maxTokens?: number; temperature?: number; json?: boolean } = {}
 ): Promise<string> {
-  const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
+  // Trim the trailing slash: "…/v1/" would build "…/v1//chat/completions",
+  // which providers used to paper over with a 301 that fetch followed — and
+  // redirects are off below.
+  const res = await fetch(`${cfg.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
     method: 'POST',
     // Every endpoint rule above is checked against the URL that was saved, so a
     // followed redirect would walk straight around them: a host that passes

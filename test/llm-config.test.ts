@@ -49,7 +49,22 @@ describe('resolveLlm', () => {
     // Trailing slash / host casing must not read as a different endpoint.
     const cfg = resolveLlm(env, settings({ llm_base_url: 'https://API.kataleptic.com/v1/' }));
     expect(cfg.apiKey).toBe(INSTANCE_KEY);
-    expect(cfg.baseUrl).toBe('https://API.kataleptic.com/v1/');
+    // …and the URL that comes back is the operator's, not the stored spelling.
+    expect(cfg.baseUrl).toBe('https://api.kataleptic.com/v1');
+  });
+
+  it('returns the instance URL verbatim whenever it lends the instance key', () => {
+    // sameLlmEndpoint is a normalizer, and no normalizer is injective — this
+    // IPv6 pair collides, because stripping the brackets makes the port
+    // indistinguishable from a final hextet. The instance key must still be
+    // unable to leave the operator's own URL, so the check being fooled costs
+    // the business its custom endpoint and nothing else.
+    const v6 = { ...env, DEFAULT_LLM_BASE_URL: 'https://[2001:db8::1]:8443/v1' } as Env;
+    const collides = settings({ llm_base_url: 'https://[2001:db8::1:8443]/v1' });
+    expect(sameLlmEndpoint('https://[2001:db8::1]:8443/v1', 'https://[2001:db8::1:8443]/v1')).toBe(true);
+    const cfg = resolveLlm(v6, collides);
+    expect(cfg.apiKey).toBe(INSTANCE_KEY);
+    expect(cfg.baseUrl).toBe('https://[2001:db8::1]:8443/v1');
   });
 
   it('treats credentials on the instance host as a custom endpoint, and rejects it', () => {
@@ -169,6 +184,20 @@ describe('validateLlmBaseUrl', () => {
     // model case that would otherwise fail the https/loopback rules.
     expect(validateLlmBaseUrl('http://localhost:11434/v1', 'localhost')).toBeNull();
   });
+
+  it('matches allowlist entries an operator would plausibly write', () => {
+    // url.hostname is always punycode, so a unicode entry has to be parsed
+    // the same way or the operator's intended host can never match.
+    expect(validateLlmBaseUrl('https://bücher.example/v1', 'bücher.example')).toBeNull();
+    expect(validateLlmBaseUrl('https://xn--bcher-kva.example/v1', 'bücher.example')).toBeNull();
+    expect(validateLlmBaseUrl('https://bücher.example/v1', 'xn--bcher-kva.example')).toBeNull();
+    // A scheme, a port, or a stray root dot in the entry is tolerated too.
+    expect(validateLlmBaseUrl('https://api.openai.com/v1', 'https://api.openai.com')).toBeNull();
+    expect(validateLlmBaseUrl('http://localhost:11434/v1', 'localhost:11434')).toBeNull();
+    expect(validateLlmBaseUrl('https://api.openai.com/v1', 'api.openai.com.')).toBeNull();
+    // …and none of that widens the list.
+    expect(validateLlmBaseUrl('https://evil.example/v1', 'bücher.example')).toMatch(/not permitted/);
+  });
 });
 
 describe('chatComplete', () => {
@@ -183,6 +212,15 @@ describe('chatComplete', () => {
     await expect(chatComplete(cfg, [{ role: 'user', content: 'hi' }])).rejects.toThrow(/redirects are not followed/);
     expect(fetchStub).toHaveBeenCalledTimes(1);
     expect((fetchStub.mock.calls[0] as unknown as [string, RequestInit])[1].redirect).toBe('manual');
+  });
+
+  it('builds the request path without a doubled slash', async () => {
+    // "…/v1/" used to work only because providers 301 the doubled slash and
+    // fetch followed; with redirects off that would be a hard failure.
+    const fetchStub = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchStub);
+    await chatComplete({ ...cfg, baseUrl: 'https://api.example.com/v1/' }, [{ role: 'user', content: 'hi' }]);
+    expect(fetchStub.mock.calls[0][0]).toBe('https://api.example.com/v1/chat/completions');
   });
 
   it('still reads an ordinary completion', async () => {
