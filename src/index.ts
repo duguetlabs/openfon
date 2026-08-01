@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import type { Env, Business, AgentSettings } from './types';
 import { createSession, deleteSession, getUserIdFromSession, hashPassword, newId, verifyPassword } from './auth';
@@ -8,6 +9,7 @@ import { CallSession } from './call-session';
 export { CallSession };
 
 type Vars = { userId: string };
+type Ctx = Context<{ Bindings: Env; Variables: Vars }>;
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 
 const COOKIE = 'ofs';
@@ -26,6 +28,92 @@ function newToken4(): string {
   return [...crypto.getRandomValues(new Uint8Array(2))].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// ---------- abuse limits ----------
+// /api/public/* and /api/auth/login are reachable by anyone on the internet, and
+// a call row is a ticket to a Durable Object that spends the owner's LLM key.
+// Counters live in D1 (fixed windows) rather than in the Cloudflare Rate
+// Limiting binding: D1 is already a hard dependency and needs no account-level
+// resource, the binding cannot express per-day or per-business counts, and its
+// per-colo scope would let a distributed burst through anyway. Self-hosters on
+// the free plan get the same behaviour as everyone else.
+//
+// Tune these three tables and nothing else moves.
+interface Limit {
+  name: string;
+  window: number; // seconds
+  max: number; // requests allowed per window
+}
+const LIMITS = {
+  // Every /api/public/* request. The widget hits /agent/:slug once per page
+  // load, so this only bites scripts.
+  publicApi: { name: 'pub', window: 60, max: 60 },
+  // Call creation. A caller who reloads the widget a few times is fine; office
+  // NAT means several legitimate callers can share one IP, hence 10 and not 5.
+  callStart: { name: 'start', window: 60, max: 10 },
+  // Failed logins only, and the per-email bucket is cleared on success — a
+  // fat-fingered password must not lock the owner out for the whole window.
+  loginIp: { name: 'lgip', window: 900, max: 20 },
+  loginEmail: { name: 'lgem', window: 900, max: 5 },
+} satisfies Record<string, Limit>;
+
+// A call row whose WebSocket never opened is dead after this: the widget
+// connects immediately, so a longer gap means nobody is coming. Doubles as the
+// attach window, which stops a leaked callId from being reusable forever.
+const STALE_UNCONNECTED = '-15 minutes';
+// A connected call this old is a leftover from a worker restart (every deploy
+// strands the calls in flight). Deliberately longer than any plausible call so
+// the sweeper can never cut a live conversation off.
+const STALE_CONNECTED = '-60 minutes';
+// Only calls this recent count against the concurrency cap, so one stranded row
+// cannot hold a slot until the sweeper next runs.
+const CONCURRENCY_WINDOW = '-30 minutes';
+
+function clientIp(c: Ctx): string {
+  // Set by Cloudflare on every edge request; absent under `wrangler dev`, where
+  // one shared bucket is the safe answer.
+  return c.req.header('CF-Connecting-IP') ?? 'local';
+}
+
+function windowStart(limit: Limit, now = Date.now()): number {
+  return Math.floor(now / 1000 / limit.window) * limit.window;
+}
+
+// Counts this request and reports whether it busted the limit. One round trip:
+// D1 supports INSERT ... ON CONFLICT ... RETURNING.
+async function consume(env: Env, limit: Limit, subject: string): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `INSERT INTO rate_counters (bucket, window_start, count) VALUES (?, ?, 1)
+     ON CONFLICT(bucket, window_start) DO UPDATE SET count = count + 1
+     RETURNING count`
+  )
+    .bind(`${limit.name}:${subject}`, windowStart(limit))
+    .first<{ count: number }>();
+  return (row?.count ?? 1) > limit.max;
+}
+
+// Read-only check, for paths that should only charge failures.
+async function isOverLimit(env: Env, limit: Limit, subject: string): Promise<boolean> {
+  const row = await env.DB.prepare('SELECT count FROM rate_counters WHERE bucket = ? AND window_start = ?')
+    .bind(`${limit.name}:${subject}`, windowStart(limit))
+    .first<{ count: number }>();
+  return (row?.count ?? 0) >= limit.max;
+}
+
+async function clearLimit(env: Env, limit: Limit, subject: string): Promise<void> {
+  await env.DB.prepare('DELETE FROM rate_counters WHERE bucket = ?').bind(`${limit.name}:${subject}`).run();
+}
+
+function tooMany(c: Ctx, message: string, retryAfter: number) {
+  return c.json({ error: message }, 429, { 'Retry-After': String(retryAfter) });
+}
+
+app.use('/api/public/*', async (c, next) => {
+  if (await consume(c.env, LIMITS.publicApi, clientIp(c))) {
+    return tooMany(c, 'Too many requests. Please wait a moment and try again.', LIMITS.publicApi.window);
+  }
+  await next();
+});
+
 // ---------- auth ----------
 app.post('/api/auth/signup', async (c) => {
   const { email, password } = await c.req.json<{ email?: string; password?: string }>();
@@ -42,14 +130,31 @@ app.post('/api/auth/signup', async (c) => {
   return c.json({ id, email: email.toLowerCase() });
 });
 
+// Well-formed but unmatchable: 16 zero-ish salt bytes and a 32-byte digest no
+// password derives to. Verifying against it on the miss path burns the same
+// 100k PBKDF2 iterations a real account pays, so the response time stops
+// disclosing whether the email exists. (POST /api/auth/signup still answers the
+// same question outright with its 409 — that is a deliberate UX call, and this
+// only closes the silent channel.)
+const DUMMY_HASH = 'BwcHBwcHBwcHBwcHBwcHBw==:CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws=';
+
 app.post('/api/auth/login', async (c) => {
   const { email, password } = await c.req.json<{ email?: string; password?: string }>();
+  const addr = clientIp(c);
+  const key = (email ?? '').toLowerCase();
+  if ((await isOverLimit(c.env, LIMITS.loginIp, addr)) || (await isOverLimit(c.env, LIMITS.loginEmail, key))) {
+    return tooMany(c, 'Too many sign-in attempts. Please try again later.', LIMITS.loginIp.window);
+  }
   const user = await c.env.DB.prepare('SELECT id, password_hash FROM users WHERE email = ?')
-    .bind((email ?? '').toLowerCase())
+    .bind(key)
     .first<{ id: string; password_hash: string }>();
-  if (!user || !password || !(await verifyPassword(password, user.password_hash))) {
+  const ok = await verifyPassword(password ?? '', user?.password_hash ?? DUMMY_HASH);
+  if (!user || !ok) {
+    await consume(c.env, LIMITS.loginIp, addr);
+    await consume(c.env, LIMITS.loginEmail, key);
     return c.json({ error: 'Invalid email or password' }, 401);
   }
+  await clearLimit(c.env, LIMITS.loginEmail, key);
   const token = await createSession(c.env, user.id);
   setCookie(c, COOKIE, token, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 86400 });
   return c.json({ id: user.id });
@@ -125,7 +230,7 @@ app.put('/api/me/business/:id', async (c) => {
   if (!biz) return c.json({ error: 'Not found' }, 404);
   const b = await c.req.json<Partial<Business>>();
   await c.env.DB.prepare(
-    `UPDATE businesses SET name=?, description=?, address=?, phone=?, website=?, timezone=?, hours_json=?, services_json=?, faqs_json=?, closures_json=? WHERE id=?`
+    `UPDATE businesses SET name=?, description=?, address=?, phone=?, website=?, timezone=?, hours_json=?, services_json=?, faqs_json=?, closures_json=?, max_concurrent_calls=?, max_calls_per_day=? WHERE id=?`
   )
     .bind(
       b.name?.trim() || biz.name,
@@ -138,11 +243,19 @@ app.put('/api/me/business/:id', async (c) => {
       b.services_json ?? biz.services_json,
       b.faqs_json ?? biz.faqs_json,
       b.closures_json ?? biz.closures_json,
+      clampCap(b.max_concurrent_calls, biz.max_concurrent_calls, 50),
+      clampCap(b.max_calls_per_day, biz.max_calls_per_day, 100_000),
       biz.id
     )
     .run();
   return c.json({ ok: true });
 });
+
+// Caps always apply — there is no "unlimited", because an unlimited public
+// endpoint is exactly the bug this is fixing. Junk input keeps the old value.
+function clampCap(v: unknown, current: number, max: number): number {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= max ? v : current;
+}
 
 app.put('/api/me/business/:id/agent', async (c) => {
   const biz = await ownedBusiness(c.env, c.get('userId'), c.req.param('id'));
@@ -406,13 +519,42 @@ app.get('/api/public/agent/:slug', async (c) => {
 
 app.post('/api/public/call/start', async (c) => {
   const { slug } = await c.req.json<{ slug?: string }>();
-  const biz = await c.env.DB.prepare('SELECT id FROM businesses WHERE slug = ?')
+  const addr = clientIp(c);
+  if (await consume(c.env, LIMITS.callStart, addr)) {
+    return tooMany(c, 'Too many calls started from this connection. Please wait a minute.', LIMITS.callStart.window);
+  }
+  const biz = await c.env.DB.prepare('SELECT id, max_concurrent_calls, max_calls_per_day FROM businesses WHERE slug = ?')
     .bind(slug ?? '')
-    .first<{ id: string }>();
+    .first<{ id: string; max_concurrent_calls: number; max_calls_per_day: number }>();
   if (!biz) return c.json({ error: 'Unknown agent' }, 404);
+
+  // Concurrency counts only calls that actually opened a WebSocket, so a caller
+  // reloading the widget — which leaves a trail of unconnected rows — can never
+  // exhaust the business's own budget.
+  const live = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM calls
+      WHERE business_id = ? AND status = 'active' AND connected_at IS NOT NULL AND started_at > datetime('now', ?)`
+  )
+    .bind(biz.id, CONCURRENCY_WINDOW)
+    .first<{ n: number }>();
+  if ((live?.n ?? 0) >= biz.max_concurrent_calls) {
+    return tooMany(c, 'All lines are busy right now. Please try again in a moment.', 30);
+  }
+
+  // Daily ceiling on the owner's provider spend. It is an availability trade the
+  // owner controls: better to go quiet than to wake up to a six-figure bill.
+  const today = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM calls WHERE business_id = ? AND started_at > datetime('now', '-1 day')`
+  )
+    .bind(biz.id)
+    .first<{ n: number }>();
+  if ((today?.n ?? 0) >= biz.max_calls_per_day) {
+    return tooMany(c, 'This agent has reached its daily call limit. Please try again tomorrow.', 3600);
+  }
+
   const callId = newId();
   await c.env.DB.prepare('INSERT INTO calls (id, business_id, channel, caller_id) VALUES (?, ?, ?, ?)')
-    .bind(callId, biz.id, 'web', c.req.header('CF-Connecting-IP') ?? 'anonymous')
+    .bind(callId, biz.id, 'web', addr === 'local' ? 'anonymous' : addr)
     .run();
   return c.json({ callId });
 });
@@ -420,10 +562,19 @@ app.post('/api/public/call/start', async (c) => {
 // ---------- websocket -> Durable Object ----------
 app.get('/ws/call/:callId', async (c) => {
   const callId = c.req.param('callId');
-  const exists = await c.env.DB.prepare('SELECT id FROM calls WHERE id = ? AND status = ?')
-    .bind(callId, 'active')
+  // Bounded by started_at, not just status: a callId that has sat unused past
+  // the stale window is not attachable, even before the sweeper retires it.
+  const exists = await c.env.DB.prepare(
+    `SELECT id FROM calls WHERE id = ? AND status = 'active' AND started_at > datetime('now', ?)`
+  )
+    .bind(callId, STALE_UNCONNECTED)
     .first();
   if (!exists) return c.json({ error: 'call not found' }, 404);
+  // Records that this row reached a Durable Object, which is what separates a
+  // real conversation from a row an abusive burst left behind.
+  await c.env.DB.prepare("UPDATE calls SET connected_at = COALESCE(connected_at, datetime('now')) WHERE id = ?")
+    .bind(callId)
+    .run();
   const id = c.env.CALL_SESSION.idFromName(callId);
   const stub = c.env.CALL_SESSION.get(id);
   const url = new URL(c.req.raw.url);
@@ -433,4 +584,30 @@ app.get('/ws/call/:callId', async (c) => {
 
 app.get('/api/health', (c) => c.json({ ok: true, service: 'openfon' }));
 
-export default app;
+// ---------- cron sweep ----------
+// A row whose WebSocket never opened has no Durable Object, so no alarm inside
+// CallSession can ever rescue it — only a scheduled pass over the table can.
+// The second query covers the other stranding path: a worker restart (i.e. every
+// deploy) leaves whatever was in flight 'active' with no ended_at.
+export async function sweepStaleCalls(env: Env, now = Date.now()): Promise<number> {
+  const retire = (extra: string, cutoff: string) =>
+    env.DB.prepare(
+      `UPDATE calls SET status = 'abandoned', ended_at = datetime('now')
+        WHERE status = 'active' AND ${extra} AND started_at < datetime('now', ?)`
+    ).bind(cutoff);
+  const res = await env.DB.batch([
+    retire('connected_at IS NULL', STALE_UNCONNECTED),
+    retire('connected_at IS NOT NULL', STALE_CONNECTED),
+    // Fixed-window counters are only read for the current window; a day of
+    // history is plenty of slack for the longest limiter.
+    env.DB.prepare('DELETE FROM rate_counters WHERE window_start < ?').bind(Math.floor(now / 1000) - 86400),
+  ]);
+  return (res[0].meta.changes ?? 0) + (res[1].meta.changes ?? 0);
+}
+
+export default {
+  fetch: app.fetch,
+  scheduled: (_event, env, ctx) => {
+    ctx.waitUntil(sweepStaleCalls(env));
+  },
+} satisfies ExportedHandler<Env>;

@@ -32,6 +32,8 @@ export interface Business {
   services_json: string;
   faqs_json: string;
   closures_json: string;
+  max_concurrent_calls: number;
+  max_calls_per_day: number;
   agent: Agent | null;
 }
 

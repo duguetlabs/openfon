@@ -11,6 +11,21 @@ const INTENT_BADGE: Record<string, string> = {
   other: 'bg-wash-iris text-ink-soft shadow-[inset_0_0_0_1px_rgb(88_73_190/0.12)]',
 };
 
+// Fallbacks for rows with no summary, one per status the schema can hold.
+//
+// 'failed' means the socket connected and the session broke mid-call, and
+// finalize() always writes a "Call failed: …" summary — so this entry is nearly
+// unreachable, and it says "Call failed" rather than "didn't connect" because a
+// failed call plainly did connect. That matters now that 'abandoned' exists: it
+// is the one that genuinely never reached a Durable Object.
+//
+// 'active' is the only status that should ever blink.
+const STATUS_LABEL: Record<string, string> = {
+  active: 'Call in progress…',
+  abandoned: 'Never connected',
+  failed: 'Call failed',
+};
+
 export default function Dashboard() {
   const { business } = useSession();
   const [calls, setCalls] = useState<CallRow[] | null>(null);
@@ -73,12 +88,22 @@ export default function Dashboard() {
               >
                 <span
                   className={`h-2 w-2 shrink-0 rounded-full ${
-                    c.status === 'active' ? 'blink bg-rose' : c.status === 'failed' ? 'bg-rose/70' : 'bg-ok/70'
+                    c.status === 'active'
+                      ? 'blink bg-rose'
+                      : c.status === 'failed'
+                        ? 'bg-rose/70'
+                        : c.status === 'abandoned'
+                          ? 'bg-ink-faint/40'
+                          : 'bg-ok/70'
                   }`}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink">
-                    {c.summary ?? (c.status === 'active' ? 'Call in progress…' : c.status === 'failed' ? "Call didn't connect" : 'Call')}
+                  <p
+                    className={`truncate text-sm font-semibold ${
+                      c.status === 'abandoned' && !c.summary ? 'text-ink-faint' : 'text-ink'
+                    }`}
+                  >
+                    {c.summary ?? STATUS_LABEL[c.status] ?? 'Call'}
                   </p>
                   <p className="mt-1 font-mono text-[11px] text-ink-faint">
                     {fmtTime(c.started_at)} · {fmtDuration(c.duration_s)} · {c.channel}
