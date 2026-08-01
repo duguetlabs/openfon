@@ -84,6 +84,10 @@ interface CallRow {
   started_at: string;
 }
 
+// WebSocket.OPEN. The numeric value is fixed by the WebSocket spec, and the
+// constant is not exposed on the Workers WebSocket instance type.
+const WS_OPEN = 1;
+
 export class CallSession implements DurableObject {
   private ws: WebSocket | null = null;
   private callId = '';
@@ -92,6 +96,7 @@ export class CallSession implements DurableObject {
   private history: ChatMessage[] = [];
   private busy = false;
   private ended = false;
+  private started = false; // guards handleStart against repeated {type:"start"}
   private lang = 'en'; // follows the caller; starts as the business default
   private mode: 'pipeline' | 'realtime' = 'pipeline';
   private upstream: WebSocket | null = null; // realtime engine connection
@@ -104,10 +109,17 @@ export class CallSession implements DurableObject {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    this.callId = url.searchParams.get('call') ?? '';
-    if (request.headers.get('Upgrade') !== 'websocket' || !this.callId) {
+    const callId = url.searchParams.get('call') ?? '';
+    if (request.headers.get('Upgrade') !== 'websocket' || !callId) {
       return new Response('expected websocket', { status: 426 });
     }
+    // One caller per call. Accepting a second socket would replace `this.ws`,
+    // so every reply — transcripts, agent audio — would go to the newcomer
+    // while the real caller sat in silence. Refuse instead of taking over.
+    if (this.ws && this.ws.readyState === WS_OPEN) {
+      return new Response('call already connected', { status: 409 });
+    }
+    this.callId = callId;
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     server.accept();
@@ -116,7 +128,6 @@ export class CallSession implements DurableObject {
       this.onMessage(ev).catch((err) => this.failInternally(err));
     });
     server.addEventListener('close', () => {
-      this.closeUpstream();
       this.finalize().catch((err) => console.error('finalize failed', err));
     });
     return new Response(null, { status: 101, webSocket: client });
@@ -165,6 +176,7 @@ export class CallSession implements DurableObject {
 
   private async onMessage(ev: MessageEvent): Promise<void> {
     if (this.ended) return;
+    this.lastActivity = Date.now(); // feeds the idle watchdog
     if (typeof ev.data !== 'string') {
       const audio = await toArrayBuffer(ev.data);
       if (this.mode === 'realtime') {
@@ -186,9 +198,7 @@ export class CallSession implements DurableObject {
         }
         break;
       case 'hangup':
-        this.send({ type: 'ended' });
-        this.closeUpstream();
-        this.ws?.close(1000, 'hangup');
+        // finalize() owns the whole teardown: engine, client socket, DB row.
         await this.finalize();
         break;
       default:
@@ -199,6 +209,10 @@ export class CallSession implements DurableObject {
   private pendingContentType = 'audio/webm';
 
   private async handleStart(): Promise<void> {
+    // A repeated {type:"start"} would open a second engine connection, greet
+    // again, and write another agent turn — so answer the phone only once.
+    if (this.started) return;
+    this.started = true;
     await this.loadCall();
     // Resolve the LLM config before saying hello: a rejected AI-provider setup
     // must fail at pickup with a message the owner can act on, not stall the
@@ -214,11 +228,14 @@ export class CallSession implements DurableObject {
       this.failure = `Agent misconfigured — ${err.message} Fix it in Settings → AI provider.`;
       console.error(`call ${this.callId}: ${this.failure}`);
       this.sendError('This agent is not available right now. Please try again later.');
-      this.send({ type: 'ended' });
-      this.ws?.close(1000, 'agent misconfigured');
+      // finalize() owns the rest: it sends `ended`, closes the socket, and
+      // writes the row. Doing any of that here would duplicate it.
       await this.finalize();
       return;
     }
+    // Armed only once the call is actually going ahead — nothing to watch over
+    // a call that is being torn down at pickup.
+    await this.armWatchdog();
     this.lang = this.settings!.language in SUPPORTED_LANGUAGES ? this.settings!.language : 'en';
     const greeting = defaultGreeting(this.biz!, this.settings!);
     const systemPrompt = buildSystemPrompt(this.biz!, this.settings!, new Date());
@@ -309,6 +326,9 @@ export class CallSession implements DurableObject {
   private sessionVoice = ''; // voice sent upstream; '' = let the tier pick
   private voiceManaged = false; // true when we own language->voice switching (HD default)
   private reconnects = 0;
+  private totalReconnects = 0; // whole-call ceiling; session.expiring resets only `reconnects`
+  private recovering: Promise<void> | null = null;
+  private static readonly MAX_TOTAL_RECONNECTS = 5;
   private greetingGuardUntil = 0; // ignore barge-in flushes while our greeting plays
   private endPending = false; // caller said farewell; hang up after the agent's sign-off
 
@@ -410,18 +430,8 @@ export class CallSession implements DurableObject {
     this.endingSent = true;
     console.log(`call ${this.callId}: agent ending the call`);
     this.send({ type: 'ending' });
-    setTimeout(() => {
-      if (!this.ended) {
-        this.send({ type: 'ended' });
-        this.closeUpstream();
-        try {
-          this.ws?.close(1000, 'agent hangup');
-        } catch {
-          /* gone */
-        }
-        void this.finalize();
-      }
-    }, 15_000);
+    // Safety net: if the client never drains playback and hangs up itself.
+    setTimeout(() => void this.finalize(), 15_000);
   }
 
   private async startRealtime(systemPrompt: string, greeting: string): Promise<boolean> {
@@ -453,6 +463,19 @@ export class CallSession implements DurableObject {
     return this.openUpstream(this.realtimeInstructions, this.engineGreets() ? greeting : null);
   }
 
+  // Discard a connection that never became usable. Without this it stays in
+  // `this.upstream` and, if it opens after we already gave up, still sends
+  // session.update and streams PCM at a client that has fallen back to
+  // pipeline mode and will try to decode those frames as MP3.
+  private abandonUpstream(ws: WebSocket): void {
+    try {
+      ws.close(1000, 'abandoned');
+    } catch {
+      /* never opened */
+    }
+    if (this.upstream === ws) this.upstream = null;
+  }
+
   private openUpstream(instructions: string, greetWith: string | null): Promise<boolean> {
     const key = this.env.REALTIME_API_KEY || this.env.DEFAULT_LLM_API_KEY || '';
     const url = `${this.env.REALTIME_BASE_URL}?model=${encodeURIComponent(this.realtimeModel)}&token=${encodeURIComponent(key)}`;
@@ -464,18 +487,23 @@ export class CallSession implements DurableObject {
           resolve(ok);
         }
       };
-      const timer = setTimeout(() => settle(false), 5000);
       let ws: WebSocket;
       try {
         ws = new WebSocket(url);
       } catch {
-        clearTimeout(timer);
         settle(false);
         return;
       }
       this.upstream = ws;
+      let abandoned = false;
+      const timer = setTimeout(() => {
+        abandoned = true;
+        this.abandonUpstream(ws);
+        settle(false);
+      }, 5000);
       ws.addEventListener('open', () => {
         clearTimeout(timer);
+        if (abandoned) return; // we already gave up on this one and closed it
         this.sendUpstream(this.realtimeSessionPayload(this.sessionVoice, instructions));
         if (greetWith) {
           this.sendUpstream({
@@ -486,10 +514,12 @@ export class CallSession implements DurableObject {
         settle(true);
       });
       ws.addEventListener('message', (ev) => {
+        if (this.upstream !== ws) return; // rotated or abandoned connection
         this.onUpstreamMessage(ev).catch((err) => console.error('upstream handler error', err));
       });
       ws.addEventListener('error', () => {
         clearTimeout(timer);
+        this.abandonUpstream(ws);
         settle(false);
       });
       ws.addEventListener('close', () => {
@@ -502,33 +532,52 @@ export class CallSession implements DurableObject {
     });
   }
 
-  // The engine dropped the session mid-call: reconnect once with the
-  // conversation so far folded into the instructions, instead of hanging up.
-  private async recoverUpstream(): Promise<void> {
-    if (this.reconnects >= 1) {
-      this.sendError('Voice engine connection lost');
-      this.send({ type: 'ended' });
-      this.ws?.close(1000, 'engine closed');
-      await this.finalize();
-      return;
+  // The engine dropped the session mid-call: reconnect with the conversation so
+  // far folded into the instructions, instead of hanging up.
+  //
+  // Single-flight: a failed connect notifies us twice — once by resolving false
+  // and once through the socket's close listener. Letting both run would open
+  // two replacements, and only the last would land in `this.upstream`, leaving
+  // an orphan nobody closes.
+  private recoverUpstream(): Promise<void> {
+    if (!this.recovering) {
+      this.recovering = this.runRecovery().finally(() => {
+        this.recovering = null;
+      });
     }
-    this.reconnects++;
-    console.log(`call ${this.callId}: upstream dropped, reconnecting`);
-    const transcript = this.history
-      .filter((m) => m.role !== 'system')
-      .map((m) => `${m.role === 'user' ? 'Caller' : 'You'}: ${m.content}`)
-      .join('\n');
-    const resumed = `${this.realtimeInstructions}\n\nThe call audio was briefly interrupted; the caller is still on the line. Do NOT greet again. Conversation so far:\n${transcript}`;
-    const old = this.upstream;
-    const ok = await this.openUpstream(resumed, null).catch(() => false);
-    if (ok && old && old !== this.upstream) {
-      try {
-        old.close(1000, 'rotated');
-      } catch {
-        /* already closed */
+    return this.recovering;
+  }
+
+  private async runRecovery(): Promise<void> {
+    while (!this.ended) {
+      // `reconnects` is the per-rotation budget, which session.expiring resets;
+      // `totalReconnects` bounds a flapping engine over the whole call.
+      if (this.reconnects >= 1 || this.totalReconnects >= CallSession.MAX_TOTAL_RECONNECTS) {
+        this.sendError('Voice engine connection lost');
+        await this.finalize();
+        return;
+      }
+      this.reconnects++;
+      this.totalReconnects++;
+      console.log(`call ${this.callId}: upstream dropped, reconnecting`);
+      const transcript = this.history
+        .filter((m) => m.role !== 'system')
+        .map((m) => `${m.role === 'user' ? 'Caller' : 'You'}: ${m.content}`)
+        .join('\n');
+      const resumed = `${this.realtimeInstructions}\n\nThe call audio was briefly interrupted; the caller is still on the line. Do NOT greet again. Conversation so far:\n${transcript}`;
+      const old = this.upstream;
+      const ok = await this.openUpstream(resumed, null);
+      if (ok) {
+        if (old && old !== this.upstream) {
+          try {
+            old.close(1000, 'rotated');
+          } catch {
+            /* already closed */
+          }
+        }
+        return;
       }
     }
-    if (!ok) await this.recoverUpstream();
   }
 
   private async onUpstreamMessage(ev: MessageEvent): Promise<void> {
@@ -694,6 +743,65 @@ export class CallSession implements DurableObject {
     await this.env.DB.prepare('INSERT INTO call_turns (call_id, role, text) VALUES (?, ?, ?)')
       .bind(this.callId, role, text)
       .run();
+    // A model that loops — or an engine echoing itself — would otherwise run up
+    // provider spend for as long as the socket stays open.
+    if (++this.turns >= CallSession.MAX_TURNS) {
+      console.log(`call ${this.callId}: turn cap reached, ending`);
+      this.beginHangup();
+    }
+  }
+
+  // ---- watchdog ----
+  // All call state lives in memory, so a worker restart or a caller whose
+  // network drops without a close frame leaves the row 'active' forever. A
+  // periodic alarm force-finalizes those. `callId` is persisted because an
+  // alarm can fire on a fresh instance that has lost every field.
+  // (Rows whose socket never opened are not covered — no DO exists to run an
+  // alarm for them; that needs a sweeper, handled separately.)
+  private static readonly WATCHDOG_TICK_MS = 60_000;
+  private static readonly IDLE_LIMIT_MS = 120_000; // clients ping every 20 s
+  private static readonly MAX_CALL_MS = 30 * 60_000;
+  private static readonly MAX_TURNS = 200;
+  private lastActivity = Date.now();
+  private turns = 0;
+
+  private async armWatchdog(): Promise<void> {
+    const now = Date.now();
+    this.lastActivity = now;
+    await this.state.storage.put({
+      callId: this.callId,
+      hardDeadline: now + CallSession.MAX_CALL_MS,
+      lastActivity: now,
+    });
+    await this.state.storage.setAlarm(now + CallSession.WATCHDOG_TICK_MS);
+  }
+
+  async alarm(): Promise<void> {
+    const callId = this.callId || (await this.state.storage.get<string>('callId')) || '';
+    if (!callId) return; // nothing to reconcile
+    this.callId = callId;
+    const now = Date.now();
+    const hardDeadline = (await this.state.storage.get<number>('hardDeadline')) ?? now;
+    // After an eviction the in-memory value is gone; the stored one is at most
+    // one tick stale, which is precisely when finalizing is the right call.
+    const stored = (await this.state.storage.get<number>('lastActivity')) ?? 0;
+    const activity = Math.max(this.lastActivity, stored);
+
+    if (now >= hardDeadline || now - activity >= CallSession.IDLE_LIMIT_MS) {
+      console.log(`call ${this.callId}: watchdog finalizing (idle ${Math.round((now - activity) / 1000)}s)`);
+      try {
+        await this.finalize();
+      } catch (err) {
+        // Alarms are at-least-once: rethrow so the platform retries. `ended`
+        // has to come back off or the retry would no-op and leave the row
+        // 'active' — the exact state this watchdog exists to prevent.
+        this.ended = false;
+        throw err;
+      }
+      return;
+    }
+    await this.state.storage.put('lastActivity', activity);
+    await this.state.storage.setAlarm(now + CallSession.WATCHDOG_TICK_MS);
   }
 
   // The status is derived from the recorded failure, never passed in. It used
@@ -707,6 +815,22 @@ export class CallSession implements DurableObject {
   private async finalize(): Promise<void> {
     if (this.ended || !this.callId) return;
     this.ended = true;
+    this.closeUpstream();
+    // Anything still attached has to be told, and then actually closed. Leaving
+    // it open means `ended` silently drops every later message and the caller
+    // just hears the agent stop, with no error and no hangup.
+    this.send({ type: 'ended' });
+    try {
+      this.ws?.close(1000, 'call ended');
+    } catch {
+      /* already gone */
+    }
+    try {
+      await this.state.storage.deleteAlarm();
+      await this.state.storage.deleteAll();
+    } catch (err) {
+      console.error('watchdog cleanup failed', err);
+    }
     const call = await this.env.DB.prepare('SELECT started_at FROM calls WHERE id = ? AND status = ?')
       .bind(this.callId, 'active')
       .first<{ started_at: string }>();
