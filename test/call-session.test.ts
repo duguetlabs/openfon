@@ -201,11 +201,14 @@ afterEach(() => {
 });
 
 function newSession(engine: 'pipeline' | 'realtime' = 'pipeline') {
-  const { db, ctl, turnWrites, callUpdates } = fakeDb(engine);
+  const backing = fakeDb(engine);
   const storage = new FakeStorage();
   const state = { storage } as unknown as DurableObjectState;
-  const session = new CallSession(state, fakeEnv(db));
-  return { session, storage, ctl, turnWrites, callUpdates };
+  const session = new CallSession(state, fakeEnv(backing.db));
+  const { ctl, turnWrites, callUpdates } = backing;
+  /** Rebuild the object on the same storage and D1, as an eviction would. */
+  const evictAndRebuild = () => new CallSession(state, fakeEnv(backing.db));
+  return { session, storage, ctl, turnWrites, callUpdates, evictAndRebuild };
 }
 
 // ---------- tests ----------
@@ -436,6 +439,38 @@ describe('watchdog alarm', () => {
     expect(storage.alarmAt).toBeNull();
   });
 
+  it('sees a stale call as idle when the alarm runs on a rebuilt instance', async () => {
+    // The eviction case the watchdog exists for. A Date.now() initializer on
+    // `lastActivity` made a rebuilt instance look freshly active, so the idle
+    // path never fired and the call survived to the 30 min hard cap — and each
+    // tick wrote the refreshed value back, so it never aged either.
+    const { session, storage, callUpdates, evictAndRebuild } = newSession();
+    await session.fetch(upgradeRequest());
+    serverSockets[0].receive({ type: 'start' });
+    await flush();
+
+    storage.map.set('lastActivity', Date.now() - 200_000);
+    await evictAndRebuild().alarm();
+
+    expect(callUpdates()).toHaveLength(1); // finalized on the idle path
+    expect(storage.alarmAt).toBeNull();
+  });
+
+  it('does not refresh persisted activity from a rebuilt instance', async () => {
+    // Rescheduling must carry the stale timestamp forward, or a call that keeps
+    // getting evicted between ticks never ages past the idle limit.
+    const { session, storage } = newSession();
+    storage.map.set('callId', 'call-1');
+    storage.map.set('hardDeadline', Date.now() + 600_000);
+    const stale = Date.now() - 60_000; // old, but not yet past the idle limit
+    storage.map.set('lastActivity', stale);
+
+    await session.alarm();
+
+    expect(storage.alarmAt).not.toBeNull(); // rescheduled, not finalized
+    expect(storage.map.get('lastActivity')).toBe(stale); // and not bumped to now
+  });
+
   it('does nothing when there is no call to reconcile', async () => {
     const { session, storage } = newSession();
     await session.alarm();
@@ -461,6 +496,29 @@ describe('watchdog alarm', () => {
     // At-least-once delivery: the retry has to actually complete the call.
     ctl.failUpdates = false;
     await session.alarm();
+    expect(callUpdates()).toHaveLength(1);
+    expect(storage.alarmAt).toBeNull();
+    expect(storage.map.size).toBe(0);
+  });
+
+  it('completes the call when the retry lands on a rebuilt instance', async () => {
+    // The alarm retry is not guaranteed to hit the same object. A rebuilt one
+    // reads everything it needs from storage — which is only true because the
+    // watchdog is cleared after the row is written, never before.
+    vi.useFakeTimers();
+    const { session, storage, ctl, callUpdates, evictAndRebuild } = newSession();
+    await session.fetch(upgradeRequest());
+    serverSockets[0].receive({ type: 'start' });
+    await flush();
+
+    ctl.failUpdates = true;
+    vi.setSystemTime(Date.now() + 200_000);
+    await expect(session.alarm()).rejects.toThrow('D1 unavailable');
+    expect(storage.map.get('callId')).toBe('call-1');
+
+    ctl.failUpdates = false;
+    await evictAndRebuild().alarm();
+
     expect(callUpdates()).toHaveLength(1);
     expect(storage.alarmAt).toBeNull();
     expect(storage.map.size).toBe(0);

@@ -774,7 +774,11 @@ export class CallSession implements DurableObject {
   private static readonly IDLE_LIMIT_MS = 120_000; // clients ping every 20 s
   private static readonly MAX_CALL_MS = 30 * 60_000;
   private static readonly MAX_TURNS = 200;
-  private lastActivity = Date.now();
+  // 0 = this instance has seen no activity of its own. Not the same as "the
+  // call was just active": an alarm can run on an object rebuilt after
+  // eviction, where any Date.now() initializer would look like fresh activity
+  // and keep the call alive forever — the very case the watchdog is for.
+  private lastActivity = 0;
   private turns = 0;
 
   private async armWatchdog(): Promise<void> {
@@ -794,10 +798,11 @@ export class CallSession implements DurableObject {
     this.callId = callId;
     const now = Date.now();
     const hardDeadline = (await this.state.storage.get<number>('hardDeadline')) ?? now;
-    // After an eviction the in-memory value is gone; the stored one is at most
-    // one tick stale, which is precisely when finalizing is the right call.
+    // Trust this instance's own observation, and only that. Falling back to the
+    // persisted value when we have none is what lets an evicted-and-rebuilt
+    // object see how stale the call really is.
     const stored = (await this.state.storage.get<number>('lastActivity')) ?? 0;
-    const activity = Math.max(this.lastActivity, stored);
+    const activity = this.lastActivity || stored;
 
     if (now >= hardDeadline || now - activity >= CallSession.IDLE_LIMIT_MS) {
       console.log(`call ${this.callId}: watchdog finalizing (idle ${Math.round((now - activity) / 1000)}s)`);
