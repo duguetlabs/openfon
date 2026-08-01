@@ -37,7 +37,7 @@ function newToken4(): string {
 // per-colo scope would let a distributed burst through anyway. Self-hosters on
 // the free plan get the same behaviour as everyone else.
 //
-// Tune these three tables and nothing else moves.
+// Everything tunable lives in LIMITS and the three window constants below.
 interface Limit {
   name: string;
   window: number; // seconds
