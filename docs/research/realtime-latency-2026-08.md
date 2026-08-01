@@ -30,6 +30,13 @@ If OpenFon wants faster turn-taking, the levers are the VAD hangover (550 ms of 
 budget, ours to set) and the choice of engine (Voice Live's gpt-4.1-mini cascade is
 ~550 ms faster to first audio than gpt-realtime-2) — not disintermediating Kataleptic.
 
+**A separate finding, from the [VAD follow-up](#follow-up-is-the-splitting-the-brain-or-the-turn-detector)
+and arguably more actionable than the latency result:** OpenFon's `gpt-realtime-2` tier
+interrupts callers who pause mid-sentence, **10 times out of 10**, because
+`src/call-session.ts` sends `server_vad` to every tier. The fix costs nothing in latency —
+but the combination that delivers it (Voice Live serving gpt-realtime-2 with Azure semantic
+VAD) is not currently exposed by Kataleptic on any tier.
+
 ---
 
 ## Setup
@@ -249,34 +256,14 @@ Resolving it would need a run with several hundred pairs, or a lower-variance me
 and it should be pre-registered as a single hypothesis rather than harvested from a table
 of 21.
 
-**VAD splits differ by brain, not by stack — and this is a real asymmetry.** The German
-short utterance contains a clause pause after "Guten Tag," longer than
-`silence_duration_ms = 550`. Server VAD commits early, starts a response, and cancels it
-(`reason: turn_detected`) when the caller resumes. This happened on **all three
-gpt-realtime-2 arms (6/25 turns each — exactly the six `de-short` rounds) and never on the
-two gpt-4.1-mini Voice Live arms.**
+**VAD splits are the detector, not the brain** — see the dedicated follow-up experiment
+below, which settles this. The main run left it confounded; the follow-up removes the
+confound and reverses the tentative reading.
 
-Both were sent the same `server_vad` config and both echoed it back, so this is not a
-configuration difference; it is two implementations of the same nominal setting behaving
-differently at a clause pause. Turn segmentation follows the *brain*, not the serving
-stack — note that `vl-native-brain` is Voice Live infrastructure yet splits like the other
-gpt-realtime-2 arms.
-
-This does **not** contaminate the headline result: splits occur symmetrically within every
-pair, so all three paired comparisons are unaffected, and `speech_stopped_ms` (above) shows
-end-of-turn *timing* is identical across arms regardless. But the native-vs-Voice-Live
-*cross* comparison on `de-short` is not strictly apples-to-apples, and the split behaviour
-is worth knowing about on its own merits: on a real call, a caller who pauses after
-"Guten Tag," gets interrupted by gpt-realtime-2 and does not by the HD tier. That is a
-product-quality difference this latency benchmark noticed but is not designed to measure.
-
-**Should a semantic-VAD arm be run to disentangle this?** No — not for the latency
-question. The hypothesis it would test (that turn detection explains the engine gap) is
-already refuted by `speech_stopped_ms` being equal across arms. Adding a
-`server_vad`-vs-`semantic_vad` arm would answer a *different* and narrower question —
-whether semantic VAD reduces mid-utterance splits — which belongs to a barge-in and
-interruption-quality study, not here. Worth doing when that study happens; not worth
-$0.50 and a confounded extra column now.
+Within the main run: splits occur symmetrically inside every pair, so all three paired
+comparisons are unaffected, and `speech_stopped_ms` shows end-of-turn *timing* is identical
+across arms regardless. The native-vs-Voice-Live *cross* comparison on `de-short` is not
+strictly apples-to-apples.
 
 **Unremovable dialect asymmetry.** Voice Live speaks the flat/beta wire format while the
 native endpoint and the gateway speak GA nested. Each arm is sent its own native dialect.
@@ -293,11 +280,104 @@ latency drift over a long call, nor barge-in behaviour. Both are separate questi
 
 ---
 
+## Follow-up: is the splitting the brain or the turn detector?
+
+*Separate run, 2026-08-02, 120 turns, $1.61. Two blocks of 6 arms × 10 rounds: `de-short`
+(the only utterance that ever splits) for split rate, `en-short` (which never splits on any
+arm) for a clean latency comparison — because on a split arm the model answers only the
+second fragment, so `ttfa` measured on `de-short` is not comparing like with like.*
+
+The main run left a confound: gpt-realtime-2 chopped the caller's utterance at a clause
+pause and gpt-4.1-mini did not, so "the better engine" could have meant the better *brain*
+or the better *turn detector* — different product decisions. This run pins the brain and
+varies only the detector.
+
+### Which combinations exist
+
+Not every pairing is offered, and the refusals are informative:
+
+| surface | brain | detector | |
+|---|---|---|---|
+| Foundry | gpt-realtime-2 | `semantic_vad` | accepted |
+| Foundry | gpt-realtime-2 | `azure_semantic_vad_multilingual` | **rejected** — *"Supported values are: none, server_vad, semantic_vad"* |
+| Voice Live | gpt-realtime-2 | `semantic_vad` | accepted |
+| Voice Live | gpt-realtime-2 | `azure_semantic_vad_multilingual` | accepted |
+| Voice Live | gpt-4.1-mini | `azure_semantic_vad_multilingual` | accepted |
+| Voice Live | gpt-4.1-mini | `semantic_vad` | **rejected** — *"OpenAI Semantic VAD is not supported in cascaded pipeline"* |
+
+OpenAI's semantic VAD needs a native-audio model; Azure's needs Azure's own pipeline.
+Neither detector can be moved onto the other brain on the Foundry surface.
+
+### Split rate — the detector, decisively
+
+| arm | brain | detector | turns split |
+|---|---|---|---:|
+| `native-direct` | gpt-realtime-2 | `server_vad` | **10/10** |
+| `vl-native-brain` | gpt-realtime-2 | `server_vad` | **10/10** |
+| `nat-semantic` | gpt-realtime-2 | OpenAI `semantic_vad` | **0/10** |
+| `vlnat-azsemantic` | gpt-realtime-2 | Azure semantic | **0/10** |
+| `vl-direct` | gpt-4.1-mini | `server_vad` | 0/10 |
+| `vlmini-azsemantic` | gpt-4.1-mini | Azure semantic | 0/10 |
+
+Fisher exact, two-sided: `nat-semantic` vs `native-direct` and `vlnat-azsemantic` vs
+`vl-native-brain` both **p < 0.0001**. Holding the brain *and* the serving stack constant
+and changing only the detector takes splitting from 100% to 0%.
+
+**This reverses the tentative reading in the main run.** Splitting is not a property of the
+brain — it is `server_vad` firing on a clause pause, and gpt-realtime-2's `server_vad`
+implementation is simply more trigger-happy than the cascade's. Give the same brain a
+semantic detector and the behaviour disappears entirely.
+
+### What the fix costs — and here the two detectors differ enormously
+
+Paired on `en-short`, where nothing splits on any arm:
+
+| comparison | median Δ ttfa | 95% CI | p raw / Holm |
+|---|---:|---|---:|
+| `vlnat-azsemantic` − `vl-native-brain`<br><sub>Azure semantic vs server VAD, brain and stack held constant</sub> | **−72 ms** | [−600, +255] | 1.000 / 1.000 |
+| `nat-semantic` − `native-direct`<br><sub>OpenAI semantic vs server VAD, brain held constant</sub> | **+662 ms** | [+248, +3425] | 0.021 / 0.559 |
+| `vlmini-azsemantic` − `vl-direct`<br><sub>Azure semantic vs server VAD, brain gpt-4.1-mini</sub> | +177 ms | [−69, +260] | 0.344 / 1.000 |
+
+`speech_stopped_ms` shows the mechanism directly — this is the detector's own decision time:
+
+| arm | detector | p50 | p90 | IQR |
+|---|---|---:|---:|---:|
+| `native-direct` | `server_vad` | 736 | 760 | 59 |
+| `vlnat-azsemantic` | Azure semantic | **707** | **742** | **22** |
+| `nat-semantic` | OpenAI `semantic_vad` | **1189** | **4512** | **3331** |
+
+**Azure's semantic detector is free** — same end-of-turn timing as server VAD, and the
+tightest spread of any arm measured. **OpenAI's is not**: it roughly doubles the median
+end-of-turn decision and its tail is catastrophic for a phone call, with a p90 of 4.5 s
+spent deciding the caller has stopped talking. (The +662 ms `ttfa` figure is flagged
+borderline by the correction, and with an IQR of 3.3 s that caution is right — but the
+direction is unambiguous and the mechanism is visible in `speech_stopped_ms`.)
+
+### What this means for OpenFon
+
+1. **You do not have to choose between the better brain and the better turn-taking.**
+   gpt-realtime-2 with Azure semantic VAD splits 0/10 at no measurable latency cost.
+2. **OpenFon is currently exposed to this.** `realtimeSessionPayload` in
+   `src/call-session.ts` sends `server_vad / 0.7 / 300 / 550` to *every* tier, including
+   `gpt-realtime-2`. On that tier a caller who pauses mid-sentence — "Guten Tag, …" — gets
+   interrupted, reproducibly, 10 times out of 10.
+3. **The good combination is not currently purchasable through Kataleptic.** Its
+   `gpt-realtime-2` tier proxies to the Foundry surface, where `semantic_vad` means
+   OpenAI's slow one; its HD tier maps `semantic_vad` to Azure's, but that tier's brain is
+   gpt-4.1-mini. Nothing exposes *Voice Live + gpt-realtime-2*, which is the combination
+   that wins here. That is a concrete tier worth asking for.
+
+Until then the honest short-term options are: use the HD tier (fast detector, weaker
+brain), or use `gpt-realtime-2` with `server_vad` and accept clause-pause interruptions.
+Switching that tier to OpenAI `semantic_vad` fixes the interruptions but trades them for a
+multi-second end-of-turn tail, which is worse on a phone call.
+
 ## Cost
 
-The run cost **$1.99** in model usage (125 turns, ~25 minutes wall clock): $0.50
+The main run cost **$1.99** in model usage (125 turns, ~25 minutes wall clock): $0.50
 `native-direct`, $0.63 `native-gateway`, $0.13 `vl-direct`, $0.19 `vl-gateway`, $0.53
-`vl-native-brain`. Caller-audio synthesis was a one-off four requests to Azure Speech.
+`vl-native-brain`. The VAD follow-up added **$1.61** (120 turns), for **$3.60** total.
+Caller-audio synthesis was a one-off four requests to Azure Speech.
 
 Worth noting for its own sake: **gpt-realtime-2 costs ~4× what the Voice Live gpt-4.1-mini
 tier costs** for the same conversation, on top of being ~550 ms slower to first audio.

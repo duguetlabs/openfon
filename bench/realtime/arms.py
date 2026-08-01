@@ -53,6 +53,13 @@ class Arm:
     _url: str = ""
     notes: str = ""
     tags: tuple = field(default_factory=tuple)
+    # Turn detector. Defaults to the one every arm of the main design shares;
+    # the VAD_ARMS follow-up varies it deliberately.
+    turn_detection: dict = field(default_factory=lambda: dict(TURN_DETECTION))
+
+    @property
+    def vad(self) -> str:
+        return self.turn_detection.get("type", "server_vad")
 
     def url(self, azure_key: str, kataleptic_key: str) -> str:
         if self.creds == "kataleptic":
@@ -69,7 +76,7 @@ class Arm:
             sess = {
                 "instructions": instructions,
                 "modalities": ["text", "audio"],
-                "turn_detection": dict(TURN_DETECTION),
+                "turn_detection": dict(self.turn_detection),
                 "input_audio_transcription": dict(self.transcription),
                 "input_audio_format": "pcm16",
                 "output_audio_format": "pcm16",
@@ -85,7 +92,7 @@ class Arm:
             "audio": {
                 "input": {
                     "format": {"type": "audio/pcm", "rate": SAMPLE_RATE},
-                    "turn_detection": dict(TURN_DETECTION),
+                    "turn_detection": dict(self.turn_detection),
                     "transcription": dict(self.transcription),
                 },
                 "output": {"format": {"type": "audio/pcm", "rate": SAMPLE_RATE}},
@@ -158,13 +165,88 @@ ARMS: list[Arm] = [
     ),
 ]
 
-ARMS_BY_ID = {a.id: a for a in ARMS}
+# ── VAD follow-up ────────────────────────────────────────────────────
+# The main design holds turn detection constant, which leaves one confound
+# open: gpt-realtime-2 splits the caller mid-utterance at a clause pause and
+# gpt-4.1-mini does not, so "the better engine" could mean "the better brain"
+# or "the better turn detector" — different product decisions.
+#
+# These arms vary ONLY the detector, with the brain pinned. Probed acceptance
+# (2026-08-02) — not every combination exists:
+#   Foundry   + gpt-realtime-2 + semantic_vad                    accepted
+#   Foundry   + gpt-realtime-2 + azure_semantic_vad_multilingual REJECTED
+#                ("Supported values are: none, server_vad, semantic_vad")
+#   VoiceLive + gpt-realtime-2 + semantic_vad                    accepted
+#   VoiceLive + gpt-realtime-2 + azure_semantic_vad_multilingual accepted
+#   VoiceLive + gpt-4.1-mini   + azure_semantic_vad_multilingual accepted
+#   VoiceLive + gpt-4.1-mini   + semantic_vad                    REJECTED
+#                ("OpenAI Semantic VAD is not supported in cascaded pipeline")
+# The two rejections are the interesting part: OpenAI's semantic VAD needs a
+# native-audio model, and Azure's needs Azure's own pipeline. Neither detector
+# can be moved onto the other brain on the Foundry surface.
+SEMANTIC_VAD = {"type": "semantic_vad", "eagerness": "auto"}
+AZURE_SEMANTIC_VAD = {"type": "azure_semantic_vad_multilingual",
+                      "threshold": 0.7, "prefix_padding_ms": 300,
+                      "silence_duration_ms": 550}
 
-# Paired comparisons the analysis reports on: (treatment, control, question).
+VAD_ARMS: list[Arm] = [
+    Arm(
+        id="nat-semantic",
+        label="gpt-realtime-2, Foundry, OpenAI semantic VAD",
+        dialect="ga", creds="azure",
+        voice="marin", voice_type="openai", transcription=WHISPER,
+        brain="gpt-realtime-2",
+        _url=f"wss://{AZURE_HOST}/openai/v1/realtime?model=gpt-realtime-2",
+        turn_detection=SEMANTIC_VAD,
+        notes="Same as native-direct but with OpenAI's semantic turn detector.",
+        tags=("native", "direct", "semantic"),
+    ),
+    Arm(
+        id="vlnat-azsemantic",
+        label="gpt-realtime-2 on Voice Live, Azure multilingual semantic VAD",
+        dialect="vl", creds="azure",
+        voice="marin", voice_type="openai", transcription=WHISPER,
+        brain="gpt-realtime-2",
+        _url=(f"wss://{AZURE_HOST}/voice-live/realtime"
+              f"?api-version={VOICE_LIVE_API_VERSION}&model=gpt-realtime-2"),
+        turn_detection=AZURE_SEMANTIC_VAD,
+        notes=("The only way to put Azure's detector in front of the native brain — "
+               "the Foundry surface rejects it."),
+        tags=("native", "direct", "voicelive-stack", "semantic"),
+    ),
+    Arm(
+        id="vlmini-azsemantic",
+        label="gpt-4.1-mini on Voice Live, Azure multilingual semantic VAD",
+        dialect="vl", creds="azure",
+        voice="en-US-AvaMultilingualNeural", voice_type="azure-standard",
+        transcription=AZURE_SPEECH,
+        brain="gpt-4.1-mini",
+        _url=(f"wss://{AZURE_HOST}/voice-live/realtime"
+              f"?api-version={VOICE_LIVE_API_VERSION}&model=gpt-4.1-mini"),
+        turn_detection=AZURE_SEMANTIC_VAD,
+        notes="vl-direct with the semantic detector instead of server VAD.",
+        tags=("vl", "direct", "semantic"),
+    ),
+]
+
+ARMS_BY_ID = {a.id: a for a in ARMS + VAD_ARMS}
+
+# Paired comparisons: (treatment, control, question). analyze.py reports only
+# the ones whose two arms both appear in the dataset, so the main run and the
+# VAD follow-up each get exactly their own comparisons — and the Holm family is
+# sized to the tests actually performed.
 PAIRS = [
+    # main design — proxy cost and serving-stack cost
     ("native-gateway", "native-direct", "Kataleptic proxy cost, gpt-realtime-2"),
     ("vl-gateway", "vl-direct", "Kataleptic proxy cost, Voice Live"),
     ("vl-native-brain", "native-direct", "Voice Live serving cost, brain held constant"),
+    # VAD follow-up — detector varied, brain pinned
+    ("nat-semantic", "native-direct",
+     "OpenAI semantic vs server VAD, brain gpt-realtime-2"),
+    ("vlnat-azsemantic", "vl-native-brain",
+     "Azure semantic vs server VAD, brain gpt-realtime-2, stack held constant"),
+    ("vlmini-azsemantic", "vl-direct",
+     "Azure semantic vs server VAD, brain gpt-4.1-mini"),
 ]
 
 

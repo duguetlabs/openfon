@@ -15,8 +15,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from analyze import (ALPHA, PRACTICAL_MS, PairedResult,  # noqa: E402
-                     bootstrap_median_ci, compute_paired, describe, holm,
-                     paired, pct, sign_test_p)
+                     bootstrap_median_ci, compute_paired, describe,
+                     fisher_exact_p, holm, paired, pct, sign_test_p,
+                     split_rate_table)
 from bench import redact  # noqa: E402
 
 
@@ -292,6 +293,61 @@ class TestComputePaired(unittest.TestCase):
         res = compute_paired(turns, ["ttfa_ms", "connect_ms"])
         self.assertIn("ttfa_ms", res)
         self.assertNotIn("connect_ms", res)
+
+
+class TestFisherExact(unittest.TestCase):
+    def test_no_association_is_p_one(self):
+        self.assertAlmostEqual(fisher_exact_p(5, 5, 5, 5), 1.0)
+
+    def test_matches_known_value(self):
+        # the classic tea-tasting 2x2: two-sided p = 0.4857...
+        self.assertAlmostEqual(fisher_exact_p(3, 1, 1, 3), 0.4857, places=3)
+
+    def test_complete_separation_is_significant(self):
+        # 10/10 vs 0/10 — the shape of the VAD split-rate result
+        p = fisher_exact_p(10, 0, 0, 10)
+        self.assertLess(p, 1e-4)
+
+    def test_small_complete_separation_is_not_oversold(self):
+        # 2/2 vs 0/2 is complete separation but far too small to be conclusive
+        self.assertGreater(fisher_exact_p(2, 0, 0, 2), 0.05)
+
+    def test_symmetric_under_row_swap(self):
+        self.assertAlmostEqual(fisher_exact_p(8, 2, 3, 7),
+                               fisher_exact_p(3, 7, 8, 2))
+
+    def test_never_exceeds_one(self):
+        for t in [(1, 1, 1, 1), (0, 5, 5, 0), (7, 3, 6, 4), (1, 0, 0, 1)]:
+            self.assertLessEqual(fisher_exact_p(*t), 1.0)
+
+    def test_empty_table(self):
+        self.assertEqual(fisher_exact_p(0, 0, 0, 0), 1.0)
+
+
+class TestSplitRateTable(unittest.TestCase):
+    def _turns(self, treat_splits, ctrl_splits, n=10):
+        out = []
+        for i in range(n):
+            out.append(turn(i, "nat-semantic", "de-short", ttfa_ms=1,
+                            false_starts=1 if i < treat_splits else 0))
+            out.append(turn(i, "native-direct", "de-short", ttfa_ms=1,
+                            false_starts=1 if i < ctrl_splits else 0))
+        return out
+
+    def test_reports_a_pair_with_splits(self):
+        rows = split_rate_table(self._turns(0, 10))
+        body = "\n".join(rows)
+        self.assertIn("0/10", body)
+        self.assertIn("10/10", body)
+
+    def test_omitted_when_nothing_split(self):
+        self.assertEqual(split_rate_table(self._turns(0, 0)), [])
+
+    def test_only_pairs_present_in_the_data(self):
+        # control arm absent -> no comparison can be formed
+        turns = [turn(i, "nat-semantic", "de-short", ttfa_ms=1, false_starts=1)
+                 for i in range(5)]
+        self.assertEqual(split_rate_table(turns), [])
 
 
 class TestRedact(unittest.TestCase):

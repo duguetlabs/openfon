@@ -257,6 +257,10 @@ async def main() -> int:
     ap.add_argument("--gap", type=float, default=0.75,
                     help="seconds between turns; keeps well under the 200 RPM cap")
     ap.add_argument("--tag", default="", help="label folded into the output filenames")
+    ap.add_argument("--utterances", default="",
+                    help="comma-separated utterance ids; narrows the cycle when a "
+                         "question only one utterance can answer needs the power "
+                         "(e.g. --utterances de-short for clause-pause splitting)")
     args = ap.parse_args()
 
     selected = ([ARMS_BY_ID[a.strip()] for a in args.arms.split(",") if a.strip()]
@@ -270,6 +274,13 @@ async def main() -> int:
     utterances = load_utterances(
         region=os.environ.get("AZURE_SPEECH_REGION", "westeurope"),
         key=os.environ.get("AZURE_SPEECH_KEY", ""))
+    if args.utterances:
+        wanted = [u.strip() for u in args.utterances.split(",") if u.strip()]
+        known = {u.id for u in utterances}
+        missing = [u for u in wanted if u not in known]
+        if missing:
+            raise SystemExit(f"unknown utterance id(s): {', '.join(missing)}")
+        utterances = [u for u in utterances if u.id in wanted]
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)

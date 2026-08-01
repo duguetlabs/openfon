@@ -136,6 +136,63 @@ def paired(turns: list[dict], treat: str, ctrl: str, metric: str) -> list[float]
             if treat in c and ctrl in c]
 
 
+def fisher_exact_p(a: int, b: int, c: int, d: int) -> float:
+    """Two-sided Fisher exact test on a 2x2 table.
+
+        [[a, b],
+         [c, d]]
+
+    Sums the probability of every table with the same margins that is at least
+    as extreme as the observed one. Exact rather than chi-square because the
+    split-rate counts are small and often contain a zero cell, where the
+    asymptotic approximation is worthless.
+    """
+    n = a + b + c + d
+    if n == 0:
+        return 1.0
+    row1, col1 = a + b, a + c
+
+    def prob(x: int) -> float:
+        return (math.comb(row1, x) * math.comb(n - row1, col1 - x)
+                / math.comb(n, col1))
+
+    observed = prob(a)
+    lo = max(0, col1 - (n - row1))
+    hi = min(row1, col1)
+    # 1e-9 slack: equally-extreme tables must count, and float error would
+    # otherwise drop them and understate p
+    return min(1.0, sum(prob(x) for x in range(lo, hi + 1)
+                        if prob(x) <= observed * (1 + 1e-9)))
+
+
+def split_rate_table(turns: list[dict]) -> list[str]:
+    """Per-pair comparison of how often server VAD chopped the utterance.
+
+    This is a rate, not a latency, so it gets a Fisher test rather than the
+    sign test — and it is deliberately kept out of the Holm family above,
+    which covers the paired latency metrics.
+    """
+    present = {t["arm"] for t in turns}
+    pairs = [p for p in PAIRS if p[0] in present and p[1] in present]
+    rows = ["| comparison | treatment splits | control splits | Fisher p |",
+            "|---|---:|---:|---:|"]
+    any_row = False
+    for treat, ctrl, question in pairs:
+        tt = [t for t in turns if t["arm"] == treat]
+        ct = [t for t in turns if t["arm"] == ctrl]
+        if not tt or not ct:
+            continue
+        a = sum(1 for t in tt if t.get("false_starts"))
+        c = sum(1 for t in ct if t.get("false_starts"))
+        if a == 0 and c == 0:
+            continue                      # nothing split either side
+        p = fisher_exact_p(a, len(tt) - a, c, len(ct) - c)
+        rows.append(f"| `{treat}` vs `{ctrl}`<br><sub>{question}</sub> | "
+                    f"{a}/{len(tt)} | {c}/{len(ct)} | {p:.4f} |")
+        any_row = True
+    return rows if any_row else []
+
+
 def holm(pvals: list[float]) -> list[float]:
     """Holm–Bonferroni adjusted p-values, returned in the input order.
 
@@ -197,9 +254,11 @@ def compute_paired(turns: list[dict], metrics: list[str]) -> dict[str, list[Pair
     a reader scanning the whole report is implicitly looking at all of them,
     so that is the family the error rate has to be controlled over.
     """
+    present = {t["arm"] for t in turns}
+    pairs = [p for p in PAIRS if p[0] in present and p[1] in present]
     results: list[PairedResult] = []
     for metric in metrics:
-        for treat, ctrl, question in PAIRS:
+        for treat, ctrl, question in pairs:
             diffs = paired(turns, treat, ctrl, metric)
             if not diffs:
                 continue
@@ -246,7 +305,8 @@ def main() -> int:
       f"({len(turns) - len(ok)} failed or produced no audio).")
     w()
     w(f"**{n_tests} paired hypothesis tests** in this run "
-      f"({len(PAIRS)} comparisons x {len(METRICS)} metrics). At α={ALPHA} that is "
+      f"({n_tests // max(1, len(METRICS))} comparisons x {len(METRICS)} metrics "
+      f"present in this dataset). At α={ALPHA} that is "
       f"~{n_tests * ALPHA:.1f} spurious rejections expected under the null, so "
       f"p-values are Holm-corrected across the whole family. A directional verdict "
       f"additionally requires a median shift of at least {PRACTICAL_MS:.0f} ms; "
@@ -332,6 +392,13 @@ def main() -> int:
             by_utt[t["utterance"]] += t["false_starts"]
     if by_utt:
         w("By utterance: " + ", ".join(f"`{k}` {v}" for k, v in sorted(by_utt.items())))
+        w()
+    srt = split_rate_table(turns)
+    if srt:
+        w("Split rate per comparison (Fisher exact, two-sided — a rate, so it is "
+          "not part of the Holm family over the paired latency metrics):")
+        w()
+        w("\n".join(srt))
         w()
 
     text = "\n".join(out)

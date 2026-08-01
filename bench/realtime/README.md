@@ -30,6 +30,26 @@ Every direct arm points at `duguet-labs-eu` in **swedencentral** — the same re
 region the gateway proxies to. The westeurope Speech resource (`openfon-speech`) is
 deliberately not used as an arm: it would confound region with stack.
 
+### The VAD follow-up arms (`VAD_ARMS`)
+
+Three further arms vary the *turn detector* with the brain pinned, to separate "better
+brain" from "better turn detector":
+
+| id | brain | detector |
+|---|---|---|
+| `nat-semantic` | gpt-realtime-2, Foundry | OpenAI `semantic_vad` |
+| `vlnat-azsemantic` | gpt-realtime-2, Voice Live | `azure_semantic_vad_multilingual` |
+| `vlmini-azsemantic` | gpt-4.1-mini, Voice Live | `azure_semantic_vad_multilingual` |
+
+Not every brain/detector pairing exists — Foundry rejects Azure's detector, and Voice Live
+rejects OpenAI's on a cascaded brain. The accepted and rejected combinations are recorded
+in `arms.py` next to the arm definitions.
+
+Run them with `--arms` and, for the split-rate question, `--utterances de-short` (the only
+utterance that ever splits). `analyze.py` reports only the comparisons whose two arms are
+both present in the dataset, so the main run and the follow-up each get exactly their own —
+and the Holm family is sized to the tests actually performed.
+
 ## Metrics
 
 All times in milliseconds. Reply metrics are measured from **the instant the last frame of
