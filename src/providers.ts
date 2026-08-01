@@ -87,14 +87,28 @@ function normalizeHost(hostname: string): string {
 function allowKeys(entry: string): string[] {
   const bare = entry.trim().replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
   if (!bare) return [];
-  const keysFor = (host: string, port: string) => (port ? [`${host}:${port}`] : [`${host}:80`, `${host}:443`]);
+  const port = entryPort(bare);
+  const keysFor = (host: string) => (port ? [`${host}:${port}`] : [`${host}:80`, `${host}:443`]);
   try {
-    const u = new URL(`https://${bare}`);
-    return keysFor(normalizeHost(u.hostname), u.port);
+    return keysFor(normalizeHost(new URL(`https://${bare}`).hostname));
   } catch {
     const host = normalizeHost(bare);
-    return host ? keysFor(host, '') : [];
+    return host ? keysFor(host) : [];
   }
+}
+
+// Read the port off the entry text, never off the parsed URL: the parser
+// canonicalizes a default port away, so "api.example.com:443" would come back
+// portless and expand to :80 as well — handing an operator who pinned TLS a
+// plaintext entry, on a list that also relaxes the https rule. The trailing
+// ":1" of an unbracketed "::1" is a hextet, not a port.
+function entryPort(bare: string): string {
+  const closeBracket = bare.lastIndexOf(']');
+  const colon = bare.lastIndexOf(':');
+  if (colon <= closeBracket) return ''; // "[::1]", or no colon at all
+  if (closeBracket < 0 && bare.indexOf(':') !== colon) return ''; // bare IPv6 literal
+  const port = bare.slice(colon + 1);
+  return /^\d{1,5}$/.test(port) ? port : '';
 }
 
 // Literal-IP inspection only: Workers have no DNS resolver, so a hostname that

@@ -200,6 +200,23 @@ describe('validateLlmBaseUrl', () => {
     expect(validateLlmBaseUrl('https://api.openai.com:8443/v1', 'api.openai.com')).toMatch(/allowed: api\.openai\.com\)/);
   });
 
+  it('honours an explicitly written default port in both directions', () => {
+    // The URL parser drops a default port, so an entry's port has to be read
+    // from the entry text. Inferring it back from the parse would turn
+    // ":443" — written to pin TLS — into ":443 or :80", and allowlisted
+    // entries may use plain http, so the key would go out in the clear.
+    expect(validateLlmBaseUrl('https://api.example.com/v1', 'api.example.com:443')).toBeNull();
+    expect(validateLlmBaseUrl('http://api.example.com/v1', 'api.example.com:443')).toMatch(/not permitted/);
+    expect(validateLlmBaseUrl('https://api.example.com:443/v1', 'api.example.com:443')).toBeNull();
+    // …and the ":80" direction still works, rather than trading one for the other.
+    expect(validateLlmBaseUrl('http://intranet.example/v1', 'intranet.example:80')).toBeNull();
+    expect(validateLlmBaseUrl('https://intranet.example/v1', 'intranet.example:80')).toMatch(/not permitted/);
+    // An IPv6 entry keeps its hextets out of the port.
+    expect(validateLlmBaseUrl('https://[2001:db8::1]/v1', '[2001:db8::1]')).toBeNull();
+    expect(validateLlmBaseUrl('https://[2001:db8::1]:8443/v1', '[2001:db8::1]:8443')).toBeNull();
+    expect(validateLlmBaseUrl('https://[2001:db8::1]:8443/v1', '[2001:db8::1]')).toMatch(/not permitted/);
+  });
+
   it('matches allowlist entries an operator would plausibly write', () => {
     // url.hostname is always punycode, so a unicode entry has to be parsed
     // the same way or the operator's intended host can never match.
