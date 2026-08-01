@@ -13,6 +13,18 @@ Significance uses a two-sided exact sign test plus a bootstrap CI on the
 median difference — both distribution-free, so no scipy dependency and no
 normality assumption about latency (which is never normal).
 
+Two guards stop a bare p < 0.05 from minting a directional claim:
+
+  Holm–Bonferroni over the whole family of paired tests in this run
+      (3 comparisons x len(METRICS) metrics = 21). Under the null, one
+      spurious rejection is expected at that many tests, so an uncorrected
+      table would reliably manufacture a finding.
+  A practical floor (PRACTICAL_MS). A 6 ms median shift on a metric whose
+      IQR is ~50 ms is noise wearing a significance badge, however small its
+      p-value gets with enough pairs.
+
+A result is only reported directionally when it clears both.
+
   python analyze.py results/turns-20260801-2130.jsonl [--markdown out.md]
 """
 from __future__ import annotations
@@ -24,6 +36,7 @@ import random
 import statistics
 import sys
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -41,6 +54,13 @@ METRICS = [
 ]
 HANGOVER_MS = TURN_DETECTION["silence_duration_ms"]
 BOOTSTRAP = 20000
+ALPHA = 0.05
+
+# Below this, a difference is reported as "no practical difference" no matter
+# what the p-value says. Conversational turn-taking tolerates far more than
+# this — gaps only become perceptible to a caller in the 100+ ms range — so
+# 50 ms is a conservative floor that still admits anything worth acting on.
+PRACTICAL_MS = 50.0
 
 
 def pct(xs: list[float], p: float) -> float:
@@ -116,22 +136,94 @@ def paired(turns: list[dict], treat: str, ctrl: str, metric: str) -> list[float]
             if treat in c and ctrl in c]
 
 
-def paired_table(turns: list[dict], metric: str) -> list[str]:
-    rows = ["| comparison | pairs | median Δ | 95% CI | p90 Δ | sign-test p | verdict |",
-            "|---|---:|---:|---|---:|---:|---|"]
-    for treat, ctrl, question in PAIRS:
-        diffs = paired(turns, treat, ctrl, metric)
-        if not diffs:
-            continue
-        med = statistics.median(diffs)
-        lo, hi = bootstrap_median_ci(diffs)
-        p = sign_test_p(diffs)
-        sig = p < 0.05
-        verdict = ("no detectable difference" if not sig
-                   else f"{'slower' if med > 0 else 'faster'} by {abs(med):.0f} ms")
-        rows.append(f"| `{treat}` − `{ctrl}`<br><sub>{question}</sub> | {len(diffs)} | "
-                    f"**{med:+.0f}** | [{lo:+.0f}, {hi:+.0f}] | {pct(diffs, 90):+.0f} | "
-                    f"{p:.3f} | {verdict} |")
+def holm(pvals: list[float]) -> list[float]:
+    """Holm–Bonferroni adjusted p-values, returned in the input order.
+
+    Step-down: sort ascending, scale the k-th smallest by (m - k), then enforce
+    monotonicity so an adjusted value never drops below one ranked before it.
+    Uniformly more powerful than Bonferroni and needs no independence
+    assumption — which matters here, since the metrics are correlated
+    (`ttfa` and `ttft` measure overlapping stages of the same turn).
+    """
+    m = len(pvals)
+    order = sorted(range(m), key=lambda i: pvals[i])
+    adj = [1.0] * m
+    running = 0.0
+    for rank, i in enumerate(order):
+        running = max(running, (m - rank) * pvals[i])
+        adj[i] = min(1.0, running)
+    return adj
+
+
+@dataclass
+class PairedResult:
+    metric: str
+    treat: str
+    ctrl: str
+    question: str
+    diffs: list[float]
+    median: float
+    lo: float
+    hi: float
+    p_raw: float
+    p_adj: float = 1.0
+
+    @property
+    def practical(self) -> bool:
+        return abs(self.median) >= PRACTICAL_MS
+
+    @property
+    def survives(self) -> bool:
+        """Directional claims require BOTH a corrected p and a real effect."""
+        return self.p_adj < ALPHA and self.practical
+
+    def verdict(self) -> str:
+        direction = "slower" if self.median > 0 else "faster"
+        if self.survives:
+            return f"**{direction} by {abs(self.median):.0f} ms**"
+        if not self.practical:
+            # too small to matter however the p-value lands
+            return (f"no practical difference (<{PRACTICAL_MS:.0f} ms)"
+                    + (" despite p<0.05" if self.p_raw < ALPHA else ""))
+        if self.p_raw < ALPHA:
+            return f"borderline — {direction} by {abs(self.median):.0f} ms, not robust to Holm"
+        return "no detectable difference"
+
+
+def compute_paired(turns: list[dict], metrics: list[str]) -> dict[str, list[PairedResult]]:
+    """Every paired test in this run, Holm-corrected as one family.
+
+    The correction spans all metrics, not just the three within a table —
+    a reader scanning the whole report is implicitly looking at all of them,
+    so that is the family the error rate has to be controlled over.
+    """
+    results: list[PairedResult] = []
+    for metric in metrics:
+        for treat, ctrl, question in PAIRS:
+            diffs = paired(turns, treat, ctrl, metric)
+            if not diffs:
+                continue
+            lo, hi = bootstrap_median_ci(diffs)
+            results.append(PairedResult(
+                metric=metric, treat=treat, ctrl=ctrl, question=question,
+                diffs=diffs, median=statistics.median(diffs), lo=lo, hi=hi,
+                p_raw=sign_test_p(diffs)))
+    for r, p_adj in zip(results, holm([r.p_raw for r in results])):
+        r.p_adj = p_adj
+    by_metric: dict[str, list[PairedResult]] = defaultdict(list)
+    for r in results:
+        by_metric[r.metric].append(r)
+    return by_metric
+
+
+def paired_table(results: list[PairedResult]) -> list[str]:
+    rows = ["| comparison | pairs | median Δ | 95% CI | p90 Δ | p (raw) | p (Holm) | verdict |",
+            "|---|---:|---:|---|---:|---:|---:|---|"]
+    for r in results:
+        rows.append(
+            f"| `{r.treat}` − `{r.ctrl}`<br><sub>{r.question}</sub> | {len(r.diffs)} | "
+            f"**{r.median:+.0f}** | [{r.lo:+.0f}, {r.hi:+.0f}] | {pct(r.diffs, 90):+.0f} | "
+            f"{r.p_raw:.3f} | {r.p_adj:.3f} | {r.verdict()} |")
     return rows
 
 
@@ -143,6 +235,8 @@ def main() -> int:
 
     turns = load(args.results)
     ok = [t for t in turns if t["ok"]]
+    paired_results = compute_paired(ok, [m for m, _ in METRICS])
+    n_tests = sum(len(v) for v in paired_results.values())
     out: list[str] = []
 
     def w(s: str = "") -> None:
@@ -150,6 +244,13 @@ def main() -> int:
 
     w(f"Turns: {len(ok)}/{len(turns)} usable "
       f"({len(turns) - len(ok)} failed or produced no audio).")
+    w()
+    w(f"**{n_tests} paired hypothesis tests** in this run "
+      f"({len(PAIRS)} comparisons x {len(METRICS)} metrics). At α={ALPHA} that is "
+      f"~{n_tests * ALPHA:.1f} spurious rejections expected under the null, so "
+      f"p-values are Holm-corrected across the whole family. A directional verdict "
+      f"additionally requires a median shift of at least {PRACTICAL_MS:.0f} ms; "
+      f"anything smaller reads as no practical difference however its p-value lands.")
     w()
     errs: dict[str, int] = defaultdict(int)
     for t in turns:
@@ -179,7 +280,7 @@ def main() -> int:
     w()
     w("Paired differences (identical caller audio, same round):")
     w()
-    w("\n".join(paired_table(ok, "ttfa_ms")))
+    w("\n".join(paired_table(paired_results.get("ttfa_ms", []))))
     w()
 
     for metric, blurb in METRICS:
@@ -192,9 +293,8 @@ def main() -> int:
         w()
         w("\n".join(rows))
         w()
-        prows = paired_table(ok, metric)
-        if len(prows) > 2:
-            w("\n".join(prows))
+        if paired_results.get(metric):
+            w("\n".join(paired_table(paired_results[metric])))
             w()
 
     # reply length, as a sanity check that arms are doing comparable work

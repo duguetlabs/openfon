@@ -11,10 +11,10 @@
 **No. Routing through the Kataleptic gateway does not cost measurable latency, for
 either engine.**
 
-| comparison | median Δ time-to-first-audio | 95% CI | sign-test p |
+| comparison | median Δ time-to-first-audio | 95% CI | p (raw / Holm) |
 |---|---:|---|---:|
-| gpt-realtime-2 via gateway − direct | **−18 ms** | [−138, +22] | 0.42 |
-| Voice Live via gateway − direct | **−19 ms** | [−122, +60] | 1.00 |
+| gpt-realtime-2 via gateway − direct | **−18 ms** | [−138, +22] | 0.42 / 1.00 |
+| Voice Live via gateway − direct | **−19 ms** | [−122, +60] | 1.00 / 1.00 |
 
 Both intervals straddle zero, on 25 paired turns each with byte-identical caller audio.
 The point estimates are *negative* — the gateway looked marginally faster — but that is a
@@ -93,11 +93,15 @@ Engine-only (raw − 550 ms hangover):
 
 Paired, on identical caller audio in the same round:
 
-| comparison | pairs | median Δ | 95% CI | p90 Δ | p | verdict |
-|---|---:|---:|---|---:|---:|---|
-| `native-gateway` − `native-direct` | 25 | **−18** | [−138, +22] | +171 | 0.424 | no detectable difference |
-| `vl-gateway` − `vl-direct` | 25 | **−19** | [−122, +60] | +404 | 1.000 | no detectable difference |
-| `vl-native-brain` − `native-direct` | 25 | **−93** | [−424, −0] | +537 | 0.043 | marginal — see caveat |
+| comparison | pairs | median Δ | 95% CI | p90 Δ | p raw | p Holm | verdict |
+|---|---:|---:|---|---:|---:|---:|---|
+| `native-gateway` − `native-direct` | 25 | **−18** | [−138, +22] | +171 | 0.424 | 1.000 | no practical difference |
+| `vl-gateway` − `vl-direct` | 25 | **−19** | [−122, +60] | +404 | 1.000 | 1.000 | no practical difference |
+| `vl-native-brain` − `native-direct` | 25 | **−93** | [−424, −0] | +537 | 0.043 | 0.779 | borderline, not robust to correction |
+
+p-values are Holm-corrected across all 21 paired tests in the run (see
+[Statistical discipline](#statistical-discipline)); a directional verdict additionally
+requires a median shift of at least 50 ms.
 
 Note the **p90 columns**: the gateway's tail is *tighter*, not looser
 (`native-gateway` p90 2487 ms vs `native-direct` 3129 ms; IQR 228 vs 399). Whatever
@@ -175,6 +179,52 @@ which has a different geometry again.
 
 ---
 
+## Statistical discipline
+
+This run performs **21 paired hypothesis tests** (3 comparisons × 7 metrics). At
+α = 0.05 that is ~1.1 spurious rejections expected under the null — so an uncorrected
+table would reliably manufacture a finding. Two guards are applied, and both are in the
+code rather than only in this prose:
+
+1. **Holm–Bonferroni across the whole family**, not per-table. A reader scanning the
+   report is implicitly looking at all 21 tests, so that is the family the error rate has
+   to be controlled over. Holm is used rather than Bonferroni because it is uniformly more
+   powerful and assumes nothing about independence — which matters here, since `ttfa` and
+   `ttft` measure overlapping stages of the same turn.
+2. **A 50 ms practical floor.** Below that, a result reads "no practical difference"
+   whatever its p-value. Conversational turn-taking gaps only become perceptible to a
+   caller well into the 100 ms range, so 50 ms is conservative and still admits anything
+   worth acting on.
+
+What survives both gates:
+
+| result | median | p raw | p Holm | status |
+|---|---:|---:|---:|---|
+| `connect_ms`, both proxy pairs | −145 / −142 ms | 0.000 | 0.000 | **robust** — large, corrected, mechanically explained |
+| `ttfa_ms`, `vl-native-brain` − `native-direct` | −93 ms | 0.043 | 0.779 | **not robust** — borderline |
+| `config_ms`, `vl-gateway` − `vl-direct` | +6 ms | 0.043 | 0.779 | **not robust**, and below the floor anyway |
+| `config_ms`, `vl-native-brain` − `native-direct` | +46 ms | 0.001 | 0.017 | survives Holm, **fails the 50 ms floor** |
+
+Only the `connect_ms` results are reported as findings. In particular:
+
+> **The −93 ms "Voice Live's serving stack is faster with the brain held constant" is not
+> an established result.** Its CI upper bound touches zero (−424, −0), its corrected
+> p-value is 0.78, and its `ttft` and `response_total` counterparts are both null. The
+> honest statement is: *no robust difference; if anything Voice Live's stack is slightly
+> faster.* Confirming it would need a dedicated, better-powered run.
+
+The last row is worth noting for the opposite reason: it clears the correction but not the
+effect-size floor. A 46 ms shift in session-configuration time is real and reproducible,
+and also irrelevant to a caller.
+
+**This discipline strengthens the headline rather than weakening it.** The proxy null is
+not "we failed to find an effect" — it is a well-powered null with a tight interval: the
+true proxy cost lies within roughly ±140 ms at 95% confidence on 25 pairs, with a point
+estimate of −18/−19 ms and a physical explanation (≈+10 ms after correcting for the
+vantage point) that agrees with an independent RTT measurement. That is a much stronger
+claim than a bare "p > 0.05", and it deserves not to be surrounded by over-claimed
+marginal findings.
+
 ## Caveats
 
 **Vantage point — the main threat to external validity.** All measurements are from a
@@ -186,14 +236,18 @@ where the client→edge leg is very short and the edge→origin leg may differ s
 cost estimated here (~10 ms) is an order of magnitude below the measurement noise, it is
 unlikely to change the verdict — but it would change the confidence.
 
-**Multiple comparisons.** Six metrics × three pairs = 18 significance tests; at α = 0.05
-roughly one false positive is expected. The `vl-native-brain` − `native-direct` ttfa
-result (−93 ms, p = 0.043, CI upper bound −0 ms) is exactly the kind of marginal finding
-that produces. Its `ttft` and `response_total` counterparts are both null. **Treat
-"Voice Live serves gpt-realtime-2 faster than the Foundry deployment" as an untested
-hypothesis worth a dedicated run, not as a result.** The `connect_ms` results, by
-contrast, are large, consistent across all three pairs, and have a mechanical explanation,
-so those are real.
+**Multiple comparisons** are handled in [Statistical discipline](#statistical-discipline)
+above rather than as an afterthought here: 21 tests, Holm-corrected as one family, with a
+50 ms practical floor on top. The short version is that only the `connect_ms` results
+survive, and "Voice Live serves gpt-realtime-2 faster than the Foundry deployment" is
+**not** among the findings.
+
+**Correction is not a substitute for power.** Holm makes the reported claims trustworthy;
+it does not make the borderline ones false. A −93 ms effect on `ttfa` may well be real —
+25 pairs simply cannot resolve it against this much per-turn variance (IQR ~400–500 ms).
+Resolving it would need a run with several hundred pairs, or a lower-variance measurement,
+and it should be pre-registered as a single hypothesis rather than harvested from a table
+of 21.
 
 **VAD splits differ by brain, not by stack — and this is a real asymmetry.** The German
 short utterance contains a clause pause after "Guten Tag," longer than

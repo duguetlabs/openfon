@@ -133,16 +133,45 @@ Useful flags: `--arms native-direct,vl-direct` to narrow, `--rounds 1` to smoke-
 than cosmetic: in 13.x the top-level `websockets.connect` still resolved to the legacy
 client, whose keyword is `extra_headers`, so every turn would fail at connect.
 
+### How `analyze.py` decides something is real
+
+Two views. **Marginal** is the per-arm distribution of each metric. **Paired** is the
+per-cell difference on identical `(round, utterance)` input — the view that answers "does
+the proxy cost anything", because pairing cancels the network and time-of-day noise that
+dominates the marginals.
+
+Significance is a two-sided exact sign test plus a seeded percentile bootstrap CI on the
+median — both distribution-free, so no scipy and no normality assumption about latency
+(which is never normal). On top of that, two guards stop a bare p < 0.05 from minting a
+directional claim:
+
+* **Holm–Bonferroni across the whole family** of paired tests in the run (3 comparisons ×
+  7 metrics = 21). At α = 0.05 that many tests yield ~1 spurious rejection under the null,
+  so an uncorrected table would reliably manufacture a finding. Correction spans all
+  metrics rather than each table separately, because a reader scanning the report is
+  implicitly looking at all of them. Holm rather than Bonferroni: uniformly more powerful,
+  and assumes nothing about independence — `ttfa` and `ttft` measure overlapping stages of
+  the same turn.
+* **A 50 ms practical floor** (`PRACTICAL_MS`). Below it the verdict reads "no practical
+  difference" whatever the p-value. Turn-taking gaps only become perceptible to a caller
+  well into the 100 ms range. In the shipped run this correctly demotes a +6 ms result
+  that was nominally significant, and a +46 ms one that even survived Holm.
+
+Tables show raw and adjusted p side by side, so a demoted result stays visible instead of
+disappearing.
+
 ### Tests
 
 ```bash
 python3 -m unittest discover -s bench/realtime -v
 ```
 
-Covers the pure statistics behind every published table — `pct`, `describe`, the paired
-difference computation, the exact sign test, the bootstrap CI — plus credential
-redaction. The network path is not unit-tested; a wrong percentile, though, would corrupt
-every number in the report while looking entirely plausible.
+52 tests over the pure statistics behind every published table — `pct`, `describe`, the
+paired difference computation, the exact sign test, the bootstrap CI, the Holm step-down,
+and the verdict gating (including the three demotion cases above) — plus credential
+redaction. The network path is not unit-tested; a wrong percentile or a mis-scaled
+correction, though, would corrupt every number in the report while looking entirely
+plausible.
 
 ### Secrets
 

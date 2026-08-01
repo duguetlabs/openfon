@@ -14,9 +14,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from analyze import (bootstrap_median_ci, describe, paired, pct,  # noqa: E402
-                     sign_test_p)
+from analyze import (ALPHA, PRACTICAL_MS, PairedResult,  # noqa: E402
+                     bootstrap_median_ci, compute_paired, describe, holm,
+                     paired, pct, sign_test_p)
 from bench import redact  # noqa: E402
+
+
+def result(median, p_raw, p_adj, metric="ttfa_ms"):
+    return PairedResult(metric=metric, treat="gw", ctrl="direct", question="q",
+                        diffs=[median], median=median, lo=median - 10,
+                        hi=median + 10, p_raw=p_raw, p_adj=p_adj)
 
 
 def turn(rnd, arm, utt, **metrics):
@@ -165,6 +172,126 @@ class TestBootstrapCI(unittest.TestCase):
         tight = bootstrap_median_ci([10, 10, 11, 10, 11, 10, 10, 11], iters=4000)
         wide = bootstrap_median_ci([-90, 10, 110, -40, 60, 10, -70, 90], iters=4000)
         self.assertLess(tight[1] - tight[0], wide[1] - wide[0])
+
+
+class TestHolm(unittest.TestCase):
+    def test_single_test_is_unchanged(self):
+        self.assertAlmostEqual(holm([0.04])[0], 0.04)
+
+    def test_smallest_is_scaled_by_m(self):
+        # 3 tests: smallest p scaled by 3
+        self.assertAlmostEqual(holm([0.01, 0.5, 0.6])[0], 0.03)
+
+    def test_step_down_scaling_by_rank(self):
+        # ranks 0,1,2 -> multipliers 3,2,1
+        adj = holm([0.01, 0.02, 0.03])
+        self.assertAlmostEqual(adj[0], 0.03)   # 3 * 0.01
+        self.assertAlmostEqual(adj[1], 0.04)   # 2 * 0.02
+        self.assertAlmostEqual(adj[2], 0.04)   # 1 * 0.03, raised to stay monotone
+
+    def test_enforces_monotonicity(self):
+        adj = holm([0.01, 0.02, 0.03])
+        self.assertEqual(adj, sorted(adj))
+
+    def test_order_is_preserved(self):
+        # the largest raw p is in position 0 and must stay there
+        adj = holm([0.6, 0.01, 0.5])
+        self.assertAlmostEqual(adj[1], 0.03)
+        self.assertGreater(adj[0], adj[1])
+
+    def test_capped_at_one(self):
+        for a in holm([0.5, 0.6, 0.7, 0.9]):
+            self.assertLessEqual(a, 1.0)
+
+    def test_never_smaller_than_raw(self):
+        raw = [0.001, 0.02, 0.04, 0.3, 0.9]
+        for r, a in zip(raw, holm(raw)):
+            self.assertGreaterEqual(a, r)
+
+    def test_is_less_conservative_than_bonferroni(self):
+        raw = [0.001, 0.02, 0.03]
+        adj = holm(raw)
+        bonf = [min(1.0, p * len(raw)) for p in raw]
+        self.assertTrue(any(a < b for a, b in zip(adj, bonf)))
+
+    def test_strong_result_still_survives_a_large_family(self):
+        raw = [0.0001] + [0.8] * 20
+        self.assertLess(holm(raw)[0], ALPHA)
+
+    def test_borderline_result_does_not_survive_a_large_family(self):
+        raw = [0.043] + [0.8] * 20
+        self.assertGreater(holm(raw)[0], ALPHA)
+
+    def test_empty(self):
+        self.assertEqual(holm([]), [])
+
+
+class TestVerdictGating(unittest.TestCase):
+    """A directional claim needs BOTH a corrected p-value and a real effect."""
+
+    def test_large_effect_surviving_correction_is_directional(self):
+        r = result(-145, 0.000, 0.000)
+        self.assertTrue(r.survives)
+        self.assertIn("faster by 145 ms", r.verdict())
+
+    def test_sign_is_reported_correctly(self):
+        self.assertIn("slower", result(+145, 0.0, 0.0).verdict())
+        self.assertIn("faster", result(-145, 0.0, 0.0).verdict())
+
+    def test_borderline_p_is_not_minted_into_a_verdict(self):
+        # the vl-native-brain ttfa case: real effect, p survives raw but not Holm
+        r = result(-93, 0.043, 0.779)
+        self.assertFalse(r.survives)
+        self.assertIn("borderline", r.verdict())
+        self.assertIn("not robust to Holm", r.verdict())
+
+    def test_tiny_effect_is_not_minted_even_when_significant(self):
+        # the config_ms case: p<0.05 raw, but 6 ms is noise
+        r = result(+6, 0.043, 0.779)
+        self.assertFalse(r.survives)
+        self.assertIn("no practical difference", r.verdict())
+        self.assertIn("despite p<0.05", r.verdict())
+
+    def test_tiny_effect_surviving_correction_is_still_not_directional(self):
+        # p can survive Holm and the effect still be too small to matter
+        r = result(+46, 0.001, 0.017)
+        self.assertLess(r.p_adj, ALPHA)
+        self.assertFalse(r.survives)
+        self.assertIn("no practical difference", r.verdict())
+
+    def test_practical_floor_boundary(self):
+        self.assertFalse(result(PRACTICAL_MS - 0.1, 0.0, 0.0).practical)
+        self.assertTrue(result(PRACTICAL_MS, 0.0, 0.0).practical)
+        self.assertTrue(result(-PRACTICAL_MS, 0.0, 0.0).practical)
+
+    def test_plain_null_reads_as_no_detectable_difference(self):
+        self.assertEqual(result(-200, 0.7, 1.0).verdict(), "no detectable difference")
+
+
+class TestComputePaired(unittest.TestCase):
+    def test_correction_family_spans_all_metrics(self):
+        # one pair per metric, so the family size is what drives the scaling
+        turns = []
+        for rnd in range(6):
+            turns.append(turn(rnd, "native-gateway", "en",
+                              ttfa_ms=1000 + rnd, connect_ms=500 + rnd))
+            turns.append(turn(rnd, "native-direct", "en",
+                              ttfa_ms=900 + rnd, connect_ms=400 + rnd))
+        res = compute_paired(turns, ["ttfa_ms", "connect_ms"])
+        self.assertEqual(set(res), {"ttfa_ms", "connect_ms"})
+        flat = [r for v in res.values() for r in v]
+        # both metrics give a perfectly one-sided result: raw p = 2*(1/2)^6
+        for r in flat:
+            self.assertAlmostEqual(r.p_raw, 0.03125)
+            # scaled across the family of 2, not treated in isolation
+            self.assertGreater(r.p_adj, r.p_raw)
+
+    def test_metrics_with_no_pairs_are_omitted(self):
+        turns = [turn(0, "native-gateway", "en", ttfa_ms=1000),
+                 turn(0, "native-direct", "en", ttfa_ms=900)]
+        res = compute_paired(turns, ["ttfa_ms", "connect_ms"])
+        self.assertIn("ttfa_ms", res)
+        self.assertNotIn("connect_ms", res)
 
 
 class TestRedact(unittest.TestCase):
