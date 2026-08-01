@@ -10,7 +10,6 @@ type Row = Record<string, unknown>;
 
 const OFFSETS: Record<string, number> = {
   '-15 minutes': -15 * 60_000,
-  '-30 minutes': -30 * 60_000,
   '-60 minutes': -60 * 60_000,
   '-1 day': -86_400_000,
 };
@@ -122,14 +121,9 @@ class FakeStatement {
 
     // ---- calls ----
     if (q.startsWith('SELECT COUNT(*) AS n FROM calls') && q.includes('connected_at IS NOT NULL')) {
-      const since = cutoff(a[2]);
+      // No age cutoff: the sweep is the only thing that releases a live slot.
       const n = this.db.calls.filter(
-        (c) =>
-          c.business_id === a[0] &&
-          c.id !== a[1] &&
-          c.status === 'active' &&
-          c.connected_at !== null &&
-          c.started_at > since
+        (c) => c.business_id === a[0] && c.id !== a[1] && c.status === 'active' && c.connected_at !== null
       ).length;
       return { rows: [{ n }], changes: 0 };
     }
@@ -141,6 +135,11 @@ class FakeStatement {
     if (q.startsWith('INSERT INTO calls')) {
       this.db.seedCall({ id: String(a[0]), business_id: String(a[1]), caller_id: String(a[3]) });
       return { rows: [], changes: 1 };
+    }
+    if (q.startsWith('DELETE FROM calls WHERE id')) {
+      const i = this.db.calls.findIndex((x) => x.id === a[0]);
+      if (i >= 0) this.db.calls.splice(i, 1);
+      return { rows: [], changes: i >= 0 ? 1 : 0 };
     }
     if (q.startsWith('SELECT calls.id, calls.business_id, businesses.max_concurrent_calls')) {
       const since = cutoff(a[1]);

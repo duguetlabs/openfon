@@ -43,6 +43,7 @@ export interface CallRow {
   caller_id: string;
   status: string;
   started_at: string;
+  connected_at: string | null;
   ended_at: string | null;
   duration_s: number | null;
   summary: string | null;

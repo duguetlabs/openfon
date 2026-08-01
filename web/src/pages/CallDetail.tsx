@@ -30,7 +30,12 @@ export default function CallDetailPage() {
           {fmtTime(call.started_at)} · {fmtDuration(call.duration_s)} · {call.channel}
         </p>
         <h1 className="mt-1.5 font-display text-3xl font-semibold tracking-tight text-ink">
-          {call.summary ?? (call.status === 'abandoned' ? 'Never connected' : 'Call transcript')}
+          {call.summary ??
+            (call.status === 'abandoned'
+              ? call.connected_at
+                ? 'Call interrupted'
+                : 'Never connected'
+              : 'Call transcript')}
         </h1>
         <div className="callline-accent mt-3 w-16" />
       </div>

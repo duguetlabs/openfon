@@ -37,7 +37,7 @@ function newToken4(): string {
 // per-colo scope would let a distributed burst through anyway. Self-hosters on
 // the free plan get the same behaviour as everyone else.
 //
-// Everything tunable lives in LIMITS and the three window constants below.
+// Everything tunable lives in LIMITS and the two staleness constants below.
 interface Limit {
   name: string;
   window: number; // seconds
@@ -50,8 +50,10 @@ const LIMITS = {
   // Call creation. A caller who reloads the widget a few times is fine; office
   // NAT means several legitimate callers can share one IP, hence 10 and not 5.
   callStart: { name: 'start', window: 60, max: 10 },
-  // Failed logins only, and the per-email bucket is cleared on success — a
-  // fat-fingered password must not lock the owner out for the whole window.
+  // Both are reserved on every attempt and refunded when the password turns out
+  // to be right. Per-IP is the hard stop that bounds PBKDF2 work; per-email only
+  // ever refuses a wrong password, so it cannot be aimed at an owner. See the
+  // login handler for why the ordering matters.
   loginIp: { name: 'lgip', window: 900, max: 20 },
   loginEmail: { name: 'lgem', window: 900, max: 5 },
 } satisfies Record<string, Limit>;
@@ -63,10 +65,14 @@ const STALE_UNCONNECTED = '-15 minutes';
 // A connected call this old is a leftover from a worker restart (every deploy
 // strands the calls in flight). Deliberately longer than any plausible call so
 // the sweeper can never cut a live conversation off.
+//
+// This is the *only* place a connected call's age is judged. The concurrency
+// count deliberately has no window of its own: it counts every connected row
+// that is still 'active', so a genuinely long call keeps its slot and the sweep
+// is the single event that releases one. Two independent windows would disagree
+// about whether a call is live, and the shorter one would silently admit callers
+// past the cap.
 const STALE_CONNECTED = '-60 minutes';
-// Only calls this recent count against the concurrency cap, so one stranded row
-// cannot hold a slot until the sweeper next runs.
-const CONCURRENCY_WINDOW = '-30 minutes';
 
 function clientIp(c: Ctx): string {
   // Set by Cloudflare on every edge request; absent under `wrangler dev`, where
@@ -89,14 +95,6 @@ async function consume(env: Env, limit: Limit, subject: string): Promise<boolean
     .bind(`${limit.name}:${subject}`, windowStart(limit))
     .first<{ count: number }>();
   return (row?.count ?? 1) > limit.max;
-}
-
-// Read-only check, for paths that should only charge failures.
-async function isOverLimit(env: Env, limit: Limit, subject: string): Promise<boolean> {
-  const row = await env.DB.prepare('SELECT count FROM rate_counters WHERE bucket = ? AND window_start = ?')
-    .bind(`${limit.name}:${subject}`, windowStart(limit))
-    .first<{ count: number }>();
-  return (row?.count ?? 0) >= limit.max;
 }
 
 async function clearLimit(env: Env, limit: Limit, subject: string): Promise<void> {
@@ -138,23 +136,42 @@ app.post('/api/auth/signup', async (c) => {
 // only closes the silent channel.)
 const DUMMY_HASH = 'BwcHBwcHBwcHBwcHBwcHBw==:CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws=';
 
+const TOO_MANY_LOGINS = 'Too many sign-in attempts. Please try again later.';
+
 app.post('/api/auth/login', async (c) => {
   const { email, password } = await c.req.json<{ email?: string; password?: string }>();
   const addr = clientIp(c);
   const key = (email ?? '').toLowerCase();
-  if ((await isOverLimit(c.env, LIMITS.loginIp, addr)) || (await isOverLimit(c.env, LIMITS.loginEmail, key))) {
-    return tooMany(c, 'Too many sign-in attempts. Please try again later.', LIMITS.loginIp.window);
-  }
+
+  // Reserve both attempts up front, atomically. Reading a counter and
+  // incrementing it only on failure is the same count-then-act race as the daily
+  // cap: a parallel burst all reads a count under the limit and all of it goes
+  // on to run PBKDF2. A correct password refunds the reservation below.
+  const ipOver = await consume(c.env, LIMITS.loginIp, addr);
+  const emailOver = await consume(c.env, LIMITS.loginEmail, key);
+
+  // Per-IP is a hard stop taken before any work, because it is the thing that
+  // bounds how much PBKDF2 an attacker can make this worker perform. It can shut
+  // out an address; it can never shut out an account.
+  if (ipOver) return tooMany(c, TOO_MANY_LOGINS, LIMITS.loginIp.window);
+
   const user = await c.env.DB.prepare('SELECT id, password_hash FROM users WHERE email = ?')
     .bind(key)
     .first<{ id: string; password_hash: string }>();
   const ok = await verifyPassword(password ?? '', user?.password_hash ?? DUMMY_HASH);
   if (!user || !ok) {
-    await consume(c.env, LIMITS.loginIp, addr);
-    await consume(c.env, LIMITS.loginEmail, key);
+    // The per-email bucket is only ever consulted for a wrong password, so it
+    // slows credential stuffing spread across many addresses without giving
+    // anyone who knows an owner's email a permanent lockout. Refusing before
+    // verifying would do exactly that: five wrong guesses per window, forever.
+    if (emailOver) return tooMany(c, TOO_MANY_LOGINS, LIMITS.loginEmail.window);
     return c.json({ error: 'Invalid email or password' }, 401);
   }
+  // A correct password always wins and refunds both buckets, so one person
+  // fat-fingering their way through an office's allowance cannot hold their
+  // colleagues out either.
   await clearLimit(c.env, LIMITS.loginEmail, key);
+  await clearLimit(c.env, LIMITS.loginIp, addr);
   const token = await createSession(c.env, user.id);
   setCookie(c, COOKIE, token, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 86400 });
   return c.json({ id: user.id });
@@ -300,7 +317,7 @@ app.get('/api/me/business/:id/calls', async (c) => {
   const biz = await ownedBusiness(c.env, c.get('userId'), c.req.param('id'));
   if (!biz) return c.json({ error: 'Not found' }, 404);
   const { results } = await c.env.DB.prepare(
-    `SELECT id, channel, caller_id, status, started_at, ended_at, duration_s, summary, intent, message_json
+    `SELECT id, channel, caller_id, status, started_at, connected_at, ended_at, duration_s, summary, intent, message_json
      FROM calls WHERE business_id = ? ORDER BY started_at DESC LIMIT 100`
   )
     .bind(biz.id)
@@ -509,13 +526,20 @@ const BUSY = 'All lines are busy right now. Please try again in a moment.';
 
 // Only calls that actually opened a WebSocket count, so a caller reloading the
 // widget — which leaves a trail of unconnected rows — can never exhaust the
-// business's own budget.
+// business's own budget. No age cutoff here on purpose: see STALE_CONNECTED.
+//
+// Known bound, not a guarantee: this counts *rows*, and only the Durable Object
+// can end a session. A row the sweep retires at 60 minutes frees its slot even
+// though the socket may still be open, so a caller who holds one that long is no
+// longer counted. Terminating that session needs a change inside CallSession,
+// which is not in this PR. What still holds meanwhile is the per-business daily
+// cap — it counts row creation, so session lifetime cannot dodge it — and the
+// per-IP call-start limit.
 function countLive(env: Env, businessId: string, exceptId: string) {
   return env.DB.prepare(
     `SELECT COUNT(*) AS n FROM calls
-      WHERE business_id = ? AND id != ? AND status = 'active' AND connected_at IS NOT NULL
-        AND started_at > datetime('now', ?)`
-  ).bind(businessId, exceptId, CONCURRENCY_WINDOW);
+      WHERE business_id = ? AND id != ? AND status = 'active' AND connected_at IS NOT NULL`
+  ).bind(businessId, exceptId);
 }
 
 async function liveCalls(env: Env, businessId: string): Promise<number> {
@@ -551,19 +575,31 @@ app.post('/api/public/call/start', async (c) => {
 
   // Daily ceiling on the owner's provider spend. It is an availability trade the
   // owner controls: better to go quiet than to wake up to a six-figure bill.
-  const today = await c.env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM calls WHERE business_id = ? AND started_at > datetime('now', '-1 day')`
-  )
-    .bind(biz.id)
-    .first<{ n: number }>();
-  if ((today?.n ?? 0) >= biz.max_calls_per_day) {
+  //
+  // Insert first and count inside the same batch, i.e. one D1 transaction.
+  // Counting and then inserting is a TOCTOU the measured burst walks straight
+  // through: at 576 requests/sec every concurrent request reads a count under
+  // the cap and every one of them inserts. Claiming first can only ever refuse
+  // too many, never too few.
+  const callId = newId();
+  const claim = await c.env.DB.batch<{ n: number }>([
+    c.env.DB.prepare('INSERT INTO calls (id, business_id, channel, caller_id) VALUES (?, ?, ?, ?)').bind(
+      callId,
+      biz.id,
+      'web',
+      addr === 'local' ? 'anonymous' : addr
+    ),
+    c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM calls WHERE business_id = ? AND started_at > datetime('now', '-1 day')`
+    ).bind(biz.id),
+  ]);
+  if ((claim[1].results[0]?.n ?? 0) > biz.max_calls_per_day) {
+    // Delete rather than mark 'abandoned': the daily count is over every row in
+    // the rolling day, so a refused attempt that left a row behind would let a
+    // burst keep the business blocked with the rows its own rejections created.
+    await c.env.DB.prepare('DELETE FROM calls WHERE id = ?').bind(callId).run();
     return tooMany(c, 'This agent has reached its daily call limit. Please try again tomorrow.', 3600);
   }
-
-  const callId = newId();
-  await c.env.DB.prepare('INSERT INTO calls (id, business_id, channel, caller_id) VALUES (?, ?, ?, ?)')
-    .bind(callId, biz.id, 'web', addr === 'local' ? 'anonymous' : addr)
-    .run();
   return c.json({ callId });
 });
 

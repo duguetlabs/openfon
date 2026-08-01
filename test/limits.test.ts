@@ -108,6 +108,36 @@ describe('per-business call caps', () => {
     expect(res.status).toBe(429);
     expect(await res.json()).toEqual({ error: expect.stringContaining('daily call limit') });
   });
+
+  it('leaves no row behind when the daily cap refuses a call', async () => {
+    const { db, start } = setup();
+    db.businesses[0].max_calls_per_day = 3;
+    for (let i = 0; i < 10; i++) await start();
+    // The count is over every row in the rolling day, so a refusal that left its
+    // row behind would let the burst block the business with its own rejections.
+    expect(db.calls).toHaveLength(3);
+  });
+
+  it('keeps counting a long call until the sweep is the thing that releases it', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-01T12:00:00Z'));
+    const { db, env, call, start } = setup();
+    db.businesses[0].max_concurrent_calls = 1;
+    const { callId } = (await (await start()).json()) as { callId: string };
+    await call(`/ws/call/${callId}`);
+
+    // Well past any independent window a second mechanism might have used. The
+    // count has none of its own, so the slot is still held.
+    vi.setSystemTime(new Date('2026-08-01T12:45:00Z'));
+    const busy = await start();
+    expect(busy.status).toBe(429);
+    expect(await busy.json()).toEqual({ error: expect.stringContaining('All lines are busy') });
+
+    // Only the sweep releases it, and only once the row is past STALE_CONNECTED.
+    vi.setSystemTime(new Date('2026-08-01T13:10:00Z'));
+    expect(await sweepStaleCalls(env)).toBe(1);
+    expect((await start()).status).toBe(200);
+  });
 });
 
 describe('GET /ws/call/:callId', () => {
@@ -212,6 +242,28 @@ describe('POST /api/auth/login', () => {
     for (let i = 0; i < 4; i++) await login('owner@example.test', 'oops');
     expect((await login('owner@example.test', 'correct-horse-battery')).status).toBe(200);
     for (let i = 0; i < 4; i++) expect((await login('owner@example.test', 'oops')).status).toBe(401);
+  });
+
+  it('cannot be used to lock an owner out of their own account', async () => {
+    const { login } = await withUser();
+    // Anyone who knows the address can burn the whole per-email allowance.
+    for (let i = 0; i < 5; i++) expect((await login('owner@example.test', `guess-${i}`)).status).toBe(401);
+    expect((await login('owner@example.test', 'guess-5')).status).toBe(429);
+    // The owner must still get in, and doing so must clear the bucket. Deciding
+    // the email limit before verifying the password would make this a permanent
+    // lockout, refreshed every window.
+    expect((await login('owner@example.test', 'correct-horse-battery')).status).toBe(200);
+    expect((await login('owner@example.test', 'oops')).status).toBe(401);
+  });
+
+  it('stops guessing at the per-IP limit even across many addresses', async () => {
+    const { login } = await withUser();
+    // Rotating the target email dodges the per-email bucket; the per-IP one is
+    // what bounds how much PBKDF2 a single source can demand.
+    const codes: number[] = [];
+    for (let i = 0; i < 24; i++) codes.push((await login(`victim-${i}@example.test`, 'oops')).status);
+    expect(codes.filter((s) => s === 401)).toHaveLength(20);
+    expect(codes.filter((s) => s === 429)).toHaveLength(4);
   });
 
   it('spends the same work on a missing account as on a real one', async () => {
