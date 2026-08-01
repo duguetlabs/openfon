@@ -52,6 +52,19 @@ describe('resolveLlm', () => {
     expect(cfg.baseUrl).toBe('https://API.kataleptic.com/v1/');
   });
 
+  it('treats credentials on the instance host as a custom endpoint, and rejects it', () => {
+    // "https://user:pass@<instance host>/v1" must not normalize equal to the
+    // clean instance URL — that would skip the credential check entirely and
+    // hand the instance key to a URL carrying someone else's basic auth.
+    const sneaky = settings({ llm_base_url: 'https://user:pass@api.kataleptic.com/v1' });
+    expect(() => resolveLlm(env, sneaky)).toThrow(/credentials/);
+    try {
+      resolveLlm(env, sneaky);
+    } catch (err) {
+      expect(`${err}`).not.toContain(INSTANCE_KEY);
+    }
+  });
+
   it('overrides the model alone without touching the endpoint or key', () => {
     const cfg = resolveLlm(env, settings({ llm_model: 'mixtral' }));
     expect(cfg).toEqual({ baseUrl: 'https://api.kataleptic.com/v1', apiKey: INSTANCE_KEY, model: 'mixtral' });
@@ -91,6 +104,14 @@ describe('validateLlmBaseUrl', () => {
   it('rejects credentials embedded in the URL', () => {
     expect(validateLlmBaseUrl('https://user:pass@api.example.com/v1')).toMatch(/credentials/);
     expect(validateLlmBaseUrl('https://token@api.example.com/v1')).toMatch(/credentials/);
+    // Allowlisting the host does not excuse them.
+    expect(validateLlmBaseUrl('https://user:pass@api.openai.com/v1', 'api.openai.com')).toMatch(/credentials/);
+  });
+
+  it('rejects schemes fetch cannot speak, allowlisted or not', () => {
+    expect(validateLlmBaseUrl('ftp://api.example.com/v1')).toMatch(/http\(s\)/);
+    expect(validateLlmBaseUrl('ftp://api.openai.com/v1', 'api.openai.com')).toMatch(/http\(s\)/);
+    expect(validateLlmBaseUrl('htt://api.openai.com/v1', 'api.openai.com')).toMatch(/http\(s\)/);
   });
 
   it('rejects loopback, private, and link-local literals', () => {
@@ -135,5 +156,10 @@ describe('sameLlmEndpoint', () => {
     expect(sameLlmEndpoint('https://api.example.com/v1', 'https://API.example.com/v1/')).toBe(true);
     expect(sameLlmEndpoint('https://api.example.com/v1', 'https://api.example.com/v2')).toBe(false);
     expect(sameLlmEndpoint('https://api.example.com/v1', 'http://api.example.com/v1')).toBe(false);
+  });
+
+  it('keeps embedded credentials in the comparison', () => {
+    expect(sameLlmEndpoint('https://user:pass@api.example.com/v1', 'https://api.example.com/v1')).toBe(false);
+    expect(sameLlmEndpoint('https://token@api.example.com/v1', 'https://api.example.com/v1')).toBe(false);
   });
 });

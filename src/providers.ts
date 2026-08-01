@@ -9,12 +9,15 @@ export class LlmConfigError extends Error {}
 
 // Two base URLs mean the same endpoint if only a trailing slash or host casing
 // differs — otherwise "https://api.host/v1/" would count as a custom endpoint
-// and lose the instance key for no reason.
+// and lose the instance key for no reason. Embedded credentials stay in the
+// normalized form: "https://user:pass@<default host>/v1" must NOT compare equal
+// to the clean instance URL, or it would skip the checks below entirely.
 export function sameLlmEndpoint(a: string, b: string): boolean {
   const norm = (u: string) => {
     try {
       const p = new URL(u.trim());
-      return `${p.protocol}//${p.host}${p.pathname.replace(/\/+$/, '')}`;
+      const cred = p.username || p.password ? `${p.username}:${p.password}@` : '';
+      return `${p.protocol}//${cred}${p.host}${p.pathname.replace(/\/+$/, '')}`;
     } catch {
       return u.trim().replace(/\/+$/, '');
     }
@@ -92,6 +95,9 @@ export function validateLlmBaseUrl(raw: string, allowedHosts?: string): string |
     return 'must be an absolute URL, e.g. https://api.example.com/v1';
   }
   if (url.username || url.password) return 'must not embed credentials — put the key in the API key field';
+  // Scheme sanity first: fetch only speaks http(s), and a typo like "htt://"
+  // parses fine, so an allowlisted host must not smuggle one through.
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return 'must be an http(s) URL';
   const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
   const allow = (allowedHosts ?? '')
     .split(',')
