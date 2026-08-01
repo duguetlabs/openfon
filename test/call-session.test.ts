@@ -87,14 +87,18 @@ const SETTINGS_ROW = {
 
 function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline') {
   const writes: { sql: string; args: unknown[] }[] = [];
-  const ctl = { failUpdates: false }; // lets a test force a transient D1 failure
+  // let a test force transient D1 failures on either side of the call row
+  const ctl = { failUpdates: false, failCallReads: false };
   const db = {
     prepare(sql: string) {
       return {
         bind(...args: unknown[]) {
           return {
             async first() {
-              if (sql.includes('FROM calls')) return CALL_ROW;
+              if (sql.includes('FROM calls')) {
+                if (ctl.failCallReads) throw new Error('D1 unavailable');
+                return CALL_ROW;
+              }
               if (sql.includes('FROM businesses')) return BIZ_ROW;
               if (sql.includes('FROM agent_settings')) return { ...SETTINGS_ROW, engine };
               return null;
@@ -276,6 +280,41 @@ describe('handleStart idempotency', () => {
     expect(sock.countOf('ready')).toBe(1);
     expect(turnWrites()).toHaveLength(1);
     expect(turnWrites()[0].args).toContain('agent');
+  });
+
+  it('joins starts that arrive together rather than duplicating the attempt', async () => {
+    const { session, turnWrites } = newSession();
+    await session.fetch(upgradeRequest());
+    const sock = serverSockets[0];
+
+    // All three land before the first has finished loading the call.
+    sock.receive({ type: 'start' });
+    sock.receive({ type: 'start' });
+    sock.receive({ type: 'start' });
+    await flush();
+
+    expect(sock.countOf('ready')).toBe(1);
+    expect(turnWrites()).toHaveLength(1);
+  });
+
+  it('lets the caller retry after a start fails transiently', async () => {
+    // A latching boolean consumed the caller's only chance: the error surfaced,
+    // `started` stayed true, and every later start returned immediately — a
+    // permanently dead call on a socket that is still open.
+    const { session, ctl } = newSession();
+    await session.fetch(upgradeRequest());
+    const sock = serverSockets[0];
+
+    ctl.failCallReads = true; // D1 blip inside loadCall()
+    sock.receive({ type: 'start' });
+    await flush();
+    expect(sock.typesSent()).toContain('error');
+    expect(sock.countOf('ready')).toBe(0);
+
+    ctl.failCallReads = false;
+    sock.receive({ type: 'start' });
+    await flush();
+    expect(sock.countOf('ready')).toBe(1); // the caller is finally answered
   });
 });
 

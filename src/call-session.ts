@@ -98,7 +98,7 @@ export class CallSession implements DurableObject {
   private ended = false; // stop handling caller messages
   private finalized = false; // the call row has been written; gates retries
   private finalizing: Promise<void> | null = null;
-  private started = false; // guards handleStart against repeated {type:"start"}
+  private starting: Promise<void> | null = null; // in-flight or completed start
   private lang = 'en'; // follows the caller; starts as the business default
   private mode: 'pipeline' | 'realtime' = 'pipeline';
   private upstream: WebSocket | null = null; // realtime engine connection
@@ -214,11 +214,23 @@ export class CallSession implements DurableObject {
 
   private pendingContentType = 'audio/webm';
 
-  private async handleStart(): Promise<void> {
-    // A repeated {type:"start"} would open a second engine connection, greet
-    // again, and write another agent turn — so answer the phone only once.
-    if (this.started) return;
-    this.started = true;
+  // Answer the phone once. A repeated {type:"start"} would open a second engine
+  // connection, greet again, and write another agent turn, so concurrent starts
+  // join the attempt already in flight. A failed attempt clears the slot: a
+  // latching boolean would leave a caller stuck on a live socket that can never
+  // produce a `ready`, because a transient D1 blip in loadCall() consumed their
+  // one chance.
+  private handleStart(): Promise<void> {
+    if (!this.starting) {
+      this.starting = this.runStart().catch((err) => {
+        this.starting = null;
+        throw err;
+      });
+    }
+    return this.starting;
+  }
+
+  private async runStart(): Promise<void> {
     await this.loadCall();
     // Resolve the LLM config before saying hello: a rejected AI-provider setup
     // must fail at pickup with a message the owner can act on, not stall the
