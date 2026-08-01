@@ -141,6 +141,12 @@ export async function chatComplete(
 ): Promise<string> {
   const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
     method: 'POST',
+    // Every endpoint rule above is checked against the URL that was saved, so a
+    // followed redirect would walk straight around them: a host that passes
+    // validation (and ALLOWED_LLM_HOSTS) can answer 302 http://10.0.0.1/ and
+    // have the Worker make that request instead. No OpenAI-compatible
+    // /chat/completions has a reason to redirect, so treat one as an error.
+    redirect: 'manual',
     headers: { Authorization: `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: cfg.model,
@@ -150,6 +156,9 @@ export async function chatComplete(
       ...(opts.json ? { response_format: { type: 'json_object' } } : {}),
     }),
   });
+  if (res.status >= 300 && res.status < 400) {
+    throw new Error(`LLM error ${res.status}: endpoint redirected to ${res.headers.get('location') ?? 'an undisclosed location'}; redirects are not followed`);
+  }
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`LLM error ${res.status}: ${body.slice(0, 300)}`);

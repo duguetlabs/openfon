@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { LlmConfigError, resolveLlm, sameLlmEndpoint, validateLlmBaseUrl } from '../src/providers';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { chatComplete, LlmConfigError, resolveLlm, sameLlmEndpoint, validateLlmBaseUrl } from '../src/providers';
 import type { AgentSettings, Env } from '../src/types';
 
 // Only the LLM fields matter here; the rest of Env/AgentSettings is stubbed.
@@ -168,6 +168,27 @@ describe('validateLlmBaseUrl', () => {
     // Listing a host is the operator's own call, so it also covers the local
     // model case that would otherwise fail the https/loopback rules.
     expect(validateLlmBaseUrl('http://localhost:11434/v1', 'localhost')).toBeNull();
+  });
+});
+
+describe('chatComplete', () => {
+  const cfg = { baseUrl: 'https://api.example.com/v1', apiKey: 'sk-tenant', model: 'm' };
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('does not follow redirects, so the validated URL is the one that gets called', async () => {
+    // The endpoint checks only ever see the saved URL; following a 302 would
+    // let a host that passed them hand the request to an internal address.
+    const fetchStub = vi.fn(async () => new Response('', { status: 302, headers: { location: 'http://169.254.169.254/' } }));
+    vi.stubGlobal('fetch', fetchStub);
+    await expect(chatComplete(cfg, [{ role: 'user', content: 'hi' }])).rejects.toThrow(/redirects are not followed/);
+    expect(fetchStub).toHaveBeenCalledTimes(1);
+    expect((fetchStub.mock.calls[0] as unknown as [string, RequestInit])[1].redirect).toBe('manual');
+  });
+
+  it('still reads an ordinary completion', async () => {
+    const body = JSON.stringify({ choices: [{ message: { content: 'Good morning.' } }] });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body, { status: 200 })));
+    await expect(chatComplete(cfg, [{ role: 'user', content: 'hi' }])).resolves.toBe('Good morning.');
   });
 });
 
