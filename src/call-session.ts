@@ -14,7 +14,7 @@
 //   server JSON  {type:"thinking"} | {type:"error", message} | {type:"ended"}
 import type { Env, Business, AgentSettings, ChatMessage } from './types';
 import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './prompt';
-import { chatComplete, detectLang, isFarewell, isVocabEcho, normalizeLang, piperVoiceFor, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
+import { chatComplete, detectLang, isFarewell, isVocabEcho, LlmConfigError, normalizeLang, piperVoiceFor, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
 
 // WebSocket binary payloads vary by runtime: ArrayBuffer, ArrayBufferView, or Blob.
 async function toArrayBuffer(data: unknown): Promise<ArrayBuffer> {
@@ -185,6 +185,19 @@ export class CallSession implements DurableObject {
 
   private async handleStart(): Promise<void> {
     await this.loadCall();
+    // Resolve the LLM config before saying hello: a rejected AI-provider setup
+    // must fail at pickup with a message the owner can act on, not stall the
+    // caller mid-conversation (realtime calls would only notice at summary time).
+    try {
+      resolveLlm(this.env, this.settings);
+    } catch (err) {
+      if (!(err instanceof LlmConfigError)) throw err;
+      this.sendError(`Agent misconfigured — ${err.message} Fix it in Settings → AI provider.`);
+      this.send({ type: 'ended' });
+      this.ws?.close(1000, 'agent misconfigured');
+      await this.finalize();
+      return;
+    }
     this.lang = this.settings!.language in SUPPORTED_LANGUAGES ? this.settings!.language : 'en';
     const greeting = defaultGreeting(this.biz!, this.settings!);
     const systemPrompt = buildSystemPrompt(this.biz!, this.settings!, new Date());

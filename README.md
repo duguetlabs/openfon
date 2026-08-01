@@ -73,8 +73,14 @@ Defaults live in `wrangler.jsonc` under `vars`; secrets via `wrangler secret put
 | `REALTIME_BASE_URL` | OpenAI Realtime-compatible WebSocket endpoint (realtime engine) | `wss://api.kataleptic.com/v1/realtime` |
 | `REALTIME_MODEL` | Model/tier for the realtime engine | `llama-3.3-70b` |
 | `REALTIME_API_KEY` | *(secret)* key for the realtime endpoint; falls back to `DEFAULT_LLM_API_KEY` | — |
+| `ALLOWED_LLM_HOSTS` | comma-separated hosts a business may point its own LLM at; unset = any public https host | — |
 
-Each business can additionally override the LLM (base URL, model, API key) from **Settings → AI provider** in the dashboard.
+Each business can additionally override the LLM (base URL, model, API key) from **Settings → AI provider** in the dashboard. A custom base URL is only ever called with the key stored beside it — `DEFAULT_LLM_API_KEY` is never sent to an endpoint a business chose. Custom endpoints must be `https` and must not be a loopback, private, or link-local address (a literal-IP check; Workers cannot resolve DNS). `ALLOWED_LLM_HOSTS` narrows this to a fixed list, and hosts on that list may also use plain `http` — which is how you point at a model running next to `wrangler dev`:
+
+```sh
+# .dev.vars
+ALLOWED_LLM_HOSTS="localhost"
+```
 
 ### Real phone numbers (PSTN)
 

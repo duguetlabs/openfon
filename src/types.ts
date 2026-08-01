@@ -6,6 +6,10 @@ export interface Env {
   DEFAULT_LLM_BASE_URL: string;
   DEFAULT_LLM_MODEL: string;
   DEFAULT_LLM_API_KEY?: string;
+  // Optional comma-separated hostnames a business may point its own LLM at.
+  // Unset = any public https host; set = only these (and they may use plain
+  // http, for a local model beside `wrangler dev`).
+  ALLOWED_LLM_HOSTS?: string;
   // STT (any OpenAI-compatible /audio/transcriptions)
   DEFAULT_STT_BASE_URL: string;
   DEFAULT_STT_MODEL: string;

@@ -263,11 +263,15 @@ export default function Settings() {
               <button
                 className="rounded-lg bg-iris px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-iris-deep"
                 onClick={() =>
-                  void api.applyProfile(p.id).then(async () => {
-                    await refresh();
-                    setSaved(`Applied "${p.name}".`);
-                    setTimeout(() => setSaved(''), 2500);
-                  })
+                  void api
+                    .applyProfile(p.id)
+                    .then(async () => {
+                      await refresh();
+                      setError('');
+                      setSaved(`Applied "${p.name}".`);
+                      setTimeout(() => setSaved(''), 2500);
+                    })
+                    .catch((err) => setError(err instanceof Error ? err.message : 'Apply failed'))
                 }
               >
                 Apply
@@ -307,7 +311,9 @@ export default function Settings() {
                   .then((p) => {
                     setProfiles([...profiles, p]);
                     setNewProfileName('');
+                    setError('');
                   })
+                  .catch((err) => setError(err instanceof Error ? err.message : 'Could not save profile'))
               }
             >
               Save profile
@@ -393,7 +399,13 @@ export default function Settings() {
               </label>
             )}
           </div>
-          <Field label="Base URL" value={agent.llm_base_url} onChange={(e) => setA({ llm_base_url: e.target.value })} placeholder="https://api.kataleptic.com/v1" />
+          <Field
+            label="Base URL"
+            value={agent.llm_base_url}
+            onChange={(e) => setA({ llm_base_url: e.target.value })}
+            placeholder="https://api.kataleptic.com/v1"
+            hint="Your own endpoint must be https and needs its own API key below — this instance never sends its key to another URL."
+          />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Model" value={agent.llm_model} onChange={(e) => setA({ llm_model: e.target.value })} placeholder="llama-3.3-70b" />
             <Field label="API key" type="password" value={agent.llm_api_key} onChange={(e) => setA({ llm_api_key: e.target.value })} placeholder="sk-…" />
