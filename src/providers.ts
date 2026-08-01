@@ -72,17 +72,28 @@ function normalizeHost(hostname: string): string {
   return hostname.replace(/^\[|\]$/g, '').replace(/\.+$/, '').toLowerCase();
 }
 
-// Allowlist entries are hand-written, so they go through the same parser as the
-// endpoint before comparison: url.hostname always reports punycode, and an
-// operator who writes "bücher.example" means "xn--bcher-kva.example". A scheme
-// or port in the entry is tolerated rather than silently never matching.
-function canonicalHost(entry: string): string {
+// An allowlist entry is a host with an optional port ("api.example.com",
+// "localhost:11434"), and the port is part of the match: allowing one service
+// on a machine must not allow every service on it. That matters most for the
+// case the allowlist exists for — a local model on a high port, where entries
+// also relax the https rule, so a host-only match would open every port on
+// that machine to tenant-controlled POSTs. An entry without a port covers the
+// standard web ports only.
+//
+// Entries are hand-written, so they go through the same parser as the endpoint:
+// url.hostname always reports punycode, and an operator who writes
+// "bücher.example" means "xn--bcher-kva.example". A scheme in an entry is
+// tolerated rather than silently never matching.
+function allowKeys(entry: string): string[] {
   const bare = entry.trim().replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
-  if (!bare) return '';
+  if (!bare) return [];
+  const keysFor = (host: string, port: string) => (port ? [`${host}:${port}`] : [`${host}:80`, `${host}:443`]);
   try {
-    return normalizeHost(new URL(`https://${bare}`).hostname);
+    const u = new URL(`https://${bare}`);
+    return keysFor(normalizeHost(u.hostname), u.port);
   } catch {
-    return normalizeHost(bare);
+    const host = normalizeHost(bare);
+    return host ? keysFor(host, '') : [];
   }
 }
 
@@ -136,15 +147,19 @@ export function validateLlmBaseUrl(raw: string, allowedHosts?: string): string |
   // parses fine, so an allowlisted host must not smuggle one through.
   if (url.protocol !== 'https:' && url.protocol !== 'http:') return 'must be an http(s) URL';
   const host = normalizeHost(url.hostname);
-  const allow = (allowedHosts ?? '')
+  // url.port is empty exactly when the URL sits on its scheme's default port.
+  const hostPort = `${host}:${url.port || (url.protocol === 'http:' ? '80' : '443')}`;
+  const entries = (allowedHosts ?? '')
     .split(',')
-    .map(canonicalHost)
+    .map((e) => e.trim())
     .filter(Boolean);
   // An allowlist entry is the operator's own decision, so it also unlocks the
   // one case self-hosters need: plain http to a model running next to
   // `wrangler dev`. Without ALLOWED_LLM_HOSTS the strict rules apply to all.
-  if (allow.length) {
-    return allow.includes(host) ? null : `host is not permitted on this instance (allowed: ${allow.join(', ')})`;
+  if (entries.length) {
+    const allow = entries.flatMap(allowKeys);
+    // Report what the operator wrote, not the host:port keys it expands to.
+    return allow.includes(hostPort) ? null : `host is not permitted on this instance (allowed: ${entries.join(', ')})`;
   }
   if (url.protocol !== 'https:') return 'must use https:// (set ALLOWED_LLM_HOSTS to permit a plain-http host)';
   if (isInternalHost(host)) return 'must not point at a loopback, private, or link-local address';

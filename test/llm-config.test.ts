@@ -182,7 +182,22 @@ describe('validateLlmBaseUrl', () => {
     expect(validateLlmBaseUrl('https://api.mistral.ai/v1', 'api.openai.com')).toMatch(/not permitted/);
     // Listing a host is the operator's own call, so it also covers the local
     // model case that would otherwise fail the https/loopback rules.
-    expect(validateLlmBaseUrl('http://localhost:11434/v1', 'localhost')).toBeNull();
+    expect(validateLlmBaseUrl('http://localhost:11434/v1', 'localhost:11434')).toBeNull();
+  });
+
+  it('matches the port, not just the host', () => {
+    // The documented local-model setup. Allowing Ollama's port must not also
+    // allow every other service on that machine — an allowlist entry relaxes
+    // the https rule, so host-only matching would open all of localhost to
+    // tenant-controlled POSTs.
+    expect(validateLlmBaseUrl('http://localhost:11434/v1', 'localhost:11434')).toBeNull();
+    expect(validateLlmBaseUrl('http://localhost:8787/v1', 'localhost:11434')).toMatch(/not permitted/);
+    expect(validateLlmBaseUrl('http://localhost/v1', 'localhost:11434')).toMatch(/not permitted/);
+    // A bare entry covers the standard web ports, and nothing else.
+    expect(validateLlmBaseUrl('https://api.openai.com/v1', 'api.openai.com')).toBeNull();
+    expect(validateLlmBaseUrl('https://api.openai.com:8443/v1', 'api.openai.com')).toMatch(/not permitted/);
+    // The rejection names what the operator wrote, not the keys it expands to.
+    expect(validateLlmBaseUrl('https://api.openai.com:8443/v1', 'api.openai.com')).toMatch(/allowed: api\.openai\.com\)/);
   });
 
   it('matches allowlist entries an operator would plausibly write', () => {
@@ -195,6 +210,8 @@ describe('validateLlmBaseUrl', () => {
     expect(validateLlmBaseUrl('https://api.openai.com/v1', 'https://api.openai.com')).toBeNull();
     expect(validateLlmBaseUrl('http://localhost:11434/v1', 'localhost:11434')).toBeNull();
     expect(validateLlmBaseUrl('https://api.openai.com/v1', 'api.openai.com.')).toBeNull();
+    // An explicitly written default port means what it says.
+    expect(validateLlmBaseUrl('http://intranet.example/v1', 'intranet.example:80')).toBeNull();
     // …and none of that widens the list.
     expect(validateLlmBaseUrl('https://evil.example/v1', 'bücher.example')).toMatch(/not permitted/);
   });
