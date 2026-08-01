@@ -200,6 +200,33 @@ describe('validateLlmBaseUrl', () => {
     expect(validateLlmBaseUrl('https://api.openai.com:8443/v1', 'api.openai.com')).toMatch(/allowed: api\.openai\.com\)/);
   });
 
+  it('pins the transport a standard port names, however the URL spells it', () => {
+    // The parser drops :443 under https: and :80 under http:, but keeps each
+    // under the other scheme — so a port only means something with its scheme.
+    // All four combinations, since fixing one direction has twice broken another.
+    expect(validateLlmBaseUrl('https://api.example.com/v1', 'api.example.com:443')).toBeNull();
+    expect(validateLlmBaseUrl('https://api.example.com:443/v1', 'api.example.com:443')).toBeNull();
+    expect(validateLlmBaseUrl('http://api.example.com/v1', 'api.example.com:443')).toMatch(/not permitted/);
+    expect(validateLlmBaseUrl('http://api.example.com:443/v1', 'api.example.com:443')).toMatch(/not permitted/);
+
+    expect(validateLlmBaseUrl('http://intranet.example/v1', 'intranet.example:80')).toBeNull();
+    expect(validateLlmBaseUrl('http://intranet.example:80/v1', 'intranet.example:80')).toBeNull();
+    expect(validateLlmBaseUrl('https://intranet.example/v1', 'intranet.example:80')).toMatch(/not permitted/);
+    expect(validateLlmBaseUrl('https://intranet.example:80/v1', 'intranet.example:80')).toMatch(/not permitted/);
+  });
+
+  it('lets a high port take either scheme, and a stated scheme pin it', () => {
+    // A high port implies no transport, and http on one is the documented
+    // local-model case — but an operator can still pin it by writing a scheme.
+    expect(validateLlmBaseUrl('http://localhost:11434/v1', 'localhost:11434')).toBeNull();
+    expect(validateLlmBaseUrl('https://localhost:11434/v1', 'localhost:11434')).toBeNull();
+    expect(validateLlmBaseUrl('https://model.example:8443/v1', 'https://model.example:8443')).toBeNull();
+    expect(validateLlmBaseUrl('http://model.example:8443/v1', 'https://model.example:8443')).toMatch(/not permitted/);
+    // A stated scheme pins a portless entry to that scheme's default port too.
+    expect(validateLlmBaseUrl('https://api.openai.com/v1', 'https://api.openai.com')).toBeNull();
+    expect(validateLlmBaseUrl('http://api.openai.com/v1', 'https://api.openai.com')).toMatch(/not permitted/);
+  });
+
   it('honours an explicitly written default port in both directions', () => {
     // The URL parser drops a default port, so an entry's port has to be read
     // from the entry text. Inferring it back from the parse would turn

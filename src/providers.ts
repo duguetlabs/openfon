@@ -80,15 +80,29 @@ function normalizeHost(hostname: string): string {
 // that machine to tenant-controlled POSTs. An entry without a port covers the
 // standard web ports only.
 //
-// Entries are hand-written, so they go through the same parser as the endpoint:
-// url.hostname always reports punycode, and an operator who writes
-// "bücher.example" means "xn--bcher-kva.example". A scheme in an entry is
-// tolerated rather than silently never matching.
+// Entries are hand-written, so the hostname goes through the same parser as the
+// endpoint: url.hostname always reports punycode, and an operator who writes
+// "bücher.example" means "xn--bcher-kva.example".
+//
+// INVARIANT: a port is only meaningful together with its scheme. The URL parser
+// drops :443 under https: and :80 under http:, but keeps each under the other
+// scheme — so a port compared on its own is sometimes present, sometimes not,
+// and sometimes present with the wrong transport. Keys therefore carry the
+// scheme, and an entry either states one or has one implied:
+//   api.example.com        -> https on 443 and http on 80
+//   api.example.com:443    -> https only (a standard port names its transport)
+//   intranet.example:80    -> http only
+//   localhost:11434        -> either scheme, since a high port implies neither
+//   https://model.ex:8443  -> https only (state a scheme to pin a high port)
 function allowKeys(entry: string): string[] {
-  const bare = entry.trim().replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
+  const raw = entry.trim();
+  const prefix = /^([a-z][a-z0-9+.-]*):\/\//i.exec(raw);
+  const stated = prefix ? prefix[1].toLowerCase() : '';
+  const bare = prefix ? raw.slice(prefix[0].length) : raw;
   if (!bare) return [];
   const port = entryPort(bare);
-  const keysFor = (host: string) => (port ? [`${host}:${port}`] : [`${host}:80`, `${host}:443`]);
+  const schemes = stated === 'http' || stated === 'https' ? [stated] : port === '443' ? ['https'] : port === '80' ? ['http'] : ['http', 'https'];
+  const keysFor = (host: string) => schemes.map((s) => `${s}://${host}:${port || (s === 'https' ? '443' : '80')}`);
   try {
     return keysFor(normalizeHost(new URL(`https://${bare}`).hostname));
   } catch {
@@ -161,8 +175,11 @@ export function validateLlmBaseUrl(raw: string, allowedHosts?: string): string |
   // parses fine, so an allowlisted host must not smuggle one through.
   if (url.protocol !== 'https:' && url.protocol !== 'http:') return 'must be an http(s) URL';
   const host = normalizeHost(url.hostname);
-  // url.port is empty exactly when the URL sits on its scheme's default port.
-  const hostPort = `${host}:${url.port || (url.protocol === 'http:' ? '80' : '443')}`;
+  // Same shape as the allowlist keys, scheme included — see the invariant on
+  // allowKeys. url.port is empty exactly when the URL sits on its scheme's own
+  // default port, which is why the scheme has to travel with it.
+  const scheme = url.protocol.slice(0, -1);
+  const endpointKey = `${scheme}://${host}:${url.port || (scheme === 'https' ? '443' : '80')}`;
   const entries = (allowedHosts ?? '')
     .split(',')
     .map((e) => e.trim())
@@ -172,8 +189,8 @@ export function validateLlmBaseUrl(raw: string, allowedHosts?: string): string |
   // `wrangler dev`. Without ALLOWED_LLM_HOSTS the strict rules apply to all.
   if (entries.length) {
     const allow = entries.flatMap(allowKeys);
-    // Report what the operator wrote, not the host:port keys it expands to.
-    return allow.includes(hostPort) ? null : `host is not permitted on this instance (allowed: ${entries.join(', ')})`;
+    // Report what the operator wrote, not the keys it expands to.
+    return allow.includes(endpointKey) ? null : `host is not permitted on this instance (allowed: ${entries.join(', ')})`;
   }
   if (url.protocol !== 'https:') return 'must use https:// (set ALLOWED_LLM_HOSTS to permit a plain-http host)';
   if (isInternalHost(host)) return 'must not point at a loopback, private, or link-local address';

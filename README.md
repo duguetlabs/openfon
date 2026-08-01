@@ -82,7 +82,7 @@ Each business can additionally override the LLM (base URL, model, API key) from 
 ALLOWED_LLM_HOSTS="localhost:11434"     # Ollama, and nothing else on this machine
 ```
 
-The port is part of the match, because an entry also relaxes the `https` rule: `localhost:11434` permits that one port, not every service listening on the box. An entry written without a port (`api.example.com`) covers the standard web ports — 443 and 80 — and no others, so a non-standard port has to be named explicitly. Naming a standard port pins it: `api.example.com:443` permits only the TLS form, `intranet.example:80` only the plaintext one.
+The port is part of the match, because an entry also relaxes the `https` rule: `localhost:11434` permits that one port, not every service listening on the box. An entry written without a port (`api.example.com`) covers the standard web ports — 443 and 80 — and no others, so a non-standard port has to be named explicitly. Naming a standard port pins the transport with it: `api.example.com:443` permits only the TLS form, `intranet.example:80` only the plaintext one. A non-standard port implies neither, so `localhost:11434` accepts both — write the scheme (`https://model.example:8443`) to pin one.
 
 ### Real phone numbers (PSTN)
 
