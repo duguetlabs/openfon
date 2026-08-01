@@ -95,6 +95,7 @@ export class CallSession implements DurableObject {
   private lang = 'en'; // follows the caller; starts as the business default
   private mode: 'pipeline' | 'realtime' = 'pipeline';
   private upstream: WebSocket | null = null; // realtime engine connection
+  private failure: string | null = null; // owner-facing reason, stored as the call's summary
 
   constructor(
     private state: DurableObjectState,
@@ -192,7 +193,13 @@ export class CallSession implements DurableObject {
       resolveLlm(this.env, this.settings);
     } catch (err) {
       if (!(err instanceof LlmConfigError)) throw err;
-      this.sendError(`Agent misconfigured — ${err.message} Fix it in Settings → AI provider.`);
+      // The diagnostic is for the owner, not the caller: it can name the
+      // instance's allowed hosts, and anyone can dial the public widget. The
+      // caller hears that the line is down; the reason is logged and lands on
+      // the call row, which is where the person who can fix it looks.
+      this.failure = `Agent misconfigured — ${err.message} Fix it in Settings → AI provider.`;
+      console.error(`call ${this.callId}: ${this.failure}`);
+      this.sendError('This agent is not available right now. Please try again later.');
       this.send({ type: 'ended' });
       this.ws?.close(1000, 'agent misconfigured');
       await this.finalize('failed');
@@ -687,7 +694,9 @@ export class CallSession implements DurableObject {
       .first<{ started_at: string }>();
     if (!call) return;
     const duration = Math.max(0, Math.round((Date.now() - new Date(call.started_at + 'Z').getTime()) / 1000));
-    let summary: string | null = null;
+    // A failure reason takes the summary slot: the call log renders it, so the
+    // owner reads why the call died where they already look for what happened.
+    let summary: string | null = this.failure;
     let intent: string | null = null;
     let messageJson: string | null = null;
     // Summarize only real conversations (greeting alone doesn't count).
