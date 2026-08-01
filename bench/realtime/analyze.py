@@ -44,6 +44,8 @@ from arms import ARMS_BY_ID, PAIRS, TURN_DETECTION  # noqa: E402
 
 METRICS = [
     ("ttfa_ms", "time to first agent audio, from end of caller speech"),
+    ("ttfa_minus_vad_ms",
+     "engine-only: ttfa minus that turn's own measured end-of-turn detection"),
     ("speech_stopped_ms",
      "the VAD's own end-of-turn decision, isolated from model and TTS time"),
     ("ttft_ms", "time to first agent text/transcript delta"),
@@ -136,59 +138,70 @@ def paired(turns: list[dict], treat: str, ctrl: str, metric: str) -> list[float]
             if treat in c and ctrl in c]
 
 
-def fisher_exact_p(a: int, b: int, c: int, d: int) -> float:
-    """Two-sided Fisher exact test on a 2x2 table.
+def mcnemar_exact_p(b: int, c: int) -> float:
+    """Exact two-sided McNemar test, from the two discordant counts.
 
-        [[a, b],
-         [c, d]]
+    Fisher's exact would be WRONG here. Treatment and control observations
+    are matched by construction — every pair is the same caller audio in the
+    same round — and Fisher assumes two independent samples. Discarding the
+    pairing overstates significance badly: for ten discordant matched cells
+    Fisher reports ~1e-5 where the correct answer is 0.00195.
 
-    Sums the probability of every table with the same margins that is at least
-    as extreme as the observed one. Exact rather than chi-square because the
-    split-rate counts are small and often contain a zero cell, where the
-    asymptotic approximation is worthless.
+    Conditional on being discordant, each pair is a coin flip under the null,
+    so this reduces to the same exact binomial as `sign_test_p` — which is
+    the point: it is the sign test on the discordant pairs.
     """
-    n = a + b + c + d
+    n = b + c
     if n == 0:
         return 1.0
-    row1, col1 = a + b, a + c
+    k = min(b, c)
+    tail = sum(math.comb(n, i) for i in range(k + 1)) / 2 ** n
+    return min(1.0, 2 * tail)
 
-    def prob(x: int) -> float:
-        return (math.comb(row1, x) * math.comb(n - row1, col1 - x)
-                / math.comb(n, col1))
 
-    observed = prob(a)
-    lo = max(0, col1 - (n - row1))
-    hi = min(row1, col1)
-    # 1e-9 slack: equally-extreme tables must count, and float error would
-    # otherwise drop them and understate p
-    return min(1.0, sum(prob(x) for x in range(lo, hi + 1)
-                        if prob(x) <= observed * (1 + 1e-9)))
+def split_cells(turns: list[dict], treat: str, ctrl: str) -> list[tuple[bool, bool]]:
+    """(treatment split?, control split?) per complete (round, utterance) cell.
+
+    Only turns that produced a usable measurement count. A turn that died in
+    connect or config has ok=False and the default false_starts=0, and
+    counting it as a clean non-split would manufacture significance out of
+    failures.
+    """
+    by_cell: dict[tuple, dict[str, bool]] = defaultdict(dict)
+    for t in turns:
+        if t["arm"] in (treat, ctrl) and t["ok"]:
+            by_cell[(t["round"], t["utterance"])][t["arm"]] = bool(t.get("false_starts"))
+    return [(c[treat], c[ctrl]) for c in by_cell.values()
+            if treat in c and ctrl in c]
 
 
 def split_rate_table(turns: list[dict]) -> list[str]:
-    """Per-pair comparison of how often server VAD chopped the utterance.
+    """Per-pair comparison of how often the detector chopped the utterance.
 
-    This is a rate, not a latency, so it gets a Fisher test rather than the
-    sign test — and it is deliberately kept out of the Holm family above,
-    which covers the paired latency metrics.
+    A matched-pair rate, so it gets exact McNemar rather than the sign test
+    used for the latency metrics — and it stays out of the Holm family above,
+    which covers those.
     """
     present = {t["arm"] for t in turns}
     pairs = [p for p in PAIRS if p[0] in present and p[1] in present]
-    rows = ["| comparison | treatment splits | control splits | Fisher p |",
-            "|---|---:|---:|---:|"]
+    rows = ["| comparison | cells | treatment splits | control splits "
+            "| discordant (T only / C only) | McNemar p |",
+            "|---|---:|---:|---:|---:|---:|"]
     any_row = False
     for treat, ctrl, question in pairs:
-        tt = [t for t in turns if t["arm"] == treat]
-        ct = [t for t in turns if t["arm"] == ctrl]
-        if not tt or not ct:
+        cells = split_cells(turns, treat, ctrl)
+        if not cells:
             continue
-        a = sum(1 for t in tt if t.get("false_starts"))
-        c = sum(1 for t in ct if t.get("false_starts"))
-        if a == 0 and c == 0:
+        t_split = sum(1 for t, _ in cells if t)
+        c_split = sum(1 for _, c in cells if c)
+        if t_split == 0 and c_split == 0:
             continue                      # nothing split either side
-        p = fisher_exact_p(a, len(tt) - a, c, len(ct) - c)
-        rows.append(f"| `{treat}` vs `{ctrl}`<br><sub>{question}</sub> | "
-                    f"{a}/{len(tt)} | {c}/{len(ct)} | {p:.4f} |")
+        b = sum(1 for t, c in cells if t and not c)
+        c_ = sum(1 for t, c in cells if c and not t)
+        p = mcnemar_exact_p(b, c_)
+        rows.append(f"| `{treat}` vs `{ctrl}`<br><sub>{question}</sub> | {len(cells)} | "
+                    f"{t_split}/{len(cells)} | {c_split}/{len(cells)} | "
+                    f"{b} / {c_} | {p:.5f} |")
         any_row = True
     return rows if any_row else []
 
@@ -293,6 +306,14 @@ def main() -> int:
     args = ap.parse_args()
 
     turns = load(args.results)
+    for t in turns:
+        # Derived per turn, never from the nominal silence_duration_ms: what a
+        # detector actually spends deciding differs from what we asked for, and
+        # a semantic detector has no fixed hangover to subtract at all.
+        t["ttfa_minus_vad_ms"] = (
+            t["ttfa_ms"] - t["speech_stopped_ms"]
+            if t.get("ttfa_ms") is not None and t.get("speech_stopped_ms") is not None
+            else None)
     ok = [t for t in turns if t["ok"]]
     paired_results = compute_paired(ok, [m for m, _ in METRICS])
     n_tests = sum(len(v) for v in paired_results.values())
@@ -323,29 +344,64 @@ def main() -> int:
             w(f"- {v}x {k}")
         w()
 
+    # Controls are only real if the endpoints honoured them. Surface any field
+    # that came back different from what was asked for, before any results.
+    warns: dict[str, int] = defaultdict(int)
+    for t in turns:
+        for wmsg in t.get("config_warnings") or []:
+            warns[f'{t["arm"]}: {wmsg}'] += 1
+    if warns:
+        w("### Control breaches (endpoint echoed something other than what was asked)")
+        w()
+        for k, v in sorted(warns.items()):
+            w(f"- {v}x {k}")
+        w()
+    elif any("config_warnings" in t for t in turns):
+        w("Controls verified: every arm echoed back the turn detection, audio "
+          "format, voice and STT model it was asked for.")
+        w()
+    n_tr_timeout = sum(1 for t in turns if t.get("transcript_timed_out"))
+    if n_tr_timeout:
+        w(f"{n_tr_timeout} turn(s) never produced a caller transcript within the "
+          f"grace window; their `transcript_ms` is missing rather than fast.")
+        w()
+
     w(f"### `ttfa_ms` — headline metric")
     w()
-    w(f"Measured from the end of the caller's streamed speech. It includes the "
-      f"server-VAD hangover we configured (`silence_duration_ms = {HANGOVER_MS}`), "
-      f"which is a constant we chose, not engine latency. Subtract {HANGOVER_MS} ms "
-      f"from every number below for the engine-only figure.")
+    w(f"Measured from the end of the caller's streamed speech, so it includes the "
+      f"detector's end-of-turn delay. We configured `silence_duration_ms = "
+      f"{HANGOVER_MS}`, but that nominal value is NOT what any arm actually spends: "
+      f"the measured `speech_stopped_ms` runs ~190 ms above it under server VAD, and "
+      f"a semantic detector has no fixed hangover at all. The engine-only view below "
+      f"therefore subtracts each turn's own measured `speech_stopped_ms`, not a "
+      f"constant.")
     w()
     w("\n".join(marginal_table(ok, "ttfa_ms")))
     w()
-    w(f"Engine-only (raw − {HANGOVER_MS} ms hangover):")
+    w("Engine-only — per turn, `ttfa_ms − speech_stopped_ms` (inference + synthesis, "
+      "with that turn's actual end-of-turn detection removed). Turns with no "
+      "`speech_stopped` event are excluded rather than guessed at:")
     w()
-    adj = [dict(t, ttfa_ms=t["ttfa_ms"] - HANGOVER_MS) for t in ok
-           if t.get("ttfa_ms") is not None]
-    w("\n".join(marginal_table(adj, "ttfa_ms")))
+    eng = [dict(t, ttfa_minus_vad_ms=t["ttfa_ms"] - t["speech_stopped_ms"])
+           for t in ok
+           if t.get("ttfa_ms") is not None and t.get("speech_stopped_ms") is not None]
+    n_drop = len([t for t in ok if t.get("ttfa_ms") is not None]) - len(eng)
+    w("\n".join(marginal_table(eng, "ttfa_minus_vad_ms")))
     w()
+    if n_drop:
+        w(f"({n_drop} turn(s) excluded for a missing `speech_stopped` event.)")
+        w()
+    if paired_results.get("ttfa_minus_vad_ms"):
+        w("\n".join(paired_table(paired_results["ttfa_minus_vad_ms"])))
+        w()
     w("Paired differences (identical caller audio, same round):")
     w()
     w("\n".join(paired_table(paired_results.get("ttfa_ms", []))))
     w()
 
     for metric, blurb in METRICS:
-        if metric == "ttfa_ms":
-            continue
+        if metric in ("ttfa_ms", "ttfa_minus_vad_ms"):
+            continue        # both rendered in the headline section above
         rows = marginal_table(ok, metric)
         if len(rows) <= 2:
             continue
@@ -395,8 +451,11 @@ def main() -> int:
         w()
     srt = split_rate_table(turns)
     if srt:
-        w("Split rate per comparison (Fisher exact, two-sided — a rate, so it is "
-          "not part of the Holm family over the paired latency metrics):")
+        w("Split rate per comparison — **exact McNemar**, two-sided, on complete "
+          "matched cells. Matched, not independent: every pair is the same caller "
+          "audio in the same round, so Fisher's exact would discard the pairing and "
+          "overstate significance. Kept out of the Holm family above, which covers "
+          "the paired latency metrics:")
         w()
         w("\n".join(srt))
         w()

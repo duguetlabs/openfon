@@ -67,11 +67,13 @@ caller speech finishes playing out**, not from the send call.
 | `audio_out_ms` | duration of the decoded reply audio |
 | `false_starts` | responses server VAD began and cancelled mid-utterance, at a clause pause longer than `silence_duration_ms`. Their timings are discarded, not measured. |
 
-`ttfa_ms` **includes the server-VAD hangover we configured**
-(`silence_duration_ms = 550`). That is a knob we chose, not engine latency, so
-`analyze.py` reports the metric twice: raw, and engine-only (raw − 550 ms). Quote the
-engine-only figure when comparing to vendor claims; quote the raw figure when reasoning
-about what a caller actually experiences with OpenFon's current settings.
+`ttfa_ms` **includes the detector's end-of-turn delay**, so `analyze.py` reports it twice:
+raw, and engine-only. The engine-only figure subtracts **each turn's own measured
+`speech_stopped_ms`**, never the nominal `silence_duration_ms` — the configured 550 ms is
+not what any arm actually spends (server VAD measures ~740 ms), and a semantic detector
+has no fixed hangover to subtract at all. Turns with no `speech_stopped` event are
+excluded rather than guessed at. Quote the engine-only figure when comparing model speed;
+quote the raw figure when reasoning about what a caller experiences.
 
 ### Why `config_ms` matches on a marker
 
@@ -91,18 +93,23 @@ a half-configured session.
   timing meaningless. Silence frames keep flowing after the utterance so server VAD has
   something to time its hangover against.
 * **Instructions** — the same Riverside Dental receptionist prompt on every arm.
-* **Turn detection** — `server_vad`, threshold `0.7`, prefix padding `300`, silence `550`,
-  on every arm, and each endpoint's `session.updated` is checked to echo exactly that
-  (no arm silently substitutes Azure semantic VAD). Voice Live defaults to
-  `silence_duration_ms: 200` where the native endpoint defaults to `500`; unpinned, that
-  alone would be a 300 ms artefact. `speech_stopped_ms` exists to verify the pin held:
-  in the shipped run all five arms decided end-of-turn within 28 ms of each other.
+* **Turn detection** — `server_vad`, threshold `0.7`, prefix padding `300`, silence `550`
+  on every arm of the main design. Voice Live defaults `silence_duration_ms` to 200 where
+  the native endpoint defaults to 500; unpinned, that alone would be a 300 ms artefact.
+  `speech_stopped_ms` confirms the pin held: in the shipped run all five arms decided
+  end-of-turn within 28 ms of each other.
 * **Audio format** — PCM16 @ 24 kHz in and out on every arm.
 * **Voice and STT within each comparison** — `marin` + `whisper-1` on all three
   gpt-realtime-2 arms; `en-US-AvaMultilingualNeural` + `azure-speech` on both
   gpt-4.1-mini arms.
 * **Conversation context** — one fresh session per turn, so no arm accumulates a longer
   prompt than another.
+* **Verified, not assumed** — every arm's `session.updated` echo is checked field by field
+  (`Arm.verify_echo`) against what was asked for, and any divergence is recorded per turn
+  in `config_warnings` and summarised at the top of the analysis. Matching the marker only
+  proves the update was *processed*; it does not prove the endpoint *honoured* it. The
+  check found a real breach — see the report's caveats — so treat an empty
+  `config_warnings` as evidence, not decoration.
 * **Ordering** — turns are strictly serial (parallel handshakes inflate `connect_ms` to
   several seconds) and interleaved round-robin, with the arm order rotated each round.
 
@@ -177,6 +184,14 @@ directional claim:
   well into the 100 ms range. In the shipped run this correctly demotes a +6 ms result
   that was nominally significant, and a +46 ms one that even survived Holm.
 
+Split rates get **exact McNemar** instead, not the sign test and emphatically not Fisher's
+exact: the observations are matched by construction — same caller audio, same round — and
+Fisher would discard the pairing and overstate the evidence by two orders of magnitude
+(~1e-5 where the correct answer is 0.00195). Rates are kept out of the Holm family over
+the latency metrics. Only complete cells where **both** turns produced a usable
+measurement are counted; a turn that died in connect has `false_starts = 0` by default,
+and counting it as a clean non-split would manufacture significance out of failures.
+
 Tables show raw and adjusted p side by side, so a demoted result stays visible instead of
 disappearing.
 
@@ -186,12 +201,13 @@ disappearing.
 python3 -m unittest discover -s bench/realtime -v
 ```
 
-52 tests over the pure statistics behind every published table — `pct`, `describe`, the
-paired difference computation, the exact sign test, the bootstrap CI, the Holm step-down,
-and the verdict gating (including the three demotion cases above) — plus credential
-redaction. The network path is not unit-tested; a wrong percentile or a mis-scaled
-correction, though, would corrupt every number in the report while looking entirely
-plausible.
+86 tests, split across `test_analyze.py` (the statistics behind every published table —
+percentiles, paired differences, the exact sign test, the bootstrap CI, the Holm
+step-down, exact McNemar, matched-cell construction, and the verdict gating) and
+`test_harness.py` (the controls that make a run trustworthy — echo verification, cache
+keying, framing, silence trimming), plus credential redaction. The network path is not
+unit-tested; a wrong percentile, a mis-scaled correction or an unmatched significance test
+would corrupt every number in the report while looking entirely plausible.
 
 ### Secrets
 

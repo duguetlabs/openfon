@@ -102,6 +102,51 @@ class Arm:
             sess["audio"]["output"]["voice"] = self.voice
         return sess
 
+    def verify_echo(self, session: dict) -> list[str]:
+        """Compare what the endpoint echoed against what we asked for.
+
+        The controls this benchmark claims — identical turn detection, audio
+        format and STT across arms — are only real if the service actually
+        applied them. Matching the marker proves our update was processed;
+        it does not prove the endpoint honoured every field. Returns a list of
+        human-readable mismatches (empty when clean).
+        """
+        s = session or {}
+        problems: list[str] = []
+        if "audio" in s:                       # GA nested echo
+            inp = (s.get("audio") or {}).get("input") or {}
+            outp = (s.get("audio") or {}).get("output") or {}
+            td = inp.get("turn_detection") or {}
+            tr = inp.get("transcription") or {}
+            in_fmt, out_fmt = inp.get("format") or {}, outp.get("format") or {}
+            in_rate = in_fmt.get("rate")
+            out_rate = out_fmt.get("rate")
+            voice = outp.get("voice")
+        else:                                  # Voice Live flat echo
+            td = s.get("turn_detection") or {}
+            tr = s.get("input_audio_transcription") or {}
+            in_rate = s.get("input_audio_sampling_rate")
+            out_rate = 24000 if s.get("output_audio_format") == "pcm16" else None
+            v = s.get("voice")
+            voice = v.get("name") if isinstance(v, dict) else v
+
+        want_td = self.turn_detection
+        if td.get("type") != want_td.get("type"):
+            problems.append(f"turn_detection.type={td.get('type')!r} "
+                            f"(asked {want_td.get('type')!r})")
+        for k in ("threshold", "prefix_padding_ms", "silence_duration_ms"):
+            if k in want_td and td.get(k) is not None and td.get(k) != want_td[k]:
+                problems.append(f"turn_detection.{k}={td.get(k)} (asked {want_td[k]})")
+        want_stt = self.transcription.get("model")
+        if want_stt and tr.get("model") != want_stt:
+            problems.append(f"transcription.model={tr.get('model')!r} (asked {want_stt!r})")
+        if self.voice and voice and voice != self.voice:
+            problems.append(f"voice={voice!r} (asked {self.voice!r})")
+        for label, rate in (("input", in_rate), ("output", out_rate)):
+            if rate is not None and int(rate) != SAMPLE_RATE:
+                problems.append(f"{label} rate={rate} (asked {SAMPLE_RATE})")
+        return problems
+
 
 WHISPER = {"model": "whisper-1"}          # no `language` key: Voice Live rejects ""
 AZURE_SPEECH = {"model": "azure-speech", "language": ""}

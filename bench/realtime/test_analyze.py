@@ -16,8 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from analyze import (ALPHA, PRACTICAL_MS, PairedResult,  # noqa: E402
                      bootstrap_median_ci, compute_paired, describe,
-                     fisher_exact_p, holm, paired, pct, sign_test_p,
-                     split_rate_table)
+                     holm, mcnemar_exact_p, paired, pct, sign_test_p,
+                     split_cells, split_rate_table)
 from bench import redact  # noqa: E402
 
 
@@ -241,14 +241,14 @@ class TestVerdictGating(unittest.TestCase):
 
     def test_borderline_p_is_not_minted_into_a_verdict(self):
         # the vl-native-brain ttfa case: real effect, p survives raw but not Holm
-        r = result(-93, 0.043, 0.779)
+        r = result(-93, 0.043, 0.909)
         self.assertFalse(r.survives)
         self.assertIn("borderline", r.verdict())
         self.assertIn("not robust to Holm", r.verdict())
 
     def test_tiny_effect_is_not_minted_even_when_significant(self):
         # the config_ms case: p<0.05 raw, but 6 ms is noise
-        r = result(+6, 0.043, 0.779)
+        r = result(+6, 0.043, 0.909)
         self.assertFalse(r.survives)
         self.assertIn("no practical difference", r.verdict())
         self.assertIn("despite p<0.05", r.verdict())
@@ -295,56 +295,91 @@ class TestComputePaired(unittest.TestCase):
         self.assertNotIn("connect_ms", res)
 
 
-class TestFisherExact(unittest.TestCase):
-    def test_no_association_is_p_one(self):
-        self.assertAlmostEqual(fisher_exact_p(5, 5, 5, 5), 1.0)
+class TestMcNemar(unittest.TestCase):
+    """The split-rate data is MATCHED — same caller audio, same round — so
+    Fisher's exact would discard the pairing and overstate significance."""
 
-    def test_matches_known_value(self):
-        # the classic tea-tasting 2x2: two-sided p = 0.4857...
-        self.assertAlmostEqual(fisher_exact_p(3, 1, 1, 3), 0.4857, places=3)
+    def test_no_discordant_pairs_is_p_one(self):
+        self.assertEqual(mcnemar_exact_p(0, 0), 1.0)
 
-    def test_complete_separation_is_significant(self):
-        # 10/10 vs 0/10 — the shape of the VAD split-rate result
-        p = fisher_exact_p(10, 0, 0, 10)
-        self.assertLess(p, 1e-4)
+    def test_ten_discordant_one_way_matches_exact_binomial(self):
+        # 2 * (1/2)^10 = 0.001953125 — NOT the ~1e-5 Fisher would report
+        self.assertAlmostEqual(mcnemar_exact_p(0, 10), 0.001953125)
+        self.assertAlmostEqual(mcnemar_exact_p(10, 0), 0.001953125)
 
-    def test_small_complete_separation_is_not_oversold(self):
-        # 2/2 vs 0/2 is complete separation but far too small to be conclusive
-        self.assertGreater(fisher_exact_p(2, 0, 0, 2), 0.05)
+    def test_six_discordant_one_way(self):
+        # the main run's de-short cells: 2 * (1/2)^6
+        self.assertAlmostEqual(mcnemar_exact_p(6, 0), 0.03125)
 
-    def test_symmetric_under_row_swap(self):
-        self.assertAlmostEqual(fisher_exact_p(8, 2, 3, 7),
-                               fisher_exact_p(3, 7, 8, 2))
+    def test_balanced_discordance_is_p_one(self):
+        self.assertAlmostEqual(mcnemar_exact_p(5, 5), 1.0)
+
+    def test_concordant_pairs_do_not_enter(self):
+        # only discordant counts are arguments, so 100 concordant pairs
+        # cannot manufacture significance
+        self.assertAlmostEqual(mcnemar_exact_p(3, 0), 0.25)
+
+    def test_is_more_conservative_than_the_unpaired_view(self):
+        # 10 vs 0 discordant: McNemar 0.00195 is far larger than Fisher's ~1e-5
+        self.assertGreater(mcnemar_exact_p(0, 10), 1e-4)
 
     def test_never_exceeds_one(self):
-        for t in [(1, 1, 1, 1), (0, 5, 5, 0), (7, 3, 6, 4), (1, 0, 0, 1)]:
-            self.assertLessEqual(fisher_exact_p(*t), 1.0)
+        for b, c in [(1, 1), (2, 3), (0, 1), (7, 6)]:
+            self.assertLessEqual(mcnemar_exact_p(b, c), 1.0)
 
-    def test_empty_table(self):
-        self.assertEqual(fisher_exact_p(0, 0, 0, 0), 1.0)
+
+class TestSplitCells(unittest.TestCase):
+    def test_pairs_by_round_and_utterance(self):
+        turns = [turn(0, "a", "de", ttfa_ms=1, false_starts=1),
+                 turn(0, "b", "de", ttfa_ms=1, false_starts=0)]
+        self.assertEqual(split_cells(turns, "a", "b"), [(True, False)])
+
+    def test_failed_turns_are_excluded_not_counted_as_clean(self):
+        """The bug this guards: a turn that died in connect has ok=False and
+        the default false_starts=0, and counting it as a clean non-split
+        manufactures significance out of failures."""
+        dead = turn(0, "b", "de", ttfa_ms=None, false_starts=0)
+        dead["ok"] = False
+        turns = [turn(0, "a", "de", ttfa_ms=1, false_starts=1), dead]
+        self.assertEqual(split_cells(turns, "a", "b"), [])
+
+    def test_incomplete_cells_are_dropped(self):
+        turns = [turn(0, "a", "de", ttfa_ms=1, false_starts=1),
+                 turn(1, "b", "de", ttfa_ms=1, false_starts=0)]
+        self.assertEqual(split_cells(turns, "a", "b"), [])
+
+    def test_multiple_false_starts_still_count_once(self):
+        turns = [turn(0, "a", "de", ttfa_ms=1, false_starts=3),
+                 turn(0, "b", "de", ttfa_ms=1, false_starts=0)]
+        self.assertEqual(split_cells(turns, "a", "b"), [(True, False)])
 
 
 class TestSplitRateTable(unittest.TestCase):
-    def _turns(self, treat_splits, ctrl_splits, n=10):
+    def _turns(self, treat_splits, ctrl_splits, n=10, treat_ok=True):
         out = []
         for i in range(n):
-            out.append(turn(i, "nat-semantic", "de-short", ttfa_ms=1,
-                            false_starts=1 if i < treat_splits else 0))
+            t = turn(i, "nat-semantic", "de-short", ttfa_ms=1,
+                     false_starts=1 if i < treat_splits else 0)
+            t["ok"] = treat_ok
+            out.append(t)
             out.append(turn(i, "native-direct", "de-short", ttfa_ms=1,
                             false_starts=1 if i < ctrl_splits else 0))
         return out
 
     def test_reports_a_pair_with_splits(self):
-        rows = split_rate_table(self._turns(0, 10))
-        body = "\n".join(rows)
+        body = "\n".join(split_rate_table(self._turns(0, 10)))
         self.assertIn("0/10", body)
         self.assertIn("10/10", body)
+        self.assertIn("0.00195", body)          # McNemar, not Fisher's 1e-5
 
     def test_omitted_when_nothing_split(self):
         self.assertEqual(split_rate_table(self._turns(0, 0)), [])
 
+    def test_failed_treatment_turns_do_not_manufacture_a_result(self):
+        # every treatment turn failed; there are no complete cells at all
+        self.assertEqual(split_rate_table(self._turns(0, 10, treat_ok=False)), [])
+
     def test_only_pairs_present_in_the_data(self):
-        # control arm absent -> no comparison can be formed
         turns = [turn(i, "nat-semantic", "de-short", ttfa_ms=1, false_starts=1)
                  for i in range(5)]
         self.assertEqual(split_rate_table(turns), [])

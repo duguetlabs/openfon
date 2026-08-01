@@ -48,6 +48,10 @@ REPO_ROOT = HERE.parent.parent
 FRAME_S = FRAME_MS / 1000.0
 BYTES_PER_MS = SAMPLE_RATE * 2 // 1000          # 48
 SILENCE_FRAME = b"\x00" * (SAMPLE_RATE * 2 * FRAME_MS // 1000)
+# How long to keep the socket open after response.done waiting for the
+# asynchronous caller transcript. Closing immediately would drop precisely the
+# slow samples and make transcript_ms look better than it is.
+TRANSCRIPT_GRACE_S = 4.0
 
 # The gateway takes its key in the query string (`?token=`), and websocket
 # libraries routinely put the request URI into exception messages. Every string
@@ -85,6 +89,12 @@ class Turn:
     # responses server VAD started and cancelled mid-utterance (a clause pause
     # longer than silence_duration_ms); their timings are discarded
     false_starts: int = 0
+    # fields the endpoint echoed back differently from what we asked for —
+    # empty means the controls this benchmark claims actually held
+    config_warnings: list = field(default_factory=list)
+    # the caller transcript never arrived within TRANSCRIPT_GRACE_S of
+    # response.done, so transcript_ms is genuinely missing rather than fast
+    transcript_timed_out: bool = False
     usage: dict = field(default_factory=dict)
 
 
@@ -136,6 +146,10 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
                         marker in json.dumps((ev.get("session") or {}).get("instructions") or ""):
                     break
             t.config_ms = (time.monotonic() - t_cfg) * 1000
+            # The marker proves our update was processed; it does not prove the
+            # endpoint honoured every field. Check what was actually echoed, so
+            # the claim that controls are held constant rests on data.
+            t.config_warnings = arm.verify_echo(ev.get("session") or {})
 
             # ── stream the caller, real-time paced ───────────────────
             frames = utt.frames()
@@ -235,6 +249,23 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
                         t.usage = resp.get("usage") or {}
                         t.audio_out_ms = audio_bytes / BYTES_PER_MS
                         t.ok = t.ttfa_ms is not None
+                        # Input transcription is asynchronous and often lands
+                        # AFTER response.done. Closing here would drop exactly
+                        # the slow samples and bias transcript_ms optimistically,
+                        # so wait a bounded moment for it.
+                        if t.transcript_ms is None:
+                            t_deadline = time.monotonic() + TRANSCRIPT_GRACE_S
+                            while time.monotonic() < t_deadline:
+                                try:
+                                    ev2 = json.loads(await asyncio.wait_for(
+                                        ws.recv(), timeout=t_deadline - time.monotonic()))
+                                except Exception:               # noqa: BLE001
+                                    break                       # timeout or closed
+                                if arms_mod.is_input_transcription_done(ev2.get("type") or ""):
+                                    t.transcript_ms = (time.monotonic() - t0) * 1000
+                                    t.caller_transcript = (ev2.get("transcript") or "").strip()
+                                    break
+                            t.transcript_timed_out = t.transcript_ms is None
                         break
             finally:
                 send_task.cancel()
@@ -271,16 +302,11 @@ async def main() -> int:
     kataleptic_key = (load_kataleptic_key()
                       if any(a.creds == "kataleptic" for a in selected) else "")
 
+    wanted = ([u.strip() for u in args.utterances.split(",") if u.strip()]
+              if args.utterances else None)
     utterances = load_utterances(
         region=os.environ.get("AZURE_SPEECH_REGION", "westeurope"),
-        key=os.environ.get("AZURE_SPEECH_KEY", ""))
-    if args.utterances:
-        wanted = [u.strip() for u in args.utterances.split(",") if u.strip()]
-        known = {u.id for u in utterances}
-        missing = [u for u in wanted if u not in known]
-        if missing:
-            raise SystemExit(f"unknown utterance id(s): {', '.join(missing)}")
-        utterances = [u for u in utterances if u.id in wanted]
+        key=os.environ.get("AZURE_SPEECH_KEY", ""), only=wanted)
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)

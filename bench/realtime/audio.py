@@ -10,6 +10,7 @@ silently inflate every number by 400 ms.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import struct
@@ -116,14 +117,37 @@ def _read_wav(path: Path) -> bytes:
         return w.readframes(w.getnframes())
 
 
+def cache_name(u: dict) -> str:
+    """Cache filename keyed by a hash of everything that determines the audio.
+
+    Keying on the id alone would silently replay stale audio after someone
+    edits an utterance's text or voice — every arm would still hear identical
+    input, so nothing would look wrong, but the run would not be testing what
+    the spec says it tests.
+    """
+    h = hashlib.sha256(
+        f"{u['text']}\x00{u['voice']}\x00{SAMPLE_RATE}".encode()).hexdigest()[:12]
+    return f"{u['id']}-{h}.wav"
+
+
 def load_utterances(spec_path: Path | None = None, *, region: str = "",
-                    key: str = "") -> list[Utterance]:
-    """Load (and synthesize+cache on first use) the caller utterance set."""
+                    key: str = "", only: list[str] | None = None) -> list[Utterance]:
+    """Load (and synthesize+cache on first use) the caller utterance set.
+
+    `only` narrows the set BEFORE synthesis, so a focused run does not pay to
+    generate — or require a Speech key for — audio it will never play.
+    """
     spec = json.loads((spec_path or HERE / "utterances.json").read_text())
+    if only is not None:
+        known = {u["id"] for u in spec}
+        missing = [i for i in only if i not in known]
+        if missing:
+            raise SystemExit(f"unknown utterance id(s): {', '.join(missing)}")
+        spec = [u for u in spec if u["id"] in only]
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     out: list[Utterance] = []
     for u in spec:
-        wav = CACHE_DIR / f"{u['id']}.wav"
+        wav = CACHE_DIR / cache_name(u)
         if wav.exists():
             pcm = _read_wav(wav)
         else:
@@ -133,7 +157,7 @@ def load_utterances(spec_path: Path | None = None, *, region: str = "",
                     "(see README) so the harness can synthesize the caller audio once.")
             pcm = trim_silence(_synthesize(u["text"], u["voice"], region, key))
             _write_wav(wav, pcm)
-            print(f"  synthesized {u['id']}: {len(pcm)/(SAMPLE_RATE*2):.2f}s -> {wav}")
+            print(f"  synthesized {u['id']}: {len(pcm)/(SAMPLE_RATE*2):.2f}s -> {wav.name}")
         out.append(Utterance(id=u["id"], lang=u["lang"], voice=u["voice"],
                              text=u["text"], pcm=pcm))
     return out

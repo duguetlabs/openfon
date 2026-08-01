@@ -26,8 +26,8 @@ round-trip overhead measured directly against the gateway's protocol path during
 
 Either way the conclusion is the same and it is a null result: **the proxy is not where
 your latency is.** At a p50 time-to-first-audio of 1.9–2.4 s, ten milliseconds is 0.5%.
-If OpenFon wants faster turn-taking, the levers are the VAD hangover (550 ms of the
-budget, ours to set) and the choice of engine (Voice Live's gpt-4.1-mini cascade is
+If OpenFon wants faster turn-taking, the levers are the turn detector (~740 ms of the
+budget as measured, and largely ours to set) and the choice of engine (Voice Live's gpt-4.1-mini cascade is
 ~550 ms faster to first audio than gpt-realtime-2) — not disintermediating Kataleptic.
 
 **A separate finding, from the [VAD follow-up](#follow-up-is-the-splitting-the-brain-or-the-turn-detector)
@@ -74,9 +74,11 @@ each round, 4 utterances (EN/DE × short/long) cycling across 25 rounds.
 
 ## Time to first agent audio
 
-Measured from the instant the last frame of caller speech finishes playing out. It
-**includes the 550 ms server-VAD hangover we configured** — a knob we chose, not engine
-latency — so both views are given.
+Measured from the instant the last frame of caller speech finishes playing out, so it
+**includes the detector's end-of-turn delay**. We configured `silence_duration_ms = 550`,
+but that nominal figure is not what any arm actually spends — the measured
+`speech_stopped_ms` is ~740 ms under server VAD — so the engine-only view subtracts each
+turn's own measurement rather than the constant.
 
 Raw (what a caller on OpenFon's current settings experiences):
 
@@ -88,15 +90,22 @@ Raw (what a caller on OpenFon's current settings experiences):
 | `vl-gateway` | gpt-4.1-mini | 25 | 1591 | **1870** | 2428 | 2963 | 387 |
 | `vl-native-brain` | gpt-realtime-2 | 25 | 1733 | **2357** | 2579 | 3795 | 496 |
 
-Engine-only (raw − 550 ms hangover):
+Engine-only — **per turn, `ttfa_ms − speech_stopped_ms`**: inference plus synthesis, with
+that turn's *own measured* end-of-turn detection removed. Subtracting the nominal 550 ms
+would be wrong: under server VAD the detector actually spends ~740 ms, and a semantic
+detector has no fixed hangover at all.
 
 | arm | brain | min | **p50** | p90 | p99 |
 |---|---|---:|---:|---:|---:|
-| `native-direct` | gpt-realtime-2 | 1089 | **1863** | 2579 | 2739 |
-| `native-gateway` | gpt-realtime-2 | 1260 | **1757** | 1937 | 2049 |
-| `vl-direct` | gpt-4.1-mini | 1036 | **1314** | 1765 | 1812 |
-| `vl-gateway` | gpt-4.1-mini | 1041 | **1320** | 1878 | 2413 |
-| `vl-native-brain` | gpt-realtime-2 | 1183 | **1807** | 2029 | 3245 |
+| `native-direct` | gpt-realtime-2 | 734 | **1615** | 2194 | 2285 |
+| `native-gateway` | gpt-realtime-2 | 879 | **1520** | 1791 | 1801 |
+| `vl-direct` | gpt-4.1-mini | 792 | **1172** | 1484 | 1581 |
+| `vl-gateway` | gpt-4.1-mini | 845 | **1132** | 1496 | 2092 |
+| `vl-native-brain` | gpt-realtime-2 | 1043 | **1606** | 1836 | 3048 |
+
+Paired on the engine-only figure, both proxy comparisons stay null
+(`native-gateway` − `native-direct` −71 ms, p = 0.23; `vl-gateway` − `vl-direct` +8 ms,
+p = 1.00).
 
 Paired, on identical caller audio in the same round:
 
@@ -104,9 +113,9 @@ Paired, on identical caller audio in the same round:
 |---|---:|---:|---|---:|---:|---:|---|
 | `native-gateway` − `native-direct` | 25 | **−18** | [−138, +22] | +171 | 0.424 | 1.000 | no practical difference |
 | `vl-gateway` − `vl-direct` | 25 | **−19** | [−122, +60] | +404 | 1.000 | 1.000 | no practical difference |
-| `vl-native-brain` − `native-direct` | 25 | **−93** | [−424, −0] | +537 | 0.043 | 0.779 | borderline, not robust to correction |
+| `vl-native-brain` − `native-direct` | 25 | **−93** | [−424, −0] | +537 | 0.043 | 0.909 | borderline, not robust to correction |
 
-p-values are Holm-corrected across all 21 paired tests in the run (see
+p-values are Holm-corrected across all 24 paired tests in the run (see
 [Statistical discipline](#statistical-discipline)); a directional verdict additionally
 requires a median shift of at least 50 ms.
 
@@ -118,7 +127,9 @@ jitter the extra hop adds is smaller than the jitter already present in the dire
 
 The interesting number is not the proxy delta, it is the ~550 ms gap between engines:
 Voice Live's gpt-4.1-mini cascade reaches first audio at a p50 of **1864 ms** raw
-(1314 ms engine-only) where gpt-realtime-2 takes **2413 ms** (1863 ms). Whether that
+(1172 ms engine-only) where gpt-realtime-2 takes **2413 ms** (1615 ms). The raw gap is
+549 ms; on the engine-only figure it is **443 ms**, the difference being that a median of
+per-turn differences is not the difference of medians. Whether that
 trade is worth it depends on what OpenFon values — gpt-realtime-2 hears tone rather than
 words and its replies are noticeably more natural. But if the goal is a snappier phone
 agent, switching tiers buys 30× more than removing the gateway would.
@@ -188,13 +199,13 @@ which has a different geometry again.
 
 ## Statistical discipline
 
-This run performs **21 paired hypothesis tests** (3 comparisons × 7 metrics). At
-α = 0.05 that is ~1.1 spurious rejections expected under the null — so an uncorrected
+This run performs **24 paired hypothesis tests** (3 comparisons × 8 metrics). At
+α = 0.05 that is ~1.2 spurious rejections expected under the null — so an uncorrected
 table would reliably manufacture a finding. Two guards are applied, and both are in the
 code rather than only in this prose:
 
 1. **Holm–Bonferroni across the whole family**, not per-table. A reader scanning the
-   report is implicitly looking at all 21 tests, so that is the family the error rate has
+   report is implicitly looking at all 24 tests, so that is the family the error rate has
    to be controlled over. Holm is used rather than Bonferroni because it is uniformly more
    powerful and assumes nothing about independence — which matters here, since `ttfa` and
    `ttft` measure overlapping stages of the same turn.
@@ -208,15 +219,23 @@ What survives both gates:
 | result | median | p raw | p Holm | status |
 |---|---:|---:|---:|---|
 | `connect_ms`, both proxy pairs | −145 / −142 ms | 0.000 | 0.000 | **robust** — large, corrected, mechanically explained |
-| `ttfa_ms`, `vl-native-brain` − `native-direct` | −93 ms | 0.043 | 0.779 | **not robust** — borderline |
-| `config_ms`, `vl-gateway` − `vl-direct` | +6 ms | 0.043 | 0.779 | **not robust**, and below the floor anyway |
+| `ttfa_ms`, `vl-native-brain` − `native-direct` | −93 ms | 0.043 | 0.909 | **not robust** — borderline |
+| `config_ms`, `vl-gateway` − `vl-direct` | +6 ms | 0.043 | 0.909 | **not robust**, and below the floor anyway |
 | `config_ms`, `vl-native-brain` − `native-direct` | +46 ms | 0.001 | 0.017 | survives Holm, **fails the 50 ms floor** |
+
+Split rates are a *rate*, not a paired latency, so they are tested separately with
+**exact McNemar** and are not part of this family. McNemar rather than Fisher's exact
+because the observations are matched by construction — same caller audio, same round —
+and Fisher discards the pairing, overstating the evidence by two orders of magnitude.
+Only complete cells where both turns produced a usable measurement are counted; a turn
+that failed has no split recorded by default, and counting it as a clean non-split would
+manufacture significance out of failures.
 
 Only the `connect_ms` results are reported as findings. In particular:
 
 > **The −93 ms "Voice Live's serving stack is faster with the brain held constant" is not
 > an established result.** Its CI upper bound touches zero (−424, −0), its corrected
-> p-value is 0.78, and its `ttft` and `response_total` counterparts are both null. The
+> p-value is 0.91, and its `ttft` and `response_total` counterparts are both null. The
 > honest statement is: *no robust difference; if anything Voice Live's stack is slightly
 > faster.* Confirming it would need a dedicated, better-powered run.
 
@@ -244,7 +263,7 @@ cost estimated here (~10 ms) is an order of magnitude below the measurement nois
 unlikely to change the verdict — but it would change the confidence.
 
 **Multiple comparisons** are handled in [Statistical discipline](#statistical-discipline)
-above rather than as an afterthought here: 21 tests, Holm-corrected as one family, with a
+above rather than as an afterthought here: 24 tests, Holm-corrected as one family, with a
 50 ms practical floor on top. The short version is that only the `connect_ms` results
 survive, and "Voice Live serves gpt-realtime-2 faster than the Foundry deployment" is
 **not** among the findings.
@@ -264,6 +283,18 @@ Within the main run: splits occur symmetrically inside every pair, so all three 
 comparisons are unaffected, and `speech_stopped_ms` shows end-of-turn *timing* is identical
 across arms regardless. The native-vs-Voice-Live *cross* comparison on `de-short` is not
 strictly apples-to-apples.
+
+**One control did not hold, and the harness now detects it.** Every arm's
+`session.updated` echo is checked field by field against what was asked for. That check
+found the `native-gateway` arm reporting `transcription.model = "whisper"` where the
+client sent `whisper-1`: the gateway injects its own transcription deployment
+(`AZURE_REALTIME_TRANSCRIPTION_MODEL`) and it wins over the client's value. So the
+gpt-realtime-2 proxy pair runs slightly different STT on each side — `whisper-1` direct,
+the `whisper` deployment through the gateway. Measured impact is nil (`transcript_ms`
+paired delta +4 ms, p = 0.69, and STT runs in parallel with generation so it does not gate
+`ttfa`), but the earlier claim that this control was pinned on both sides was wrong, and
+it is stated here rather than quietly fixed. Every other field on every other arm echoed
+back exactly as asked.
 
 **Unremovable dialect asymmetry.** Voice Live speaks the flat/beta wire format while the
 native endpoint and the gateway speak GA nested. Each arm is sent its own native dialect.
@@ -319,9 +350,13 @@ Neither detector can be moved onto the other brain on the Foundry surface.
 | `vl-direct` | gpt-4.1-mini | `server_vad` | 0/10 |
 | `vlmini-azsemantic` | gpt-4.1-mini | Azure semantic | 0/10 |
 
-Fisher exact, two-sided: `nat-semantic` vs `native-direct` and `vlnat-azsemantic` vs
-`vl-native-brain` both **p < 0.0001**. Holding the brain *and* the serving stack constant
-and changing only the detector takes splitting from 100% to 0%.
+**Exact McNemar**, two-sided, on complete matched cells: `nat-semantic` vs
+`native-direct` and `vlnat-azsemantic` vs `vl-native-brain` are both **p = 0.00195**
+(10 discordant cells, all in the same direction). McNemar rather than Fisher because
+these observations are matched by construction — the same caller audio in the same round —
+and Fisher would discard the pairing and report ~1e-5, overstating the evidence by two
+orders of magnitude. Holding the brain *and* the serving stack constant and changing only
+the detector takes splitting from 100% to 0%.
 
 **This reverses the tentative reading in the main run.** Splitting is not a property of the
 brain — it is `server_vad` firing on a clause pause, and gpt-realtime-2's `server_vad`
@@ -352,6 +387,11 @@ end-of-turn decision and its tail is catastrophic for a phone call, with a p90 o
 spent deciding the caller has stopped talking. (The +662 ms `ttfa` figure is flagged
 borderline by the correction, and with an IQR of 3.3 s that caution is right — but the
 direction is unambiguous and the mechanism is visible in `speech_stopped_ms`.)
+
+The engine-only view isolates it cleanly. With each turn's own detection time subtracted,
+`nat-semantic` − `native-direct` is **−87 ms (p = 0.34, null)**: inference and synthesis
+are unchanged. **The entire penalty of OpenAI's semantic VAD is the detector deciding, not
+the model thinking.**
 
 ### What this means for OpenFon
 
