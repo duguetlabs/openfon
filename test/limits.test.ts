@@ -78,6 +78,19 @@ describe('per-business call caps', () => {
     expect(await res.json()).toEqual({ error: expect.stringContaining('All lines are busy') });
   });
 
+  it('enforces the cap at attach too, not only at start', async () => {
+    const { db, call, start } = setup();
+    db.businesses[0].max_concurrent_calls = 3;
+    // A minute's worth of call ids collected up front, exactly what the burst
+    // repro does — turning them into simultaneous Durable Objects must fail.
+    const ids: string[] = [];
+    for (let i = 0; i < 8; i++) ids.push(((await (await start()).json()) as { callId: string }).callId);
+
+    const upgraded = [];
+    for (const id of ids) if ((await call(`/ws/call/${id}`)).headers.get(UPGRADED)) upgraded.push(id);
+    expect(upgraded).toHaveLength(3);
+  });
+
   it('does not count rows that never opened a WebSocket', async () => {
     const { db, start } = setup();
     db.businesses[0].max_concurrent_calls = 3;

@@ -40,7 +40,7 @@ export class FakeD1 {
     return new FakeStatement(this, sql.replace(/\s+/g, ' ').trim());
   }
 
-  async batch(stmts: FakeStatement[]): Promise<{ meta: { changes: number } }[]> {
+  async batch(stmts: FakeStatement[]): Promise<{ results: Row[]; meta: { changes: number } }[]> {
     const out = [];
     for (const s of stmts) out.push(await s.run());
     return out;
@@ -79,8 +79,9 @@ class FakeStatement {
     return { results: this.exec().rows as T[] };
   }
 
-  async run(): Promise<{ meta: { changes: number } }> {
-    return { meta: { changes: this.exec().changes } };
+  async run(): Promise<{ results: Row[]; meta: { changes: number } }> {
+    const r = this.exec();
+    return { results: r.rows, meta: { changes: r.changes } };
   }
 
   private exec(): { rows: Row[]; changes: number } {
@@ -121,9 +122,14 @@ class FakeStatement {
 
     // ---- calls ----
     if (q.startsWith('SELECT COUNT(*) AS n FROM calls') && q.includes('connected_at IS NOT NULL')) {
-      const since = cutoff(a[1]);
+      const since = cutoff(a[2]);
       const n = this.db.calls.filter(
-        (c) => c.business_id === a[0] && c.status === 'active' && c.connected_at !== null && c.started_at > since
+        (c) =>
+          c.business_id === a[0] &&
+          c.id !== a[1] &&
+          c.status === 'active' &&
+          c.connected_at !== null &&
+          c.started_at > since
       ).length;
       return { rows: [{ n }], changes: 0 };
     }
@@ -136,14 +142,23 @@ class FakeStatement {
       this.db.seedCall({ id: String(a[0]), business_id: String(a[1]), caller_id: String(a[3]) });
       return { rows: [], changes: 1 };
     }
-    if (q.startsWith('SELECT id FROM calls WHERE id')) {
+    if (q.startsWith('SELECT calls.id, calls.business_id, businesses.max_concurrent_calls')) {
       const since = cutoff(a[1]);
       const c = this.db.calls.find((x) => x.id === a[0] && x.status === 'active' && x.started_at > since);
-      return { rows: c ? [{ id: c.id }] : [], changes: 0 };
+      const b = c && this.db.businesses.find((x) => x.id === c.business_id);
+      return {
+        rows: c && b ? [{ id: c.id, business_id: c.business_id, max_concurrent_calls: b.max_concurrent_calls }] : [],
+        changes: 0,
+      };
     }
     if (q.startsWith('UPDATE calls SET connected_at')) {
       const c = this.db.calls.find((x) => x.id === a[0]);
       if (c) c.connected_at ??= Date.now();
+      return { rows: [], changes: c ? 1 : 0 };
+    }
+    if (q.startsWith("UPDATE calls SET status = 'abandoned'") && q.endsWith('WHERE id = ?')) {
+      const c = this.db.calls.find((x) => x.id === a[0]);
+      if (c) (c.status = 'abandoned'), (c.ended_at = Date.now());
       return { rows: [], changes: c ? 1 : 0 };
     }
     if (q.startsWith("UPDATE calls SET status = 'abandoned'")) {

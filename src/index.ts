@@ -505,6 +505,23 @@ app.get('/api/me/voices', async (c) => {
   return c.json(out);
 });
 
+const BUSY = 'All lines are busy right now. Please try again in a moment.';
+
+// Only calls that actually opened a WebSocket count, so a caller reloading the
+// widget — which leaves a trail of unconnected rows — can never exhaust the
+// business's own budget.
+function countLive(env: Env, businessId: string, exceptId: string) {
+  return env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM calls
+      WHERE business_id = ? AND id != ? AND status = 'active' AND connected_at IS NOT NULL
+        AND started_at > datetime('now', ?)`
+  ).bind(businessId, exceptId, CONCURRENCY_WINDOW);
+}
+
+async function liveCalls(env: Env, businessId: string): Promise<number> {
+  return (await countLive(env, businessId, '').first<{ n: number }>())?.n ?? 0;
+}
+
 // ---------- public widget API ----------
 app.get('/api/public/agent/:slug', async (c) => {
   const biz = await c.env.DB.prepare('SELECT id, name, slug FROM businesses WHERE slug = ?')
@@ -528,17 +545,8 @@ app.post('/api/public/call/start', async (c) => {
     .first<{ id: string; max_concurrent_calls: number; max_calls_per_day: number }>();
   if (!biz) return c.json({ error: 'Unknown agent' }, 404);
 
-  // Concurrency counts only calls that actually opened a WebSocket, so a caller
-  // reloading the widget — which leaves a trail of unconnected rows — can never
-  // exhaust the business's own budget.
-  const live = await c.env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM calls
-      WHERE business_id = ? AND status = 'active' AND connected_at IS NOT NULL AND started_at > datetime('now', ?)`
-  )
-    .bind(biz.id, CONCURRENCY_WINDOW)
-    .first<{ n: number }>();
-  if ((live?.n ?? 0) >= biz.max_concurrent_calls) {
-    return tooMany(c, 'All lines are busy right now. Please try again in a moment.', 30);
+  if ((await liveCalls(c.env, biz.id)) >= biz.max_concurrent_calls) {
+    return tooMany(c, BUSY, 30);
   }
 
   // Daily ceiling on the owner's provider spend. It is an availability trade the
@@ -564,17 +572,34 @@ app.get('/ws/call/:callId', async (c) => {
   const callId = c.req.param('callId');
   // Bounded by started_at, not just status: a callId that has sat unused past
   // the stale window is not attachable, even before the sweeper retires it.
-  const exists = await c.env.DB.prepare(
-    `SELECT id FROM calls WHERE id = ? AND status = 'active' AND started_at > datetime('now', ?)`
+  const call = await c.env.DB.prepare(
+    `SELECT calls.id, calls.business_id, businesses.max_concurrent_calls
+       FROM calls JOIN businesses ON businesses.id = calls.business_id
+      WHERE calls.id = ? AND calls.status = 'active' AND calls.started_at > datetime('now', ?)`
   )
     .bind(callId, STALE_UNCONNECTED)
-    .first();
-  if (!exists) return c.json({ error: 'call not found' }, 404);
-  // Records that this row reached a Durable Object, which is what separates a
-  // real conversation from a row an abusive burst left behind.
-  await c.env.DB.prepare("UPDATE calls SET connected_at = COALESCE(connected_at, datetime('now')) WHERE id = ?")
-    .bind(callId)
-    .run();
+    .first<{ id: string; business_id: string; max_concurrent_calls: number }>();
+  if (!call) return c.json({ error: 'call not found' }, 404);
+  // The Durable Object — and every provider request it makes — starts here, so
+  // this is where the concurrency cap has to bite. Checking only at /call/start
+  // would let a minute's worth of call ids become that many simultaneous
+  // sessions, which is the shape of the measured attack.
+  //
+  // Claim the slot and count it in one batch, i.e. one D1 transaction. Counting
+  // first and marking after loses the race: fifty sockets opened at once all
+  // read zero live calls and all get in.
+  const claim = await c.env.DB.batch<{ n: number }>([
+    c.env.DB.prepare("UPDATE calls SET connected_at = COALESCE(connected_at, datetime('now')) WHERE id = ?").bind(callId),
+    countLive(c.env, call.business_id, callId),
+  ]);
+  if ((claim[1].results[0]?.n ?? 0) >= call.max_concurrent_calls) {
+    // Release the slot we just claimed, so a refused attach cannot hold a line
+    // open until the sweeper next runs.
+    await c.env.DB.prepare("UPDATE calls SET status = 'abandoned', ended_at = datetime('now') WHERE id = ?")
+      .bind(callId)
+      .run();
+    return c.json({ error: BUSY }, 429, { 'Retry-After': '30' });
+  }
   const id = c.env.CALL_SESSION.idFromName(callId);
   const stub = c.env.CALL_SESSION.get(id);
   const url = new URL(c.req.raw.url);
