@@ -87,6 +87,7 @@ const SETTINGS_ROW = {
 
 function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline') {
   const writes: { sql: string; args: unknown[] }[] = [];
+  const ctl = { failUpdates: false }; // lets a test force a transient D1 failure
   const db = {
     prepare(sql: string) {
       return {
@@ -102,6 +103,7 @@ function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline') {
               return { results: [] };
             },
             async run() {
+              if (ctl.failUpdates && sql.includes('UPDATE calls')) throw new Error('D1 unavailable');
               writes.push({ sql, args });
               return {};
             },
@@ -110,7 +112,13 @@ function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline') {
       };
     },
   };
-  return { db, writes, turnWrites: () => writes.filter((w) => w.sql.includes('INSERT INTO call_turns')) };
+  return {
+    db,
+    writes,
+    ctl,
+    turnWrites: () => writes.filter((w) => w.sql.includes('INSERT INTO call_turns')),
+    callUpdates: () => writes.filter((w) => w.sql.includes('UPDATE calls')),
+  };
 }
 
 function fakeEnv(db: unknown): Env {
@@ -193,11 +201,11 @@ afterEach(() => {
 });
 
 function newSession(engine: 'pipeline' | 'realtime' = 'pipeline') {
-  const { db, turnWrites } = fakeDb(engine);
+  const { db, ctl, turnWrites, callUpdates } = fakeDb(engine);
   const storage = new FakeStorage();
   const state = { storage } as unknown as DurableObjectState;
   const session = new CallSession(state, fakeEnv(db));
-  return { session, storage, turnWrites };
+  return { session, storage, ctl, turnWrites, callUpdates };
 }
 
 // ---------- tests ----------
@@ -226,6 +234,27 @@ describe('second attach to a live call', () => {
     serverSockets[0].readyState = 3; // caller hung up / dropped
     const again = await session.fetch(upgradeRequest());
     expect(again.status).toBe(101);
+  });
+
+  it('does not let a superseded socket finalize the call that replaced it', async () => {
+    // A socket still CLOSING does not block a new attach, so its close event
+    // arrives after this.ws has moved on. Unscoped, that event tore down the
+    // new caller's call.
+    const { session, callUpdates } = newSession();
+    await session.fetch(upgradeRequest());
+    const stale = serverSockets[0];
+    stale.readyState = 2; // CLOSING
+
+    const second = await session.fetch(upgradeRequest());
+    expect(second.status).toBe(101);
+    const fresh = serverSockets[1];
+
+    stale.close(1006, 'late close of the old socket');
+    await flush();
+
+    expect(fresh.readyState).toBe(1); // still connected
+    expect(fresh.typesSent()).not.toContain('ended');
+    expect(callUpdates()).toHaveLength(0); // call was not finalized
   });
 });
 
@@ -315,6 +344,28 @@ describe('upstream connect timeout', () => {
 });
 
 describe('upstream recovery', () => {
+  it('still reconnects when an established socket errors before closing', async () => {
+    // Sockets routinely fire `error` immediately before `close`. Treating that
+    // as "never became usable" cleared this.upstream and made the close
+    // listener's ownership guard false, silently killing the reconnect.
+    vi.useFakeTimers();
+    const { session } = newSession('realtime');
+    await session.fetch(upgradeRequest());
+    const sock = serverSockets[0];
+
+    sock.receive({ type: 'start' });
+    await flush();
+    upstreamSockets[0].emit('open', {});
+    await flush();
+    expect(sock.messages().find((m) => m.type === 'ready')?.mode).toBe('realtime');
+
+    upstreamSockets[0].emit('error', {}); // error, then close — the usual pair
+    upstreamSockets[0].close(1006, 'engine dropped');
+    await flush();
+
+    expect(upstreamSockets.length).toBe(2); // recovery actually ran
+  });
+
   it('is bounded and finalizes rather than spawning orphan connections', async () => {
     vi.useFakeTimers();
     const { session } = newSession('realtime');
@@ -389,6 +440,30 @@ describe('watchdog alarm', () => {
     const { session, storage } = newSession();
     await session.alarm();
     expect(storage.alarmAt).toBeNull();
+  });
+
+  it('keeps the watchdog armed when the call row fails to write', async () => {
+    vi.useFakeTimers();
+    const { session, storage, ctl, callUpdates } = newSession();
+    await session.fetch(upgradeRequest());
+    serverSockets[0].receive({ type: 'start' });
+    await flush();
+
+    ctl.failUpdates = true; // transient D1 outage
+    vi.setSystemTime(Date.now() + 200_000);
+    await expect(session.alarm()).rejects.toThrow('D1 unavailable');
+
+    // Clearing the watchdog before the write landed would strand the row as
+    // 'active' with nothing left to reclaim it.
+    expect(storage.map.get('callId')).toBe('call-1');
+    expect(callUpdates()).toHaveLength(0);
+
+    // At-least-once delivery: the retry has to actually complete the call.
+    ctl.failUpdates = false;
+    await session.alarm();
+    expect(callUpdates()).toHaveLength(1);
+    expect(storage.alarmAt).toBeNull();
+    expect(storage.map.size).toBe(0);
   });
 });
 
