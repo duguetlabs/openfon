@@ -49,6 +49,16 @@ FRAME_S = FRAME_MS / 1000.0
 BYTES_PER_MS = SAMPLE_RATE * 2 // 1000          # 48
 SILENCE_FRAME = b"\x00" * (SAMPLE_RATE * 2 * FRAME_MS // 1000)
 
+# The gateway takes its key in the query string (`?token=`), and websocket
+# libraries routinely put the request URI into exception messages. Every string
+# that reaches a results file goes through this first.
+_SECRET_IN_URL = re.compile(r"([?&](?:token|api[-_]?key)=)[^&\s\"']+", re.I)
+
+
+def redact(s: str) -> str:
+    """Strip credentials out of anything we are about to persist."""
+    return _SECRET_IN_URL.sub(r"\1<redacted>", str(s))
+
 
 @dataclass
 class Turn:
@@ -104,7 +114,7 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
         ws = await websockets.connect(url, additional_headers=headers,
                                       max_size=None, open_timeout=20)
     except Exception as e:                                  # noqa: BLE001
-        t.error = f"connect: {type(e).__name__}: {str(e)[:200]}"
+        t.error = redact(f"connect: {type(e).__name__}: {e}")[:250]
         return t
     t.connect_ms = (time.monotonic() - t_dial) * 1000
 
@@ -120,7 +130,7 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
             while True:
                 ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=25))
                 if ev.get("type") == "error":
-                    t.error = f"config: {json.dumps(ev.get('error'))[:250]}"
+                    t.error = redact(f"config: {json.dumps(ev.get('error'))}")[:300]
                     return t
                 if ev.get("type") == "session.updated" and \
                         marker in json.dumps((ev.get("session") or {}).get("instructions") or ""):
@@ -177,6 +187,15 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
                     def since() -> float | None:
                         return (now - t0) * 1000 if t0 is not None else None
 
+                    # An upstream error is always fatal to the turn and must be
+                    # reported verbatim — a benchmark that misreports *why* a turn
+                    # failed is worse than one that fails loudly. Checked before
+                    # the pre-speech-end filter below so mid-utterance errors are
+                    # not swallowed into a generic timeout.
+                    if et == "error":
+                        t.error = redact(f"session: {json.dumps(ev.get('error'))}")[:300]
+                        break
+
                     # A clause pause inside an utterance can exceed
                     # silence_duration_ms: server VAD then commits early, starts a
                     # response, and cancels it ("reason": "turn_detected") when the
@@ -189,10 +208,6 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
                             t.transcript = ""
                             audio_bytes = 0
                         continue
-
-                    if et == "error":
-                        t.error = f"session: {json.dumps(ev.get('error'))[:250]}"
-                        break
                     if et == "input_audio_buffer.speech_stopped" and t.speech_stopped_ms is None:
                         t.speech_stopped_ms = since()
                     elif arms_mod.is_audio_delta(et):
@@ -224,7 +239,7 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
             finally:
                 send_task.cancel()
     except Exception as e:                                  # noqa: BLE001
-        t.error = t.error or f"{type(e).__name__}: {str(e)[:200]}"
+        t.error = t.error or redact(f"{type(e).__name__}: {e}")[:250]
     t.transcript = t.transcript.strip()
     return t
 

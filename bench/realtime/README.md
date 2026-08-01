@@ -40,11 +40,12 @@ caller speech finishes playing out**, not from the send call.
 | `connect_ms` | dial → WebSocket open |
 | `config_ms` | `session.update` sent → the `session.updated` **that echoes our own marker** |
 | **`ttfa_ms`** | **end of caller speech → first agent audio delta. The headline number.** |
+| `speech_stopped_ms` | end of caller speech → the server's own `speech_stopped`. Isolates the VAD's end-of-turn decision from model and TTS time, so an engine difference can be attributed to the right stage. |
 | `ttft_ms` | end of caller speech → first agent text/transcript delta |
 | `transcript_ms` | end of caller speech → `conversation.item.input_audio_transcription.completed` |
 | `response_total_ms` | end of caller speech → `response.done` |
 | `audio_out_ms` | duration of the decoded reply audio |
-| `speech_stopped_ms` | end of caller speech → the server's own `speech_stopped` (VAD sanity check) |
+| `false_starts` | responses server VAD began and cancelled mid-utterance, at a clause pause longer than `silence_duration_ms`. Their timings are discarded, not measured. |
 
 `ttfa_ms` **includes the server-VAD hangover we configured**
 (`silence_duration_ms = 550`). That is a knob we chose, not engine latency, so
@@ -70,9 +71,12 @@ a half-configured session.
   timing meaningless. Silence frames keep flowing after the utterance so server VAD has
   something to time its hangover against.
 * **Instructions** — the same Riverside Dental receptionist prompt on every arm.
-* **Turn detection** — `server_vad`, threshold `0.7`, prefix padding `300`, silence `550`.
-  Voice Live defaults to `silence_duration_ms: 200` where the native endpoint defaults to
-  `500`; unpinned, that alone would be a 300 ms artefact.
+* **Turn detection** — `server_vad`, threshold `0.7`, prefix padding `300`, silence `550`,
+  on every arm, and each endpoint's `session.updated` is checked to echo exactly that
+  (no arm silently substitutes Azure semantic VAD). Voice Live defaults to
+  `silence_duration_ms: 200` where the native endpoint defaults to `500`; unpinned, that
+  alone would be a 300 ms artefact. `speech_stopped_ms` exists to verify the pin held:
+  in the shipped run all five arms decided end-of-turn within 28 ms of each other.
 * **Audio format** — PCM16 @ 24 kHz in and out on every arm.
 * **Voice and STT within each comparison** — `marin` + `whisper-1` on all three
   gpt-realtime-2 arms; `en-US-AvaMultilingualNeural` + `azure-speech` on both
@@ -125,8 +129,28 @@ export AZURE_SPEECH_KEY=$(az cognitiveservices account keys list \
 Useful flags: `--arms native-direct,vl-direct` to narrow, `--rounds 1` to smoke-test,
 `--gap` to change the pause between turns, `--reply-timeout` for slow arms.
 
-No secret is ever written to `results/` or to the cache. `cache/` and `results/` are
-gitignored — the caller WAVs regenerate from `utterances.json` on first run.
+`requirements.txt` floors `websockets` at **14**, and that floor is load-bearing rather
+than cosmetic: in 13.x the top-level `websockets.connect` still resolved to the legacy
+client, whose keyword is `extra_headers`, so every turn would fail at connect.
+
+### Tests
+
+```bash
+python3 -m unittest discover -s bench/realtime -v
+```
+
+Covers the pure statistics behind every published table — `pct`, `describe`, the paired
+difference computation, the exact sign test, the bootstrap CI — plus credential
+redaction. The network path is not unit-tested; a wrong percentile, though, would corrupt
+every number in the report while looking entirely plausible.
+
+### Secrets
+
+The gateway takes its key in the query string (`?token=`), which is what its
+protocol requires, and websocket libraries put the request URI into exception messages.
+Every string persisted to `results/` therefore passes through `redact()` first, on all
+error paths. `cache/` and `results/` are gitignored regardless — the caller WAVs
+regenerate from `utterances.json` on first run.
 
 ## Cost and caps
 

@@ -31,6 +31,8 @@ from arms import ARMS_BY_ID, PAIRS, TURN_DETECTION  # noqa: E402
 
 METRICS = [
     ("ttfa_ms", "time to first agent audio, from end of caller speech"),
+    ("speech_stopped_ms",
+     "the VAD's own end-of-turn decision, isolated from model and TTS time"),
     ("ttft_ms", "time to first agent text/transcript delta"),
     ("transcript_ms", "time to the caller's own transcript"),
     ("response_total_ms", "time to response.done"),

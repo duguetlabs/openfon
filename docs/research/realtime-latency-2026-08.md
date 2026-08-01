@@ -112,12 +112,48 @@ trade is worth it depends on what OpenFon values — gpt-realtime-2 hears tone r
 words and its replies are noticeably more natural. But if the goal is a snappier phone
 agent, switching tiers buys 30× more than removing the gateway would.
 
+### That gap is the model, not turn detection
+
+A reasonable worry about the number above: if the two engines detected end-of-turn
+differently, the "engine gap" could really be a VAD gap. It is not, and the run measures
+this directly.
+
+All five arms were configured with **identical turn detection** — `server_vad`,
+threshold `0.7`, prefix padding `300 ms`, silence `550 ms` — and every endpoint echoed
+that back verbatim in its `session.updated` (re-verified live after the run; no arm
+silently substituted Azure semantic VAD or anything else). `speech_stopped_ms` then
+measures each server's *own* end-of-turn decision, from the end of caller speech to its
+`input_audio_buffer.speech_stopped`:
+
+| arm | brain | min | **p50** | p90 | IQR |
+|---|---|---:|---:|---:|---:|
+| `native-direct` | gpt-realtime-2 | 687 | **741** | 999 | 94 |
+| `native-gateway` | gpt-realtime-2 | 677 | **765** | 931 | 90 |
+| `vl-direct` | gpt-4.1-mini | 691 | **739** | 868 | 23 |
+| `vl-gateway` | gpt-4.1-mini | 687 | **764** | 871 | 42 |
+| `vl-native-brain` | gpt-realtime-2 | 690 | **737** | 781 | 24 |
+
+**Every arm decides end-of-turn within 28 ms of every other** (p50 737–765 ms; all three
+paired deltas null, p ≥ 0.23) — the 550 ms hangover plus ~190 ms of detection and
+network, the same everywhere. Turn detection is therefore *not* where the engines
+diverge. The ~550 ms difference in time-to-first-audio accrues entirely **downstream of
+the turn ending**, in model inference plus speech synthesis.
+
+So the honest attribution is: gpt-4.1-mini-behind-Voice-Live **produces its first audio
+byte sooner**, not "ends turns better" and not "reasons faster" — with a cascade, first
+audio only needs the first TTS chunk, whereas a native speech-to-speech model must begin
+generating audio tokens itself. Two different mechanisms, one observable.
+
+One thing genuinely *does* differ by engine, but it is turn **segmentation**, not
+end-of-turn speed — see the VAD-splits caveat below.
+
 ---
 
 ## Supporting metrics
 
 | metric | native-direct | native-gateway | vl-direct | vl-gateway | vl-native-brain |
 |---|---:|---:|---:|---:|---:|
+| `speech_stopped_ms` p50 (VAD end-of-turn) | 741 | 765 | 739 | 764 | 737 |
 | `ttft_ms` p50 (first text) | 2055 | 2072 | 1479 | 1509 | 2053 |
 | `transcript_ms` p50 (caller's transcript) | 1367 | 1413 | 1242 | 1288 | 1405 |
 | `response_total_ms` p50 | 5018 | 4803 | 2942 | 2796 | 5259 |
@@ -159,15 +195,34 @@ hypothesis worth a dedicated run, not as a result.** The `connect_ms` results, b
 contrast, are large, consistent across all three pairs, and have a mechanical explanation,
 so those are real.
 
-**VAD splits differ by brain, not by stack.** The German short utterance contains a clause
-pause after "Guten Tag," longer than `silence_duration_ms = 550`. Server VAD commits
-early, starts a response, and cancels it (`reason: turn_detected`) when the caller
-resumes. This happened on **all three gpt-realtime-2 arms (6/25 turns each) and never on
-the two gpt-4.1-mini Voice Live arms** — turn detection follows the brain, not the serving
-stack. The harness discards those fragment responses and measures the reply to the
-complete utterance. Because splits occur symmetrically within every pair, the paired
-analysis is unaffected; but the native-vs-Voice-Live *cross* comparison on `de-short` is
-not strictly apples-to-apples.
+**VAD splits differ by brain, not by stack — and this is a real asymmetry.** The German
+short utterance contains a clause pause after "Guten Tag," longer than
+`silence_duration_ms = 550`. Server VAD commits early, starts a response, and cancels it
+(`reason: turn_detected`) when the caller resumes. This happened on **all three
+gpt-realtime-2 arms (6/25 turns each — exactly the six `de-short` rounds) and never on the
+two gpt-4.1-mini Voice Live arms.**
+
+Both were sent the same `server_vad` config and both echoed it back, so this is not a
+configuration difference; it is two implementations of the same nominal setting behaving
+differently at a clause pause. Turn segmentation follows the *brain*, not the serving
+stack — note that `vl-native-brain` is Voice Live infrastructure yet splits like the other
+gpt-realtime-2 arms.
+
+This does **not** contaminate the headline result: splits occur symmetrically within every
+pair, so all three paired comparisons are unaffected, and `speech_stopped_ms` (above) shows
+end-of-turn *timing* is identical across arms regardless. But the native-vs-Voice-Live
+*cross* comparison on `de-short` is not strictly apples-to-apples, and the split behaviour
+is worth knowing about on its own merits: on a real call, a caller who pauses after
+"Guten Tag," gets interrupted by gpt-realtime-2 and does not by the HD tier. That is a
+product-quality difference this latency benchmark noticed but is not designed to measure.
+
+**Should a semantic-VAD arm be run to disentangle this?** No — not for the latency
+question. The hypothesis it would test (that turn detection explains the engine gap) is
+already refuted by `speech_stopped_ms` being equal across arms. Adding a
+`server_vad`-vs-`semantic_vad` arm would answer a *different* and narrower question —
+whether semantic VAD reduces mid-utterance splits — which belongs to a barge-in and
+interruption-quality study, not here. Worth doing when that study happens; not worth
+$0.50 and a confounded extra column now.
 
 **Unremovable dialect asymmetry.** Voice Live speaks the flat/beta wire format while the
 native endpoint and the gateway speak GA nested. Each arm is sent its own native dialect.

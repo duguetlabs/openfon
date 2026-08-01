@@ -1,1 +1,6 @@
-websockets>=13,<18
+# >=14 is required, not cosmetic: in 13.x the top-level `websockets.connect`
+# still resolved to the legacy client, whose keyword is `extra_headers`. The
+# asyncio client this harness uses (`additional_headers`) only became the
+# top-level default in 14.0. Verified against 14.0; the run in
+# docs/research/realtime-latency-2026-08.md used 17.0.1.
+websockets>=14,<18
