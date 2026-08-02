@@ -58,7 +58,9 @@ class FakeStorage {
   map = new Map<string, unknown>();
   alarmAt: number | null = null;
   failPuts = false; // durable storage having a bad moment
+  failGetsFor: string | null = null; // …including on the way back out
   async get<T>(key: string): Promise<T | undefined> {
+    if (this.failGetsFor === key) throw new Error('storage unavailable');
     return this.map.get(key) as T | undefined;
   }
   async put(keyOrEntries: string | Record<string, unknown>, value?: unknown): Promise<void> {
@@ -1204,10 +1206,43 @@ describe('watchdog alarm', () => {
     expect(storage.map.get('callId')).toBe('call-1'); // left for a later sweep
   });
 
-  it('retries often enough to land inside the sweep window', async () => {
-    // The sweep retires a connected call at 60 minutes and forecloses recovery,
-    // so the retry cadence has to fit many attempts inside that hour — this is
-    // the constraint that ruled out an exponential ladder.
+  it('still reschedules when the ending marker cannot be read either', async () => {
+    // The decision to keep retrying must not itself require storage to be
+    // readable: an outage that makes the write fail is exactly when the read
+    // fails too. Letting it throw skipped the reschedule and handed the row
+    // back to the platform's finite retries — losing the retry precisely in
+    // the case it exists for.
+    vi.useFakeTimers();
+    const { session, storage, ctl, callUpdates } = newSession();
+    await session.fetch(upgradeRequest());
+    serverSockets[0].receive({ type: 'start' });
+    await flush();
+
+    ctl.failUpdates = true;
+    storage.failGetsFor = 'ending';
+    vi.setSystemTime(Date.now() + 200_000);
+    storage.alarmAt = null;
+    await session.alarm();
+
+    expect(callUpdates()).toHaveLength(0);
+    expect(storage.alarmAt).toBe(Date.now() + 60_000); // retry still scheduled
+
+    // And it recovers normally once storage comes back.
+    storage.failGetsFor = null;
+    ctl.failUpdates = false;
+    vi.setSystemTime(storage.alarmAt);
+    storage.alarmAt = null;
+    await session.alarm();
+    expect(callUpdates()).toHaveLength(1);
+  });
+
+  it('retries at a flat cadence rather than backing off', async () => {
+    // Asserts the interval directly. Counting attempts was the previous shape
+    // and it passed for the wrong reason: the loop did not consume the alarm,
+    // so once the ceiling stopped rescheduling it kept re-firing the same stale
+    // timestamp and the count assertion was satisfied by the loop itself. The
+    // gap between attempts is the property that distinguishes flat from a
+    // ladder, and a stale alarm cannot fake it.
     vi.useFakeTimers();
     const { session, storage, ctl } = newSession();
     await session.fetch(upgradeRequest());
@@ -1215,14 +1250,18 @@ describe('watchdog alarm', () => {
     await flush();
 
     ctl.failUpdates = true;
-    let attempts = 0;
-    const deadline = Date.now() + 60 * 60_000;
-    while (Date.now() < deadline && attempts < 200) {
-      vi.setSystemTime(storage.alarmAt as number);
+    const gaps: number[] = [];
+    while (storage.alarmAt !== null && gaps.length < 200) {
+      const at = storage.alarmAt;
+      gaps.push(at - Date.now());
+      vi.setSystemTime(at);
+      storage.alarmAt = null; // a real Durable Object consumes the alarm
       await session.alarm();
-      attempts++;
     }
-    expect(attempts).toBeGreaterThan(50); // an exponential ladder gives ~8
+
+    expect(new Set(gaps).size).toBe(1); // one interval, not a growing one
+    expect(gaps[0]).toBe(60_000);
+    expect(gaps.length).toBeGreaterThan(20); // an exponential ladder gives ~8
   });
 
   it('stops retrying once the sweep has retired the row', async () => {

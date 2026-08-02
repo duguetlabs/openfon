@@ -1035,8 +1035,19 @@ export class CallSession implements DurableObject {
       // which is already persisted for the retry, so it costs no extra state
       // and survives eviction.
       this.firstFinalizeFailure ||= now;
-      const ending = await this.state.storage.get<{ endedAt: number }>('ending');
-      const trying = now - (ending?.endedAt ?? this.firstFinalizeFailure);
+      // Read defensively. Deciding whether to keep retrying must not itself
+      // depend on storage being readable — storage being unreadable is one of
+      // the things this is retrying for, and letting the read throw here
+      // skipped the reschedule entirely and handed the row back to the
+      // platform's finite retries. That is what the in-memory clock is for.
+      let startedTrying = this.firstFinalizeFailure;
+      try {
+        const ending = await this.state.storage.get<{ endedAt: number }>('ending');
+        if (ending) startedTrying = ending.endedAt;
+      } catch (readErr) {
+        console.error(`call ${this.callId}: ending marker unreadable, using the in-memory clock`, readErr);
+      }
+      const trying = now - startedTrying;
       if (trying >= CallSession.MAX_FINALIZE_RETRY_MS) {
         console.error(
           `call ${this.callId}: giving up on finalize after ${Math.round(trying / 60_000)}m — leaving the row to be swept`,
