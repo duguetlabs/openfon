@@ -84,6 +84,10 @@ interface CallRow {
   started_at: string;
 }
 
+// WebSocket.OPEN. Fixed by the spec, and not exposed on the Workers instance
+// type — needed to tell "this connection still works" from "it is gone".
+const WS_OPEN = 1;
+
 export class CallSession implements DurableObject {
   private ws: WebSocket | null = null;
   private callId = '';
@@ -674,6 +678,21 @@ export class CallSession implements DurableObject {
       // `reconnects` is the per-rotation budget, which session.expiring resets;
       // `totalReconnects` bounds a flapping engine over the whole call.
       if (this.reconnects >= 1 || this.totalReconnects >= CallSession.MAX_TOTAL_RECONNECTS) {
+        // Failing to open a replacement is not the same as the call being over.
+        // A proactive rotation keeps the outgoing connection live while the new
+        // one dials, so when that connection is still open the right move is to
+        // keep using it: session.expiring warns about a minute ahead, and
+        // riding the engine we have until it actually closes beats hanging up
+        // on a caller whose engine still works. A close-driven recovery is the
+        // other case — the listener nulls `upstream` before calling here, so
+        // there is genuinely nothing left and finalizing is correct.
+        if (this.upstream && this.upstream.readyState === WS_OPEN) {
+          console.log(`call ${this.callId}: rotation failed; staying on the connection we still have`);
+          // The rotation episode is over. A later drop is a new event and gets
+          // its own attempt; `totalReconnects` still bounds the whole call.
+          this.reconnects = 0;
+          return;
+        }
         // The caller was cut off mid-conversation and we could not get the
         // engine back. That is a failed call, not a completed one, and the
         // owner's log should say so — otherwise it reads as a normal call that

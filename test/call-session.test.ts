@@ -735,6 +735,51 @@ describe('upstream recovery', () => {
     expect(instructions).toContain('Got it, four seven two.');
   });
 
+  it('keeps the call alive when a proactive rotation fails to connect', async () => {
+    // Rotation deliberately holds the outgoing connection open while the
+    // replacement dials. Treating a failed dial as unrecoverable hung up on a
+    // caller whose engine was still working — a transient failure to open a
+    // *second* socket ending a call that was never broken.
+    vi.useFakeTimers();
+    const { session, callUpdates } = newSession('realtime');
+    await session.fetch(upgradeRequest());
+    const client = serverSockets[0];
+    client.receive({ type: 'start' });
+    await flush();
+    const engine = upstreamSockets[0];
+    engine.emit('open', {});
+    await flush();
+
+    engine.emit('message', { data: JSON.stringify({ type: 'session.expiring' }) });
+    await flush();
+    expect(upstreamSockets).toHaveLength(2);
+
+    // The replacement never connects.
+    await vi.advanceTimersByTimeAsync(6000);
+    await flush();
+
+    expect(client.typesSent()).not.toContain('error');
+    expect(client.typesSent()).not.toContain('ended');
+    expect(client.readyState).toBe(1);
+    expect(callUpdates()).toHaveLength(0); // not finalized
+    expect(engine.readyState).toBe(1); // still riding the original
+
+    // …and it is still carrying audio.
+    const before = client.binaryCount();
+    engine.emit('message', {
+      data: JSON.stringify({ type: 'response.output_audio.delta', delta: 'AAAA' }),
+    });
+    await flush();
+    expect(client.binaryCount()).toBe(before + 1);
+
+    // When that connection does finally close, there is nothing left and the
+    // call ends properly rather than hanging.
+    engine.close(1006, 'engine cutoff');
+    await vi.advanceTimersByTimeAsync(6000);
+    await flush();
+    expect(client.typesSent()).toContain('error');
+  });
+
   it('is bounded and finalizes rather than spawning orphan connections', async () => {
     vi.useFakeTimers();
     const { session } = newSession('realtime');
