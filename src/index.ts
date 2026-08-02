@@ -225,7 +225,7 @@ function maskSettings(s: AgentSettings): AgentSettings {
 function llmEndpointError(env: Env, baseUrl: string, apiKey: string): string | null {
   const url = (baseUrl ?? '').trim();
   if (!url || sameLlmEndpoint(url, env.DEFAULT_LLM_BASE_URL)) return null;
-  const rejected = validateLlmBaseUrl(url, env.ALLOWED_LLM_HOSTS);
+  const rejected = validateLlmBaseUrl(url, env.ALLOW_INSECURE_LLM_URL === 'true');
   if (rejected) return `LLM base URL ${rejected}`;
   if (!apiKey) return 'A custom LLM base URL needs its own API key — this instance never sends its key to another endpoint.';
   return null;

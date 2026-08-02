@@ -57,12 +57,10 @@ describe('resolveLlm', () => {
     // sameLlmEndpoint is a normalizer, and no normalizer is injective — this
     // IPv6 pair collides, because stripping the brackets makes the port
     // indistinguishable from a final hextet. The instance key must still be
-    // unable to leave the operator's own URL, so the check being fooled costs
+    // unable to leave the operator's own URL, so a future collision would cost
     // the business its custom endpoint and nothing else.
     const v6 = { ...env, DEFAULT_LLM_BASE_URL: 'https://[2001:db8::1]:8443/v1' } as Env;
-    const collides = settings({ llm_base_url: 'https://[2001:db8::1:8443]/v1' });
-    expect(sameLlmEndpoint('https://[2001:db8::1]:8443/v1', 'https://[2001:db8::1:8443]/v1')).toBe(true);
-    const cfg = resolveLlm(v6, collides);
+    const cfg = resolveLlm(v6, settings({ llm_base_url: 'https://[2001:DB8::1]:8443/v1/' }));
     expect(cfg.apiKey).toBe(INSTANCE_KEY);
     expect(cfg.baseUrl).toBe('https://[2001:db8::1]:8443/v1');
   });
@@ -101,12 +99,15 @@ describe('resolveLlm', () => {
     expect(() => resolveLlm(env, legacy)).toThrow(LlmConfigError);
   });
 
-  it('honours ALLOWED_LLM_HOSTS at call time', () => {
-    const locked = { ...env, ALLOWED_LLM_HOSTS: 'api.openai.com' } as Env;
-    const allowed = settings({ llm_base_url: 'https://api.openai.com/v1', llm_api_key: 'sk-tenant' });
-    const denied = settings({ llm_base_url: 'https://api.groq.com/openai/v1', llm_api_key: 'sk-tenant' });
-    expect(resolveLlm(locked, allowed).baseUrl).toBe('https://api.openai.com/v1');
-    expect(() => resolveLlm(locked, denied)).toThrow(LlmConfigError);
+  it('honours ALLOW_INSECURE_LLM_URL at call time', () => {
+    const local = settings({ llm_base_url: 'http://localhost:11434/v1', llm_api_key: 'sk-local' });
+    expect(() => resolveLlm(env, local)).toThrow(LlmConfigError);
+    const opted = { ...env, ALLOW_INSECURE_LLM_URL: 'true' } as Env;
+    expect(resolveLlm(opted, local).baseUrl).toBe('http://localhost:11434/v1');
+    // The flag is the operator's, and only the exact opt-in counts.
+    expect(() => resolveLlm({ ...env, ALLOW_INSECURE_LLM_URL: 'yes' } as Env, local)).toThrow(LlmConfigError);
+    // It relaxes where the endpoint may live — not who the key belongs to.
+    expect(() => resolveLlm(opted, settings({ llm_base_url: 'http://localhost:11434/v1' }))).toThrow(/needs its own API key/);
   });
 });
 
@@ -129,14 +130,14 @@ describe('validateLlmBaseUrl', () => {
   it('rejects credentials embedded in the URL', () => {
     expect(validateLlmBaseUrl('https://user:pass@api.example.com/v1')).toMatch(/credentials/);
     expect(validateLlmBaseUrl('https://token@api.example.com/v1')).toMatch(/credentials/);
-    // Allowlisting the host does not excuse them.
-    expect(validateLlmBaseUrl('https://user:pass@api.openai.com/v1', 'api.openai.com')).toMatch(/credentials/);
+    // The insecure opt-in does not excuse them.
+    expect(validateLlmBaseUrl('https://user:pass@api.example.com/v1', true)).toMatch(/credentials/);
   });
 
-  it('rejects schemes fetch cannot speak, allowlisted or not', () => {
+  it('rejects schemes fetch cannot speak, opted in or not', () => {
     expect(validateLlmBaseUrl('ftp://api.example.com/v1')).toMatch(/http\(s\)/);
-    expect(validateLlmBaseUrl('ftp://api.openai.com/v1', 'api.openai.com')).toMatch(/http\(s\)/);
-    expect(validateLlmBaseUrl('htt://api.openai.com/v1', 'api.openai.com')).toMatch(/http\(s\)/);
+    expect(validateLlmBaseUrl('ftp://api.example.com/v1', true)).toMatch(/http\(s\)/);
+    expect(validateLlmBaseUrl('htt://api.example.com/v1', true)).toMatch(/http\(s\)/);
   });
 
   it('rejects loopback, private, and link-local literals', () => {
@@ -167,8 +168,8 @@ describe('validateLlmBaseUrl', () => {
     expect(validateLlmBaseUrl('https://foo.internal./v1')).toMatch(/loopback/);
     expect(validateLlmBaseUrl('https://foo.localhost./v1')).toMatch(/loopback/);
     expect(validateLlmBaseUrl('https://127.0.0.1./v1')).toMatch(/loopback/);
-    // …and it cuts the other way too: an allowlisted host stays allowlisted.
-    expect(validateLlmBaseUrl('https://api.openai.com./v1', 'api.openai.com')).toBeNull();
+    // A root dot on an ordinary host is just an ordinary host.
+    expect(validateLlmBaseUrl('https://api.openai.com./v1')).toBeNull();
   });
 
   it('sees through obfuscated IPv4 forms', () => {
@@ -177,87 +178,15 @@ describe('validateLlmBaseUrl', () => {
     expect(validateLlmBaseUrl('https://0x7f.0x0.0x0.0x1/v1')).toMatch(/loopback/);
   });
 
-  it('narrows to ALLOWED_LLM_HOSTS when the operator sets one', () => {
-    expect(validateLlmBaseUrl('https://api.openai.com/v1', 'api.openai.com, api.groq.com')).toBeNull();
-    expect(validateLlmBaseUrl('https://api.mistral.ai/v1', 'api.openai.com')).toMatch(/not permitted/);
-    // Listing a host is the operator's own call, so it also covers the local
-    // model case that would otherwise fail the https/loopback rules.
-    expect(validateLlmBaseUrl('http://localhost:11434/v1', 'localhost:11434')).toBeNull();
-  });
-
-  it('matches the port, not just the host', () => {
-    // The documented local-model setup. Allowing Ollama's port must not also
-    // allow every other service on that machine — an allowlist entry relaxes
-    // the https rule, so host-only matching would open all of localhost to
-    // tenant-controlled POSTs.
-    expect(validateLlmBaseUrl('http://localhost:11434/v1', 'localhost:11434')).toBeNull();
-    expect(validateLlmBaseUrl('http://localhost:8787/v1', 'localhost:11434')).toMatch(/not permitted/);
-    expect(validateLlmBaseUrl('http://localhost/v1', 'localhost:11434')).toMatch(/not permitted/);
-    // A bare entry covers the standard web ports, and nothing else.
-    expect(validateLlmBaseUrl('https://api.openai.com/v1', 'api.openai.com')).toBeNull();
-    expect(validateLlmBaseUrl('https://api.openai.com:8443/v1', 'api.openai.com')).toMatch(/not permitted/);
-    // The rejection names what the operator wrote, not the keys it expands to.
-    expect(validateLlmBaseUrl('https://api.openai.com:8443/v1', 'api.openai.com')).toMatch(/allowed: api\.openai\.com\)/);
-  });
-
-  it('pins the transport a standard port names, however the URL spells it', () => {
-    // The parser drops :443 under https: and :80 under http:, but keeps each
-    // under the other scheme — so a port only means something with its scheme.
-    // All four combinations, since fixing one direction has twice broken another.
-    expect(validateLlmBaseUrl('https://api.example.com/v1', 'api.example.com:443')).toBeNull();
-    expect(validateLlmBaseUrl('https://api.example.com:443/v1', 'api.example.com:443')).toBeNull();
-    expect(validateLlmBaseUrl('http://api.example.com/v1', 'api.example.com:443')).toMatch(/not permitted/);
-    expect(validateLlmBaseUrl('http://api.example.com:443/v1', 'api.example.com:443')).toMatch(/not permitted/);
-
-    expect(validateLlmBaseUrl('http://intranet.example/v1', 'intranet.example:80')).toBeNull();
-    expect(validateLlmBaseUrl('http://intranet.example:80/v1', 'intranet.example:80')).toBeNull();
-    expect(validateLlmBaseUrl('https://intranet.example/v1', 'intranet.example:80')).toMatch(/not permitted/);
-    expect(validateLlmBaseUrl('https://intranet.example:80/v1', 'intranet.example:80')).toMatch(/not permitted/);
-  });
-
-  it('lets a high port take either scheme, and a stated scheme pin it', () => {
-    // A high port implies no transport, and http on one is the documented
-    // local-model case — but an operator can still pin it by writing a scheme.
-    expect(validateLlmBaseUrl('http://localhost:11434/v1', 'localhost:11434')).toBeNull();
-    expect(validateLlmBaseUrl('https://localhost:11434/v1', 'localhost:11434')).toBeNull();
-    expect(validateLlmBaseUrl('https://model.example:8443/v1', 'https://model.example:8443')).toBeNull();
-    expect(validateLlmBaseUrl('http://model.example:8443/v1', 'https://model.example:8443')).toMatch(/not permitted/);
-    // A stated scheme pins a portless entry to that scheme's default port too.
-    expect(validateLlmBaseUrl('https://api.openai.com/v1', 'https://api.openai.com')).toBeNull();
-    expect(validateLlmBaseUrl('http://api.openai.com/v1', 'https://api.openai.com')).toMatch(/not permitted/);
-  });
-
-  it('honours an explicitly written default port in both directions', () => {
-    // The URL parser drops a default port, so an entry's port has to be read
-    // from the entry text. Inferring it back from the parse would turn
-    // ":443" — written to pin TLS — into ":443 or :80", and allowlisted
-    // entries may use plain http, so the key would go out in the clear.
-    expect(validateLlmBaseUrl('https://api.example.com/v1', 'api.example.com:443')).toBeNull();
-    expect(validateLlmBaseUrl('http://api.example.com/v1', 'api.example.com:443')).toMatch(/not permitted/);
-    expect(validateLlmBaseUrl('https://api.example.com:443/v1', 'api.example.com:443')).toBeNull();
-    // …and the ":80" direction still works, rather than trading one for the other.
-    expect(validateLlmBaseUrl('http://intranet.example/v1', 'intranet.example:80')).toBeNull();
-    expect(validateLlmBaseUrl('https://intranet.example/v1', 'intranet.example:80')).toMatch(/not permitted/);
-    // An IPv6 entry keeps its hextets out of the port.
-    expect(validateLlmBaseUrl('https://[2001:db8::1]/v1', '[2001:db8::1]')).toBeNull();
-    expect(validateLlmBaseUrl('https://[2001:db8::1]:8443/v1', '[2001:db8::1]:8443')).toBeNull();
-    expect(validateLlmBaseUrl('https://[2001:db8::1]:8443/v1', '[2001:db8::1]')).toMatch(/not permitted/);
-  });
-
-  it('matches allowlist entries an operator would plausibly write', () => {
-    // url.hostname is always punycode, so a unicode entry has to be parsed
-    // the same way or the operator's intended host can never match.
-    expect(validateLlmBaseUrl('https://bücher.example/v1', 'bücher.example')).toBeNull();
-    expect(validateLlmBaseUrl('https://xn--bcher-kva.example/v1', 'bücher.example')).toBeNull();
-    expect(validateLlmBaseUrl('https://bücher.example/v1', 'xn--bcher-kva.example')).toBeNull();
-    // A scheme, a port, or a stray root dot in the entry is tolerated too.
-    expect(validateLlmBaseUrl('https://api.openai.com/v1', 'https://api.openai.com')).toBeNull();
-    expect(validateLlmBaseUrl('http://localhost:11434/v1', 'localhost:11434')).toBeNull();
-    expect(validateLlmBaseUrl('https://api.openai.com/v1', 'api.openai.com.')).toBeNull();
-    // An explicitly written default port means what it says.
-    expect(validateLlmBaseUrl('http://intranet.example/v1', 'intranet.example:80')).toBeNull();
-    // …and none of that widens the list.
-    expect(validateLlmBaseUrl('https://evil.example/v1', 'bücher.example')).toMatch(/not permitted/);
+  it('lifts the transport and address rules together when the operator opts in', () => {
+    // A model beside the Worker is plain http *to loopback*: relaxing only one
+    // of the two would leave the setup this flag exists for still rejected.
+    expect(validateLlmBaseUrl('http://localhost:11434/v1', true)).toBeNull();
+    expect(validateLlmBaseUrl('http://127.0.0.1:8080/v1', true)).toBeNull();
+    expect(validateLlmBaseUrl('http://192.168.1.50:11434/v1', true)).toBeNull();
+    // Same URLs, no opt-in.
+    expect(validateLlmBaseUrl('http://localhost:11434/v1')).toMatch(/https/);
+    expect(validateLlmBaseUrl('https://localhost:11434/v1')).toMatch(/loopback/);
   });
 });
 

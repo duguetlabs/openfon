@@ -6,11 +6,9 @@ export interface Env {
   DEFAULT_LLM_BASE_URL: string;
   DEFAULT_LLM_MODEL: string;
   DEFAULT_LLM_API_KEY?: string;
-  // Optional comma-separated host[:port] entries a business may point its own
-  // LLM at. Unset = any public https host; set = only these (and they may use
-  // plain http, for a local model beside `wrangler dev`). A portless entry
-  // covers the standard web ports only.
-  ALLOWED_LLM_HOSTS?: string;
+  // "true" lets a business point its own LLM at a plain-http or loopback URL —
+  // for a model running alongside the Worker. Single-tenant instances only.
+  ALLOW_INSECURE_LLM_URL?: string;
   // STT (any OpenAI-compatible /audio/transcriptions)
   DEFAULT_STT_BASE_URL: string;
   DEFAULT_STT_MODEL: string;

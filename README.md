@@ -73,16 +73,18 @@ Defaults live in `wrangler.jsonc` under `vars`; secrets via `wrangler secret put
 | `REALTIME_BASE_URL` | OpenAI Realtime-compatible WebSocket endpoint (realtime engine) | `wss://api.kataleptic.com/v1/realtime` |
 | `REALTIME_MODEL` | Model/tier for the realtime engine | `llama-3.3-70b` |
 | `REALTIME_API_KEY` | *(secret)* key for the realtime endpoint; falls back to `DEFAULT_LLM_API_KEY` | — |
-| `ALLOWED_LLM_HOSTS` | comma-separated `host` / `host:port` entries a business may point its own LLM at; unset = any public https host | — |
+| `ALLOW_INSECURE_LLM_URL` | `"true"` lets a business point its LLM at a plain-http or loopback URL; single-tenant instances only | — |
 
-Each business can additionally override the LLM (base URL, model, API key) from **Settings → AI provider** in the dashboard. A custom base URL is only ever called with the key stored beside it — `DEFAULT_LLM_API_KEY` is never sent to an endpoint a business chose. Custom endpoints must be `https` and must not be a loopback, private, or link-local address (a literal-IP check; Workers cannot resolve DNS). `ALLOWED_LLM_HOSTS` narrows this to a fixed list, and entries on that list may also use plain `http` — which is how you point at a model running next to `wrangler dev`:
+Each business can additionally override the LLM (base URL, model, API key) from **Settings → AI provider** in the dashboard. A custom base URL is only ever called with the key stored beside it — `DEFAULT_LLM_API_KEY` is never sent to an endpoint a business chose. Custom endpoints must be `https` and must not be a loopback, private, or link-local address (a literal-IP check; Workers cannot resolve DNS).
+
+Running a model on the same machine as the Worker breaks both of those rules, so it needs an explicit opt-in:
 
 ```sh
-# .dev.vars
-ALLOWED_LLM_HOSTS="localhost:11434"     # Ollama, and nothing else on this machine
+# .dev.vars — e.g. Ollama on http://localhost:11434/v1
+ALLOW_INSECURE_LLM_URL="true"
 ```
 
-The port is part of the match, because an entry also relaxes the `https` rule: `localhost:11434` permits that one port, not every service listening on the box. An entry written without a port (`api.example.com`) covers the standard web ports — 443 and 80 — and no others, so a non-standard port has to be named explicitly. Naming a standard port pins the transport with it: `api.example.com:443` permits only the TLS form, `intranet.example:80` only the plaintext one. A non-standard port implies neither, so `localhost:11434` accepts both — write the scheme (`https://model.example:8443`) to pin one.
+Set this only where every account belongs to you. On an instance with tenants it lets any of them aim the agent at your local network — with their own API key, never yours, but still from your Worker's egress.
 
 ### Real phone numbers (PSTN)
 

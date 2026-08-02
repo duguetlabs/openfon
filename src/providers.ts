@@ -45,10 +45,10 @@ export function resolveLlm(env: Env, settings: AgentSettings | null): LlmConfig 
   if (!custom || sameLlmEndpoint(custom, env.DEFAULT_LLM_BASE_URL)) {
     return {
       // The operator's own URL, never the business's spelling of it. The two
-      // are equivalent by the check above — but only as far as that check is
-      // injective, and no normalizer is. Returning the trusted string makes
-      // the property structural: a collision in sameLlmEndpoint can cost a
-      // business its custom endpoint, never send the instance key elsewhere.
+      // are equivalent by the check above, so this costs nothing — and it means
+      // the guarantee doesn't rest on that check being injective: any future
+      // collision costs a business its custom endpoint, and can never route
+      // the instance key somewhere the operator didn't configure.
       baseUrl: env.DEFAULT_LLM_BASE_URL,
       apiKey: settings?.llm_api_key || env.DEFAULT_LLM_API_KEY || '',
       model,
@@ -56,7 +56,7 @@ export function resolveLlm(env: Env, settings: AgentSettings | null): LlmConfig 
   }
   // Rows written before this rule existed (or edited straight in D1) are
   // re-checked here, so a stale endpoint can't outlive the policy.
-  const rejected = validateLlmBaseUrl(custom, env.ALLOWED_LLM_HOSTS);
+  const rejected = validateLlmBaseUrl(custom, env.ALLOW_INSECURE_LLM_URL === 'true');
   if (rejected) throw new LlmConfigError(`LLM base URL ${rejected}`);
   if (!settings?.llm_api_key) {
     throw new LlmConfigError('A custom LLM base URL needs its own API key — this instance never sends its key to another endpoint.');
@@ -67,62 +67,10 @@ export function resolveLlm(env: Env, settings: AgentSettings | null): LlmConfig 
 // The URL parser already folds case, punycodes IDNs, and canonicalizes IP
 // literals for us, but it keeps the DNS root dot: "localhost." and
 // "svc.internal." are the same host to every resolver, so they must not read
-// as different ones here. Brackets come off IPv6 literals for the same reason.
+// as different ones here. Brackets come off so IPv6 literals can be inspected
+// as addresses — callers that compare hosts keep them (see sameLlmEndpoint).
 function normalizeHost(hostname: string): string {
   return hostname.replace(/^\[|\]$/g, '').replace(/\.+$/, '').toLowerCase();
-}
-
-// An allowlist entry is a host with an optional port ("api.example.com",
-// "localhost:11434"), and the port is part of the match: allowing one service
-// on a machine must not allow every service on it. That matters most for the
-// case the allowlist exists for — a local model on a high port, where entries
-// also relax the https rule, so a host-only match would open every port on
-// that machine to tenant-controlled POSTs. An entry without a port covers the
-// standard web ports only.
-//
-// Entries are hand-written, so the hostname goes through the same parser as the
-// endpoint: url.hostname always reports punycode, and an operator who writes
-// "bücher.example" means "xn--bcher-kva.example".
-//
-// INVARIANT: a port is only meaningful together with its scheme. The URL parser
-// drops :443 under https: and :80 under http:, but keeps each under the other
-// scheme — so a port compared on its own is sometimes present, sometimes not,
-// and sometimes present with the wrong transport. Keys therefore carry the
-// scheme, and an entry either states one or has one implied:
-//   api.example.com        -> https on 443 and http on 80
-//   api.example.com:443    -> https only (a standard port names its transport)
-//   intranet.example:80    -> http only
-//   localhost:11434        -> either scheme, since a high port implies neither
-//   https://model.ex:8443  -> https only (state a scheme to pin a high port)
-function allowKeys(entry: string): string[] {
-  const raw = entry.trim();
-  const prefix = /^([a-z][a-z0-9+.-]*):\/\//i.exec(raw);
-  const stated = prefix ? prefix[1].toLowerCase() : '';
-  const bare = prefix ? raw.slice(prefix[0].length) : raw;
-  if (!bare) return [];
-  const port = entryPort(bare);
-  const schemes = stated === 'http' || stated === 'https' ? [stated] : port === '443' ? ['https'] : port === '80' ? ['http'] : ['http', 'https'];
-  const keysFor = (host: string) => schemes.map((s) => `${s}://${host}:${port || (s === 'https' ? '443' : '80')}`);
-  try {
-    return keysFor(normalizeHost(new URL(`https://${bare}`).hostname));
-  } catch {
-    const host = normalizeHost(bare);
-    return host ? keysFor(host) : [];
-  }
-}
-
-// Read the port off the entry text, never off the parsed URL: the parser
-// canonicalizes a default port away, so "api.example.com:443" would come back
-// portless and expand to :80 as well — handing an operator who pinned TLS a
-// plaintext entry, on a list that also relaxes the https rule. The trailing
-// ":1" of an unbracketed "::1" is a hextet, not a port.
-function entryPort(bare: string): string {
-  const closeBracket = bare.lastIndexOf(']');
-  const colon = bare.lastIndexOf(':');
-  if (colon <= closeBracket) return ''; // "[::1]", or no colon at all
-  if (closeBracket < 0 && bare.indexOf(':') !== colon) return ''; // bare IPv6 literal
-  const port = bare.slice(colon + 1);
-  return /^\d{1,5}$/.test(port) ? port : '';
 }
 
 // Literal-IP inspection only: Workers have no DNS resolver, so a hostname that
@@ -163,7 +111,7 @@ function isInternalHost(host: string): boolean {
 // Checks a base URL a business supplied for its own LLM endpoint. Returns a
 // sentence to append to "LLM base URL …" for the dashboard, or null if it's
 // acceptable. Kept here so the write path and the call path agree.
-export function validateLlmBaseUrl(raw: string, allowedHosts?: string): string | null {
+export function validateLlmBaseUrl(raw: string, allowInsecure = false): string | null {
   let url: URL;
   try {
     url = new URL(raw.trim());
@@ -171,29 +119,15 @@ export function validateLlmBaseUrl(raw: string, allowedHosts?: string): string |
     return 'must be an absolute URL, e.g. https://api.example.com/v1';
   }
   if (url.username || url.password) return 'must not embed credentials — put the key in the API key field';
-  // Scheme sanity first: fetch only speaks http(s), and a typo like "htt://"
-  // parses fine, so an allowlisted host must not smuggle one through.
+  // fetch only speaks http(s), and a typo like "htt://" parses fine.
   if (url.protocol !== 'https:' && url.protocol !== 'http:') return 'must be an http(s) URL';
-  const host = normalizeHost(url.hostname);
-  // Same shape as the allowlist keys, scheme included — see the invariant on
-  // allowKeys. url.port is empty exactly when the URL sits on its scheme's own
-  // default port, which is why the scheme has to travel with it.
-  const scheme = url.protocol.slice(0, -1);
-  const endpointKey = `${scheme}://${host}:${url.port || (scheme === 'https' ? '443' : '80')}`;
-  const entries = (allowedHosts ?? '')
-    .split(',')
-    .map((e) => e.trim())
-    .filter(Boolean);
-  // An allowlist entry is the operator's own decision, so it also unlocks the
-  // one case self-hosters need: plain http to a model running next to
-  // `wrangler dev`. Without ALLOWED_LLM_HOSTS the strict rules apply to all.
-  if (entries.length) {
-    const allow = entries.flatMap(allowKeys);
-    // Report what the operator wrote, not the keys it expands to.
-    return allow.includes(endpointKey) ? null : `host is not permitted on this instance (allowed: ${entries.join(', ')})`;
-  }
-  if (url.protocol !== 'https:') return 'must use https:// (set ALLOWED_LLM_HOSTS to permit a plain-http host)';
-  if (isInternalHost(host)) return 'must not point at a loopback, private, or link-local address';
+  // ALLOW_INSECURE_LLM_URL is the operator declaring "this instance runs a
+  // model next to the Worker". That setup is plain http to loopback, so the
+  // flag lifts the transport and address rules together — one switch, no
+  // grammar to get wrong. Not for a deployment with tenants on it.
+  if (allowInsecure) return null;
+  if (url.protocol !== 'https:') return 'must use https://';
+  if (isInternalHost(normalizeHost(url.hostname))) return 'must not point at a loopback, private, or link-local address';
   return null;
 }
 
@@ -209,9 +143,9 @@ export async function chatComplete(
     method: 'POST',
     // Every endpoint rule above is checked against the URL that was saved, so a
     // followed redirect would walk straight around them: a host that passes
-    // validation (and ALLOWED_LLM_HOSTS) can answer 302 http://10.0.0.1/ and
-    // have the Worker make that request instead. No OpenAI-compatible
-    // /chat/completions has a reason to redirect, so treat one as an error.
+    // validation can answer 302 http://10.0.0.1/ and have the Worker make that
+    // request instead. No OpenAI-compatible /chat/completions has a reason to
+    // redirect, so treat one as an error.
     redirect: 'manual',
     headers: { Authorization: `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
