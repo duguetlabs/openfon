@@ -130,6 +130,7 @@ export class CallSession implements DurableObject {
     const [client, server] = Object.values(pair);
     server.accept();
     this.ws = server;
+    await this.armStartDeadline();
     server.addEventListener('message', (ev) => {
       this.onMessage(ev).catch((err) => this.failInternally(err));
     });
@@ -238,10 +239,13 @@ export class CallSession implements DurableObject {
     return this.starting;
   }
 
-  // Announcing `ready` is the point of no return for retries.
-  private sendReady(payload: Record<string, unknown>): void {
+  // Announcing `ready` is the point of no return for retries, and the point at
+  // which the call has made real progress — so the start deadline is retired
+  // and the idle timer takes over from here.
+  private async sendReady(payload: Record<string, unknown>): Promise<void> {
     this.announced = true;
     this.send({ type: 'ready', ...payload });
+    await this.state.storage.delete('startDeadline');
   }
 
   private async runStart(): Promise<void> {
@@ -294,7 +298,7 @@ export class CallSession implements DurableObject {
           // transcript turn arrive through the normal event stream.
           this.history = [{ role: 'system', content: systemPrompt }];
           const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-          this.sendReady({ mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
+          await this.sendReady({ mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
           return;
         }
         this.history = [
@@ -302,7 +306,7 @@ export class CallSession implements DurableObject {
           { role: 'assistant', content: greeting },
         ];
         const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-        this.sendReady({ mode: 'realtime', ttsMode, greeting, engine: engineLabel });
+        await this.sendReady({ mode: 'realtime', ttsMode, greeting, engine: engineLabel });
         await this.saveTurn('agent', greeting);
         // The greeting is ours, not the model's: synthesize it deterministically
         // and stream it as PCM so it matches the realtime audio path.
@@ -332,7 +336,7 @@ export class CallSession implements DurableObject {
       { role: 'assistant', content: greeting },
     ];
     const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-    this.sendReady({
+    await this.sendReady({
       mode: 'pipeline',
       ttsMode,
       greeting,
@@ -829,12 +833,26 @@ export class CallSession implements DurableObject {
   private static readonly IDLE_LIMIT_MS = 120_000; // clients ping every 20 s
   private static readonly MAX_CALL_MS = 30 * 60_000;
   private static readonly MAX_TURNS = 200;
+  // A real widget sends {type:"start"} immediately; 30 s is generous.
+  private static readonly START_DEADLINE_MS = 30_000;
   // 0 = this instance has seen no activity of its own. Not the same as "the
   // call was just active": an alarm can run on an object rebuilt after
   // eviction, where any Date.now() initializer would look like fresh activity
   // and keep the call alive forever — the very case the watchdog is for.
   private lastActivity = 0;
   private turns = 0;
+
+  // A socket that upgrades but never sends {type:"start"} does no provider work
+  // yet still occupies the call — and a concurrency slot, since the row stays
+  // 'active'. The idle timer cannot see it: `ping` is inbound traffic, so a
+  // squatter pinging every 20 s looks perfectly alive. Liveness and progress are
+  // different properties, so this gets its own deadline, armed at upgrade and
+  // retired by `ready`. Persisted rather than a timer, so it survives eviction.
+  private async armStartDeadline(): Promise<void> {
+    const deadline = Date.now() + CallSession.START_DEADLINE_MS;
+    await this.state.storage.put({ callId: this.callId, startDeadline: deadline });
+    await this.state.storage.setAlarm(deadline);
+  }
 
   private async armWatchdog(): Promise<void> {
     const now = Date.now();
@@ -852,7 +870,21 @@ export class CallSession implements DurableObject {
     if (!callId) return; // nothing to reconcile
     this.callId = callId;
     const now = Date.now();
-    const hardDeadline = (await this.state.storage.get<number>('hardDeadline')) ?? now;
+
+    // Checked before the idle logic and never refreshed by inbound traffic:
+    // pings keep an established call alive, but must not extend the grace
+    // period for one that never began.
+    const startDeadline = await this.state.storage.get<number>('startDeadline');
+    if (startDeadline && now >= startDeadline) {
+      console.log(`call ${this.callId}: no start within the deadline, releasing the call`);
+      await this.finalize();
+      return;
+    }
+
+    // Absent between the upgrade and a successful start. Treat that as "not
+    // reached" — defaulting to `now` would read as already expired and end a
+    // call that is still connecting. The idle check below is the backstop.
+    const hardDeadline = (await this.state.storage.get<number>('hardDeadline')) ?? Number.POSITIVE_INFINITY;
     // Trust this instance's own observation, and only that. Falling back to the
     // persisted value when we have none is what lets an evicted-and-rebuilt
     // object see how stale the call really is.
@@ -875,10 +907,18 @@ export class CallSession implements DurableObject {
   // it stops the conversation immediately and must not gate the retry.
   private finalize(): Promise<void> {
     if (this.finalized || !this.callId) return Promise.resolve();
+    this.ended = true; // stop handling caller messages from this instant
     if (!this.finalizing) {
-      this.finalizing = this.runFinalize().finally(() => {
-        this.finalizing = null;
-      });
+      // Claim the slot before any of the work runs. runFinalize() closes the
+      // client socket synchronously, and that close listener calls back into
+      // finalize() — with the assignment happening after the call, the slot was
+      // still empty at that moment and a second finalize started, writing the
+      // call row and re-running summarization twice.
+      this.finalizing = Promise.resolve()
+        .then(() => this.runFinalize())
+        .finally(() => {
+          this.finalizing = null;
+        });
     }
     return this.finalizing;
   }

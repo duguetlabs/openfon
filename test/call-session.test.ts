@@ -64,6 +64,9 @@ class FakeStorage {
     if (typeof keyOrEntries === 'string') this.map.set(keyOrEntries, value);
     else for (const [k, v] of Object.entries(keyOrEntries)) this.map.set(k, v);
   }
+  async delete(key: string): Promise<boolean> {
+    return this.map.delete(key);
+  }
   async deleteAll(): Promise<void> {
     this.map.clear();
   }
@@ -399,6 +402,23 @@ describe('finalize closes attached sockets', () => {
     expect(sock.closed?.code).toBe(1000);
   });
 
+  it('writes the call row once when closing the socket re-enters finalize', async () => {
+    // finalize() closes the client socket, whose close listener calls finalize()
+    // again. The single-flight slot has to be claimed before that happens, or
+    // the second entry finds it empty and the row is written — and the call
+    // summarized — twice.
+    const { session, callUpdates } = newSession();
+    await session.fetch(upgradeRequest());
+    const sock = serverSockets[0];
+    sock.receive({ type: 'start' });
+    await flush();
+
+    sock.receive({ type: 'hangup' });
+    await flush();
+
+    expect(callUpdates()).toHaveLength(1);
+  });
+
   it('clears the watchdog alarm when the call ends', async () => {
     const { session, storage } = newSession();
     await session.fetch(upgradeRequest());
@@ -640,6 +660,51 @@ describe('watchdog alarm', () => {
     const { session, storage } = newSession();
     await session.alarm();
     expect(storage.alarmAt).toBeNull();
+  });
+
+  it('releases a socket that never starts, however hard it pings', async () => {
+    // Squatting: upgrade a freshly issued call id, never send {type:"start"},
+    // and hold the socket with the keepalive the protocol already accepts. No
+    // provider work, but the row stays 'active' and occupies a concurrency
+    // slot. The idle timer cannot see it — a ping is inbound traffic, so
+    // `lastActivity` keeps getting refreshed.
+    vi.useFakeTimers();
+    const { session, storage, callUpdates } = newSession();
+    await session.fetch(upgradeRequest());
+    const sock = serverSockets[0];
+    expect(storage.alarmAt).not.toBeNull(); // armed at upgrade, before any start
+
+    for (let i = 0; i < 3; i++) {
+      vi.setSystemTime(Date.now() + 15_000);
+      sock.receive({ type: 'ping' }); // keeps lastActivity fresh the whole time
+      await flush();
+    }
+    await session.alarm();
+    await flush();
+
+    expect(callUpdates()).toHaveLength(1); // finalized, so the slot is released
+    expect(sock.readyState).toBe(3);
+    expect(storage.alarmAt).toBeNull();
+  });
+
+  it('does not apply the start deadline once the call is under way', async () => {
+    vi.useFakeTimers();
+    const { session, storage, callUpdates } = newSession();
+    await session.fetch(upgradeRequest());
+    const sock = serverSockets[0];
+    sock.receive({ type: 'start' });
+    await flush();
+    expect(storage.map.has('startDeadline')).toBe(false); // retired by `ready`
+
+    // Well past the start deadline, but the caller is talking.
+    vi.setSystemTime(Date.now() + 90_000);
+    sock.receive({ type: 'ping' });
+    await flush();
+    await session.alarm();
+
+    expect(callUpdates()).toHaveLength(0); // still live
+    expect(sock.readyState).toBe(1);
+    expect(storage.alarmAt).not.toBeNull();
   });
 
   it('keeps the watchdog armed when the call row fails to write', async () => {
