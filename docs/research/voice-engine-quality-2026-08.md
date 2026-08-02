@@ -252,7 +252,7 @@ question depends on is the genuine one, pinned to Monday 2026-08-03.
 | `vl-native-brain` | 0.407 | 0.222 | 0.920 | **0.908** | 17/27 | **1.000** | 1.778 | 1.556 | 2369 | 3474 |
 | `vl-gpt41mini-dns` | 0.370 | 0.222 | **0.960** | 0.681 | 17/27 | 0.815 | 1.778 | 1.667 | 1408 | 1891 |
 | `vl-gpt41mini` | 0.333 | 0.222 | **0.960** | 0.697 | 18/27 | 0.704 | 1.778 | **1.778** | **1315** | **1719** |
-| `vl-gpt41mini-semvad` | 0.259 | 0.111 | 0.920 | 0.753 | **19/27** | 0.704 | **1.852** | 1.667 | 1320 | 1852 |
+| `vl-gpt41mini-semvad` | 0.259 | 0.111 | 0.920 | 0.740 | **19/27** | 0.704 | **1.852** | 1.667 | 1320 | 1852 |
 
 **Nine scenarios, not eleven.** The two barge-in scenarios are run and logged but
 excluded from every aggregate — see below. 27 scored runs per arm.
@@ -333,7 +333,7 @@ been delivered in full.
 Written down because a reader deciding on the strength of this study deserves the
 same summary the reviewers had.
 
-**Thirteen instances of one bug class** were found across eight rounds of review, in
+**Thirteen instances of one bug class** were found across nine rounds of review, in
 which missing or unverified data read as a passing result — a missing judge row,
 an empty judge file, a missing trial, duplicate trials counted as distinct ones,
 a scenario an arm never ran, an unparseable numeric, an errored run, a call the
@@ -362,7 +362,49 @@ task-success rates. The figure that did not survive is barge-in.
 
 ## Confounds and limits
 
-Stated rather than smoothed over.
+Stated rather than smoothed over. The first two change what the numbers *mean*,
+not merely what they are, and belong ahead of everything else.
+
+### The absolute rates are optimistic: the recogniser was told the language
+
+Both tracks pass the scenario's language to the speech recogniser — `language`
+to Azure Speech on the Voice Live arms, and to `whisper-1` on the Foundry arm.
+**Production does not.** `src/call-session.ts` leaves it unset so that language
+is detected per utterance, which is what a real caller gets.
+
+Every slot-capture and success figure in this report therefore benefits from an
+oracle prior the product does not have. A reader who sees "0.960 slots heard"
+should not read it as what a caller experiences: it is what a caller would
+experience if the system already knew which language they were about to speak.
+The gap is likely largest exactly where it matters most — German names and
+digit strings, and the code-switching scenario, whose 15/15 result is the most
+optimistic number in the document for this reason.
+
+Both arms received the same prior, so the *comparison* is unaffected. Only the
+levels are.
+
+### The strict-success comparison may favour engines that hang up earlier
+
+Production begins tearing the call down when `end_call` fires. The harness
+records the tool and keeps streaming the remaining scripted turns, so a later
+transcript — and any slot it satisfies — can be credited to a call that would
+already have ended. Since `end_call` fires in 17–19 of 27 scored runs, the
+mechanism is live rather than theoretical, and it biases *toward* engines that
+end calls sooner, which is a comparison-level effect rather than a level-only one.
+
+**Measured exposure in this run: two turns, on one arm.** Across all 135 scored
+runs, `end_call` fired before the final turn only twice, both on `vl-gpt41mini`;
+every other arm streamed nothing after it. That is because the scripted
+`end_call` almost always lands on the closing turn, where there is nothing left
+to stream.
+
+**Could it flip the ordering? No, on this dataset.** The gap between
+`vl-gpt41mini` (0.333) and `native-gpt-realtime-2` (0.593) is seven runs out of
+27. The exposure is two turns, and it runs against `vl-gpt41mini` — the arm that
+would *lose* credit — so removing it would widen the gap rather than close it.
+The mechanism could matter in a scenario set with more post-goodbye content;
+it does not matter here, and the harness cannot quantify it beyond this because
+it never modelled the hang-up.
 
 1. **VAD is not held constant between stacks, and semantic VAD is not free.**
    Voice Live **rejects** `server_vad` on the gpt-realtime-2 brain
@@ -544,6 +586,22 @@ Stated rather than smoothed over.
      every subsequent clip inherited its predecessor's hypothesis — silent WER
      corruption with no error on any affected row. The batch now aborts and
      reconnects.
+   * *The time matcher accepted semantically wrong times.* The bare-hour
+     pattern dropped the minutes and made the meridiem optional, so an expected
+     `14:00` was satisfied by `2:30`, `2 AM` or a bare `2`. Times are now parsed
+     into (hour, minute) and compared, with spoken hours scanned only after the
+     digits are stripped — normalising "2:30" yields "two thirty", and a word
+     scan over that re-admitted the very times the digit pass had rejected.
+     This removed seven false grounding credits, all on gpt-4.1-mini arms
+     (`grounded_ok` 1.000 → 0.963, 0.963 → 0.852, 1.000 → 0.889); the
+     gpt-realtime-2 arms were unaffected, and no success or pass^3 figure moved.
+   * *Negated claims matched the claim being denied.* "We are not open on
+     Saturday" matched the forbidden `open on Saturday`, and "not 10:00 — I
+     meant 14:00" matched `10:00`. Since any forbidden hit is a hard failure,
+     correct denials and self-corrections scored as failures. A negation-window
+     check now applies to both the phrase and the time paths. It changed
+     nothing on this dataset — the study's only `forbidden_hit` had already
+     been removed as a cross-turn artefact — so it is a guard for future runs.
    * *A withdrawn metric's scenarios were still being scored.* The barge-in
      metric was dropped, but its two scenarios kept feeding `success`, `pass^k`
      and the slot aggregates — and when the preceding response produces no audio

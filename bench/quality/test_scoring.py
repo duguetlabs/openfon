@@ -30,7 +30,8 @@ sys.path.insert(0, str(HERE / "prepare"))
 from judge import JudgeParseError, parse_verdicts  # noqa: E402
 from events import function_call, response_cancelled  # noqa: E402
 from score_slots import (  # noqa: E402
-    detect_lang, fact_present, score_run, slot_present, time_forms,
+    detect_lang, fact_present, score_run, slot_present, time_matches,
+    times_mentioned,
 )
 from score_wer import normalize  # noqa: E402
 from summarize import pct, sibling  # noqa: E402
@@ -118,6 +119,25 @@ class TestSlotMatching(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertTrue(slot_present(text, "new_time", ["14:00"], "en"))
 
+    def test_time_rejects_wrong_minutes_and_meridiem(self):
+        """A bare-hour match dropped minutes and meridiem, so 14:00 == 2:30."""
+        for text in ("how about 2:30", "how about 2 AM", "at 2 a.m.",
+                     "we could do 2:45"):
+            with self.subTest(text=text):
+                self.assertFalse(slot_present(text, "new_time", ["14:00"], "en"))
+        for text in ("at 2 PM", "at 2:00", "Wednesday at two", "we can do 14:00"):
+            with self.subTest(text=text):
+                self.assertTrue(slot_present(text, "new_time", ["14:00"], "en"))
+
+    def test_german_time_rejects_wrong_minutes(self):
+        self.assertFalse(slot_present("um 15:30", "time_after", ["15:00"], "de"))
+        self.assertTrue(slot_present("um 15 Uhr", "time_after", ["15:00"], "de"))
+
+    def test_spoken_hours_are_not_reconstructed_from_digits(self):
+        """normalize("2:30") is "two thirty"; a word scan must not see "two"."""
+        self.assertFalse(slot_present("2:30", "new_time", ["14:00"], "en"))
+        self.assertFalse(slot_present("15:30", "time_after", ["15:00"], "de"))
+
     def test_time_rejects_the_wrong_hour(self):
         # The reschedule scenario turns on 10:00 being replaced by 14:00.
         self.assertFalse(
@@ -136,12 +156,18 @@ class TestSlotMatching(unittest.TestCase):
         self.assertEqual(detect_lang("Ja, wir haben einen Termin frei"), "de")
         self.assertIsNone(detect_lang(""))
 
-    def test_time_forms_are_valid_regexes(self):
-        import re
-        for lang in ("en", "de"):
-            for f in time_forms("14:00", lang):
-                with self.subTest(lang=lang, form=f):
-                    re.compile(f)
+    def test_mentions_are_parsed_into_hour_and_minute(self):
+        got = {(h, m) for h, m, _ctx, _at in times_mentioned("at 14:30", "en")}
+        self.assertIn((14, 30), got)
+        got = {(h, m) for h, m, _ctx, _at in times_mentioned("at 2 PM", "en")}
+        self.assertIn((14, None), got)
+        got = {(h, m) for h, m, _ctx, _at in times_mentioned("at 2 AM", "en")}
+        self.assertIn((2, None), got)
+        self.assertNotIn((14, None), got)
+
+    def test_bare_hour_is_ambiguous_and_matches_either_reading(self):
+        self.assertTrue(time_matches("Wednesday at 2", "14:00", "en"))
+        self.assertTrue(time_matches("Wednesday at 2", "02:00", "en"))
 
 
 class TestFactMatching(unittest.TestCase):
@@ -174,6 +200,29 @@ class TestFactMatching(unittest.TestCase):
         # ...but a single utterance that really does say it must still fire.
         self.assertTrue(fact_present(["We close at 17:00 on Friday."],
                                      "17:00 on Friday", "en"))
+
+    def test_negated_claims_do_not_match_the_claim_denied(self):
+        """Any forbidden hit is a hard failure, so a correct denial must not fire."""
+        for utt in ("We are not open on Saturday.",
+                    "No, we are not open on Saturday.",
+                    "Unfortunately we are not open on Saturday."):
+            with self.subTest(utt=utt):
+                self.assertFalse(fact_present([utt], "open on Saturday", "en"))
+        self.assertTrue(fact_present(["We are open on Saturday."],
+                                     "open on Saturday", "en"))
+
+    def test_negated_times_do_not_match(self):
+        self.assertFalse(fact_present(["Sorry, not 10:00 - I meant 14:00."],
+                                      "10:00", "en"))
+        self.assertTrue(fact_present(["We close at 10:00."], "10:00", "en"))
+        self.assertFalse(fact_present(["Wir schliessen nicht um 17 Uhr."],
+                                      "17:00", "de"))
+
+    def test_german_negation(self):
+        self.assertFalse(fact_present(["Am Samstag sind wir nicht geoeffnet."],
+                                      "Samstag geöffnet", "de"))
+        self.assertTrue(fact_present(["Wir sind samstags geschlossen."],
+                                     "geschlossen", "de"))
 
     def test_plain_facts_still_match(self):
         self.assertTrue(fact_present(["We are closed on Saturday."], "closed", "en"))

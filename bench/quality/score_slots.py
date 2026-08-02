@@ -48,40 +48,96 @@ def detect_lang(text: str) -> str | None:
     return "de" if de > en else "en"
 
 
-TIME_SUFFIX = r"(?:\s*(?::00|\.00|h|uhr|o'?clock|am|pm|a\.m\.|p\.m\.))?"
+MERIDIEM = r"(?:\s*(a\.?m\.?|p\.?m\.?))?"
+CLOCK_MENTION = re.compile(
+    rf"\b(\d{{1,2}})(?::(\d{{2}}))?\s*(uhr|o'?clock|h)?{MERIDIEM}", re.I)
 
 
-def time_forms(value: str, lang: str) -> list[str]:
-    """Surface forms a speaker might use for a 24-hour `HH:MM` time.
+def _word_hours(lang: str) -> dict[str, int]:
+    """Spelled-out hour names for this language, 0–24, via the normaliser."""
+    code = NUM_LANG.get(lang.split("_")[0].lower())
+    out: dict[str, int] = {}
+    if not code:
+        return out
+    for n in range(25):
+        try:
+            out[normalize(num2words(n, lang=code), lang)] = n
+        except Exception:  # noqa: BLE001 - a missing word form is not fatal
+            pass
+    return out
 
-    A caller who wants 14:00 says "at two", and the agent confirms "2 PM".
-    Matching only the literal "14" scores every one of those as a miss — which
-    is what the first version of this did, silently marking `new_time` wrong on
-    all 15 reschedule runs where every arm had in fact got it right. A slot
-    matcher that fails closed moves every number in the report without failing
-    anything, so it is pinned by tests.
+
+def times_mentioned(text: str, lang: str) -> list[tuple[int | None, int | None]]:
+    """Every clock time the text asserts, as (hour24 or None, minute or None).
+
+    `None` for the hour means "a spoken hour with no meridiem", which is
+    ambiguous between H and H+12 and is resolved by the caller. Parsing
+    mentions and comparing them semantically replaces the old approach of
+    building a regex per expected value: that pattern made the suffix optional
+    and dropped the minutes, so expected `14:00` matched `2:30`, `2 AM` and a
+    bare `2` alike — semantically wrong appointment times satisfying a strict
+    check.
+    """
+    # Each entry carries the string it was found in and the offset within it, so
+    # a caller can ask whether the mention sits inside a negation.
+    found: list[tuple[int | None, int | None, str, int]] = []
+    low = text.lower()
+    for m in CLOCK_MENTION.finditer(text):
+        hour, minute, suffix, mer = (int(m.group(1)), m.group(2),
+                                     (m.group(3) or "").lower(), (m.group(4) or "").lower())
+        if hour > 24:
+            continue
+        mm = int(minute) if minute is not None else None
+        at = m.start()
+        if mer.startswith("p"):
+            found.append(((hour % 12) + 12, mm, low, at))
+        elif mer.startswith("a"):
+            found.append((hour % 12, mm, low, at))
+        elif hour > 12 or suffix in ("uhr", "h"):
+            found.append((hour, mm, low, at))   # 24-hour reading is unambiguous
+        else:
+            found.append((None, mm, low, at))   # bare "2"/"2 o'clock": ambiguous
+            found.append((hour, mm, low, at))
+            found.append((hour + 12, mm, low, at))
+    # Spelled-out hours, scanned over text with the DIGITS REMOVED FIRST.
+    # `normalize` expands digits into words, so normalising "2:30" yields "two
+    # thirty" and a naive word scan finds "two" — re-admitting exactly the wrong
+    # times the digit pass just rejected ("2:30", "2 AM", "15:30" all matched an
+    # expected 14:00/15:00 this way). Only genuinely spoken hours should reach here.
+    words = _word_hours(lang)
+    norm = normalize(re.sub(r"\d+", " ", text), lang)
+    for w, n in words.items():
+        if not w:
+            continue
+        wm = re.search(rf"\b{re.escape(w)}\b", norm)
+        if wm:
+            found.append((n, None, norm, wm.start()))
+            if n <= 12:
+                found.append((n + 12, None, norm, wm.start()))
+    return found
+
+
+def time_matches(text: str, value: str, lang: str, reject_negated: bool = False) -> bool:
+    """Does `text` assert the clock time `value` (HH:MM)?
+
+    A mention matches only if the hour agrees *and* the minutes do not
+    disagree: an expected 14:00 is satisfied by "2 PM", "14 Uhr", "at two" or
+    "14:00", but not by "2:30" (wrong minutes) or "2 AM" (wrong meridiem).
     """
     hh_s, _, mm_s = value.partition(":")
     try:
-        hh = int(hh_s)
+        want_h, want_m = int(hh_s), int(mm_s or 0)
     except ValueError:
-        return [re.escape(value.lower())]
-    hh12 = hh % 12 or 12
-    mm = mm_s or "00"
-
-    forms = {re.escape(f"{hh:02d}:{mm}"), re.escape(f"{hh}:{mm}")}
-    code = NUM_LANG.get(lang.split("_")[0].lower())
-    for n in {hh, hh12}:
-        forms.add(rf"\b{n}\b{TIME_SUFFIX}")
-        if code:
-            try:
-                # Through the normaliser, so num2words' "fünfzehn" also matches a
-                # transcript (or a scenario script) spelled "fuenfzehn".
-                word = normalize(num2words(n, lang=code), lang)
-                forms.add(rf"\b{re.escape(word)}\b{TIME_SUFFIX}")
-            except Exception:  # noqa: BLE001 - a missing word form is not fatal
-                pass
-    return sorted(forms)
+        return normalize(value, lang) in normalize(text, lang)
+    for hour, minute, ctx, at in times_mentioned(text, lang):
+        if hour is None or hour != want_h:
+            continue
+        if minute is not None and minute != want_m:
+            continue
+        if reject_negated and negated_before(ctx, at):
+            continue        # "not 10:00 — I meant 14:00" does not assert 10:00
+        return True
+    return False
 
 
 def slot_present(agent_text: str, key: str, accepted: list[str], lang: str) -> bool:
@@ -111,23 +167,38 @@ def slot_present(agent_text: str, key: str, accepted: list[str], lang: str) -> b
     if key == "final_language":
         return detect_lang(agent_text) in accepted
     if key in ("time_after", "new_time"):
-        # Two haystacks: the raw text keeps digits ("2 PM", "14:00"), the
-        # normalised text spells them out ("two", "fuenfzehn"). A pattern only
-        # matches the one it belongs to, so searching both costs nothing.
-        hays = (agent_text.lower(), normalize(agent_text, lang))
-        return any(re.search(f, h)
-                   for v in accepted for f in time_forms(v, lang) for h in hays)
+        return any(time_matches(agent_text, v, lang) for v in accepted)
     hay = normalize(agent_text, lang)
     return any(normalize(v, lang) in hay for v in accepted)
 
 
 CLOCK_RE = re.compile(r"\b([01]?\d|2[0-3]):([0-5]\d)\b")
 
+# Negators, post-normalisation (punctuation stripped, so "isn't" -> "isnt").
+NEGATORS = {
+    "not", "no", "never", "isnt", "arent", "dont", "doesnt", "wont", "cannot",
+    "cant", "unfortunately", "afraid",
+    "nicht", "kein", "keine", "keinen", "keiner", "nie", "leider",
+}
+NEGATION_WINDOW = 6
+
+
+def negated_before(norm_text: str, index: int) -> bool:
+    """Is the phrase at `index` inside a negation?
+
+    Substring matching cannot tell "We are open on Saturday" from "We are NOT
+    open on Saturday", so a correct denial matched the forbidden claim it was
+    denying — and any forbidden hit is a hard failure, so correct answers and
+    self-corrections were scored as failures. Looks back a few tokens, which is
+    crude but covers the constructions these scenarios actually produce.
+    """
+    before = norm_text[:index].split()
+    return any(tok in NEGATORS for tok in before[-NEGATION_WINDOW:])
+
 
 def time_in(text: str, value: str, lang: str) -> bool:
-    """Does `text` assert the clock time `value` (HH:MM), however it is spoken?"""
-    hays = (text.lower(), normalize(text, lang))
-    return any(re.search(f, h) for f in time_forms(value, lang) for h in hays)
+    """Does `text` *assert* the clock time `value`, negations excluded?"""
+    return time_matches(text, value, lang, reject_negated=True)
 
 
 def fact_present(utterances: list[str], fact: str, lang: str) -> bool:
@@ -152,8 +223,13 @@ def fact_present(utterances: list[str], fact: str, lang: str) -> bool:
     for u in utterances:
         if m and not time_in(u, m.group(0), lang):
             continue
-        if want_rest and want_rest not in normalize(u, lang):
-            continue
+        norm_u = normalize(u, lang)
+        if want_rest:
+            at = norm_u.find(want_rest)
+            if at < 0:
+                continue
+            if negated_before(norm_u, at):
+                continue
         return True
     return False
 
