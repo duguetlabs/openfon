@@ -89,6 +89,16 @@ class Turn:
     # responses server VAD started and cancelled mid-utterance (a clause pause
     # longer than silence_duration_ms); their timings are discarded
     false_starts: int = 0
+    # of those, how many got as far as emitting audio — the difference between
+    # the caller being talked over and the service silently re-segmenting
+    false_starts_audible: int = 0
+    false_start_audio_ms: float = 0.0
+    # which input item the accepted caller transcript belongs to (split turns
+    # commit several, and a late one for an earlier fragment must not be used)
+    transcript_item_id: str = ""
+    # True once an echo was actually verified; absence of warnings on a turn
+    # that never configured is not evidence the controls held
+    config_verified: bool = False
     # fields the endpoint echoed back differently from what we asked for.
     # config_fatal means a measurement-critical control could not be confirmed
     # and the turn was aborted; config_warnings is recorded but not fatal.
@@ -154,6 +164,7 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
             fatal, advisory = arm.verify_echo(ev.get("session") or {})
             t.config_warnings = advisory
             t.config_fatal = fatal
+            t.config_verified = not fatal
             if fatal:
                 # A control we cannot confirm is not a control. Abort rather
                 # than emit a measurement that would look identical to a valid
@@ -191,6 +202,9 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
 
             send_task = asyncio.create_task(sender())
             audio_bytes = 0
+            frag_audio_bytes = 0          # audio emitted by a pre-speech-end fragment
+            fragment_items: set[str] = set()   # input items committed mid-utterance
+            final_items: set[str] = set()      # input items committed after speech end
             deadline = time.monotonic() + utt.duration_s + reply_timeout + 5.0
             try:
                 while True:
@@ -226,15 +240,33 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
                     # response, and cancels it ("reason": "turn_detected") when the
                     # caller resumes. That response answers a fragment, not the
                     # utterance — discard everything it produced and keep waiting.
+                    #
+                    # Whether the fragment got as far as EMITTING AUDIO is the
+                    # difference between "the caller was talked over" and "the
+                    # service silently re-segmented", so it is counted separately
+                    # rather than assumed.
                     if t0 is None:
-                        if et == "response.done":
+                        if arms_mod.is_audio_delta(et):
+                            frag_audio_bytes += len(base64.b64decode(ev.get("delta") or ""))
+                        elif et == "input_audio_buffer.committed" and ev.get("item_id"):
+                            fragment_items.add(ev["item_id"])
+                        elif et == "response.done":
                             t.false_starts += 1
+                            if frag_audio_bytes:
+                                t.false_starts_audible += 1
+                                t.false_start_audio_ms += frag_audio_bytes / BYTES_PER_MS
+                            frag_audio_bytes = 0
                             t.ttfa_ms = t.ttft_ms = t.transcript_ms = None
                             t.transcript = ""
+                            t.caller_transcript = ""
                             audio_bytes = 0
                         continue
                     if et == "input_audio_buffer.speech_stopped" and t.speech_stopped_ms is None:
                         t.speech_stopped_ms = since()
+                    elif et == "input_audio_buffer.committed":
+                        # the input item this turn's reply actually answers
+                        if ev.get("item_id"):
+                            final_items.add(ev["item_id"])
                     elif arms_mod.is_audio_delta(et):
                         if t.ttfa_ms is None:
                             t.ttfa_ms = since()
@@ -244,14 +276,27 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
                             t.ttft_ms = since()
                         t.transcript += ev.get("delta") or ""
                     elif arms_mod.is_input_transcription_done(et):
+                        # On a split turn the service commits several input items,
+                        # and a late transcript for an EARLIER fragment would
+                        # otherwise become this turn's transcript_ms. Only accept
+                        # the completion for an item committed after speech ended.
+                        item_id = ev.get("item_id")
+                        if item_id and item_id in fragment_items:
+                            continue                       # belongs to a fragment
+                        if item_id and final_items and item_id not in final_items:
+                            continue
                         if t.transcript_ms is None:
                             t.transcript_ms = since()
+                            t.transcript_item_id = item_id or ""
                         t.caller_transcript = (ev.get("transcript") or "").strip()
                     elif et == "response.done":
                         resp = ev.get("response") or {}
                         if resp.get("status") == "cancelled":
                             # a late cancellation of a fragment response
                             t.false_starts += 1
+                            if audio_bytes:
+                                t.false_starts_audible += 1
+                                t.false_start_audio_ms += audio_bytes / BYTES_PER_MS
                             t.ttfa_ms = t.ttft_ms = None
                             t.transcript = ""
                             audio_bytes = 0

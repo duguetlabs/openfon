@@ -13,17 +13,23 @@ Significance uses a two-sided exact sign test plus a bootstrap CI on the
 median difference — both distribution-free, so no scipy dependency and no
 normality assumption about latency (which is never normal).
 
-Two guards stop a bare p < 0.05 from minting a directional claim:
+Three rules keep a verdict honest in both directions:
 
   Holm–Bonferroni over the whole family of paired tests in this run
-      (3 comparisons x len(METRICS) metrics = 21). Under the null, one
-      spurious rejection is expected at that many tests, so an uncorrected
-      table would reliably manufacture a finding.
+      (one per comparison per metric). Under the null, roughly one spurious
+      rejection is expected at that many tests, so an uncorrected table would
+      reliably manufacture a finding.
   A practical floor (PRACTICAL_MS). A 6 ms median shift on a metric whose
       IQR is ~50 ms is noise wearing a significance badge, however small its
       p-value gets with enough pairs.
+  Equivalence needs the whole INTERVAL, not the point estimate. A median of
+      -19 ms with a CI of [-122, +60] is compatible with a 100 ms effect, so
+      it is reported as "no detectable difference; CI admits up to 122 ms" —
+      never as "no practical difference", which would assert something the
+      data does not support.
 
-A result is only reported directionally when it clears both.
+A directional claim needs the first two; an equivalence claim needs the third.
+Everything else is reported as a null with the bound the data actually gives.
 
   python analyze.py results/turns-20260801-2130.jsonl [--markdown out.md]
 """
@@ -247,17 +253,39 @@ class PairedResult:
         """Directional claims require BOTH a corrected p and a real effect."""
         return self.p_adj < ALPHA and self.practical
 
+    @property
+    def equivalent(self) -> bool:
+        """True only when the WHOLE interval sits inside ±PRACTICAL_MS.
+
+        Equivalence is a claim about what the data rules out, so it cannot be
+        made from the point estimate. A median of −19 ms with a CI of
+        [−122, +60] is perfectly compatible with a 100 ms effect; calling that
+        "no practical difference" asserts something the data does not support.
+        This is the interval form of a TOST.
+        """
+        return (not math.isnan(self.lo) and not math.isnan(self.hi)
+                and self.lo > -PRACTICAL_MS and self.hi < PRACTICAL_MS)
+
+    @property
+    def bound_ms(self) -> float:
+        """Largest effect the interval still admits, either direction."""
+        if math.isnan(self.lo) or math.isnan(self.hi):
+            return float("nan")
+        return max(abs(self.lo), abs(self.hi))
+
     def verdict(self) -> str:
         direction = "slower" if self.median > 0 else "faster"
         if self.survives:
             return f"**{direction} by {abs(self.median):.0f} ms**"
-        if not self.practical:
-            # too small to matter however the p-value lands
-            return (f"no practical difference (<{PRACTICAL_MS:.0f} ms)"
-                    + (" despite p<0.05" if self.p_raw < ALPHA else ""))
-        if self.p_raw < ALPHA:
+        if self.p_adj < ALPHA and not self.practical:
+            return (f"significant but below the {PRACTICAL_MS:.0f} ms floor "
+                    f"({self.median:+.0f} ms)")
+        if self.p_raw < ALPHA and self.practical:
             return f"borderline — {direction} by {abs(self.median):.0f} ms, not robust to Holm"
-        return "no detectable difference"
+        if self.equivalent:
+            return f"equivalent within ±{PRACTICAL_MS:.0f} ms"
+        return (f"no detectable difference; CI admits up to "
+                f"{self.bound_ms:.0f} ms")
 
 
 def compute_paired(turns: list[dict], metrics: list[str]) -> dict[str, list[PairedResult]]:
@@ -368,10 +396,25 @@ def main() -> int:
         for k, v in sorted(warns.items()):
             w(f"- {v}x {k}")
         w()
-    if not fatals and not warns and any("config_fatal" in t for t in turns):
-        w("Controls verified: every arm echoed back the audio format, sample "
-          "rate, turn detection, voice and STT model it was asked for.")
-        w()
+    # "No warnings" is not verification: a turn that failed before configuring
+    # has no warnings either. Require a positively verified echo from every arm
+    # that appears in the dataset.
+    if any("config_verified" in t for t in turns):
+        by_arm: dict[str, int] = defaultdict(int)
+        for t in turns:
+            if t.get("config_verified"):
+                by_arm[t["arm"]] += 1
+        unverified = sorted({t["arm"] for t in turns} - set(by_arm))
+        if unverified:
+            w(f"**Unverified arms** (no turn ever confirmed its controls): "
+              f"{', '.join('`' + a + '`' for a in unverified)}. Their numbers "
+              f"rest on unchecked settings.")
+            w()
+        elif not fatals and not warns:
+            w(f"Controls verified: every arm confirmed the audio format, sample "
+              f"rate, turn detection, voice and STT model it was asked for on "
+              f"{min(by_arm.values())}+ turns each.")
+            w()
     n_tr_timeout = sum(1 for t in turns if t.get("transcript_timed_out"))
     if n_tr_timeout:
         w(f"{n_tr_timeout} turn(s) never produced a caller transcript within the "
@@ -444,15 +487,23 @@ def main() -> int:
     # turn structure and the ttfa comparison needs a caveat.
     w("### VAD false starts (utterance split at a clause pause, response cancelled)")
     w()
-    w("| arm | turns | turns with >=1 false start | total false starts |")
-    w("|---|---:|---:|---:|")
+    w("`audible` counts fragments that got as far as emitting audio — i.e. the "
+      "caller was actually talked over. A split with no audible fragment is a "
+      "silent re-segmentation: nothing is heard, but the model then answers a "
+      "fragment of the sentence, which is invisible in testing.")
+    w()
+    w("| arm | turns | turns with >=1 split | total splits | of which audible | audio emitted |")
+    w("|---|---:|---:|---:|---:|---:|")
     for arm_id in ARMS_BY_ID:
         xs = [t for t in turns if t["arm"] == arm_id]
         if not xs:
             continue
         n_any = sum(1 for t in xs if t.get("false_starts"))
         tot = sum(t.get("false_starts", 0) for t in xs)
-        w(f"| `{arm_id}` | {len(xs)} | {n_any} | {tot} |")
+        aud = sum(t.get("false_starts_audible", 0) for t in xs)
+        ms = sum(t.get("false_start_audio_ms", 0.0) for t in xs)
+        w(f"| `{arm_id}` | {len(xs)} | {n_any} | {tot} | {aud} | "
+          f"{ms:.0f} ms |")
     w()
     by_utt: dict[str, int] = defaultdict(int)
     for t in turns:

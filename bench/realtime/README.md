@@ -66,6 +66,8 @@ caller speech finishes playing out**, not from the send call.
 | `response_total_ms` | end of caller speech → `response.done` |
 | `audio_out_ms` | duration of the decoded reply audio |
 | `false_starts` | responses server VAD began and cancelled mid-utterance, at a clause pause longer than `silence_duration_ms`. Their timings are discarded, not measured. |
+| `false_starts_audible` | how many of those got as far as emitting audio. This is the difference between "the caller was talked over" and "the service silently re-segmented the turn" — two very different severities, so it is measured rather than assumed. |
+| `transcript_item_id` | which committed input item the accepted caller transcript belongs to. A split turn commits several, and a late transcript for an earlier fragment must not become the turn's `transcript_ms`. |
 
 `ttfa_ms` **includes the detector's end-of-turn delay**, so `analyze.py` reports it twice:
 raw, and engine-only. The engine-only figure subtracts **each turn's own measured

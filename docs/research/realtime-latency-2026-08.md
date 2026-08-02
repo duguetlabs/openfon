@@ -17,6 +17,10 @@ either engine.**
 | Voice Live via gateway − direct | **−19 ms** | [−122, +60] | 1.00 / 1.00 |
 
 Both intervals straddle zero, on 25 paired turns each with byte-identical caller audio.
+**Stated precisely: no detectable difference, with the data ruling out anything larger than
+~140 ms in either direction.** That is not a claim of exact equivalence — 25 pairs against
+this much per-turn variance cannot deliver one — but at a p50 of 1.9–2.4 s it is decisive
+for the decision at hand.
 The point estimates are *negative* — the gateway looked marginally faster — but that is a
 vantage-point artefact, not a win: from the machine that ran this, the Cloudflare edge
 fronting `api.kataleptic.com` is 30 ms of TCP RTT away while Azure swedencentral is 61 ms,
@@ -32,10 +36,13 @@ budget as measured, and largely ours to set) and the choice of engine (Voice Liv
 
 **A separate finding, from the [VAD follow-up](#follow-up-is-the-splitting-the-brain-or-the-turn-detector)
 and arguably more actionable than the latency result:** OpenFon's `gpt-realtime-2` tier
-interrupts callers who pause mid-sentence, **10 times out of 10**, because
-`src/call-session.ts` sends `server_vad` to every tier. The fix costs nothing in latency —
-but the combination that delivers it (Voice Live serving gpt-realtime-2 with Azure semantic
-VAD) is not currently exposed by Kataleptic on any tier.
+**silently splits a caller's sentence at a clause pause, 10 times out of 10**, because
+`src/call-session.ts` sends `server_vad` to every tier. The caller hears nothing — 20 splits
+produced 0 ms of audio — so the model answers a sentence fragment as if it were a complete
+turn, and a response is generated and discarded on every pause. Being inaudible makes it
+harder to catch, not less real. The fix costs nothing in latency, but the combination that
+delivers it (Voice Live serving gpt-realtime-2 with Azure semantic VAD) is not currently
+exposed by Kataleptic on any tier.
 
 ---
 
@@ -370,6 +377,36 @@ brain — it is `server_vad` firing on a clause pause, and gpt-realtime-2's `ser
 implementation is simply more trigger-happy than the cascade's. Give the same brain a
 semantic detector and the behaviour disappears entirely.
 
+### The caller is not talked over — which makes this subtler, not milder
+
+The obvious reading of a "false start" is that the agent begins answering half a sentence
+out loud. **It does not.** Tracking whether each cancelled fragment emitted any audio:
+
+| | splits | of which audible | audio emitted |
+|---|---:|---:|---:|
+| all splitting arms, `de-short` × 10 rounds | **20** | **0** | **0 ms** |
+
+Every split was cancelled before a single audio delta went out — in a traced session, 8 ms
+after the fragment response was created. So the caller hears nothing. What actually happens
+is that the service commits the utterance as **two input items** and answers the second:
+
+| arm | caller transcript the reply answers |
+|---|---|
+| `native-direct` (split) | `'Haben Sie am Donnerstagnachmittag noch einen Termin frei?'` |
+| `nat-semantic` (no split) | `'Guten Tag, haben Sie am Donnerstagnachmittag noch einen Termin frei?'` |
+
+Both fragments remain in the conversation, so no content is destroyed — the model still has
+"Guten Tag" as a prior item. The defect is that **turn boundaries land in the wrong place**:
+the model treats a sentence fragment as a complete turn, and a response is generated and
+thrown away on every such pause (which is billed).
+
+This is a **lower severity than "the agent interrupts callers", and a higher detection
+cost**. Nothing is audible, so it will never show up in manual testing or a call recording;
+it surfaces only as occasional oddly-scoped answers. Two things remain untested: whether a
+longer clause pause crosses into audible interruption (these fragments died in single-digit
+milliseconds, but that is a race, not a guarantee), and whether the re-segmentation measurably
+degrades reply quality. The first is a barge-in study; the second is task #6.
+
 ### What the fix costs — and here the two detectors differ enormously
 
 Paired on `en-short`, where nothing splits on any arm:
@@ -406,8 +443,9 @@ the model thinking.**
    gpt-realtime-2 with Azure semantic VAD splits 0/10 at no measurable latency cost.
 2. **OpenFon is currently exposed to this.** `realtimeSessionPayload` in
    `src/call-session.ts` sends `server_vad / 0.7 / 300 / 550` to *every* tier, including
-   `gpt-realtime-2`. On that tier a caller who pauses mid-sentence — "Guten Tag, …" — gets
-   interrupted, reproducibly, 10 times out of 10.
+   `gpt-realtime-2`. On that tier a caller who pauses mid-sentence — "Guten Tag, …" — has
+   the turn split, reproducibly, 10 times out of 10. Inaudibly: the model answers the
+   fragment and a discarded response is billed each time.
 3. **The good combination is not currently purchasable through Kataleptic.** Its
    `gpt-realtime-2` tier proxies to the Foundry surface, where `semantic_vad` means
    OpenAI's slow one; its HD tier maps `semantic_vad` to Azure's, but that tier's brain is
@@ -415,8 +453,8 @@ the model thinking.**
    that wins here. That is a concrete tier worth asking for.
 
 Until then the honest short-term options are: use the HD tier (fast detector, weaker
-brain), or use `gpt-realtime-2` with `server_vad` and accept clause-pause interruptions.
-Switching that tier to OpenAI `semantic_vad` fixes the interruptions but trades them for a
+brain), or use `gpt-realtime-2` with `server_vad` and accept silent clause-pause splitting.
+Switching that tier to OpenAI `semantic_vad` fixes the splitting but trades it for a
 multi-second end-of-turn tail, which is worse on a phone call.
 
 ## Cost

@@ -21,10 +21,12 @@ from analyze import (ALPHA, PRACTICAL_MS, PairedResult,  # noqa: E402
 from bench import redact  # noqa: E402
 
 
-def result(median, p_raw, p_adj, metric="ttfa_ms"):
+def result(median, p_raw, p_adj, metric="ttfa_ms", lo=None, hi=None):
     return PairedResult(metric=metric, treat="gw", ctrl="direct", question="q",
-                        diffs=[median], median=median, lo=median - 10,
-                        hi=median + 10, p_raw=p_raw, p_adj=p_adj)
+                        diffs=[median], median=median,
+                        lo=median - 10 if lo is None else lo,
+                        hi=median + 10 if hi is None else hi,
+                        p_raw=p_raw, p_adj=p_adj)
 
 
 def turn(rnd, arm, utt, **metrics):
@@ -247,26 +249,71 @@ class TestVerdictGating(unittest.TestCase):
         self.assertIn("not robust to Holm", r.verdict())
 
     def test_tiny_effect_is_not_minted_even_when_significant(self):
-        # the config_ms case: p<0.05 raw, but 6 ms is noise
-        r = result(+6, 0.043, 0.909)
+        # the config_ms case: p<0.05 raw, but 6 ms is noise. With a tight CI
+        # this is a genuine equivalence claim, not merely a failure to detect.
+        r = result(+6, 0.043, 0.909, lo=1, hi=43)
         self.assertFalse(r.survives)
-        self.assertIn("no practical difference", r.verdict())
-        self.assertIn("despite p<0.05", r.verdict())
+        self.assertIn("equivalent within", r.verdict())
 
     def test_tiny_effect_surviving_correction_is_still_not_directional(self):
         # p can survive Holm and the effect still be too small to matter
-        r = result(+46, 0.001, 0.017)
+        r = result(+46, 0.001, 0.017, lo=19, hi=83)
         self.assertLess(r.p_adj, ALPHA)
         self.assertFalse(r.survives)
-        self.assertIn("no practical difference", r.verdict())
+        self.assertIn("below the", r.verdict())
 
     def test_practical_floor_boundary(self):
         self.assertFalse(result(PRACTICAL_MS - 0.1, 0.0, 0.0).practical)
         self.assertTrue(result(PRACTICAL_MS, 0.0, 0.0).practical)
         self.assertTrue(result(-PRACTICAL_MS, 0.0, 0.0).practical)
 
-    def test_plain_null_reads_as_no_detectable_difference(self):
-        self.assertEqual(result(-200, 0.7, 1.0).verdict(), "no detectable difference")
+    def test_plain_null_states_the_bound_the_data_gives(self):
+        """A bare "no detectable difference" hides how weak the evidence is;
+        the verdict has to carry the interval."""
+        v = result(-200, 0.7, 1.0, lo=-500, hi=100).verdict()
+        self.assertIn("no detectable difference", v)
+        self.assertIn("admits up to 500 ms", v)
+
+
+class TestEquivalence(unittest.TestCase):
+    """Equivalence is a claim about what the data RULES OUT, so it cannot be
+    made from the point estimate alone."""
+
+    def test_wide_ci_around_a_small_median_is_not_equivalence(self):
+        # the shipped Voice Live proxy result: median -19, CI [-122, +60]
+        r = result(-19, 1.0, 1.0, lo=-122, hi=60)
+        self.assertFalse(r.equivalent)
+        self.assertNotIn("no practical difference", r.verdict())
+        self.assertIn("admits up to 122 ms", r.verdict())
+
+    def test_tight_ci_inside_the_bounds_is_equivalence(self):
+        r = result(+6, 1.0, 1.0, lo=-20, hi=30)
+        self.assertTrue(r.equivalent)
+        self.assertIn("equivalent within", r.verdict())
+
+    def test_ci_touching_the_bound_is_not_equivalence(self):
+        self.assertFalse(result(0, 1.0, 1.0, lo=-PRACTICAL_MS, hi=10).equivalent)
+        self.assertFalse(result(0, 1.0, 1.0, lo=-10, hi=PRACTICAL_MS).equivalent)
+
+    def test_bound_is_the_larger_side_of_the_interval(self):
+        self.assertAlmostEqual(result(-19, 1.0, 1.0, lo=-122, hi=60).bound_ms, 122)
+        self.assertAlmostEqual(result(+19, 1.0, 1.0, lo=-40, hi=200).bound_ms, 200)
+
+    def test_nan_ci_is_never_equivalence(self):
+        nan = float("nan")
+        r = result(0, 1.0, 1.0, lo=nan, hi=nan)
+        self.assertFalse(r.equivalent)
+
+    def test_significant_but_tiny_reads_as_below_the_floor(self):
+        # +46 ms surviving Holm: real, reproducible, and irrelevant to a caller
+        r = result(+46, 0.001, 0.017, lo=19, hi=83)
+        self.assertFalse(r.survives)
+        self.assertIn("below the", r.verdict())
+
+    def test_directional_verdict_still_requires_both_gates(self):
+        r = result(-145, 0.0, 0.0, lo=-249, hi=-84)
+        self.assertTrue(r.survives)
+        self.assertIn("faster by 145 ms", r.verdict())
 
 
 class TestComputePaired(unittest.TestCase):
