@@ -344,20 +344,31 @@ export class CallSession implements DurableObject {
 
   // ---- realtime engine bridge (OpenAI Realtime wire protocol) ----
 
-  private sendUpstream(obj: unknown): void {
+  // Two different questions, deliberately kept apart. `upstream` is the socket
+  // we write to; `readableUpstreams` is every socket whose events we still
+  // accept. They differ during a proactive rotation: the outgoing connection is
+  // still mid-response and has to stay both readable and writable until its
+  // replacement is actually open, or rotating — which exists so a call does not
+  // drop mid-sentence — would itself swallow seconds of speech.
+  private readableUpstreams = new Set<WebSocket>();
+
+  private sendUpstream(obj: unknown, target: WebSocket | null = this.upstream): void {
     try {
-      this.upstream?.send(JSON.stringify(obj));
+      target?.send(JSON.stringify(obj));
     } catch {
       /* upstream gone */
     }
   }
 
   private closeUpstream(): void {
-    try {
-      this.upstream?.close(1000, 'call ended');
-    } catch {
-      /* noop */
+    for (const ws of this.readableUpstreams) {
+      try {
+        ws.close(1000, 'call ended');
+      } catch {
+        /* noop */
+      }
     }
+    this.readableUpstreams.clear();
     this.upstream = null;
   }
 
@@ -508,6 +519,7 @@ export class CallSession implements DurableObject {
   // session.update and streams PCM at a client that has fallen back to
   // pipeline mode and will try to decode those frames as MP3.
   private abandonUpstream(ws: WebSocket): void {
+    this.readableUpstreams.delete(ws);
     try {
       ws.close(1000, 'abandoned');
     } catch {
@@ -534,7 +546,10 @@ export class CallSession implements DurableObject {
         settle(false);
         return;
       }
-      this.upstream = ws;
+      // Readable from the moment it is dialed, but not the write target until
+      // it opens — so a rotation keeps using the outgoing connection, in both
+      // directions, right up to the handover.
+      this.readableUpstreams.add(ws);
       let abandoned = false;
       let opened = false; // did this connection ever become usable?
       const timer = setTimeout(() => {
@@ -546,32 +561,38 @@ export class CallSession implements DurableObject {
         clearTimeout(timer);
         if (abandoned) return; // we already gave up on this one and closed it
         opened = true;
-        this.sendUpstream(this.realtimeSessionPayload(this.sessionVoice, instructions));
+        this.upstream = ws; // handover: from here we write to the new socket
+        this.sendUpstream(this.realtimeSessionPayload(this.sessionVoice, instructions), ws);
         if (greetWith) {
-          this.sendUpstream({
-            type: 'response.create',
-            response: { instructions: `Greet the caller by saying exactly this, then wait for them to speak: "${greetWith}"` },
-          });
+          this.sendUpstream(
+            {
+              type: 'response.create',
+              response: { instructions: `Greet the caller by saying exactly this, then wait for them to speak: "${greetWith}"` },
+            },
+            ws
+          );
         }
         settle(true);
       });
       ws.addEventListener('message', (ev) => {
-        if (this.upstream !== ws) return; // rotated or abandoned connection
+        if (!this.readableUpstreams.has(ws)) return; // abandoned or rotated out
         this.onUpstreamMessage(ev).catch((err) => console.error('upstream handler error', err));
       });
       ws.addEventListener('error', () => {
         clearTimeout(timer);
         // Only discard a connection that never became usable. WebSockets
         // routinely emit `error` immediately before `close`, and `close` is
-        // what triggers recovery — clearing this.upstream here would make its
-        // `this.upstream === ws` guard false and silently kill the reconnect.
+        // what triggers recovery — dropping it here would make the close
+        // listener's ownership guard false and silently kill the reconnect.
         if (!opened) this.abandonUpstream(ws);
         settle(false);
       });
       ws.addEventListener('close', () => {
         clearTimeout(timer);
+        this.readableUpstreams.delete(ws);
         settle(false);
         if (this.mode === 'realtime' && !this.ended && this.upstream === ws) {
+          this.upstream = null;
           void this.recoverUpstream();
         }
       });

@@ -40,6 +40,9 @@ class FakeSocket {
   messages(): { type: string; [k: string]: unknown }[] {
     return this.sent.filter((s) => typeof s === 'string').map((s) => JSON.parse(s as string));
   }
+  binaryCount(): number {
+    return this.sent.filter((s) => typeof s !== 'string').length;
+  }
   typesSent(): string[] {
     return this.messages().map((m) => m.type);
   }
@@ -466,6 +469,69 @@ describe('upstream recovery', () => {
     await flush();
 
     expect(upstreamSockets.length).toBe(2); // recovery actually ran
+  });
+
+  it('keeps the outgoing connection live for the whole rotation window', async () => {
+    // session.expiring rotates proactively so a call does not drop mid-sentence.
+    // The old socket is deliberately held open until the replacement succeeds,
+    // so it has to stay both readable and writable for those seconds — keying
+    // the receive guard on "is this the write target" silently discarded every
+    // audio delta the still-working connection produced.
+    vi.useFakeTimers();
+    const { session } = newSession('realtime');
+    await session.fetch(upgradeRequest());
+    const client = serverSockets[0];
+
+    client.receive({ type: 'start' });
+    await flush();
+    const oldUp = upstreamSockets[0];
+    oldUp.emit('open', {});
+    await flush();
+    expect(client.messages().find((m) => m.type === 'ready')?.mode).toBe('realtime');
+
+    const audioBefore = client.binaryCount();
+
+    // Engine warns of its cutoff: rotation begins, replacement starts dialing.
+    oldUp.emit('message', { data: JSON.stringify({ type: 'session.expiring' }) });
+    await flush();
+    expect(upstreamSockets).toHaveLength(2);
+    const newUp = upstreamSockets[1];
+    expect(newUp.readyState).toBe(1);
+
+    // Mid-rotation, the old connection is still mid-response.
+    for (let i = 0; i < 3; i++) {
+      oldUp.emit('message', {
+        data: JSON.stringify({ type: 'response.output_audio.delta', delta: 'AAAA' }),
+      });
+    }
+    oldUp.emit('message', {
+      data: JSON.stringify({ type: 'response.output_audio_transcript.done', transcript: 'still talking' }),
+    });
+    await flush();
+
+    expect(client.binaryCount()).toBe(audioBefore + 3); // nothing dropped
+    expect(client.messages().some((m) => m.text === 'still talking')).toBe(true);
+
+    // Caller audio must still reach the engine that is actually connected.
+    const oldSentBefore = oldUp.sent.length;
+    client.emit('message', { data: new ArrayBuffer(8) });
+    await flush();
+    expect(oldUp.sent.length).toBe(oldSentBefore + 1);
+    expect(newUp.sent).toHaveLength(0); // not written to before it opens
+
+    // Handover: once the replacement opens it takes over and the old is closed.
+    newUp.emit('open', {});
+    await flush();
+    expect(newUp.sent.length).toBeGreaterThan(0); // session.update went out
+    expect(oldUp.readyState).toBe(3);
+
+    // And a rotated-out socket can no longer inject anything.
+    const after = client.binaryCount();
+    oldUp.emit('message', {
+      data: JSON.stringify({ type: 'response.output_audio.delta', delta: 'BBBB' }),
+    });
+    await flush();
+    expect(client.binaryCount()).toBe(after);
   });
 
   it('is bounded and finalizes rather than spawning orphan connections', async () => {
