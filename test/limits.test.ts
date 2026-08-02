@@ -307,6 +307,44 @@ describe('sweepStaleCalls', () => {
     expect(stranded.status).toBe('abandoned');
   });
 
+  it('reconciles a row an older worker connected, before classifying it', async () => {
+    const db = new FakeD1();
+    // The rollout window `npm run deploy` opens: the migration has already run,
+    // then the old worker — which never writes connected_at — serves this call,
+    // and the deploy restarting the worker strands it. Classified as-is it takes
+    // the never-dialled branch and a real transcript reads "Never connected".
+    const row = db.seedCall({
+      id: 'served-by-old-worker',
+      business_id: 'biz1',
+      started_at: Date.now() - 40 * MINUTE,
+      connected_at: null,
+    });
+    db.seedTurn('served-by-old-worker', Date.now() - 39 * MINUTE);
+    db.seedTurn('served-by-old-worker', Date.now() - 38 * MINUTE);
+
+    expect(await sweepStaleCalls(fakeEnv(db))).toBe(0);
+    expect(row.connected_at).toBe(Date.now() - 39 * MINUTE);
+    // Now judged on the connected clock, which has 21 minutes left to run.
+    expect(row.status).toBe('active');
+  });
+
+  it('retires a reconciled row as interrupted once its connected clock runs out', async () => {
+    const db = new FakeD1();
+    const row = db.seedCall({
+      id: 'old-worker-stranded',
+      business_id: 'biz1',
+      started_at: Date.now() - 95 * MINUTE,
+      connected_at: null,
+    });
+    db.seedTurn('old-worker-stranded', Date.now() - 94 * MINUTE);
+
+    expect(await sweepStaleCalls(fakeEnv(db))).toBe(1);
+    expect(row.status).toBe('abandoned');
+    // connected_at survives the retirement, so the dashboard reads this as a
+    // conversation that was cut off rather than one that never happened.
+    expect(row.connected_at).toBe(Date.now() - 94 * MINUTE);
+  });
+
   it('still retires an old row whose connection was released', async () => {
     const db = new FakeD1();
     // A refused handshake clears connected_at, so the row falls back to the

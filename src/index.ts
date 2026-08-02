@@ -740,6 +740,10 @@ app.get('/api/health', (c) => c.json({ ok: true, service: 'openfon' }));
 // than sharing a template — the column is the part that differs, and hiding it
 // behind a parameter is how it came to be wrong in the first place.
 //
+// connected_at's NULL-ness is a moving target for as long as two worker versions
+// can serve, so the sweep repairs it at runtime rather than trusting a migration
+// to have established it. See the first statement.
+//
 // This is a FLOOR, not a retry, and the difference matters to anything thinking
 // of leaning on it. The write is terminal: CallSession.finalize() selects
 // `WHERE id = ? AND status = 'active'` and returns early when that misses, so
@@ -752,6 +756,27 @@ app.get('/api/health', (c) => c.json({ ok: true, service: 'openfon' }));
 // session still exists, because only there can a summary still be produced.
 export async function sweepStaleCalls(env: Env, now = Date.now()): Promise<number> {
   const res = await env.DB.batch([
+    // Reconcile before classifying. A row with saved turns reached a Durable
+    // Object by definition, so connected_at IS NULL there means the row was
+    // served by a worker that predates the column — which is not only ancient
+    // history: `npm run deploy` applies migrations *before* uploading, so the old
+    // worker keeps serving through the rollout and every call it takes in that
+    // window lands with a NULL. The migration's one-time backfill cannot see
+    // those; it already ran. Classified as-is they take the never-dialled branch
+    // and a real transcript gets labelled "Never connected".
+    //
+    // Same COALESCE rule the migration uses, for the same reason: MIN(ts) trails
+    // the real connect by one greeting, started_at is early by at most the attach
+    // window, and either beats NULL, which asserts something known to be false.
+    // Runs inside the batch, so the two statements below see the repair.
+    env.DB.prepare(
+      `UPDATE calls SET connected_at = COALESCE(
+           (SELECT MIN(ts) FROM call_turns WHERE call_turns.call_id = calls.id),
+           started_at
+         )
+        WHERE status = 'active' AND connected_at IS NULL
+          AND EXISTS (SELECT 1 FROM call_turns WHERE call_turns.call_id = calls.id)`
+    ),
     // Never dialled: measured from when the id was handed out, because that is
     // the only timestamp such a row has.
     env.DB.prepare(
@@ -771,7 +796,8 @@ export async function sweepStaleCalls(env: Env, now = Date.now()): Promise<numbe
     // history is plenty of slack for the longest limiter.
     env.DB.prepare('DELETE FROM rate_counters WHERE window_start < ?').bind(Math.floor(now / 1000) - 86400),
   ]);
-  return (res[0].meta.changes ?? 0) + (res[1].meta.changes ?? 0);
+  // Retired rows only — the reconciliation at res[0] repairs, it does not retire.
+  return (res[1].meta.changes ?? 0) + (res[2].meta.changes ?? 0);
 }
 
 export default {

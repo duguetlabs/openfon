@@ -33,6 +33,7 @@ export class FakeD1 {
   sessions: Row[] = [];
   businesses: Row[] = [];
   calls: FakeCall[] = [];
+  turns: { call_id: string; ts: number }[] = [];
   counters = new Map<string, number>(); // `${bucket}|${window_start}` -> count
 
   // Called before every statement. Tests use it to move the clock mid-request,
@@ -64,6 +65,11 @@ export class FakeD1 {
     const row: FakeCall = { status: 'active', started_at: Date.now(), connected_at: null, ...c };
     this.calls.push(row);
     return row;
+  }
+
+  // A saved transcript turn — proof the call reached a Durable Object.
+  seedTurn(callId: string, ts: number): void {
+    this.turns.push({ call_id: callId, ts });
   }
 }
 
@@ -182,6 +188,19 @@ class FakeStatement {
         rows: c && b ? [{ id: c.id, business_id: c.business_id, max_concurrent_calls: b.max_concurrent_calls }] : [],
         changes: 0,
       };
+    }
+    // Runtime reconciliation: repair rows an older worker connected without
+    // writing the column, before the two classification statements read it.
+    if (q.startsWith('UPDATE calls SET connected_at = COALESCE(')) {
+      let changes = 0;
+      for (const c of this.db.calls) {
+        if (c.status !== 'active' || c.connected_at !== null) continue;
+        const ts = this.db.turns.filter((t) => t.call_id === c.id).map((t) => t.ts);
+        if (ts.length === 0) continue;
+        c.connected_at = Math.min(...ts);
+        changes++;
+      }
+      return { rows: [], changes };
     }
     if (q.startsWith('UPDATE calls SET connected_at = NULL')) {
       const c = this.db.calls.find((x) => x.id === a[0]);
