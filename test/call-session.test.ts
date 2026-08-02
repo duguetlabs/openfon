@@ -788,6 +788,41 @@ describe('upstream recovery', () => {
     expect(client.typesSent()).toContain('error');
   });
 
+  it('recovers from a second engine drop, not just the first', async () => {
+    // `reconnects` bounds attempts within one recovery episode; it was never
+    // given back after a successful one, so it silently became a second,
+    // stricter whole-call cap. A call that survived one drop was hung up on by
+    // the next — which took the exhausted-budget branch without dialling at
+    // all — while MAX_TOTAL_RECONNECTS still permitted several more.
+    vi.useFakeTimers();
+    const { session, callUpdates } = newSession('realtime');
+    await session.fetch(upgradeRequest());
+    const client = serverSockets[0];
+    client.receive({ type: 'start' });
+    await flush();
+    upstreamSockets[0].emit('open', {});
+    await flush();
+
+    // First drop: recovery connects a replacement.
+    upstreamSockets[0].close(1006, 'engine dropped');
+    await flush();
+    expect(upstreamSockets).toHaveLength(2);
+    upstreamSockets[1].emit('open', {});
+    await flush();
+    expect(client.typesSent()).not.toContain('error');
+
+    // Second drop, later in the same call: it must try again.
+    upstreamSockets[1].close(1006, 'engine dropped again');
+    await flush();
+    expect(upstreamSockets).toHaveLength(3); // dialled, rather than giving up
+    upstreamSockets[2].emit('open', {});
+    await flush();
+
+    expect(client.typesSent()).not.toContain('error');
+    expect(client.readyState).toBe(1);
+    expect(callUpdates()).toHaveLength(0); // the call is still going
+  });
+
   it('is bounded and finalizes rather than spawning orphan connections', async () => {
     vi.useFakeTimers();
     const { session } = newSession('realtime');

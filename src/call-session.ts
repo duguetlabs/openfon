@@ -742,6 +742,13 @@ export class CallSession implements DurableObject {
             /* already closed */
           }
         }
+        // The episode succeeded, so its budget goes back. `reconnects` bounds
+        // attempts within one recovery; leaving it spent turned it into a
+        // second, stricter whole-call cap, and the next drop finalized without
+        // trying at all — a call that survived one engine drop was hung up on
+        // by the second, with MAX_TOTAL_RECONNECTS still permitting several.
+        // `totalReconnects` is what bounds the call.
+        this.reconnects = 0;
         return;
       }
     }
