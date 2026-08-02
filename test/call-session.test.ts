@@ -228,10 +228,10 @@ function newSession(engine: 'pipeline' | 'realtime' = 'pipeline') {
   const storage = new FakeStorage();
   const state = { storage } as unknown as DurableObjectState;
   const session = new CallSession(state, fakeEnv(backing.db));
-  const { ctl, turnWrites, callUpdates } = backing;
+  const { ctl, writes, turnWrites, callUpdates } = backing;
   /** Rebuild the object on the same storage and D1, as an eviction would. */
   const evictAndRebuild = () => new CallSession(state, fakeEnv(backing.db));
-  return { session, storage, ctl, turnWrites, callUpdates, evictAndRebuild };
+  return { session, storage, ctl, writes, turnWrites, callUpdates, evictAndRebuild };
 }
 
 // ---------- tests ----------
@@ -878,6 +878,73 @@ describe('watchdog alarm', () => {
     await session.alarm();
     expect(callUpdates()).toHaveLength(1);
     expect(storage.alarmAt).toBeNull();
+  });
+
+  it('salvages the caller message when the sweep retires the row first', async () => {
+    // The sweep is terminal — finalize's `AND status = 'active'` misses forever
+    // after it — and it writes none of the content fields. A summary this
+    // session already paid for should not die with the row: for a small
+    // business the callback message is the most valuable thing a call produces.
+    vi.useFakeTimers();
+    const { session, storage, ctl, writes } = newSession();
+    storage.map.set('callId', 'call-1');
+    storage.map.set('hardDeadline', Date.now() - 1000);
+    ctl.turns = [
+      { role: 'agent', text: 'Riverside Dental, how can I help?' },
+      { role: 'caller', text: 'Ring me back on 0664 1234567 about a crown.' },
+      { role: 'agent', text: 'Will do.' },
+    ];
+    (globalThis as never).fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content:
+                '{"summary":"Callback requested.","intent":"message","caller_phone":"0664 1234567","message":"Ring back about a crown."}',
+            },
+          },
+        ],
+      }),
+    });
+
+    ctl.failUpdates = true;
+    await session.alarm(); // summarizes, then the write fails
+    expect(storage.map.get('summarized')).toBeDefined();
+
+    ctl.callRowActive = false; // the cron sweep retires it as 'abandoned'
+    ctl.failUpdates = false;
+    await session.alarm();
+
+    const salvage = writes.find((w) => w.sql.includes('COALESCE'));
+    expect(salvage).toBeDefined();
+    expect(salvage!.args[0]).toBe('Callback requested.');
+    expect(String(salvage!.args[2])).toContain('0664 1234567');
+    // Content only: the sweep's own verdict on the call is left alone.
+    expect(salvage!.sql).not.toContain('status =');
+    expect(salvage!.sql).not.toContain('duration_s');
+    expect(storage.alarmAt).toBeNull(); // and it stops
+  });
+
+  it('retries often enough to land inside the sweep window', async () => {
+    // The sweep retires a connected call at 60 minutes and forecloses recovery,
+    // so the retry cadence has to fit many attempts inside that hour — this is
+    // the constraint that ruled out an exponential ladder.
+    vi.useFakeTimers();
+    const { session, storage, ctl } = newSession();
+    await session.fetch(upgradeRequest());
+    serverSockets[0].receive({ type: 'start' });
+    await flush();
+
+    ctl.failUpdates = true;
+    let attempts = 0;
+    const deadline = Date.now() + 60 * 60_000;
+    while (Date.now() < deadline && attempts < 200) {
+      vi.setSystemTime(storage.alarmAt as number);
+      await session.alarm();
+      attempts++;
+    }
+    expect(attempts).toBeGreaterThan(50); // an exponential ladder gives ~8
   });
 
   it('stops retrying once the sweep has retired the row', async () => {

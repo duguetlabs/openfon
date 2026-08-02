@@ -1051,6 +1051,31 @@ export class CallSession implements DurableObject {
     return new Date(ms).toISOString().replace('T', ' ').slice(0, 19);
   }
 
+  // A summary this session already paid for, written to a row that something
+  // else has since retired. For a small business the structured callback
+  // message is the most valuable thing a call produces, and the sweep writes
+  // none of the content fields — so losing it because our write lost a race is
+  // worth one more statement to avoid.
+  //
+  // COALESCE so we only fill blanks, never overwrite another writer. Status and
+  // duration are left exactly as they were found: this recovers what the caller
+  // said, it does not reopen the call. Nothing is generated here, so a call
+  // that never reached summarization costs nothing but a log line.
+  private async salvageSummary(): Promise<void> {
+    this.summarized ??= (await this.state.storage.get<typeof this.summarized>('summarized')) ?? null;
+    const { summary = null, intent = null, messageJson = null } = this.summarized ?? {};
+    if (!summary && !messageJson) {
+      console.warn(`call ${this.callId}: row already retired, and nothing summarized to salvage`);
+      return;
+    }
+    console.warn(`call ${this.callId}: row retired before finalize could write — salvaging its summary`);
+    await this.env.DB.prepare(
+      `UPDATE calls SET summary = COALESCE(summary, ?), intent = COALESCE(intent, ?), message_json = COALESCE(message_json, ?) WHERE id = ?`
+    )
+      .bind(summary, intent, messageJson, this.callId)
+      .run();
+  }
+
   private async runFinalize(): Promise<void> {
     this.ended = true;
     this.closeUpstream();
@@ -1067,7 +1092,12 @@ export class CallSession implements DurableObject {
       .bind(this.callId, 'active')
       .first<{ started_at: string; business_id: string }>();
     if (!call) {
-      // Already completed by someone else — nothing left to reconcile.
+      // The row is no longer active: either something else completed it, or the
+      // sweep retired it as 'abandoned' before we got here. The sweep is
+      // terminal — this select is what forecloses recovery — so if a previous
+      // attempt already produced a summary, write its content now instead of
+      // letting the caller's callback request die with the row.
+      await this.salvageSummary();
       this.finalized = true;
       await this.clearWatchdog();
       return;
