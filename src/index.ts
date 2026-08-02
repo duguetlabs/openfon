@@ -44,12 +44,18 @@ interface Limit {
   max: number; // requests allowed per window
 }
 const LIMITS = {
-  // Every /api/public/* request. The widget hits /agent/:slug once per page
-  // load, so this only bites scripts.
-  publicApi: { name: 'pub', window: 60, max: 60 },
-  // Call creation. A caller who reloads the widget a few times is fine; office
-  // NAT means several legitimate callers can share one IP, hence 10 and not 5.
-  callStart: { name: 'start', window: 60, max: 10 },
+  // Every /api/public/* request. A widget page load is two of them — the agent
+  // lookup and the call start — so 30 is fifteen page loads a minute from one
+  // address, well past any legitimate NAT and still cheap to store.
+  //
+  // This number is also the instance's write budget, which is why it is not
+  // larger. Each request that lands inside it costs exactly one D1 row write, so
+  // an address saturating it for a full day costs 30 x 60 x 24 = 43,200 writes
+  // against D1's free-tier ceiling of 100,000/day, leaving the rest for call
+  // rows, transcripts and the sweep. At the old 60 — with call starts billing a
+  // second row on top — a client breaking no rule at all reached 100,800 and
+  // took the instance's own limiter offline with it.
+  publicApi: { name: 'pub', window: 60, max: 30 },
   // Both are reserved on every attempt, and they do different jobs.
   //
   // Per-IP is the only real ceiling: it bounds how much work one address can
@@ -64,6 +70,14 @@ const LIMITS = {
   loginIp: { name: 'lgip', window: 900, max: 20 },
   loginEmail: { name: 'lgem', window: 900, max: 5 },
 } satisfies Record<string, Limit>;
+
+// Call creation, counted in a second column of the *same* row as publicApi
+// rather than a bucket of its own. Two buckets meant one call start billed two
+// D1 row writes for one request, which is how the limiter's own cost came to
+// exceed the quota it was protecting. They share a window, so they can share a
+// row: one upsert, both ceilings. A caller who reloads the widget a few times is
+// fine, and office NAT means several legitimate callers share one address.
+const MAX_STARTS_PER_WINDOW = 10;
 
 // A call row whose WebSocket never opened is dead after this: the widget
 // connects immediately, so a longer gap means nobody is coming. Doubles as the
@@ -154,9 +168,40 @@ function tooMany(c: Ctx, message: string, retryAfter: number) {
   return c.json({ error: message }, 429, { 'Retry-After': String(retryAfter) });
 }
 
+// Both public ceilings in one row write. `count` gates in SQL, so anything past
+// it costs nothing at all; `starts` is judged on the returned value, so a start
+// refused for exceeding its own ceiling does write — but only up to the `count`
+// gate, which is what bounds the instance's write budget either way.
+async function consumePublic(
+  env: Env,
+  subject: string,
+  isStart: boolean
+): Promise<{ overAll: boolean; overStart: boolean }> {
+  const limit = LIMITS.publicApi;
+  const row = await env.DB.prepare(
+    `INSERT INTO rate_counters (bucket, window_start, count, starts) VALUES (?, ?, 1, ?)
+     ON CONFLICT(bucket, window_start) DO UPDATE SET
+         count = rate_counters.count + 1,
+         starts = rate_counters.starts + excluded.starts
+       WHERE rate_counters.count < ?
+     RETURNING count, starts`
+  )
+    .bind(`${limit.name}:${subject}`, windowStart(limit), isStart ? 1 : 0, limit.max)
+    .first<{ count: number; starts: number }>();
+  if (!row) return { overAll: true, overStart: false };
+  return { overAll: false, overStart: isStart && row.starts > MAX_STARTS_PER_WINDOW };
+}
+
 app.use('/api/public/*', async (c, next) => {
-  if ((await consume(c.env, LIMITS.publicApi, clientIp(c))).over) {
+  // The middleware owns both ceilings now: it is the one place that sees every
+  // public request, so counting here is what lets a start cost one write.
+  const isStart = c.req.method === 'POST' && new URL(c.req.url).pathname === '/api/public/call/start';
+  const taken = await consumePublic(c.env, clientIp(c), isStart);
+  if (taken.overAll) {
     return tooMany(c, 'Too many requests. Please wait a moment and try again.', LIMITS.publicApi.window);
+  }
+  if (taken.overStart) {
+    return tooMany(c, 'Too many calls started from this connection. Please wait a minute.', LIMITS.publicApi.window);
   }
   await next();
 });
@@ -644,10 +689,8 @@ app.get('/api/public/agent/:slug', async (c) => {
 
 app.post('/api/public/call/start', async (c) => {
   const { slug } = await c.req.json<{ slug?: string }>();
+  // The per-IP ceilings were already applied by the /api/public/* middleware.
   const addr = clientIp(c);
-  if ((await consume(c.env, LIMITS.callStart, addr)).over) {
-    return tooMany(c, 'Too many calls started from this connection. Please wait a minute.', LIMITS.callStart.window);
-  }
   const biz = await c.env.DB.prepare('SELECT id, max_concurrent_calls, max_calls_per_day FROM businesses WHERE slug = ?')
     .bind(slug ?? '')
     .first<{ id: string; max_concurrent_calls: number; max_calls_per_day: number }>();

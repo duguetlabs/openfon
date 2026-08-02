@@ -6,9 +6,13 @@
 -- Rate Limiting binding: no account-level resource for self-hosters to
 -- provision, and it is the only store that can also hold the per-day counts.
 CREATE TABLE rate_counters (
-  bucket TEXT NOT NULL,           -- "<limiter>:<subject>", e.g. "start:203.0.113.7"
+  bucket TEXT NOT NULL,           -- "<limiter>:<subject>", e.g. "pub:203.0.113.7"
   window_start INTEGER NOT NULL,  -- unix seconds, floored to the window size
   count INTEGER NOT NULL DEFAULT 0,
+  -- Call starts, counted alongside `count` in the same row rather than in a
+  -- bucket of their own. Two rows per start put the limiter's own write volume
+  -- over D1's free-tier daily ceiling before the app had written anything.
+  starts INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (bucket, window_start)
 );
 CREATE INDEX idx_rate_counters_window ON rate_counters(window_start);

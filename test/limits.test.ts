@@ -74,6 +74,30 @@ describe('POST /api/public/call/start burst', () => {
     expect(db.rowsWritten).toBe(settled);
   });
 
+  it('bills one row write for the limiter on a call start, not two', async () => {
+    const { db, start } = setup();
+    db.rowsWritten = 0;
+    expect((await start()).status).toBe(200);
+    // One rate_counters upsert plus the calls INSERT. A start used to consume a
+    // second bucket of its own, and that extra row per request is what pushed
+    // the default configuration past D1's free-tier ceiling.
+    expect(db.rowsWritten).toBe(2);
+  });
+
+  it('keeps a saturating address inside the free-tier write budget', async () => {
+    const { db, start } = setup();
+    db.rowsWritten = 0;
+    for (let i = 0; i < 200; i++) await start();
+
+    const counterWrites = db.rowsWritten - db.calls.length;
+    const perDay = counterWrites * (86_400 / 60); // this window, every minute, all day
+    // D1's free plan allows 100,000 row writes a day. The limiter's own
+    // bookkeeping is the instance's largest fixed cost, so it has to leave room
+    // for call rows, transcripts and the sweep — a limiter that spends the quota
+    // it is protecting takes the instance down by working exactly as configured.
+    expect(perDay).toBeLessThan(50_000);
+  });
+
   it('answers 429 with a Retry-After the widget can honour', async () => {
     const { start } = setup();
     for (let i = 0; i < 10; i++) await start();

@@ -35,6 +35,9 @@ export class FakeD1 {
   calls: FakeCall[] = [];
   turns: { call_id: string; ts: number }[] = [];
   counters = new Map<string, number>(); // `${bucket}|${window_start}` -> count
+  // The public row's second column, kept beside `counters` rather than folded
+  // into it so tests can still read a plain number out of either.
+  starts = new Map<string, number>();
 
   // Called before every statement. Tests use it to move the clock mid-request,
   // which is the only way to put a rate-limit window boundary in the middle of
@@ -110,6 +113,19 @@ class FakeStatement {
     this.db.hook?.(q);
 
     // ---- rate_counters ----
+    // The public limiter: one row, two counters, one write.
+    if (q.startsWith('INSERT INTO rate_counters') && q.includes('starts')) {
+      const key = `${a[0]}|${a[1]}`;
+      const inc = Number(a[2]);
+      const max = Number(a[3]);
+      const cur = this.db.counters.get(key);
+      if (cur !== undefined && cur >= max) return { rows: [], changes: 0 };
+      const count = (cur ?? 0) + 1;
+      const starts = (this.db.starts.get(key) ?? 0) + inc;
+      this.db.counters.set(key, count);
+      this.db.starts.set(key, starts);
+      return { rows: [{ count, starts }], changes: 1 };
+    }
     if (q.startsWith('INSERT INTO rate_counters')) {
       const key = `${a[0]}|${a[1]}`;
       const max = Number(a[2]);
@@ -140,14 +156,14 @@ class FakeStatement {
     if (q.startsWith('DELETE FROM rate_counters WHERE bucket')) {
       let changes = 0;
       for (const k of [...this.db.counters.keys()]) {
-        if (k.startsWith(`${a[0]}|`)) (this.db.counters.delete(k), changes++);
+        if (k.startsWith(`${a[0]}|`)) (this.db.counters.delete(k), this.db.starts.delete(k), changes++);
       }
       return { rows: [], changes };
     }
     if (q.startsWith('DELETE FROM rate_counters WHERE window_start')) {
       let changes = 0;
       for (const k of [...this.db.counters.keys()]) {
-        if (Number(k.split('|')[1]) < Number(a[0])) (this.db.counters.delete(k), changes++);
+        if (Number(k.split('|')[1]) < Number(a[0])) (this.db.counters.delete(k), this.db.starts.delete(k), changes++);
       }
       return { rows: [], changes };
     }
