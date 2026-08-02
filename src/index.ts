@@ -739,6 +739,17 @@ app.get('/api/health', (c) => c.json({ ok: true, service: 'openfon' }));
 // The two branches age from different columns, so they are written out rather
 // than sharing a template — the column is the part that differs, and hiding it
 // behind a parameter is how it came to be wrong in the first place.
+//
+// This is a FLOOR, not a retry, and the difference matters to anything thinking
+// of leaning on it. The write is terminal: CallSession.finalize() selects
+// `WHERE id = ? AND status = 'active'` and returns early when that misses, so
+// once a row is swept no later attempt can ever complete it. summary, intent,
+// message_json and duration_s are written only by that one finalize UPDATE, so a
+// call this sweep retires never gets any of them — including the structured
+// callback message a caller left. call_turns are written per turn, so the raw
+// transcript survives and the row reads "Call interrupted"; the extracted
+// message does not. Recovering a failed finalize is worth doing where the
+// session still exists, because only there can a summary still be produced.
 export async function sweepStaleCalls(env: Env, now = Date.now()): Promise<number> {
   const res = await env.DB.batch([
     // Never dialled: measured from when the id was handed out, because that is
