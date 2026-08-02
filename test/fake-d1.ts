@@ -269,6 +269,11 @@ class FakeStatement {
       const u = this.db.users.find((x) => x.email === a[0]);
       return { rows: u ? [u] : [], changes: 0 };
     }
+    if (q.startsWith('DELETE FROM sessions WHERE expires_at')) {
+      const before = this.db.sessions.length;
+      this.db.sessions = this.db.sessions.filter((s) => Date.parse(String(s.expires_at)) >= Date.now());
+      return { rows: [], changes: before - this.db.sessions.length };
+    }
     if (q.startsWith('INSERT INTO sessions')) {
       this.db.sessions.push({ token: a[0], user_id: a[1], expires_at: a[2] });
       return { rows: [], changes: 1 };

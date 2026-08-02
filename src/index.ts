@@ -68,6 +68,11 @@ const LIMITS = {
   // price of five requests. The login handler sets out the trade in full; it is
   // a choice, not a limiter that quietly failed.
   loginIp: { name: 'lgip', window: 900, max: 20 },
+  // How many *successful* sign-ins an address gets refunded before they start
+  // spending the per-IP allowance like everything else. Far beyond what a shared
+  // office does in a quarter of an hour — sessions last thirty days — and finite,
+  // so a loop of deliberately correct logins cannot run for ever.
+  loginOk: { name: 'lgok', window: 900, max: 30 },
   loginEmail: { name: 'lgem', window: 900, max: 5 },
 } satisfies Record<string, Limit>;
 
@@ -287,20 +292,25 @@ app.post('/api/auth/login', async (c) => {
     }
     return c.json({ error: 'Invalid email or password' }, 401);
   }
-  // The two buckets are refunded differently on purpose.
-  //
   // Per-email is cleared outright: its whole job is to keep one account from
   // being locked out, and a correct password proves ownership of that account.
   //
-  // Per-IP gets back only this request's own reservation. Clearing its history
-  // would hand back the budget that bounds guessing against *other* accounts —
-  // signup is public, so an attacker would spend nineteen guesses on victims and
-  // the twentieth on an account of their own, forever. Refunding one keeps the
-  // allowance from being spent by people who signed in successfully without ever
-  // resetting the ceiling on wrong guesses. The refund goes back to the window
-  // the reservation came from, which a PBKDF2-length request can outlive.
+  // Per-IP gets its reservation back, but only while successes stay inside an
+  // allowance of their own. An unconditional refund made succeeding free, and
+  // signup is public, so anyone can hold valid credentials and loop /login
+  // forever: PBKDF2 every time, a handful of counter writes, and a session row
+  // that nothing ever removes, from one address that never advances a counter.
+  // Once loginOk is spent the refund stops, the per-IP counter starts climbing
+  // again, and the gate above — which runs before any verification — closes.
+  // That is what bounds the CPU as well as the writes; a check down here could
+  // only ever refuse after the work was already done.
+  //
+  // The refund goes back to the window the reservation came from, which a
+  // PBKDF2-length request can outlive.
   await clearLimit(c.env, LIMITS.loginEmail, key);
-  await refundOne(c.env, LIMITS.loginIp, addr, ipTaken);
+  if (!(await consume(c.env, LIMITS.loginOk, addr)).over) {
+    await refundOne(c.env, LIMITS.loginIp, addr, ipTaken);
+  }
   const token = await createSession(c.env, user.id);
   setCookie(c, COOKIE, token, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 86400 });
   return c.json({ id: user.id });
@@ -802,11 +812,20 @@ app.get('/ws/call/:callId', async (c) => {
   const stub = c.env.CALL_SESSION.get(id);
   const url = new URL(c.req.raw.url);
   url.searchParams.set('call', callId);
-  // Hand the slot back unless a session actually started. Both failure shapes
-  // count: the Durable Object answering with an error, and stub.fetch() itself
-  // rejecting because the object could not be reached or was reset. Only the
-  // first was handled before, so a DO that failed to start held a line until the
-  // sweep — and a business with a low cap looked permanently busy after a few.
+  // Hand the slot back only on an answer that proves no session owns this call.
+  //
+  // Not every error qualifies, and 409 is the counter-example that matters:
+  // CallSession returns it for "already connected", meaning a session *is* live
+  // on this row. Releasing then clears a live call's slot. That is reachable
+  // without any race — during a rollout an older worker serves calls without
+  // writing connected_at, so a second attach can claim a row whose session is
+  // already running, get the 409, and knock the live call out of the concurrency
+  // count until the sweep repairs it from its turns.
+  //
+  // 426 is the safe one: CallSession answers it before touching any state, so
+  // nothing was started. A rejected fetch is safe for the same reason — the
+  // object was never reached. Anything else keeps the marker; holding a slot a
+  // little too long is recoverable, releasing a live one is not.
   const releaseSlot = () =>
     c.env.DB.prepare('UPDATE calls SET connected_at = NULL WHERE id = ?').bind(callId).run();
   let res: Response;
@@ -817,7 +836,7 @@ app.get('/ws/call/:callId', async (c) => {
     console.error('call session unreachable', err);
     return c.json({ error: 'could not reach the call session' }, 502);
   }
-  if (res.status >= 400) await releaseSlot();
+  if (res.status === 426) await releaseSlot();
   return res;
 });
 
@@ -887,6 +906,11 @@ export async function sweepStaleCalls(env: Env, now = Date.now()): Promise<numbe
     // Fixed-window counters are only read for the current window; a day of
     // history is plenty of slack for the longest limiter.
     env.DB.prepare('DELETE FROM rate_counters WHERE window_start < ?').bind(Math.floor(now / 1000) - 86400),
+    // Expired sessions were never removed by anything. That was survivable while
+    // rows only arrived when a person signed in; it stopped being survivable once
+    // it became clear a caller with valid credentials can mint them in a loop.
+    // The login allowance bounds the rate, this bounds the residue.
+    env.DB.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')"),
   ]);
   // Retired rows only — the reconciliation at res[0] repairs, it does not retire.
   return (res[1].meta.changes ?? 0) + (res[2].meta.changes ?? 0);

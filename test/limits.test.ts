@@ -300,6 +300,27 @@ describe('GET /ws/call/:callId', () => {
     expect((await req('/api/public/call/start', body)).status).toBe(200);
   });
 
+  it('does not release the slot when the session says someone else owns the call', async () => {
+    const db = new FakeD1();
+    db.seedBusiness({ id: 'biz1', slug: 'riverside-dental-1377', max_concurrent_calls: 1 });
+    const env = fakeEnv(db);
+    // 409 is CallSession's "already connected" — proof a session is live on this
+    // row, and the one error that must not hand the slot back. Reachable during a
+    // rollout, where an older worker serves calls without writing connected_at.
+    env.CALL_SESSION = {
+      idFromName: (n: string) => n,
+      get: () => ({ fetch: async () => new Response('call already connected', { status: 409 }) }),
+    };
+    const req = (path: string, init?: RequestInit) => worker.fetch(new Request(`https://openfon.test${path}`, init), env, fakeCtx);
+    const body = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug: 'riverside-dental-1377' }) };
+    const { callId } = (await (await req('/api/public/call/start', body)).json()) as { callId: string };
+
+    expect((await req(`/ws/call/${callId}`, { headers: { Upgrade: 'websocket' } })).status).toBe(409);
+    // Still counted, so the live call keeps its line.
+    expect(db.calls.find((c) => c.id === callId)?.connected_at).toBeTypeOf('number');
+    expect((await req('/api/public/call/start', body)).status).toBe(429);
+  });
+
   it('hands the slot back when the Durable Object refuses the handshake', async () => {
     const db = new FakeD1();
     db.seedBusiness({ id: 'biz1', slug: 'riverside-dental-1377', max_concurrent_calls: 1 });
@@ -595,6 +616,29 @@ describe('POST /api/auth/login', () => {
       expect((await login('owner@example.test', 'correct-horse-battery')).status).toBe(200);
     }
     expect((await login('owner@example.test', 'oops')).status).toBe(401);
+  });
+
+  it('stops a loop of deliberately correct logins', async () => {
+    const { db, login } = await withUser();
+    // Signup is public, so an attacker can always hold real credentials. An
+    // unconditional refund made succeeding free: PBKDF2, counter writes and a
+    // session row per iteration, from an address whose counter never moved.
+    const codes: number[] = [];
+    for (let i = 0; i < 60; i++) codes.push((await login('owner@example.test', 'correct-horse-battery')).status);
+
+    expect(codes).toContain(429);
+    expect(codes.filter((s) => s === 200).length).toBeLessThanOrEqual(51);
+    // And the refusal arrives at the gate that runs *before* verification, so it
+    // bounds the CPU too, not only the rows.
+    expect(db.sessions.length).toBe(codes.filter((s) => s === 200).length);
+  });
+
+  it('clears expired sessions in the sweep', async () => {
+    const db = new FakeD1();
+    db.sessions.push({ token: 'live', user_id: 'u1', expires_at: new Date(Date.now() + 86_400_000).toISOString() });
+    db.sessions.push({ token: 'stale', user_id: 'u1', expires_at: new Date(Date.now() - 1000).toISOString() });
+    await sweepStaleCalls(fakeEnv(db));
+    expect(db.sessions.map((s) => s.token)).toEqual(['live']);
   });
 
   it('stops guessing at the per-IP limit even across many addresses', async () => {
