@@ -216,7 +216,7 @@ export class CallSession implements DurableObject {
       this.sendError('This agent is not available right now. Please try again later.');
       this.send({ type: 'ended' });
       this.ws?.close(1000, 'agent misconfigured');
-      await this.finalize('failed');
+      await this.finalize();
       return;
     }
     this.lang = this.settings!.language in SUPPORTED_LANGUAGES ? this.settings!.language : 'en';
@@ -696,11 +696,15 @@ export class CallSession implements DurableObject {
       .run();
   }
 
-  // `status` is the schema's own vocabulary (active | completed | failed).
-  // A call that never got past pickup must not count as a conversation: the
-  // dashboard's stats read 'completed', so a business with a broken provider
-  // config sees the failures instead of a wall of two-second "calls".
-  private async finalize(status: 'completed' | 'failed' = 'completed'): Promise<void> {
+  // The status is derived from the recorded failure, never passed in. It used
+  // to be an argument, and then the two could disagree — a mid-call error wrote
+  // "Call failed: …" into the summary of a row the dashboard counted as a
+  // success, because the socket-close path finalizes without knowing anything
+  // went wrong. A recorded failure *is* the call failing, so it decides both
+  // fields and no caller can reintroduce the split. ('failed' is the schema's
+  // own vocabulary, and the dashboard's stats read 'completed', so these drop
+  // out of call counts and talk time.)
+  private async finalize(): Promise<void> {
     if (this.ended || !this.callId) return;
     this.ended = true;
     const call = await this.env.DB.prepare('SELECT started_at FROM calls WHERE id = ? AND status = ?')
@@ -758,6 +762,7 @@ export class CallSession implements DurableObject {
     if (this.failure && summary !== this.failure) {
       summary = summary ? `${this.failure} — ${summary}` : this.failure;
     }
+    const status = this.failure ? 'failed' : 'completed';
     await this.env.DB.prepare(
       `UPDATE calls SET status = ?, ended_at = datetime('now'), duration_s = ?, summary = ?, intent = ?, message_json = ? WHERE id = ?`
     )

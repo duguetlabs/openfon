@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CallSession } from '../src/call-session';
 
-// finalize() writes one summary column that two things want: the failure
-// recorded by failInternally, and the generated conversation summary. These
-// drive the real method rather than a extracted rule, because the defect this
-// pins was in the *ordering* of those two writers, not in either one.
+// finalize() decides two fields that have to agree — the row's status and its
+// summary — from one recorded failure. These drive the real method rather than
+// an extracted rule, because both defects here were in how the pieces were
+// wired together (a summary assigned after the diagnostic, a status passed by a
+// caller that didn't know one had been recorded) rather than in any one of them.
 
 interface Bound {
   sql: string;
@@ -44,12 +45,12 @@ function session(failure: string | null) {
   const calls: Bound[] = [];
   const s = new CallSession({} as never, fakeEnv(calls) as never);
   Object.assign(s, { callId: 'call-1', history: HISTORY, settings: { language: 'en' }, failure });
-  return { s: s as unknown as { finalize(status?: 'completed' | 'failed'): Promise<void> }, calls };
+  return { s: s as unknown as { finalize(): Promise<void> }, calls };
 }
 
-function summaryWritten(calls: Bound[]): string | null {
+function written(calls: Bound[]): { status: string | null; summary: string | null } {
   const update = calls.find((c) => c.sql.startsWith('UPDATE calls'));
-  return (update?.args[2] ?? null) as string | null;
+  return { status: (update?.args[0] ?? null) as string | null, summary: (update?.args[2] ?? null) as string | null };
 }
 
 describe('finalize', () => {
@@ -60,14 +61,17 @@ describe('finalize', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(body, { status: 200 })));
   }
 
-  it('keeps the recorded failure even when a summary is generated over it', async () => {
+  it('marks the row failed and keeps the diagnostic, even mid-conversation', async () => {
     // The failure lands after a real exchange — TTS rejecting once the LLM has
-    // already replied — so summary generation still runs and used to overwrite
-    // the diagnostic, leaving the owner an ordinary-looking successful call.
+    // already replied — so the socket closes on the ordinary path and summary
+    // generation still runs. Both used to go wrong here: the generated text
+    // overwrote the diagnostic, and the row was recorded as a successful call.
     stubSummary('Caller booked a cleaning for Friday.');
     const { s, calls } = session('Call failed: Error: TTS error 503');
     await s.finalize();
-    const summary = summaryWritten(calls);
+    const { status, summary } = written(calls);
+    // Status and summary have to agree — stats read 'completed'.
+    expect(status).toBe('failed');
     expect(summary).toContain('TTS error 503');
     expect(summary).toContain('Caller booked a cleaning for Friday.');
     // The failure leads: the call log truncates this row.
@@ -78,13 +82,13 @@ describe('finalize', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 500 })));
     const { s, calls } = session('Call failed: Error: LLM error 500');
     await s.finalize();
-    expect(summaryWritten(calls)).toBe('Call failed: Error: LLM error 500');
+    expect(written(calls)).toEqual({ status: 'failed', summary: 'Call failed: Error: LLM error 500' });
   });
 
-  it('leaves the summary of an ordinary call untouched', async () => {
+  it('leaves an ordinary call completed, with its summary untouched', async () => {
     stubSummary('Caller booked a cleaning for Friday.');
     const { s, calls } = session(null);
     await s.finalize();
-    expect(summaryWritten(calls)).toBe('Caller booked a cleaning for Friday.');
+    expect(written(calls)).toEqual({ status: 'completed', summary: 'Caller booked a cleaning for Friday.' });
   });
 });
