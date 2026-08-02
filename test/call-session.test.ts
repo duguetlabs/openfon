@@ -625,7 +625,7 @@ describe('upstream recovery', () => {
 describe('watchdog alarm', () => {
   it('finalizes a call whose client vanished without a close frame', async () => {
     vi.useFakeTimers();
-    const { session, storage } = newSession();
+    const { session, storage, callUpdates } = newSession();
     await session.fetch(upgradeRequest());
     serverSockets[0].receive({ type: 'start' });
     await flush();
@@ -639,6 +639,10 @@ describe('watchdog alarm', () => {
     expect(storage.alarmAt).toBeNull();
     expect(serverSockets[0].readyState).toBe(3);
     expect(serverSockets[0].typesSent()).toContain('ended');
+    // A conversation that happened and then went quiet on the caller's side is
+    // still a call. Marking it failed would drop it — and any message left in
+    // it — out of the owner's counts, which is the opposite of what they need.
+    expect(callUpdates()[0].args[0]).toBe('completed');
   });
 
   it('reschedules itself while the call is still active', async () => {
@@ -726,6 +730,10 @@ describe('watchdog alarm', () => {
     expect(callUpdates()).toHaveLength(1); // finalized, so the slot is released
     expect(sock.readyState).toBe(3);
     expect(storage.alarmAt).toBeNull();
+    // Never became a call, so it must not count as one: 'failed' is what keeps
+    // it out of the owner's call count and talk time.
+    expect(callUpdates()[0].args[0]).toBe('failed');
+    expect(String(callUpdates()[0].args[2])).toContain('never started the call');
   });
 
   it('does not apply the start deadline once the call is under way', async () => {
@@ -810,12 +818,13 @@ describe('watchdog alarm', () => {
 
     await session.alarm();
 
-    // bind order: duration, summary, intent, message_json, callId
+    // bind order: status, duration, summary, intent, message_json, callId
     const update = callUpdates()[0];
     expect(update).toBeDefined();
-    expect(update.args[1]).toBe('Maria asked for a callback about a crown.');
-    expect(update.args[2]).toBe('message');
-    expect(String(update.args[3])).toContain('0664 1234567');
+    expect(update.args[0]).toBe('completed'); // recovered, not a failure
+    expect(update.args[2]).toBe('Maria asked for a callback about a crown.');
+    expect(update.args[3]).toBe('message');
+    expect(String(update.args[4])).toContain('0664 1234567');
     // and the conversation genuinely reached the model
     expect(sentTranscript).toContain('This is Maria');
     expect(sentTranscript).toContain('crown');
@@ -883,7 +892,7 @@ describe('watchdog alarm', () => {
     await session.alarm();
 
     expect(callUpdates()).toHaveLength(1);
-    expect(callUpdates()[0].args[1]).toBe('Callback requested.'); // kept the result
+    expect(callUpdates()[0].args[2]).toBe('Callback requested.'); // kept the result
     expect(summaryCalls).toBe(1); // and did not pay for it twice
   });
 

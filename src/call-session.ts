@@ -642,6 +642,12 @@ export class CallSession implements DurableObject {
       // `reconnects` is the per-rotation budget, which session.expiring resets;
       // `totalReconnects` bounds a flapping engine over the whole call.
       if (this.reconnects >= 1 || this.totalReconnects >= CallSession.MAX_TOTAL_RECONNECTS) {
+        // The caller was cut off mid-conversation and we could not get the
+        // engine back. That is a failed call, not a completed one, and the
+        // owner's log should say so — otherwise it reads as a normal call that
+        // merely ends abruptly. The summary the exchange produced still follows
+        // the reason, so nothing the caller said is lost.
+        this.failure ??= 'Call failed: the voice engine connection was lost and could not be restored.';
         this.sendError('Voice engine connection lost');
         await this.finalize();
         return;
@@ -896,6 +902,11 @@ export class CallSession implements DurableObject {
     const startDeadline = await this.state.storage.get<number>('startDeadline');
     if (startDeadline && now >= startDeadline) {
       console.log(`call ${this.callId}: no start within the deadline, releasing the call`);
+      // Never became a call: no start, no turns, no conversation. 'failed' is
+      // what keeps it out of the owner's call count and talk time, which is
+      // where a connection that produced nothing belongs — and the recorded
+      // reason means the row explains itself instead of sitting there blank.
+      this.failure ??= 'Call failed: the caller connected but never started the call.';
       await this.finalize();
       return;
     }
@@ -912,6 +923,13 @@ export class CallSession implements DurableObject {
 
     if (now >= hardDeadline || now - activity >= CallSession.IDLE_LIMIT_MS) {
       console.log(`call ${this.callId}: watchdog finalizing (idle ${Math.round((now - activity) / 1000)}s)`);
+      // Deliberately records no failure, so these land as 'completed'. The
+      // conversation happened and the agent did its job; the line went quiet on
+      // the caller's side, which is nothing the owner can act on. Marking them
+      // failed would drop real calls — and any message left in them — out of the
+      // dashboard's counts and talk time, which is the opposite of what someone
+      // reading their call log needs. Only a call that never began (the start
+      // deadline above) or one we cut off ourselves records a failure.
       try {
         await this.finalize();
       } catch (err) {
