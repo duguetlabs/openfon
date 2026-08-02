@@ -115,6 +115,24 @@ def load_kataleptic_key() -> str:
     raise SystemExit("no gateway key: set KATALEPTIC_KEY or add DEFAULT_LLM_API_KEY to .dev.vars")
 
 
+def transcript_belongs_to_turn(item_id: str, fragment_items: set,
+                              final_items: set) -> bool:
+    """Does this transcription completion describe the turn's final input?
+
+    A split turn commits several input items, and transcription is
+    asynchronous, so a completion for an EARLIER fragment can arrive after the
+    reply has finished. Used by both the main loop and the post-response grace
+    window — one predicate, so the two paths cannot drift apart.
+    """
+    if not item_id:
+        return True                     # nothing to correlate on; accept
+    if item_id in fragment_items:
+        return False                    # belongs to a pre-speech-end fragment
+    if final_items and item_id not in final_items:
+        return False
+    return True
+
+
 def discard_fragment(t: "Turn", resp_audio_bytes: int) -> int:
     """Record a server-VAD fragment response and drop what it produced.
 
@@ -285,10 +303,9 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
                         # and a late transcript for an EARLIER fragment would
                         # otherwise become this turn's transcript_ms. Only accept
                         # the completion for an item committed after speech ended.
-                        item_id = ev.get("item_id")
-                        if item_id and item_id in fragment_items:
-                            continue                       # belongs to a fragment
-                        if item_id and final_items and item_id not in final_items:
+                        item_id = ev.get("item_id") or ""
+                        if not transcript_belongs_to_turn(item_id, fragment_items,
+                                                          final_items):
                             continue
                         if t.transcript_ms is None:
                             t.transcript_ms = since()
@@ -332,10 +349,17 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
                                         ws.recv(), timeout=t_deadline - time.monotonic()))
                                 except Exception:               # noqa: BLE001
                                     break                       # timeout or closed
-                                if arms_mod.is_input_transcription_done(ev2.get("type") or ""):
-                                    t.transcript_ms = (time.monotonic() - t0) * 1000
-                                    t.caller_transcript = (ev2.get("transcript") or "").strip()
-                                    break
+                                if not arms_mod.is_input_transcription_done(
+                                        ev2.get("type") or ""):
+                                    continue
+                                item_id = ev2.get("item_id") or ""
+                                if not transcript_belongs_to_turn(
+                                        item_id, fragment_items, final_items):
+                                    continue     # a late fragment transcript
+                                t.transcript_ms = (time.monotonic() - t0) * 1000
+                                t.transcript_item_id = item_id
+                                t.caller_transcript = (ev2.get("transcript") or "").strip()
+                                break
                             t.transcript_timed_out = t.transcript_ms is None
                         break
             finally:

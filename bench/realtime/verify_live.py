@@ -67,6 +67,12 @@ def mutate(sess: dict, arm: Arm, kind: str) -> dict:
             s["input_audio_sampling_rate"] = 16000
         elif kind == "detector":
             s.setdefault("turn_detection", {})["type"] = "none"
+        elif kind == "detector-field":
+            td = s.setdefault("turn_detection", {})
+            for k in arm.turn_detection:
+                if k != "type":
+                    td.pop(k, None)      # drop every field but the type
+                    break
     else:
         if kind == "codec":
             s["audio"]["output"]["format"] = {"type": "audio/pcmu"}
@@ -76,10 +82,16 @@ def mutate(sess: dict, arm: Arm, kind: str) -> dict:
             s["audio"]["input"]["format"] = {"type": "audio/pcm", "rate": 16000}
         elif kind == "detector":
             s["audio"]["input"].setdefault("turn_detection", {})["type"] = "none"
+        elif kind == "detector-field":
+            td = s["audio"]["input"].setdefault("turn_detection", {})
+            for k in arm.turn_detection:
+                if k != "type":
+                    td.pop(k, None)
+                    break
     return s
 
 
-MUTATIONS = ("codec", "absent-format", "rate", "detector")
+MUTATIONS = ("codec", "absent-format", "rate", "detector", "detector-field")
 
 
 async def main() -> int:

@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from arms import ARMS_BY_ID, SAMPLE_RATE  # noqa: E402
 from audio import FRAME_BYTES, Utterance, cache_name, trim_silence  # noqa: E402
-from bench import discard_fragment  # noqa: E402
+from bench import discard_fragment, transcript_belongs_to_turn  # noqa: E402
 from safety import redact, scrub_record  # noqa: E402
 
 GA_ARM = ARMS_BY_ID["native-direct"]        # marin / whisper-1 / server_vad
@@ -316,3 +316,54 @@ class TestSafetyBoundary(unittest.TestCase):
     def test_clean_text_is_untouched(self):
         self.assertEqual(redact("timeout waiting for response.done"),
                          "timeout waiting for response.done")
+
+
+class TestEveryRequestedDetectorFieldIsVerified(unittest.TestCase):
+    """The check is derived from the request payload, not a hardcoded list —
+    which is how `eagerness`, added later for the semantic detector, went
+    unverified while the follow-up attributed its results to that setting."""
+
+    def test_dropped_eagerness_is_fatal(self):
+        echo = ga_echo(turn_detection={"type": "semantic_vad"})   # no eagerness
+        fatal, _ = SEM_ARM.verify_echo(echo)
+        self.assertTrue(any("eagerness absent" in x for x in fatal), fatal)
+
+    def test_substituted_eagerness_is_fatal(self):
+        echo = ga_echo(turn_detection={"type": "semantic_vad", "eagerness": "low"})
+        fatal, _ = SEM_ARM.verify_echo(echo)
+        self.assertTrue(any("eagerness=" in x for x in fatal), fatal)
+
+    def test_every_requested_key_is_actually_checked(self):
+        """Whatever an arm asks for, dropping it must be caught — so a field
+        added to any arm in future cannot be silently unverified."""
+        for arm, echo_fn in ((GA_ARM, ga_echo), (VL_ARM, vl_echo),
+                             (SEM_ARM, ga_echo)):
+            for key in arm.turn_detection:
+                echo = echo_fn()
+                td = (echo["audio"]["input"]["turn_detection"]
+                      if "audio" in echo else echo["turn_detection"])
+                td.update(arm.turn_detection)
+                td.pop(key)
+                fatal, _ = arm.verify_echo(echo)
+                self.assertTrue(any(f"turn_detection.{key}" in x for x in fatal),
+                                f"{arm.id}: dropping {key} was not caught")
+
+
+class TestTranscriptCorrelation(unittest.TestCase):
+    """Used by both the main loop and the post-response grace window, so the
+    two paths cannot drift apart — the grace path previously kept the old
+    uncorrelated behaviour after the main path was fixed."""
+
+    def test_final_item_is_accepted(self):
+        self.assertTrue(transcript_belongs_to_turn("item_b", {"item_a"}, {"item_b"}))
+
+    def test_fragment_item_is_rejected(self):
+        self.assertFalse(transcript_belongs_to_turn("item_a", {"item_a"}, {"item_b"}))
+
+    def test_unknown_item_is_rejected_when_finals_are_known(self):
+        self.assertFalse(transcript_belongs_to_turn("item_z", set(), {"item_b"}))
+
+    def test_accepts_when_there_is_nothing_to_correlate_on(self):
+        # no item_id on the event, or no commits observed
+        self.assertTrue(transcript_belongs_to_turn("", {"item_a"}, {"item_b"}))
+        self.assertTrue(transcript_belongs_to_turn("item_x", set(), set()))

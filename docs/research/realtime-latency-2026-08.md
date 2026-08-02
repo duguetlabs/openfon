@@ -231,7 +231,7 @@ Split rates are corrected as their **own** Holm family, separately from the pair
 metrics: they are rates on the same matched cells tested with a different statistic
 (exact McNemar), and merging the families would over-correct the latency metrics without
 making the rate claims any safer. Both VAD split results survive their family correction
-(p = 0.00195 raw, 0.00586 adjusted).
+(p = 0.00195 raw, 0.00781 adjusted over a family of four — including the comparison that showed no splits on either arm, which is corrected over even though its row is hidden, so the family size does not depend on the outcomes).
 
 What survives both gates:
 
@@ -378,7 +378,7 @@ Neither detector can be moved onto the other brain on the Foundry surface.
 
 **Exact McNemar**, two-sided, on complete matched cells: `nat-semantic` vs
 `native-direct` and `vlnat-azsemantic` vs `vl-native-brain` are both **p = 0.00195**
-(10 discordant cells, all in the same direction), **0.00586 after Holm correction within
+(10 discordant cells, all in the same direction), **0.00781 after Holm correction within
 the split-rate family** — which is a separate family from the paired latency metrics,
 since these are rates tested with a different statistic. McNemar rather than Fisher because
 these observations are matched by construction — the same caller audio in the same round —

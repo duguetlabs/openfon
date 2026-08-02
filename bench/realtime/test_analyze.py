@@ -14,16 +14,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from analyze import (ALPHA, PRACTICAL_MS, PairedResult,  # noqa: E402
+from analyze import (ALPHA, MIN_EQUIVALENCE_N, PRACTICAL_MS,  # noqa: E402
+                     PairedResult,
                      bootstrap_median_ci, compute_paired, describe,
                      holm, mcnemar_exact_p, paired, pct, sign_test_p,
                      split_cells, split_rate_table)
 from bench import redact  # noqa: E402
 
 
-def result(median, p_raw, p_adj, metric="ttfa_ms", lo=None, hi=None):
+def result(median, p_raw, p_adj, metric="ttfa_ms", lo=None, hi=None, n=None):
+    n = MIN_EQUIVALENCE_N if n is None else n
     return PairedResult(metric=metric, treat="gw", ctrl="direct", question="q",
-                        diffs=[median], median=median,
+                        diffs=[median] * n, median=median,
                         lo=median - 10 if lo is None else lo,
                         hi=median + 10 if hi is None else hi,
                         p_raw=p_raw, p_adj=p_adj)
@@ -469,3 +471,61 @@ class TestRedact(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestEquivalenceNeedsEnoughData(unittest.TestCase):
+    """Resampling one paired difference always returns [d, d], so without a
+    floor n=1 would "prove" equivalence from a single sample — and --rounds 1
+    is the documented smoke test."""
+
+    def test_single_observation_cannot_claim_equivalence(self):
+        r = result(+5, 1.0, 1.0, lo=5, hi=5, n=1)
+        self.assertFalse(r.equivalent)
+        self.assertIn("too small to claim equivalence", r.verdict())
+
+    def test_just_below_the_floor_cannot_claim_equivalence(self):
+        r = result(+5, 1.0, 1.0, lo=-10, hi=20, n=MIN_EQUIVALENCE_N - 1)
+        self.assertFalse(r.equivalent)
+
+    def test_at_the_floor_equivalence_is_available(self):
+        r = result(+5, 1.0, 1.0, lo=-10, hi=20, n=MIN_EQUIVALENCE_N)
+        self.assertTrue(r.equivalent)
+        self.assertIn("equivalent within", r.verdict())
+
+    def test_small_n_still_reports_the_null(self):
+        self.assertIn("no detectable difference",
+                      result(+5, 1.0, 1.0, lo=5, hi=5, n=2).verdict())
+
+
+class TestSplitFamilyIsOutcomeIndependent(unittest.TestCase):
+    """Dropping zero-split comparisons before correcting would make the family
+    size depend on the results — choosing which hypotheses to correct over
+    based on their outcomes is the error we started this review with."""
+
+    def _cells(self, rnd_from, arm_a, a_split, arm_b, b_split, n=10):
+        out = []
+        for i in range(rnd_from, rnd_from + n):
+            out.append(turn(i, arm_a, "de-short", ttfa_ms=1,
+                            false_starts=1 if a_split else 0))
+            out.append(turn(i, arm_b, "de-short", ttfa_ms=1,
+                            false_starts=1 if b_split else 0))
+        return out
+
+    def test_zero_split_comparison_still_enlarges_the_family(self):
+        # one discordant comparison + one all-zero comparison = family of 2,
+        # so the significant p is scaled by 2, not left alone
+        turns = (self._cells(0, "nat-semantic", False, "native-direct", True)
+                 + self._cells(0, "vlmini-azsemantic", False, "vl-direct", False))
+        body = "\n".join(split_rate_table(turns))
+        self.assertIn("0.00391", body)          # 2 x 0.001953
+        self.assertIn("corrected over but not shown", body)
+
+    def test_zero_split_rows_are_hidden_from_the_table(self):
+        turns = (self._cells(0, "nat-semantic", False, "native-direct", True)
+                 + self._cells(0, "vlmini-azsemantic", False, "vl-direct", False))
+        body = "\n".join(split_rate_table(turns))
+        self.assertNotIn("`vlmini-azsemantic` vs `vl-direct`", body)
+
+    def test_table_omitted_entirely_when_nothing_split_anywhere(self):
+        turns = self._cells(0, "vlmini-azsemantic", False, "vl-direct", False)
+        self.assertEqual(split_rate_table(turns), [])

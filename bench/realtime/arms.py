@@ -178,19 +178,17 @@ class Arm:
                 elif int(rate) != SAMPLE_RATE:
                     fatal.append(f"{label} rate={rate} (asked {SAMPLE_RATE})")
 
-        want_td = self.turn_detection
-        if td.get("type") != want_td.get("type"):
-            fatal.append(f"turn_detection.type={td.get('type')!r} "
-                         f"(asked {want_td.get('type')!r})")
-        for k in ("threshold", "prefix_padding_ms", "silence_duration_ms"):
-            if k not in want_td:
-                continue
+        # Every field we sent is verified, derived from the request rather than
+        # a hardcoded list. A hardcoded list is how `eagerness` — added later,
+        # for the semantic detector — went unchecked while the follow-up
+        # attributed its results to exactly that setting.
+        for k, want in self.turn_detection.items():
             got = td.get(k)
             if got is None:
                 fatal.append(f"turn_detection.{k} absent — unverifiable "
-                             f"(asked {want_td[k]})")
-            elif got != want_td[k]:
-                fatal.append(f"turn_detection.{k}={got} (asked {want_td[k]})")
+                             f"(asked {want!r})")
+            elif got != want:
+                fatal.append(f"turn_detection.{k}={got!r} (asked {want!r})")
 
         want_stt = self.transcription.get("model")
         if want_stt and tr.get("model") != want_stt:

@@ -71,6 +71,13 @@ ALPHA = 0.05
 # 50 ms is a conservative floor that still admits anything worth acting on.
 PRACTICAL_MS = 50.0
 
+# An equivalence claim needs enough observations for the bootstrap interval to
+# mean anything. Resampling a single paired difference always returns [d, d],
+# so n=1 would "prove" equivalence from one sample — and `--rounds 1` is the
+# documented smoke test. Below this the interval is reported but no equivalence
+# is asserted.
+MIN_EQUIVALENCE_N = 10
+
 
 def pct(xs: list[float], p: float) -> float:
     """Nearest-rank percentile — no interpolation games on small n."""
@@ -191,20 +198,24 @@ def split_rate_table(turns: list[dict]) -> list[str]:
     """
     present = {t["arm"] for t in turns}
     pairs = [p for p in PAIRS if p[0] in present and p[1] in present]
+    # Every comparison with data enters the correction, including those that
+    # turned out to have no splits at all (p = 1). Dropping them first would
+    # make the family size depend on the observed outcomes — choosing which
+    # hypotheses to correct over based on their results is the same error as
+    # not correcting at all. Zero-zero rows are hidden from the table but they
+    # are still counted here.
     computed = []
     for treat, ctrl, question in pairs:
         cells = split_cells(turns, treat, ctrl)
         if not cells:
-            continue
+            continue                      # no data: not a test that was run
         t_split = sum(1 for t, _ in cells if t)
         c_split = sum(1 for _, c in cells if c)
-        if t_split == 0 and c_split == 0:
-            continue                      # nothing split either side
         b = sum(1 for t, c in cells if t and not c)
         c_ = sum(1 for t, c in cells if c and not t)
         computed.append((treat, ctrl, question, cells, t_split, c_split, b, c_,
                          mcnemar_exact_p(b, c_)))
-    if not computed:
+    if not computed or not any(c[4] or c[5] for c in computed):
         return []
     # Corrected within the split-rate family, separately from the latency
     # family: these are rates on the same matched cells, tested with a
@@ -215,11 +226,19 @@ def split_rate_table(turns: list[dict]) -> list[str]:
             "| discordant (T only / C only) | McNemar p | p (Holm, split family) |",
             "|---|---:|---:|---:|---:|---:|---:|"]
     any_row = False
+    hidden = 0
     for (treat, ctrl, question, cells, t_split, c_split, b, c_, p), pa in zip(computed, adj):
+        if t_split == 0 and c_split == 0:
+            hidden += 1                   # nothing split either side; still corrected over
+            continue
         rows.append(f"| `{treat}` vs `{ctrl}`<br><sub>{question}</sub> | {len(cells)} | "
                     f"{t_split}/{len(cells)} | {c_split}/{len(cells)} | "
                     f"{b} / {c_} | {p:.5f} | {pa:.5f} |")
         any_row = True
+    if hidden:
+        rows.append("")
+        rows.append(f"*Holm family size {len(computed)}: {hidden} comparison(s) with no "
+                    f"splits on either arm are corrected over but not shown.*")
     return rows if any_row else []
 
 
@@ -274,7 +293,8 @@ class PairedResult:
         "no practical difference" asserts something the data does not support.
         This is the interval form of a TOST.
         """
-        return (not math.isnan(self.lo) and not math.isnan(self.hi)
+        return (len(self.diffs) >= MIN_EQUIVALENCE_N
+                and not math.isnan(self.lo) and not math.isnan(self.hi)
                 and self.lo > -PRACTICAL_MS and self.hi < PRACTICAL_MS)
 
     @property
@@ -295,6 +315,9 @@ class PairedResult:
             return f"borderline — {direction} by {abs(self.median):.0f} ms, not robust to Holm"
         if self.equivalent:
             return f"equivalent within ±{PRACTICAL_MS:.0f} ms"
+        if len(self.diffs) < MIN_EQUIVALENCE_N:
+            return (f"no detectable difference; n={len(self.diffs)} too small to "
+                    f"claim equivalence")
         return (f"no detectable difference; CI admits up to "
                 f"{self.bound_ms:.0f} ms")
 
