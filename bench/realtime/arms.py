@@ -49,23 +49,35 @@ VOICE_LIVE_API_VERSION = "2025-10-01"
 #                 parallel with generation and cannot gate first audio.
 #   Voice       — everything downstream of synthesis: when speech starts, when
 #                 the response completes, how long the reply audio is.
-STT_DEPENDENT = ("transcript_ms",)
+#   STT model   — on a NATIVE speech-to-speech arm the transcription is
+#                 observational: the model hears the audio directly, so a
+#                 substituted STT moves only the caller-transcript metric. On a
+#                 CASCADE arm the same field is the pipeline — its text is what
+#                 the language model reads — so a substitution moves everything
+#                 downstream of it. Same field, load-bearing on one arm and an
+#                 observer on the other, which is why this is arm-dependent.
+STT_OBSERVED = ("transcript_ms",)
+DOWNSTREAM_OF_TEXT = ("ttft_ms", "ttfa_ms", "ttfa_minus_vad_ms",
+                      "response_total_ms", "audio_out_ms")
 VOICE_DEPENDENT = ("ttfa_ms", "ttfa_minus_vad_ms", "response_total_ms",
                    "audio_out_ms")
 
 
-def invalidated_metrics(warnings) -> tuple:
+def invalidated_metrics(warnings, *, cascade: bool = False) -> tuple:
     """Metrics made incomparable by these advisory divergences.
 
+    `cascade` says whether the arm's brain reads STT text rather than audio.
     Both the harness (recording per turn) and the analyzer (reading datasets
-    recorded before the field existed) classify through this one function, so
+    written before the field existed) classify through this one function, so
     the two cannot disagree about what a given divergence invalidates.
     """
     out: set = set()
     for w in warnings or []:
         msg = w if isinstance(w, str) else getattr(w, "message", str(w))
         if msg.startswith("transcription.model"):
-            out.update(STT_DEPENDENT)
+            out.update(STT_OBSERVED)
+            if cascade:
+                out.update(DOWNSTREAM_OF_TEXT)
         elif msg.startswith("voice="):
             out.update(VOICE_DEPENDENT)
     return tuple(sorted(out))
@@ -91,6 +103,12 @@ class Arm:
     @property
     def vad(self) -> str:
         return self.turn_detection.get("type", "server_vad")
+
+    @property
+    def is_cascade(self) -> bool:
+        """True when the brain reads STT text rather than hearing audio, so the
+        transcription model is part of the pipeline, not an observer of it."""
+        return not self.brain.startswith("gpt-realtime")
 
     def url(self, azure_key: str, kataleptic_key: str) -> str:
         if self.creds == "kataleptic":

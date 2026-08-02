@@ -19,7 +19,7 @@ from analyze import (ALPHA, MIN_EQUIVALENCE_N, PRACTICAL_MS,  # noqa: E402
                      bootstrap_median_ci, compute_paired, describe,
                      holm, mcnemar_exact_p, paired, pct, sign_test_p,
                      split_cells, split_rate_table)
-from arms import invalidated_metrics  # noqa: E402
+from arms import ARMS_BY_ID, invalidated_metrics  # noqa: E402
 from bench import redact  # noqa: E402
 
 
@@ -540,6 +540,34 @@ class TestConfirmedDifferentConfigIsExcluded(unittest.TestCase):
 
     STT = ["transcription.model='whisper' (asked 'whisper-1')"]
     VOICE = ["voice='alloy' (asked 'marin')"]
+
+    def test_stt_is_observational_on_a_native_speech_to_speech_arm(self):
+        """The model hears the audio directly, so transcription only observes."""
+        self.assertEqual(invalidated_metrics(self.STT, cascade=False),
+                         ("transcript_ms",))
+
+    def test_stt_is_load_bearing_on_a_cascade_arm(self):
+        """Its text is what the language model reads, so a substitution moves
+        everything downstream — same field, a pipeline stage rather than an
+        observer."""
+        bad = invalidated_metrics(self.STT, cascade=True)
+        for m in ("transcript_ms", "ttft_ms", "ttfa_ms", "response_total_ms",
+                  "audio_out_ms"):
+            self.assertIn(m, bad)
+
+    def test_cascade_flag_follows_the_brain(self):
+        self.assertTrue(ARMS_BY_ID["vl-direct"].is_cascade)
+        self.assertTrue(ARMS_BY_ID["vl-gateway"].is_cascade)
+        self.assertFalse(ARMS_BY_ID["native-direct"].is_cascade)
+        self.assertFalse(ARMS_BY_ID["vl-native-brain"].is_cascade)  # VL stack, S2S brain
+
+    def test_analyzer_infers_cascade_from_the_arm_for_old_datasets(self):
+        t = turn(0, "vl-gateway", "en", ttfa_ms=1800, config_warnings=self.STT)
+        t.pop("invalid_metrics", None)
+        self.assertFalse(usable_for(t, "ttfa_ms"))      # cascade: load-bearing
+        t2 = turn(0, "native-gateway", "en", ttfa_ms=1800, config_warnings=self.STT)
+        t2.pop("invalid_metrics", None)
+        self.assertTrue(usable_for(t2, "ttfa_ms"))      # native: observational
 
     def test_stt_substitution_excludes_only_the_transcript_metric(self):
         t = turn(0, "gw", "en", transcript_ms=100, ttfa_ms=2000,

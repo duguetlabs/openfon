@@ -23,18 +23,40 @@ run-to-run variation. **Stated precisely: no detectable difference, with the dat
 out anything larger than ~140 ms for the native pair and ~280 ms for Voice Live.** That is
 not a claim of exact equivalence — 25 pairs against this per-turn variance cannot deliver
 one — but at a p50 of 1.9–2.2 s it is decisive for the decision at hand.
-The point estimates are *negative* — the gateway looked marginally faster — but that is a
-vantage-point artefact, not a win: from the machine that ran this, the Cloudflare edge
-fronting `api.kataleptic.com` is 30 ms of TCP RTT away while Azure swedencentral is 61 ms,
-so the gateway arms got a shorter first leg. Correcting for that ~30 ms of geographic
-advantage puts the **true proxy cost at roughly +10 ms**, which agrees with the ~5–8 ms
-round-trip overhead measured directly against the gateway's protocol path during recon.
+
+The measurements also flatter the gateway. From the machine that ran this, the Cloudflare
+edge fronting `api.kataleptic.com` is 30 ms of TCP RTT away while Azure swedencentral is
+61 ms, so the gateway arms get a ~31 ms shorter round trip before any proxying happens.
+Adding that back:
+
+| | measured | path-adjusted |
+|---|---:|---:|
+| native, run 2 | +12 ms | **+43 ms** |
+| native, run 1 | −18 ms | **+13 ms** |
+| Voice Live, run 2 | −100 ms | **−69 ms** |
+| Voice Live, run 1 | −19 ms | **+12 ms** |
+
+**No point estimate is defensible from this.** The adjusted values span −69 to +43 ms and
+do not agree on sign, so quoting any one of them as "the proxy cost" would claim precision
+the data does not contain. What the benchmark supports is the **bound** above, not an
+estimate.
+
+A separate and much more precise measurement does exist. During recon the gateway's own
+protocol path was timed directly — round-tripping a free `input_audio_buffer.clear`
+through it — at **5–8 ms**. That figure is not derived from this benchmark, is far better
+powered for that specific quantity, and is consistent with everything here. It is the
+number to quote for the gateway's own overhead; this benchmark's job is to confirm nothing
+much larger is hiding behind it.
 
 Either way the conclusion is the same and it is a null result: **the proxy is not where
-your latency is.** At a p50 time-to-first-audio of 1.9–2.4 s, ten milliseconds is 0.5%.
-If OpenFon wants faster turn-taking, the levers are the turn detector (~740 ms of the
-budget as measured, and largely ours to set) and the choice of engine (Voice Live's gpt-4.1-mini cascade is
-~550 ms faster to first audio than gpt-realtime-2) — not disintermediating Kataleptic.
+your latency is.** At a p50 time-to-first-audio of 1.9–2.2 s, even the loosest bound the
+data allows — ~280 ms — is under 15%, and the directly measured 5–8 ms is under half a
+percent.
+If OpenFon wants faster turn-taking, the levers are the turn detector (~720 ms of the
+budget as measured, and largely ours to set) and the choice of engine (Voice Live's
+gpt-4.1-mini cascade reaches first audio a few hundred milliseconds sooner than
+gpt-realtime-2, consistently in direction across both runs) — not disintermediating
+Kataleptic.
 
 **A separate finding, from the [VAD follow-up](#follow-up-is-the-splitting-the-brain-or-the-turn-detector)
 and arguably more actionable than the latency result:** OpenFon's `gpt-realtime-2` tier
@@ -268,12 +290,13 @@ effect-size floor. A 46 ms shift in session-configuration time is real and repro
 and also irrelevant to a caller.
 
 **This discipline strengthens the headline rather than weakening it.** The proxy null is
-not "we failed to find an effect" — it is a well-powered null with a tight interval: the
-true proxy cost lies within roughly ±140 ms at 95% confidence on 25 pairs, with a point
-estimate of −18/−19 ms and a physical explanation (≈+10 ms after correcting for the
-vantage point) that agrees with an independent RTT measurement. That is a much stronger
-claim than a bare "p > 0.05", and it deserves not to be surrounded by over-claimed
-marginal findings.
+not "we failed to find an effect" — it is a bounded null, replicated: two independent
+125-turn runs, neither surviving correction, disagreeing on sign, with the true effect
+confined to roughly ±140 ms (native) and ±280 ms (Voice Live) at 95%. Alongside it sits an
+independent and far more precise direct measurement of the gateway's own protocol overhead
+at 5–8 ms. That is a much stronger position than a bare "p > 0.05", and it deserves not to
+be surrounded by over-claimed marginal findings — including one of my own, since an earlier
+draft quoted a single "+10 ms true proxy cost" that the replication does not support.
 
 ## Caveats
 

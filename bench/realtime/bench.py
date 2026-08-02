@@ -193,7 +193,8 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
             t.config_warnings = advisory
             t.config_fatal = fatal
             t.config_verified = not fatal
-            t.invalid_metrics = list(arms_mod.invalidated_metrics(advisory))
+            t.invalid_metrics = list(arms_mod.invalidated_metrics(
+                advisory, cascade=arm.is_cascade))
             if fatal:
                 # A control we cannot confirm is not a control. Abort rather
                 # than emit a measurement that would look identical to a valid

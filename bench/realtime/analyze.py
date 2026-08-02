@@ -143,7 +143,9 @@ def usable_for(t: dict, metric: str) -> bool:
         return False
     bad = t.get("invalid_metrics")
     if bad is None:
-        bad = invalidated_metrics(t.get("config_warnings"))
+        arm = ARMS_BY_ID.get(t["arm"])
+        bad = invalidated_metrics(t.get("config_warnings"),
+                                  cascade=bool(arm and arm.is_cascade))
     return metric not in bad
 
 
@@ -155,7 +157,9 @@ def excluded_reason(turns: list[dict], treat: str, ctrl: str, metric: str) -> st
             continue
         bad = t.get("invalid_metrics")
         if bad is None:
-            bad = invalidated_metrics(t.get("config_warnings"))
+            arm = ARMS_BY_ID.get(t["arm"])
+            bad = invalidated_metrics(t.get("config_warnings"),
+                                      cascade=bool(arm and arm.is_cascade))
         if metric in bad:
             msgs += [w for w in (t.get("config_warnings") or [])]
     if not msgs:
@@ -434,7 +438,8 @@ def main() -> int:
             else None)
     ok = [t for t in turns if t["ok"]]
     paired_results = compute_paired(ok, [m for m, _ in METRICS])
-    n_tests = sum(len(v) for v in paired_results.values())
+    n_tests = sum(1 for v in paired_results.values() for r in v
+                  if not r.not_comparable)
     out: list[str] = []
 
     def w(s: str = "") -> None:
@@ -564,7 +569,7 @@ def main() -> int:
     w("| arm | median audio out (ms) | median reply |")
     w("|---|---:|---|")
     for arm_id in ARMS_BY_ID:
-        xs = [t for t in ok if t["arm"] == arm_id and t.get("audio_out_ms")]
+        xs = [t for t in ok if t["arm"] == arm_id and usable_for(t, "audio_out_ms")]
         if not xs:
             continue
         med = statistics.median(t["audio_out_ms"] for t in xs)
