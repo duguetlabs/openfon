@@ -50,10 +50,11 @@ const LIMITS = {
   // Call creation. A caller who reloads the widget a few times is fine; office
   // NAT means several legitimate callers can share one IP, hence 10 and not 5.
   callStart: { name: 'start', window: 60, max: 10 },
-  // Both are reserved on every attempt and refunded when the password turns out
-  // to be right. Per-IP is the hard stop that bounds PBKDF2 work; per-email only
-  // ever refuses a wrong password, so it cannot be aimed at an owner. See the
-  // login handler for why the ordering matters.
+  // Both are reserved on every attempt. Per-IP is the hard stop that bounds
+  // PBKDF2 work across every email an attacker tries, and is never refunded.
+  // Per-email only ever refuses a wrong password and is cleared by a correct
+  // one, so it cannot be aimed at an owner. See the login handler for why the
+  // ordering and the asymmetry both matter.
   loginIp: { name: 'lgip', window: 900, max: 20 },
   loginEmail: { name: 'lgem', window: 900, max: 5 },
 } satisfies Record<string, Limit>;
@@ -101,6 +102,15 @@ async function clearLimit(env: Env, limit: Limit, subject: string): Promise<void
   await env.DB.prepare('DELETE FROM rate_counters WHERE bucket = ?').bind(`${limit.name}:${subject}`).run();
 }
 
+// Give back exactly the one reservation this request made — not the bucket's
+// history. Clearing the whole bucket on success is a bypass wherever the bucket
+// spans more than the thing that succeeded.
+async function refundOne(env: Env, limit: Limit, subject: string): Promise<void> {
+  await env.DB.prepare('UPDATE rate_counters SET count = count - 1 WHERE bucket = ? AND window_start = ? AND count > 0')
+    .bind(`${limit.name}:${subject}`, windowStart(limit))
+    .run();
+}
+
 function tooMany(c: Ctx, message: string, retryAfter: number) {
   return c.json({ error: message }, 429, { 'Retry-After': String(retryAfter) });
 }
@@ -146,13 +156,14 @@ app.post('/api/auth/login', async (c) => {
   // Reserve both attempts up front, atomically. Reading a counter and
   // incrementing it only on failure is the same count-then-act race as the daily
   // cap: a parallel burst all reads a count under the limit and all of it goes
-  // on to run PBKDF2. A correct password refunds the reservation below.
+  // on to run PBKDF2.
   const ipOver = await consume(c.env, LIMITS.loginIp, addr);
   const emailOver = await consume(c.env, LIMITS.loginEmail, key);
 
   // Per-IP is a hard stop taken before any work, because it is the thing that
-  // bounds how much PBKDF2 an attacker can make this worker perform. It can shut
-  // out an address; it can never shut out an account.
+  // bounds how much PBKDF2 an attacker can make this worker perform across all
+  // the emails they care to try. It can shut out an address; it can never shut
+  // out an account, so nothing below ever refunds it.
   if (ipOver) return tooMany(c, TOO_MANY_LOGINS, LIMITS.loginIp.window);
 
   const user = await c.env.DB.prepare('SELECT id, password_hash FROM users WHERE email = ?')
@@ -167,11 +178,19 @@ app.post('/api/auth/login', async (c) => {
     if (emailOver) return tooMany(c, TOO_MANY_LOGINS, LIMITS.loginEmail.window);
     return c.json({ error: 'Invalid email or password' }, 401);
   }
-  // A correct password always wins and refunds both buckets, so one person
-  // fat-fingering their way through an office's allowance cannot hold their
-  // colleagues out either.
+  // The two buckets are refunded differently on purpose.
+  //
+  // Per-email is cleared outright: its whole job is to keep one account from
+  // being locked out, and a correct password proves ownership of that account.
+  //
+  // Per-IP gets back only this request's own reservation. Clearing its history
+  // would hand back the budget that bounds guessing against *other* accounts —
+  // signup is public, so an attacker would spend nineteen guesses on victims and
+  // the twentieth on an account of their own, forever. Refunding one keeps the
+  // allowance from being spent by people who signed in successfully without ever
+  // resetting the ceiling on wrong guesses.
   await clearLimit(c.env, LIMITS.loginEmail, key);
-  await clearLimit(c.env, LIMITS.loginIp, addr);
+  await refundOne(c.env, LIMITS.loginIp, addr);
   const token = await createSession(c.env, user.id);
   setCookie(c, COOKIE, token, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 86400 });
   return c.json({ id: user.id });
@@ -606,6 +625,13 @@ app.post('/api/public/call/start', async (c) => {
 // ---------- websocket -> Durable Object ----------
 app.get('/ws/call/:callId', async (c) => {
   const callId = c.req.param('callId');
+  // Before anything touches the database. connected_at is what the concurrency
+  // cap counts, so a plain GET that could write it would let anyone make a
+  // business look busy for the length of the stale window at no cost — and
+  // without ever opening a socket. CallSession answers 426 to the same check.
+  if (c.req.header('Upgrade')?.toLowerCase() !== 'websocket') {
+    return c.json({ error: 'expected websocket' }, 426);
+  }
   // Bounded by started_at, not just status: a callId that has sat unused past
   // the stale window is not attachable, even before the sweeper retires it.
   const call = await c.env.DB.prepare(
@@ -624,14 +650,29 @@ app.get('/ws/call/:callId', async (c) => {
   // Claim the slot and count it in one batch, i.e. one D1 transaction. Counting
   // first and marking after loses the race: fifty sockets opened at once all
   // read zero live calls and all get in.
+  //
+  // The UPDATE is conditional, so its affected-row count says whether *this*
+  // request is the one that took the slot. Zero means the id was already
+  // connected, and a second attach on a live id is refused outright: it would
+  // ride one row's slot while driving a second session's worth of provider work,
+  // and both caps would count it once. (CallSession's own half of that bug — the
+  // socket swap — is fixed separately; refusing at the route is cheap and does
+  // not depend on which lands first.)
   const claim = await c.env.DB.batch<{ n: number }>([
-    c.env.DB.prepare("UPDATE calls SET connected_at = COALESCE(connected_at, datetime('now')) WHERE id = ?").bind(callId),
+    c.env.DB.prepare("UPDATE calls SET connected_at = datetime('now') WHERE id = ? AND connected_at IS NULL").bind(callId),
     countLive(c.env, call.business_id, callId),
   ]);
+  if ((claim[0].meta.changes ?? 0) !== 1) {
+    return c.json({ error: 'call already connected' }, 409);
+  }
   if ((claim[1].results[0]?.n ?? 0) >= call.max_concurrent_calls) {
     // Release the slot we just claimed, so a refused attach cannot hold a line
-    // open until the sweeper next runs.
-    await c.env.DB.prepare("UPDATE calls SET status = 'abandoned', ended_at = datetime('now') WHERE id = ?")
+    // open until the sweeper next runs. connected_at goes back to NULL with it:
+    // this row never reached a Durable Object, and leaving the marker set would
+    // show it in the dashboard as a real conversation that got cut off.
+    await c.env.DB.prepare(
+      "UPDATE calls SET status = 'abandoned', connected_at = NULL, ended_at = datetime('now') WHERE id = ?"
+    )
       .bind(callId)
       .run();
     return c.json({ error: BUSY }, 429, { 'Retry-After': '30' });
@@ -640,7 +681,13 @@ app.get('/ws/call/:callId', async (c) => {
   const stub = c.env.CALL_SESSION.get(id);
   const url = new URL(c.req.raw.url);
   url.searchParams.set('call', callId);
-  return stub.fetch(new Request(url.toString(), c.req.raw));
+  const res = await stub.fetch(new Request(url.toString(), c.req.raw));
+  // The handshake can still fail inside the Durable Object. Hand the slot back
+  // rather than leaving a connected_at behind for a session that never started.
+  if (res.status >= 400) {
+    await c.env.DB.prepare('UPDATE calls SET connected_at = NULL WHERE id = ?').bind(callId).run();
+  }
+  return res;
 });
 
 app.get('/api/health', (c) => c.json({ ok: true, service: 'openfon' }));

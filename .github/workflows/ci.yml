@@ -33,6 +33,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # `npm run deploy` applies D1 migrations before uploading the worker.
+      # The worker queries columns and tables the migrations create, so shipping
+      # it against an unmigrated database takes every route that touches them
+      # down. Migrations here are additive, so the running worker keeps serving
+      # while they apply.
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

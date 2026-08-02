@@ -98,6 +98,12 @@ class FakeStatement {
       const n = this.db.counters.get(`${a[0]}|${a[1]}`);
       return { rows: n === undefined ? [] : [{ count: n }], changes: 0 };
     }
+    if (q.startsWith('UPDATE rate_counters SET count = count - 1')) {
+      const key = `${a[0]}|${a[1]}`;
+      const n = this.db.counters.get(key) ?? 0;
+      if (n > 0) this.db.counters.set(key, n - 1);
+      return { rows: [], changes: n > 0 ? 1 : 0 };
+    }
     if (q.startsWith('DELETE FROM rate_counters WHERE bucket')) {
       let changes = 0;
       for (const k of [...this.db.counters.keys()]) {
@@ -150,14 +156,24 @@ class FakeStatement {
         changes: 0,
       };
     }
-    if (q.startsWith('UPDATE calls SET connected_at')) {
+    if (q.startsWith('UPDATE calls SET connected_at = NULL')) {
       const c = this.db.calls.find((x) => x.id === a[0]);
-      if (c) c.connected_at ??= Date.now();
+      if (c) c.connected_at = null;
+      return { rows: [], changes: c ? 1 : 0 };
+    }
+    // Conditional: changes === 1 only for the request that takes the slot.
+    if (q.startsWith('UPDATE calls SET connected_at')) {
+      const c = this.db.calls.find((x) => x.id === a[0] && x.connected_at === null);
+      if (c) c.connected_at = Date.now();
       return { rows: [], changes: c ? 1 : 0 };
     }
     if (q.startsWith("UPDATE calls SET status = 'abandoned'") && q.endsWith('WHERE id = ?')) {
       const c = this.db.calls.find((x) => x.id === a[0]);
-      if (c) (c.status = 'abandoned'), (c.ended_at = Date.now());
+      if (c) {
+        c.status = 'abandoned';
+        c.ended_at = Date.now();
+        if (q.includes('connected_at = NULL')) c.connected_at = null;
+      }
       return { rows: [], changes: c ? 1 : 0 };
     }
     if (q.startsWith("UPDATE calls SET status = 'abandoned'")) {

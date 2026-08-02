@@ -17,7 +17,9 @@ function setup() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ slug }),
     });
-  return { db, env, call, start };
+  // A genuine WebSocket upgrade, which is the only thing allowed to claim a slot.
+  const attach = (callId: string) => call(`/ws/call/${callId}`, { headers: { Upgrade: 'websocket' } });
+  return { db, env, call, start, attach };
 }
 
 afterEach(() => {
@@ -65,13 +67,13 @@ describe('POST /api/public/call/start burst', () => {
 
 describe('per-business call caps', () => {
   it('turns callers away once the concurrency cap is reached', async () => {
-    const { db, call, start } = setup();
+    const { db, attach, start } = setup();
     db.businesses[0].max_concurrent_calls = 3;
 
     // Three callers who actually connect their WebSocket.
     for (let i = 0; i < 3; i++) {
       const { callId } = (await (await start()).json()) as { callId: string };
-      expect((await call(`/ws/call/${callId}`)).headers.get(UPGRADED)).toBe('1');
+      expect((await attach(callId)).headers.get(UPGRADED)).toBe('1');
     }
     const res = await start();
     expect(res.status).toBe(429);
@@ -79,7 +81,7 @@ describe('per-business call caps', () => {
   });
 
   it('enforces the cap at attach too, not only at start', async () => {
-    const { db, call, start } = setup();
+    const { db, attach, start } = setup();
     db.businesses[0].max_concurrent_calls = 3;
     // A minute's worth of call ids collected up front, exactly what the burst
     // repro does — turning them into simultaneous Durable Objects must fail.
@@ -87,7 +89,7 @@ describe('per-business call caps', () => {
     for (let i = 0; i < 8; i++) ids.push(((await (await start()).json()) as { callId: string }).callId);
 
     const upgraded = [];
-    for (const id of ids) if ((await call(`/ws/call/${id}`)).headers.get(UPGRADED)) upgraded.push(id);
+    for (const id of ids) if ((await attach(id)).headers.get(UPGRADED)) upgraded.push(id);
     expect(upgraded).toHaveLength(3);
   });
 
@@ -121,10 +123,10 @@ describe('per-business call caps', () => {
   it('keeps counting a long call until the sweep is the thing that releases it', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-01T12:00:00Z'));
-    const { db, env, call, start } = setup();
+    const { db, env, attach, start } = setup();
     db.businesses[0].max_concurrent_calls = 1;
     const { callId } = (await (await start()).json()) as { callId: string };
-    await call(`/ws/call/${callId}`);
+    await attach(callId);
 
     // Well past any independent window a second mechanism might have used. The
     // count has none of its own, so the slot is still held.
@@ -144,18 +146,76 @@ describe('GET /ws/call/:callId', () => {
   it('refuses a call id that was never used inside the stale window', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-01T12:00:00Z'));
-    const { call, start } = setup();
+    const { attach, start } = setup();
     const { callId } = (await (await start()).json()) as { callId: string };
 
     vi.setSystemTime(new Date('2026-08-01T12:20:00Z'));
-    expect((await call(`/ws/call/${callId}`)).status).toBe(404);
+    expect((await attach(callId)).status).toBe(404);
   });
 
   it('marks the row connected so the sweeper can tell it apart', async () => {
-    const { db, call, start } = setup();
+    const { db, attach, start } = setup();
     const { callId } = (await (await start()).json()) as { callId: string };
-    await call(`/ws/call/${callId}`);
+    await attach(callId);
     expect(db.calls.find((c) => c.id === callId)?.connected_at).toBeTypeOf('number');
+  });
+
+  it('refuses a second attach on a call id that is already connected', async () => {
+    const { db, attach, start } = setup();
+    const { callId } = (await (await start()).json()) as { callId: string };
+    expect((await attach(callId)).headers.get(UPGRADED)).toBe('1');
+
+    // One row, one slot — but two sessions' worth of provider work, counted once
+    // against both caps. Refused at the route regardless of what the DO does.
+    const second = await attach(callId);
+    expect(second.status).toBe(409);
+    expect(db.calls.filter((c) => c.connected_at !== null)).toHaveLength(1);
+  });
+
+  it('does not label a capacity refusal as an interrupted conversation', async () => {
+    const { db, attach, start } = setup();
+    db.businesses[0].max_concurrent_calls = 1;
+    const a = (await (await start()).json()) as { callId: string };
+    const b = (await (await start()).json()) as { callId: string };
+    await attach(a.callId);
+
+    expect((await attach(b.callId)).status).toBe(429);
+    const refused = db.calls.find((c) => c.id === b.callId);
+    // It never reached a Durable Object, so the dashboard must read it as
+    // "Never connected", not as a real call that got cut off.
+    expect(refused?.status).toBe('abandoned');
+    expect(refused?.connected_at).toBeNull();
+  });
+
+  it('will not let a plain GET claim a concurrency slot', async () => {
+    const { db, call, start } = setup();
+    db.businesses[0].max_concurrent_calls = 1;
+    const { callId } = (await (await start()).json()) as { callId: string };
+
+    // No Upgrade header. connected_at is what the cap counts, so writing it from
+    // a bare GET would make the business look busy for free.
+    const res = await call(`/ws/call/${callId}`);
+    expect(res.status).toBe(426);
+    expect(db.calls.find((c) => c.id === callId)?.connected_at).toBeNull();
+    expect((await start()).status).toBe(200);
+  });
+
+  it('hands the slot back when the Durable Object refuses the handshake', async () => {
+    const db = new FakeD1();
+    db.seedBusiness({ id: 'biz1', slug: 'riverside-dental-1377', max_concurrent_calls: 1 });
+    const env = fakeEnv(db);
+    env.CALL_SESSION = { idFromName: (n: string) => n, get: () => ({ fetch: async () => new Response(null, { status: 426 }) }) };
+    const req = (path: string, init?: RequestInit) => worker.fetch(new Request(`https://openfon.test${path}`, init), env, fakeCtx);
+    const { callId } = (await (
+      await req('/api/public/call/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: 'riverside-dental-1377' }),
+      })
+    ).json()) as { callId: string };
+
+    expect((await req(`/ws/call/${callId}`, { headers: { Upgrade: 'websocket' } })).status).toBe(426);
+    expect(db.calls.find((c) => c.id === callId)?.connected_at).toBeNull();
   });
 });
 
@@ -253,6 +313,34 @@ describe('POST /api/auth/login', () => {
     // the email limit before verifying the password would make this a permanent
     // lockout, refreshed every window.
     expect((await login('owner@example.test', 'correct-horse-battery')).status).toBe(200);
+    expect((await login('owner@example.test', 'oops')).status).toBe(401);
+  });
+
+  it('does not let a successful login buy back the per-IP guessing budget', async () => {
+    const { db, login } = await withUser();
+    // Signup is public, so an attacker always has an account of their own.
+    db.users.push({ id: 'u2', email: 'attacker@example.test', password_hash: await hashPassword('their-own-password') });
+
+    const codes: number[] = [];
+    for (let i = 0; i < 10; i++) codes.push((await login(`victim-${i}@example.test`, 'oops')).status);
+    // The reset attempt: a correct login to an account they control.
+    expect((await login('attacker@example.test', 'their-own-password')).status).toBe(200);
+    for (let i = 10; i < 20; i++) codes.push((await login(`victim-${i}@example.test`, 'oops')).status);
+
+    // The success refunds its own reservation, so all 20 guesses land — but not
+    // one more. Clearing the bucket instead would reset the ceiling on every
+    // successful login and the limiter would never bite.
+    expect(codes.filter((s) => s === 401)).toHaveLength(20);
+    expect(codes.filter((s) => s === 429)).toHaveLength(0);
+    expect((await login('victim-99@example.test', 'oops')).status).toBe(429);
+  });
+
+  it('does not spend an office’s allowance on people who signed in fine', async () => {
+    const { login } = await withUser();
+    // Twenty successful sign-ins in a window must not exhaust a shared IP.
+    for (let i = 0; i < 20; i++) {
+      expect((await login('owner@example.test', 'correct-horse-battery')).status).toBe(200);
+    }
     expect((await login('owner@example.test', 'oops')).status).toBe(401);
   });
 
