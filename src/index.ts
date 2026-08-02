@@ -50,12 +50,17 @@ const LIMITS = {
   // Call creation. A caller who reloads the widget a few times is fine; office
   // NAT means several legitimate callers can share one IP, hence 10 and not 5.
   callStart: { name: 'start', window: 60, max: 10 },
-  // Both are reserved on every attempt. Per-IP is the hard stop that bounds
-  // PBKDF2 work across every email an attacker tries; a success gives back only
-  // its own reservation, never the bucket's history. Per-email only ever refuses
-  // a wrong password and is cleared outright by a correct one, so it cannot be
-  // aimed at an owner. See the login handler for why the ordering and the
-  // asymmetry both matter.
+  // Both are reserved on every attempt, and they do different jobs.
+  //
+  // Per-IP is the only real ceiling: it bounds how much work one address can
+  // demand across every email it tries, and a success gives back only its own
+  // reservation, never the bucket's history.
+  //
+  // Per-email refuses a wrong password from a repeat guesser and slows the next
+  // one down. It is deliberately *not* a bound on guesses or on work — the only
+  // version that would be also locks an owner out of their own account for the
+  // price of five requests. The login handler sets out the trade in full; it is
+  // a choice, not a limiter that quietly failed.
   loginIp: { name: 'lgip', window: 900, max: 20 },
   loginEmail: { name: 'lgem', window: 900, max: 5 },
 } satisfies Record<string, Limit>;
@@ -182,6 +187,11 @@ const DUMMY_HASH = 'BwcHBwcHBwcHBwcHBwcHBw==:CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws
 
 const TOO_MANY_LOGINS = 'Too many sign-in attempts. Please try again later.';
 
+// Applied to a wrong password once its email is over the limit. Long enough to
+// cost a sequential guesser an order of magnitude, short enough that an owner
+// who mistyped twice does not think the app has hung.
+const OVER_LIMIT_DELAY_MS = 1000;
+
 app.post('/api/auth/login', async (c) => {
   const { email, password } = await c.req.json<{ email?: string; password?: string }>();
   const addr = clientIp(c);
@@ -207,11 +217,29 @@ app.post('/api/auth/login', async (c) => {
     .first<{ id: string; password_hash: string }>();
   const ok = await verifyPassword(password ?? '', user?.password_hash ?? DUMMY_HASH);
   if (!user || !ok) {
-    // The per-email bucket is only ever consulted for a wrong password, so it
-    // slows credential stuffing spread across many addresses without giving
-    // anyone who knows an owner's email a permanent lockout. Refusing before
-    // verifying would do exactly that: five wrong guesses per window, forever.
-    if (emailTaken.over) return tooMany(c, TOO_MANY_LOGINS, LIMITS.loginEmail.window);
+    // What the per-email bucket does, stated exactly, because it is easy to
+    // credit it with more: it refuses a *wrong* password once an address has had
+    // its five in the window, and it slows the next guess down. That is all.
+    //
+    // It is not a bound on guesses and not a bound on work. A correct password
+    // still gets in from here, and the verify above already ran, so an attacker
+    // spread over many addresses is limited by LIMITS.loginIp per address and by
+    // nothing at all per account. Making it a real bound means refusing before
+    // the password is checked, and then five wrong guesses from anyone who knows
+    // an owner's email locks that owner out of the only control surface this
+    // product has — with no 2FA, no email verification and no recovery flow to
+    // get back in. Between an account that can be shut off by a stranger for the
+    // price of five requests and an account whose defence against distributed
+    // guessing is password strength plus the per-IP ceiling, this takes the
+    // second. The trade is the point; it is not a limiter that quietly failed.
+    //
+    // The delay is worth what it is worth: a sequential guesser drops from ~10
+    // attempts a second to ~1, and it costs the operator no CPU, because Workers
+    // bill compute and this is a sleep. A parallel attacker is unaffected.
+    if (emailTaken.over) {
+      await new Promise((r) => setTimeout(r, OVER_LIMIT_DELAY_MS));
+      return tooMany(c, TOO_MANY_LOGINS, LIMITS.loginEmail.window);
+    }
     return c.json({ error: 'Invalid email or password' }, 401);
   }
   // The two buckets are refunded differently on purpose.

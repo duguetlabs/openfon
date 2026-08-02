@@ -475,6 +475,29 @@ describe('POST /api/auth/login', () => {
     expect((await login('owner@example.test', 'oops')).status).toBe(401);
   });
 
+  it('lets the owner in even while their email is over its limit', async () => {
+    const { login } = await withUser();
+    for (let i = 0; i < 5; i++) expect((await login('owner@example.test', `guess-${i}`)).status).toBe(401);
+    expect((await login('owner@example.test', 'guess-5')).status).toBe(429);
+    // Deliberate, and the reason the per-email bucket is not a bound on guesses:
+    // gating before the password is checked would let anyone who knows an
+    // owner's address shut them out of the only control surface this product
+    // has, with no 2FA and no recovery flow to get back in.
+    expect((await login('owner@example.test', 'correct-horse-battery')).status).toBe(200);
+  });
+
+  it('slows a wrong password once its email is over the limit', async () => {
+    const { login } = await withUser();
+    for (let i = 0; i < 5; i++) await login('owner@example.test', `guess-${i}`);
+    const t0 = performance.now();
+    expect((await login('owner@example.test', 'guess-5')).status).toBe(429);
+    const elapsed = performance.now() - t0;
+    // Worth an order of magnitude against a sequential guesser and no CPU to the
+    // operator. It does nothing to a parallel one, which is why the comment on
+    // this path claims a delay and not a limit.
+    expect(elapsed).toBeGreaterThanOrEqual(900);
+  });
+
   it('does not let a successful login buy back the per-IP guessing budget', async () => {
     const { db, login } = await withUser();
     // Signup is public, so an attacker always has an account of their own.

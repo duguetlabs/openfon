@@ -55,10 +55,22 @@ npm run deploy
 Open the printed `*.workers.dev` URL, create your account, and walk through onboarding. That's it.
 
 > **Deploying with an API token** instead of `npx wrangler login` — from CI, or with
-> `CLOUDFLARE_API_TOKEN` in your environment — needs a **Custom Token** carrying both
-> `Workers Scripts: Edit` **and** `D1: Edit`. `npm run deploy` applies pending D1
-> migrations before uploading the worker, and Cloudflare's "Edit Cloudflare Workers"
-> template does not grant D1. `npx wrangler login` covers both already.
+> `CLOUDFLARE_API_TOKEN` in your environment — needs two things, and missing either
+> one fails before anything ships:
+>
+> 1. A **Custom Token** carrying `Workers Scripts: Edit` **and** `D1: Edit`.
+>    `npm run deploy` applies pending D1 migrations before uploading the worker, and
+>    Cloudflare's "Edit Cloudflare Workers" template does not grant D1.
+> 2. **`CLOUDFLARE_ACCOUNT_ID`** in the environment (find it under Workers & Pages in
+>    the dashboard sidebar). Without a cached login, wrangler tries to discover your
+>    account by listing `/accounts`, which the two permissions above do not allow —
+>    and which cannot choose between accounts non-interactively anyway. Supplying the
+>    id skips that lookup entirely; widening the token with `Account Settings: Read`
+>    also works but grants more and still breaks if the token can see more than one
+>    account.
+>
+> `npx wrangler login` needs neither: it authorizes interactively and caches the
+> account, which is why the steps above just work on your own machine.
 
 ### Configuration
 
