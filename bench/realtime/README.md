@@ -154,6 +154,16 @@ not a universal constant.** A Worker-side measurement would settle it and is not
 
 ## Running it
 
+> **The report's tables are generated. Regenerate them; do not edit them.**
+> `docs/research/realtime-latency-2026-08.md` is written from `analyze.py --markdown`
+> output. Three separate times during review a conclusion in that document outlived the
+> data behind it, because a number was corrected in one place and left standing in
+> another — including a retracted estimate that survived in a caveat three hundred lines
+> below the sentence that removed it. After any re-run or any change to the analyzer,
+> regenerate every table, then grep the prose for hand-written millisecond values and
+> confirm each one still appears in current output. Editing exactly one number by hand is
+> how this recurs.
+
 ```bash
 python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
 

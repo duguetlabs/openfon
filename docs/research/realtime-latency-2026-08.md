@@ -145,7 +145,7 @@ Paired, on identical caller audio in the same round:
 |---|---:|---:|---|---:|---:|---:|---|
 | `native-gateway` − `native-direct` | 23 | **+12** | [−90, +141] | +502 | 1.000 | 1.000 | no detectable difference; CI admits up to 141 ms |
 | `vl-gateway` − `vl-direct` | 25 | **−100** | [−280, −15] | +171 | 0.043 | 0.779 | borderline, not robust to correction |
-| `vl-native-brain` − `native-direct` | 25 | **−64** | [−156, −12] | +506 | 0.015 | 0.293 | borderline, not robust to correction |
+| `vl-native-brain` − `native-direct` | 25 | **−46** | [−152, −1] | +508 | 0.043 | 0.779 | no detectable difference; CI admits up to 152 ms |
 
 p-values are Holm-corrected across all 24 paired tests in the run (see
 [Statistical discipline](#statistical-discipline)); a directional verdict additionally
@@ -215,19 +215,28 @@ end-of-turn speed — see the VAD-splits caveat below.
 |---|---:|---:|---:|---:|---:|
 | `speech_stopped_ms` p50 (VAD end-of-turn) | 724 | 707 | 733 | 731 | 727 |
 | `transcript_ms` p50 (caller's transcript) | 1332 | *(n=3, excluded)* | 1271 | 1193 | 1292 |
-| `connect_ms` p50 | — | **−91 ms vs direct** | — | **−121 ms vs direct** | — |
+| `connect_ms` paired Δ | — | **−91 ms** | — | **−121 ms** | — |
+| `config_ms` paired Δ vs `native-direct` | — | +37 ms | — | — | **+65 ms** |
 
 Every paired `ttft`, `transcript` and `response_total` comparison for the two proxy pairs
 is null (p ≥ 0.11). The reply lengths confirm the arms were doing comparable work.
 
 **`connect_ms` is the vantage point made visible.** The gateway is 91–121 ms faster to
-open a socket (p < 0.001 on both pairs, in both runs) purely because the Cloudflare
-edge is nearer than Sweden — and then gives ~50 ms of it back on `config_ms`, because the
-gateway dials its upstream lazily *after* accepting the client socket, so the upstream
+open a socket (p < 0.001 on both pairs, in both runs) purely because the Cloudflare edge
+is nearer than Sweden — p50 317 ms vs 414 ms on the native pair, 310 ms vs 433 ms on Voice
+Live. It gives some of that back on `config_ms` (133 ms vs 79 ms, +37 ms paired) because
+the gateway dials its upstream lazily *after* accepting the client socket, so the upstream
 handshake is hidden inside session configuration rather than inside connect. Summed,
-first-configured-session is still faster through the gateway from here (513 ms vs 633 ms
-native; 462 ms vs 556 ms Voice Live). None of this transfers to a Cloudflare Worker,
-which has a different geometry again.
+first-configured-session is still faster through the gateway from here — 450 ms vs 493 ms
+native, 392 ms vs 509 ms Voice Live. None of this transfers to a Cloudflare Worker, which
+has a different geometry again.
+
+The one non-connection result that survives correction lives here too:
+**`vl-native-brain` − `native-direct` on `config_ms` is +65 ms** (CI [+40, +78],
+p_adj < 0.001) — Voice Live is measurably slower than the Foundry endpoint at applying a
+session configuration. It is paid once at session setup, not per turn, so it does not
+reach `ttfa_ms`; but it is a real difference between the two stacks and the only one this
+benchmark establishes.
 
 ---
 
@@ -262,12 +271,20 @@ making the rate claims any safer. Both VAD split results survive their family co
 
 What survives both gates:
 
+Everything in the primary run with an uncorrected p below 0.05:
+
 | result | median | p raw | p Holm | status |
 |---|---:|---:|---:|---|
-| `connect_ms`, both proxy pairs | −145 / −142 ms | 0.000 | 0.000 | **robust** — large, corrected, mechanically explained |
-| `ttfa_ms`, `vl-native-brain` − `native-direct` | −93 ms | 0.043 | 0.909 | **not robust** — borderline |
-| `config_ms`, `vl-gateway` − `vl-direct` | +6 ms | 0.043 | 0.909 | **not robust**, and below the floor anyway |
-| `config_ms`, `vl-native-brain` − `native-direct` | +46 ms | 0.001 | 0.017 | survives Holm, **fails the 50 ms floor** |
+| `connect_ms`, `native-gateway` − `native-direct` | −91 ms | 0.000 | 0.001 | **survives both gates** |
+| `connect_ms`, `vl-gateway` − `vl-direct` | −121 ms | 0.000 | 0.000 | **survives both gates** |
+| `config_ms`, `vl-native-brain` − `native-direct` | +65 ms | 0.000 | 0.000 | **survives both gates** |
+| `config_ms`, `native-gateway` − `native-direct` | +37 ms | 0.003 | 0.055 | demoted — correction, and below the floor |
+| `ttfa_ms`, `vl-gateway` − `vl-direct` | −100 ms | 0.043 | 0.779 | demoted — not robust to correction |
+| `ttfa_ms`, `vl-native-brain` − `native-direct` | −46 ms | 0.043 | 0.779 | demoted — not robust |
+| `ttfa_minus_vad_ms`, `vl-gateway` − `vl-direct` | −95 ms | 0.043 | 0.779 | demoted — not robust |
+| `ttfa_minus_vad_ms`, `vl-native-brain` − `native-direct` | −64 ms | 0.015 | 0.293 | demoted — not robust |
+| `response_total_ms`, `native-gateway` − `native-direct` | −588 ms | 0.035 | 0.659 | demoted — not robust |
+| `response_total_ms`, `vl-gateway` − `vl-direct` | −1272 ms | 0.043 | 0.779 | demoted — not robust |
 
 Split rates are a *rate*, not a paired latency, so they are tested separately with
 **exact McNemar** and are not part of this family. McNemar rather than Fisher's exact
@@ -277,17 +294,27 @@ Only complete cells where both turns produced a usable measurement are counted; 
 that failed has no split recorded by default, and counting it as a clean non-split would
 manufacture significance out of failures.
 
-Only the `connect_ms` results are reported as findings. In particular:
+**Three results survive both gates**, and one of them is not a connection metric:
+the two `connect_ms` rows (explained mechanically by the vantage point — the Cloudflare
+edge is nearer than Sweden) and **`config_ms`, `vl-native-brain` − `native-direct`,
++65 ms**. That last one says Voice Live takes ~65 ms longer than the Foundry endpoint to
+apply a session configuration. It is real and reproducible, it is a one-off cost paid
+before the call starts rather than per turn, and it does not touch time-to-first-audio —
+but it is a finding, and an earlier draft of this document wrongly said only connection
+results survived.
 
-> **The −93 ms "Voice Live's serving stack is faster with the brain held constant" is not
-> an established result.** Its CI upper bound touches zero (−424, −0), its corrected
-> p-value is 0.91, and its `ttft` and `response_total` counterparts are both null. The
-> honest statement is: *no robust difference; if anything Voice Live's stack is slightly
-> faster.* Confirming it would need a dedicated, better-powered run.
+Nothing on the headline metric survives. In particular:
 
-The last row is worth noting for the opposite reason: it clears the correction but not the
-effect-size floor. A 46 ms shift in session-configuration time is real and reproducible,
-and also irrelevant to a caller.
+> **"Voice Live's serving stack is faster with the brain held constant" is not an
+> established result.** In the primary run it is −46 ms with a CI upper bound touching zero
+> (−152, −1) and a corrected p of 0.78; run 1 put it at −93 ms, also demoted. The honest
+> statement is: *no robust difference; if anything Voice Live's stack is slightly faster.*
+> Confirming it would need a dedicated, better-powered run.
+
+Note also how many rows sit at exactly p = 0.043 — that is the smallest two-sided p an
+exact sign test can produce at n = 25 with one discordant pair short of unanimity. Several
+metrics landing there together is what a family of correlated near-null tests looks like,
+and is precisely why the correction exists.
 
 **This discipline strengthens the headline rather than weakening it.** The proxy null is
 not "we failed to find an effect" — it is a bounded null, replicated: two independent
@@ -305,9 +332,10 @@ laptop in Austria. TCP RTT: Cloudflare edge **30 ms**, Azure swedencentral **61 
 gateway arms therefore get a systematically shorter client leg. Pairing cancels drift and
 time-of-day load but cannot cancel path length. Production OpenFon is a Cloudflare Worker,
 where the client→edge leg is very short and the edge→origin leg may differ substantially.
-**A Worker-side run would settle this and has not been done.** Given that the true proxy
-cost estimated here (~10 ms) is an order of magnitude below the measurement noise, it is
-unlikely to change the verdict — but it would change the confidence.
+**A Worker-side run would settle this and has not been done.** The directly measured
+protocol overhead (5–8 ms round-trip) is an order of magnitude below the measurement noise
+here, so a change of vantage point is unlikely to change the verdict — but it would change
+the confidence, and it is the one adjustment that pairing cannot make for us.
 
 **Multiple comparisons** are handled in [Statistical discipline](#statistical-discipline)
 above rather than as an afterthought here: 24 tests, Holm-corrected as one family, with a
