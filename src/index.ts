@@ -637,8 +637,21 @@ app.post('/api/public/call/start', async (c) => {
       'web',
       addr === 'local' ? 'anonymous' : addr
     ),
+    // A swept never-connected row is excluded, because it is the one shape that
+    // provably cost nothing: the sweeper retired it, so its id can no longer
+    // attach, and it never reached a Durable Object to spend anything. Counting
+    // those turns a cap on *spend* into a cap on junk — a pre-upgrade burst above
+    // the limit would leave a business dark for a day the moment it migrated, and
+    // one address could reproduce that on purpose at ten ids a minute without
+    // ever opening a socket.
+    //
+    // Still-'active' rows do count even with no connection yet: an unattached but
+    // live ticket is a real reservation someone can still redeem. It stops
+    // counting when the sweep retires it, not before.
     c.env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM calls WHERE business_id = ? AND started_at > datetime('now', '-1 day')`
+      `SELECT COUNT(*) AS n FROM calls
+        WHERE business_id = ? AND started_at > datetime('now', '-1 day')
+          AND NOT (status = 'abandoned' AND connected_at IS NULL)`
     ).bind(biz.id),
   ]);
   if ((claim[1].results[0]?.n ?? 0) > biz.max_calls_per_day) {

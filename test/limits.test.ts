@@ -127,6 +127,31 @@ describe('per-business call caps', () => {
     expect(await res.json()).toEqual({ error: expect.stringContaining('daily call limit') });
   });
 
+  it('does not charge the daily budget for rows that were never connected', async () => {
+    const { db, start } = setup();
+    db.businesses[0].max_calls_per_day = 3;
+    // What a swept burst leaves behind — or what an upgrade inherits. These ids
+    // can no longer attach and never reached a Durable Object, so they cannot
+    // have spent anything the cap exists to bound.
+    for (let i = 0; i < 50; i++) {
+      db.seedCall({ id: `swept-${i}`, business_id: 'biz1', status: 'abandoned', connected_at: null });
+    }
+    expect((await start()).status).toBe(200);
+  });
+
+  it('still charges the budget for live tickets and for calls that connected', async () => {
+    const { db, start } = setup();
+    db.businesses[0].max_calls_per_day = 3;
+    // An unattached but still-active row is a real reservation someone can
+    // redeem; a connected row that was later swept did spend. Both count.
+    db.seedCall({ id: 'pending', business_id: 'biz1', status: 'active', connected_at: null });
+    db.seedCall({ id: 'was-connected', business_id: 'biz1', status: 'abandoned', connected_at: Date.now() });
+    expect((await start()).status).toBe(200);
+    const res = await start();
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ error: expect.stringContaining('daily call limit') });
+  });
+
   it('leaves no row behind when the daily cap refuses a call', async () => {
     const { db, start } = setup();
     db.businesses[0].max_calls_per_day = 3;

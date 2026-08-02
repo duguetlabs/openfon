@@ -168,7 +168,14 @@ class FakeStatement {
     }
     if (q.startsWith('SELECT COUNT(*) AS n FROM calls')) {
       const since = cutoff('-1 day');
-      const n = this.db.calls.filter((c) => c.business_id === a[0] && c.started_at > since).length;
+      const n = this.db.calls.filter(
+        (c) =>
+          c.business_id === a[0] &&
+          c.started_at > since &&
+          // A swept never-connected row provably cost nothing, so it is not
+          // charged against a cap that exists to bound spend.
+          !(c.status === 'abandoned' && c.connected_at === null)
+      ).length;
       return { rows: [{ n }], changes: 0 };
     }
     if (q.startsWith('INSERT INTO calls')) {

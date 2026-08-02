@@ -84,6 +84,13 @@ export default function Widget() {
 
   async function startCall() {
     if (!slug) return;
+    // Hang up whatever was here first. A call that ended in an error leaves its
+    // socket open — the server tells the caller the call broke but does not close
+    // it — so replacing the ref without this leaks a live session per retry. Each
+    // one holds a line against the business's concurrency cap until the sweep
+    // retires it, which is how one person clicking "try again" through a provider
+    // blip can put their own agent on "all lines are busy" for the next hour.
+    callRef.current?.hangup();
     setPhase('connecting');
     setLines([]);
     const call = new VoiceCall();
