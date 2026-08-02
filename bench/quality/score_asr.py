@@ -30,6 +30,20 @@ from score_wer import normalize  # noqa: E402
 SNR_RE = re.compile(r"_snr(-?\d+)$")
 
 
+def sibling(out_path: str, suffix: str) -> str:
+    """`results/x.csv` + "_per_run" -> `results/x_per_run.csv`.
+
+    `out.replace(".csv", ...)` silently returns the original string when the
+    name has no `.csv`, so the second write lands on the first file and destroys
+    it. Reject names without a suffix rather than guess.
+    """
+    p = Path(out_path)
+    if not p.suffix:
+        sys.exit(f"--out {out_path!r} has no file extension; a companion file "
+                 f"cannot be derived from it. Use e.g. {out_path}.csv")
+    return str(p.with_name(p.stem + suffix + p.suffix))
+
+
 def wer_cer(rows: list[dict], lang: str) -> tuple[float, float, int, int]:
     """WER/CER over `rows`, plus how many rows were usable out of how many given.
 
@@ -103,6 +117,13 @@ def main() -> None:
                                     f"{','.join(dupes[:3])}")
                 elif len(ids) != expect:
                     problems.append(f"{arm}/{lang}/{cond}: {len(ids)} of {expect}")
+                rs = groups.get((arm, lang, cond), [])
+                if rs and all(r.get("error") for r in rs):
+                    # Every row errored: this is an outage, not a 100% WER. The
+                    # clip ids are all present, so nothing else here would notice.
+                    problems.append(f"{arm}/{lang}/{cond}: every row is an error "
+                                    f"({rs[0].get('error', '')[:60]}) — that is an "
+                                    f"outage, not a measurement")
 
     # Same (lang, condition) across arms must mean the same clips.
     for lang in langs:
@@ -170,7 +191,7 @@ def main() -> None:
     # condition-only run (`--conditions tel`) produced an empty list and then an
     # IndexError on `summary[0]` — after the detailed CSV had already been
     # written, so the run looked half-successful.
-    dest = a.summary or a.out.replace(".csv", "_summary.csv")
+    dest = a.summary or sibling(a.out, "_summary")
     if not summary:
         print(f"no robustness summary: none of the {len(arms) * len(langs)} "
               f"(arm, language) pairs has a `clean` baseline, and dWER/SNR50 are "

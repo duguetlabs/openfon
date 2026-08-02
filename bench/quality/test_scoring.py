@@ -28,12 +28,12 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "prepare"))
 
 from judge import JudgeParseError, parse_verdicts  # noqa: E402
-from run_scenarios import function_call  # noqa: E402
+from events import function_call, response_cancelled  # noqa: E402
 from score_slots import (  # noqa: E402
     detect_lang, fact_present, score_run, slot_present, time_forms,
 )
 from score_wer import normalize  # noqa: E402
-from summarize import pct  # noqa: E402
+from summarize import pct, sibling  # noqa: E402
 
 
 class TestNormalize(unittest.TestCase):
@@ -775,10 +775,12 @@ class TestCancellationDetection(unittest.TestCase):
         self.assertEqual(ev["type"], "response.done")
         self.assertIn(ev["response"]["status"], ("cancelled", "canceled"))
 
-    def test_runner_sets_cancelled_from_response_status(self):
-        src = (HERE / "run_scenarios.py").read_text()
-        self.assertIn('status in ("cancelled", "canceled")', src)
-        self.assertNotIn('t in ("response.cancelled", "response.canceled")', src)
+    def test_response_cancelled_reads_the_status_field(self):
+        self.assertTrue(response_cancelled(self.status_event("cancelled")))
+        self.assertTrue(response_cancelled(self.status_event("canceled")))
+        self.assertFalse(response_cancelled(self.status_event("completed")))
+        self.assertFalse(response_cancelled({"type": "response.cancelled"}))
+        self.assertFalse(response_cancelled({"type": "response.done"}))
 
     def test_committed_logs_encode_cancellation_this_way(self):
         """Guards the assumption against a service-side change."""
@@ -796,6 +798,108 @@ class TestCancellationDetection(unittest.TestCase):
             self.skipTest("no barge-in logs present")
         self.assertIn("cancelled", seen_status)
         self.assertEqual(seen_toplevel, 0)
+
+
+class TestFinalLanguage(unittest.TestCase):
+    """Language adherence is a property of the agent's last turn."""
+
+    SPEC = {"scenarios": [{
+        "id": "cs", "lang": "de_DE", "intent": "grounded_qa",
+        "turns": [{"text": "auf Deutsch"}, {"text": "in English please"}],
+        "expected": {"tool_calls": [], "slots": {"final_language": ["en"]},
+                     "grounded_facts": [], "forbidden": []}}]}
+
+    def run_with(self, agent_turns):
+        transcript = [{"role": "caller_asr", "text": "Guten Tag, nehmen Sie gesetzlich Versicherte?"},
+                      {"role": "caller_asr", "text": "Sorry, could we continue in English?"}]
+        transcript += [{"role": "agent", "text": t} for t in agent_turns]
+        return score_run({"arm": "a", "trial": 1, "scenario": "cs", "lang": "de_DE",
+                          "intent": "grounded_qa", "tool_calls": [], "error": None,
+                          "transcript": transcript,
+                          "turns": [{"index": 0}, {"index": 1}]}, self.SPEC)
+
+    def test_switch_followed_counts_even_after_german_turns(self):
+        """Earlier German must not drown out a correct English final reply."""
+        r = self.run_with(["Ja, wir nehmen gesetzlich Versicherte und die meisten "
+                           "privaten Kassen an.",
+                           "Yes, we accept all statutory insurers and most private plans."])
+        self.assertEqual(r["slots_all_heard"], 1)
+
+    def test_switch_ignored_is_a_failure(self):
+        r = self.run_with(["Ja, wir nehmen gesetzlich Versicherte an.",
+                           "Ja, das ist richtig, wir haben auch private Kassen."])
+        self.assertEqual(r["slots_all_heard"], 0)
+
+    def test_it_does_not_read_the_caller_transcript(self):
+        # The caller's second turn is English either way; only the agent decides.
+        self.assertEqual(self.run_with(["Ja, natürlich, das haben wir."])["slots_all_heard"], 0)
+
+
+class TestOutageIsNotAMeasurement(unittest.TestCase):
+    def test_score_asr_refuses_a_cell_where_every_row_errored(self):
+        """A failed batch writes a full set of clip ids with empty hypotheses."""
+        with tempfile.TemporaryDirectory() as tmp:
+            hyp = Path(tmp) / "asr.jsonl"
+            rows = [{"arm": "a", "lang": "en_us", "condition": "clean", "id": f"c{i}",
+                     "reference": "hello world", "hypothesis": "",
+                     "error": "ConnectionClosed: 1011", "audio_seconds": 0.0,
+                     "latency_s": 0.0} for i in range(3)]
+            hyp.write_text("".join(json.dumps(r) + "\n" for r in rows))
+            r = subprocess.run(
+                [sys.executable, str(HERE / "score_asr.py"), "--hyp", str(hyp),
+                 "--expect-clips", "3", "--out", str(Path(tmp) / "out.csv")],
+                capture_output=True, text=True)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("outage, not a measurement", r.stderr)
+
+    def test_a_cell_with_some_errors_is_still_scored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            hyp = Path(tmp) / "asr.jsonl"
+            rows = [{"arm": "a", "lang": "en_us", "condition": "clean", "id": f"c{i}",
+                     "reference": "hello world",
+                     "hypothesis": "" if i == 0 else "hello world",
+                     "error": "boom" if i == 0 else None,
+                     "audio_seconds": 1.0, "latency_s": 0.1} for i in range(3)]
+            hyp.write_text("".join(json.dumps(r) + "\n" for r in rows))
+            r = subprocess.run(
+                [sys.executable, str(HERE / "score_asr.py"), "--hyp", str(hyp),
+                 "--expect-clips", "3", "--out", str(Path(tmp) / "out.csv")],
+                capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+
+
+class TestCompanionFilePaths(unittest.TestCase):
+    def test_companion_path_keeps_the_suffix(self):
+        self.assertEqual(sibling("results/x.csv", "_per_run"), "results/x_per_run.csv")
+        self.assertEqual(sibling("/a/b/summary.tsv", "_detail"), "/a/b/summary_detail.tsv")
+
+    def test_extensionless_out_is_rejected_not_silently_overwritten(self):
+        """`out.replace('.csv', ...)` returns `out`, so the detail write clobbers it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            h = TestAbsentDataNeverPasses()
+            slots = h.write(tmp, "slots.csv", h.SLOTS_HEADER, [h.slot_row()])
+            r = subprocess.run(
+                [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
+                 "--trials", "1", "--out", str(Path(tmp) / "noext")],
+                capture_output=True, text=True)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("no file extension", r.stderr)
+
+
+class TestScoringImportsAreTransportFree(unittest.TestCase):
+    def test_no_scoring_module_imports_websockets(self):
+        """CI installs jiwer and num2words only; an import of `websockets` in the
+        scoring path kills collection before a single test runs."""
+        # Built from parts so this file does not contain the needle it greps for.
+        ws = "import " + "websockets"
+        runner = "from " + "run_scenarios" + " import"
+        for mod in ("score_slots.py", "score_asr.py", "summarize.py",
+                    "judge.py", "events.py", "test_scoring.py",
+                    "rederive_tools.py"):
+            with self.subTest(module=mod):
+                src = (HERE / mod).read_text()
+                self.assertNotIn(ws, src)
+                self.assertNotIn(runner, src)
 
 
 class TestFixtureHygiene(unittest.TestCase):

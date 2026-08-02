@@ -27,7 +27,22 @@ import csv
 import math
 import statistics
 import sys
+from pathlib import Path
 from collections import defaultdict
+
+
+def sibling(out_path: str, suffix: str) -> str:
+    """`results/x.csv` + "_per_run" -> `results/x_per_run.csv`.
+
+    `out.replace(".csv", ...)` silently returns the original string when the
+    name has no `.csv`, so the second write lands on the first file and destroys
+    it. Reject names without a suffix rather than guess.
+    """
+    p = Path(out_path)
+    if not p.suffix:
+        sys.exit(f"--out {out_path!r} has no file extension; a companion file "
+                 f"cannot be derived from it. Use e.g. {out_path}.csv")
+    return str(p.with_name(p.stem + suffix + p.suffix))
 
 
 def read(path: str) -> list[dict]:
@@ -271,7 +286,7 @@ def main() -> None:
         w.writerows(rows)
     print(f"wrote {len(rows)} rows -> {a.out}")
 
-    detail = a.out.replace(".csv", "_per_run.csv")
+    detail = sibling(a.out, "_per_run")
     with open(detail, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(per_run[0].keys()))
         w.writeheader()

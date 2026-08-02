@@ -31,6 +31,7 @@ from pathlib import Path
 import websockets
 
 from engines import ARMS, connect_kwargs, load_prompt
+from events import function_call, redact, response_cancelled
 
 FRAME_MS = 40                       # 40 ms frames ~= a realistic RTP cadence
 LANG_CODE = {"en_US": "en", "de_DE": "de"}
@@ -44,44 +45,6 @@ def pcm24k(path: Path) -> bytes:
          "-ac", "1", "-ar", "24000", "-f", "s16le", "-"],
         check=True, capture_output=True,
     ).stdout
-
-
-def redact(ev: dict) -> dict:
-    """Drop base64 audio payloads before logging, keeping their length.
-
-    A single scenario's raw log is ~2 MB of base64 otherwise, and 120 runs would
-    be ~120 MB of unreviewable diff. Everything needed to re-score without
-    re-spending — transcripts, timings, tool calls, errors — survives.
-    """
-    if not any(k in ev for k in ("delta", "audio")):
-        return ev
-    out = dict(ev)
-    for k in ("delta", "audio"):
-        v = out.get(k)
-        if isinstance(v, str) and len(v) > 64:
-            out[k] = f"<{len(v)} b64 chars redacted>"
-    return out
-
-
-def function_call(ev: dict) -> tuple[str, str] | None:
-    """Return (call_id, name) if this event announces a tool call, else None.
-
-    Several event types describe the same invocation; the caller deduplicates on
-    call_id. Events that carry a call_id but no name (the argument deltas) are
-    ignored, since the name is what we record.
-    """
-    t = ev.get("type", "")
-    item = ev.get("item") or {}
-    if t in ("response.function_call_arguments.done", "response.output_item.done",
-             "response.output_item.added"):
-        name = ev.get("name") or item.get("name")
-        cid = ev.get("call_id") or item.get("call_id") or ev.get("item_id")
-        if name and cid:
-            return (cid, name)
-    if t == "conversation.item.created" and item.get("type") == "function_call":
-        if item.get("name") and (item.get("call_id") or item.get("id")):
-            return (item.get("call_id") or item.get("id"), item["name"])
-    return None
 
 
 class Turn:
@@ -187,8 +150,7 @@ async def run_scenario(arm_name: str, sc: dict, audio_dir: Path, trial: int,
                     # seen in any committed log — so the old check never fired
                     # and `agent_cancelled` was false even for real cancellations.
                     cur.done = True
-                    status = (ev.get("response") or {}).get("status")
-                    if status in ("cancelled", "canceled"):
+                    if response_cancelled(ev):
                         cur.cancelled = True
 
         pump_task = asyncio.create_task(pump())

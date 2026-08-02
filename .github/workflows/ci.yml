@@ -30,6 +30,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      # Scoring only. If this list ever needs `websockets`, something in the
+      # scoring path has picked up a transport import — see
+      # TestScoringImportsAreTransportFree.
       - run: pip install jiwer num2words
       - run: python -m unittest discover -s bench/quality -p 'test_*.py' -v
 

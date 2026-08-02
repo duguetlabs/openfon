@@ -18,7 +18,7 @@ import collections
 import json
 from pathlib import Path
 
-from run_scenarios import function_call
+from events import function_call
 
 
 def calls_from_log(path: Path) -> list[str]:

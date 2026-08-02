@@ -3,9 +3,12 @@
 Every place this harness decides **"this run is complete / this arm is verified /
 this result counts"** — what each check compares, and how it can be fooled.
 
-This file exists because eleven instances of one bug were found across five
-review rounds, and three separate sweeps each missed instances of the class they
-were sweeping for. The shapes are not memorable. The inventory is.
+This file exists because **the same bug class was found twelve times across seven
+review rounds**, and three separate sweeps each missed instances of the class
+they were sweeping for. That is not a run of bad luck — it is the failure mode
+this code attracts, and anyone extending the harness should expect to introduce
+it again rather than assume it has been designed out. The shapes are not
+memorable. The inventory is.
 
 **The rule.** *Every check must compare what it got against what it expected, by
 identity rather than by count.* Counting rows is not verifying trials. Writing an
@@ -22,6 +25,7 @@ correct ones, which is worse than no numbers.
 | # | Where | Decides | Compares | Fooled by |
 |---|---|---|---|---|
 | 1 | `run_scenarios.py` `main()` | did this arm/trial complete | every scenario ran without raising **and** produced at least one agent turn; **exits non-zero** if any failed | nothing known. A silently-empty scenario used to reach the scorer as a valid row. |
+| 2a | `run_asr.py` `main()` | did every condition produce results | retries not exhausted for any condition; **exits non-zero** if any were | nothing known. Exiting zero was the bug: a full cell of error rows has every expected clip id, so the scorer scored an outage as 100% WER. Paired with #11's all-error guard. |
 | 2 | `run_asr.py` `transcribe_batch()` | is this session still coherent | each clip gets `input_audio_buffer.committed`; a timeout **raises** `CommitDesync` rather than continuing | nothing known. Continuing was the bug: a late commit was consumed as the next clip's, cascading wrong hypotheses. |
 | 3 | `run_all.sh` | did the matrix complete | every runner invocation's exit code; collects failures and **exits non-zero** | a runner that exits 0 having swallowed its errors — which is why #1 exists. Also `OUT` must point somewhere disposable in tests: the `: >` truncation writes to `$HERE` by default and once destroyed a finished run. |
 | 4 | `summarize.py` trial check | did every arm run everything | **set of trial ids** per `(arm, scenario)` equals `{1..k}`, no duplicates, no extras | nothing known. Counting rows was the bug: three copies of trial 1 satisfied `--trials 3`. Runners append to JSONL, so re-runs duplicate rather than replace. |

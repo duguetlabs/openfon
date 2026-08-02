@@ -23,10 +23,10 @@ settings default, not a rebuild.
 |---|---|---|
 | Time to first audio, p50 | **1331 ms** | 2017–2367 ms |
 | Time to first audio, p95 | **1748 ms** | 3048–3468 ms |
-| Caller-slot capture, heard | **0.967** | 0.856–0.933 |
-| Caller-slot capture, echoed back | 0.719 | **0.812–0.819** |
+| Caller-slot capture, heard | **0.967** | 0.911–0.933 |
+| Caller-slot capture, echoed back | 0.719 | **0.819–0.868** |
 | Judge groundedness | 0.697 | **1.000** |
-| Strict task success | 0.394 | **0.424–0.606** |
+| Strict task success | 0.394 | **0.424–0.636** |
 | pass^3 | 0.182 | **0.273–0.545** |
 | Cost | **$0.03/min** | $0.07/min |
 
@@ -246,9 +246,9 @@ question depends on is the genuine one, pinned to Monday 2026-08-03.
 
 | arm | success | pass^3 | slots heard | slots echoed | end_call | grounded (judge) | resolution | tone | TTFA p50 | TTFA p95 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `native-gpt-realtime-2` | **0.606** | **0.545** | 0.856 | **0.819** | 24/33 | **1.000** | 1.697 | 1.576 | 2017 | 3048 |
-| `vl-gpt41mini-dns` | 0.455 | 0.273 | **0.967** | 0.651 | 23/33 | 0.818 | 1.727 | 1.697 | 1431 | 1994 |
-| `vl-native-brain` | 0.424 | 0.273 | 0.933 | 0.812 | 23/33 | **1.000** | 1.727 | 1.576 | 2367 | 3468 |
+| `native-gpt-realtime-2` | **0.636** | **0.545** | 0.911 | **0.819** | 24/33 | **1.000** | 1.697 | 1.576 | 2017 | 3048 |
+| `vl-gpt41mini-dns` | 0.455 | 0.273 | **0.967** | 0.706 | 23/33 | 0.818 | 1.727 | 1.697 | 1431 | 1994 |
+| `vl-native-brain` | 0.424 | 0.273 | 0.933 | **0.868** | 23/33 | **1.000** | 1.727 | 1.576 | 2367 | 3468 |
 | `vl-gpt41mini` | 0.394 | 0.182 | **0.967** | 0.719 | 24/33 | 0.697 | 1.727 | **1.788** | 1331 | 1748 |
 | `vl-gpt41mini-semvad` | 0.364 | 0.182 | 0.933 | 0.767 | **25/33** | 0.758 | **1.788** | 1.697 | **1321** | **1852** |
 
@@ -258,7 +258,7 @@ judge's groundedness verdict positive. `pass^3` requires that on **all three**
 trials.
 
 **The two capabilities separate cleanly.** Voice Live *hears* better — 0.967 vs
-0.856 slot capture, and it never lost a phone number. gpt-realtime-2 *reasons*
+0.911 slot capture, and it never lost a phone number. gpt-realtime-2 *reasons*
 better — a perfect 1.000 groundedness against 0.697, and it completes the whole
 call correctly on all three trials in 54.5 % of scenarios against 18.2 %.
 
@@ -275,7 +275,7 @@ are out of the way (Confounds 9 and 11):
 |---|---|---|
 | `book-de-01` | 0/15 | the ASR hears **"Katrin"** for "Kathrin" on 15/15 — one letter, but the wrong name in the booking |
 | `reschedule-en-01` | 1/15 | every slot captured; `end_call` fires 1/15 |
-| `codeswitch-01` | 1/15 | language switch followed 14/15; `end_call` 0/15 |
+| `codeswitch-01` | 1/15 | language switch followed **15/15**; `end_call` 0/15 |
 | `message-de-01` | 2/15 | `end_call`, plus the judge objecting to "Dr. Weber is not available right now" |
 | `holiday-de-01` | 15/15 | the special-closure calendar lookup works on every arm and trial |
 | `bargein-en-01` | 13/15 | correction adopted 24/30 across arms |
@@ -285,8 +285,10 @@ contains the value — did it *hear* the phone number. `slots echoed` is whether
 the agent repeated it back. The confirmation gap is brain/prompt behaviour, not
 recognition, and is fixable in the prompt; a recognition gap is not.
 
-**Code-switching:** every Voice Live arm followed the German→English switch on
-3/3 trials. Native gpt-realtime-2 failed it once (2/3).
+**Code-switching: every arm followed the German→English switch on 3/3 trials,
+15 of 15 runs.** An earlier draft reported native gpt-realtime-2 failing once;
+that came from scoring language adherence off the *caller's* transcript rather
+than the agent's final turn, which is the only place the answer lives.
 
 ### Barge-in — measured, and withdrawn
 
@@ -326,12 +328,12 @@ been delivered in full.
 Written down because a reader deciding on the strength of this study deserves the
 same summary the reviewers had.
 
-**Eleven instances of one bug class** were found across six rounds of review, in
+**Twelve instances of one bug class** were found across seven rounds of review, in
 which missing or unverified data read as a passing result — a missing judge row,
 an empty judge file, a missing trial, duplicate trials counted as distinct ones,
 a scenario an arm never ran, an unparseable numeric, an errored run, a call the
 agent never joined, a runner that swallowed its own errors, a shell that reported
-success anyway, and a duplicated ASR clip double-weighted in a WER. Three
+success anyway, a duplicated ASR clip double-weighted in a WER, and an ASR batch that exhausted its retries and was published as 100 % WER rather than as the outage it was. Three
 successive sweeps each missed instances of the class they were sweeping for,
 which is why the checks are now enumerated in
 [`bench/quality/COMPLETENESS.md`](../../bench/quality/COMPLETENESS.md) rather
@@ -503,6 +505,19 @@ Stated rather than smoothed over.
      every subsequent clip inherited its predecessor's hypothesis — silent WER
      corruption with no error on any affected row. The batch now aborts and
      reconnects.
+   * *An exhausted ASR batch became a data point.* After both attempts failed,
+     the runner wrote a full cell of error rows and exited zero, so the shell
+     reported completion and the scorer saw a complete set of clip ids — a
+     transport or configuration outage published as 100 % WER. The worst version
+     of the class: the others let a gap pass as success, this one converted
+     infrastructure failure into a measurement. The runner now exits non-zero and
+     `score_asr.py` refuses any cell whose rows are all errors.
+   * *`final_language` was scored from the caller's transcript*, so strict
+     success tested what the *caller* said rather than whether the agent
+     switched languages; the companion echoed score joined all agent turns, where
+     earlier German drowns out a correct English reply. Both wrong, in opposite
+     directions. Scored from the agent's final turn, every arm followed the
+     switch 15/15, and native gpt-realtime-2's strict success rose 0.606 → 0.636.
    * *Cancellation was never detected.* An interrupted generation is
      `response.done` with `response.status == "cancelled"`; the runner watched
      for a top-level `response.cancelled` that neither service emits, so

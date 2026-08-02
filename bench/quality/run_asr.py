@@ -199,6 +199,7 @@ async def main() -> None:
     a = ap.parse_args()
 
     root = Path(a.data)
+    exhausted: list[str] = []
     Path(a.logdir).mkdir(parents=True, exist_ok=True)
     results: list[dict] = []
 
@@ -219,11 +220,18 @@ async def main() -> None:
                     print(f"  batch failed ({type(e).__name__}: {e}); "
                           f"{'retrying' if attempt == 1 else 'giving up'}", file=sys.stderr)
                     if attempt == 2:
+                        # These rows exist so the failure is visible in the data,
+                        # NOT so it can be scored. A cell of empty hypotheses is
+                        # indistinguishable from an engine that transcribed
+                        # nothing: without the exit code below and the all-error
+                        # guard in score_asr.py, a transport or configuration
+                        # outage is published as 100% WER.
                         results += [{"arm": a.arm, "lang": a.lang, "condition": cond,
                                      "id": c["id"], "reference": c["reference"],
                                      "hypothesis": "", "error": str(e),
                                      "audio_seconds": 0.0, "latency_s": 0.0}
                                     for c in clips]
+                        exhausted.append(f"{a.lang}/{cond}")
                     await asyncio.sleep(5)
         await asyncio.sleep(1)  # stagger session opens
 
@@ -233,6 +241,9 @@ async def main() -> None:
     secs = sum(r["audio_seconds"] for r in results)
     print(f"[{a.arm}] wrote {len(results)} rows, {secs/60:.1f} audio-min "
           f"(~${secs/60*ARMS[a.arm].usd_per_min:.2f})", file=sys.stderr)
+    if exhausted:
+        sys.exit(f"[{a.arm}] {len(exhausted)} condition(s) exhausted their retries: "
+                 f"{', '.join(exhausted)}. Those cells are error rows, not results.")
 
 
 if __name__ == "__main__":

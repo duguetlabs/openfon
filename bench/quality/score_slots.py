@@ -180,9 +180,22 @@ def score_run(run: dict, spec: dict) -> dict:
     # down for being terse, which is why success is keyed on `heard`.
     caller_text = " ".join(m["text"] for m in run.get("transcript", [])
                            if m["role"] == "caller_asr")
+    # `final_language` is not an ASR slot: it asks whether the *agent* switched
+    # languages, so neither the caller transcript (which tests what the caller
+    # said) nor the joined agent turns (where earlier German drowns out a correct
+    # English reply) answers it. Both were wrong, in opposite directions. It is
+    # scored from the agent's last turn, which is what "final" means.
+    final_agent = next((m["text"] for m in reversed(run.get("transcript", []))
+                        if m["role"] == "agent"), "")
+
+    def source(key: str, default: str) -> str:
+        return final_agent if key == "final_language" else default
+
     slots = exp.get("slots") or {}
-    heard = {k: slot_present(caller_text, k, v, lang) for k, v in slots.items()}
-    hits = {k: slot_present(agent_text, k, v, lang) for k, v in slots.items()}
+    heard = {k: slot_present(source(k, caller_text), k, v, lang)
+             for k, v in slots.items()}
+    hits = {k: slot_present(source(k, agent_text), k, v, lang)
+            for k, v in slots.items()}
     called = set(run.get("tool_calls") or [])
     want_tools = set(exp.get("tool_calls") or [])
 

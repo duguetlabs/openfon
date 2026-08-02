@@ -86,14 +86,14 @@ vl-native-brain,1,holiday-de-01,de_DE,grounded_qa,0,,,,,,,end_call,1,1,1,1,0,,23
 vl-native-brain,1,message-de-01,de_DE,take_message,3,1.0,1,,1.0,1,,,0,0,0,1,0,,1859.7;-5443.0;2284.7;-1697.2,1859.7,0,0,,,2,4,28.9,,1.0,2.0,2.0,0
 vl-native-brain,1,emergency-de-01,de_DE,handoff,0,,,,,,,,1,1,1,1,0,,4280.4;2271.5,4280.4,0,0,,,2,2,19.7,,1.0,2.0,2.0,1
 vl-native-brain,1,bargein-de-01,de_DE,grounded_qa,0,,,,,,,,1,1,0,0,0,,1716.1;1912.5,1912.5,1,0,17.7,1,2,2,14.4,,1.0,2.0,2.0,0
-vl-native-brain,1,codeswitch-01,de_DE,grounded_qa,1,1.0,1,,0.0,0,final_language,,0,1,1,1,0,,2239.1;1976.8;1948.6,1976.8,0,0,,,3,3,21.1,,1.0,2.0,2.0,0
+vl-native-brain,1,codeswitch-01,de_DE,grounded_qa,1,1.0,1,,1.0,1,,,0,1,1,1,0,,2239.1;1976.8;1948.6,1976.8,0,0,,,3,3,21.1,,1.0,2.0,2.0,0
 native-gpt-realtime-2,1,book-de-01,de_DE,book_appointment,5,0.8,0,first_name,0.8,0,first_name,,0,0,0,1,0,,2133.7;2794.8;1907.2;1905.3;2067.4,2067.4,0,0,,,6,5,48.2,,1.0,2.0,1.0,0
 native-gpt-realtime-2,1,hours-de-01,de_DE,grounded_qa,0,,,,,,,end_call,1,2,2,1,0,,3324.9;2735.3;1577.2,2735.3,0,0,,,3,3,22.1,,1.0,2.0,2.0,1
 native-gpt-realtime-2,1,holiday-de-01,de_DE,grounded_qa,0,,,,,,,end_call,1,1,1,1,0,,2145.2;1868.2;1479.3,1868.2,0,0,,,4,3,20.9,,1.0,2.0,2.0,1
 native-gpt-realtime-2,1,message-de-01,de_DE,take_message,3,0.667,0,first_name,0.333,0,"first_name,phone",,0,0,0,1,0,,1717.8;-5442.9;1837.4;-1720.5,1717.8,0,0,,,2,4,28.5,,1.0,1.0,1.0,0
 native-gpt-realtime-2,1,emergency-de-01,de_DE,handoff,0,,,,,,,,1,1,1,1,0,,2619.7;2565.9,2619.7,0,0,,,2,2,22.0,,1.0,2.0,1.0,1
 native-gpt-realtime-2,1,bargein-de-01,de_DE,grounded_qa,0,,,,,,,,1,1,1,1,0,,1935.8;1647.1,1935.8,1,0,285.2,1,2,2,14.8,,1.0,2.0,2.0,1
-native-gpt-realtime-2,1,codeswitch-01,de_DE,grounded_qa,1,0.0,0,final_language,1.0,1,,end_call,1,1,1,1,0,,1820.5;2152.2,2152.2,0,0,,,2,3,45.5,,1.0,2.0,1.0,0
+native-gpt-realtime-2,1,codeswitch-01,de_DE,grounded_qa,1,1.0,1,,1.0,1,,end_call,1,1,1,1,0,,1820.5;2152.2,2152.2,0,0,,,2,3,45.5,,1.0,2.0,1.0,1
 vl-gpt41mini,2,book-de-01,de_DE,book_appointment,5,0.8,0,first_name,0.6,0,"first_name,phone",,0,0,0,1,0,,1296.8;1404.9;1386.8;1584.7;1269.3,1386.8,0,0,,,5,5,37.9,,1.0,2.0,2.0,0
 vl-gpt41mini,2,hours-de-01,de_DE,grounded_qa,0,,,,,,,,0,2,2,1,0,,1562.8;1296.2;1272.6,1296.2,0,0,,,3,3,17.1,,1.0,2.0,2.0,0
 vl-gpt41mini,2,holiday-de-01,de_DE,grounded_qa,0,,,,,,,end_call,1,1,1,1,0,,1315.0;1747.7,1747.7,0,0,,,2,3,39.9,,1.0,2.0,1.0,1
@@ -142,7 +142,7 @@ vl-gpt41mini-dns,3,holiday-de-01,de_DE,grounded_qa,0,,,,,,,end_call,1,1,1,1,0,,1
 vl-gpt41mini-dns,3,message-de-01,de_DE,take_message,3,1.0,1,,0.333,0,"first_name,phone",end_call,1,0,0,1,0,,1442.5;1567.0;1533.0,1533.0,0,0,,,3,4,57.3,,0.0,2.0,2.0,0
 vl-gpt41mini-dns,3,emergency-de-01,de_DE,handoff,0,,,,,,,,1,1,1,1,0,,1802.7;1604.7,1802.7,0,0,,,2,2,17.7,,1.0,2.0,1.0,1
 vl-gpt41mini-dns,3,bargein-de-01,de_DE,grounded_qa,0,,,,,,,,1,1,1,1,0,,1286.6;1695.6,1695.6,1,0,,1,2,2,13.6,,1.0,2.0,2.0,1
-vl-gpt41mini-dns,3,codeswitch-01,de_DE,grounded_qa,1,1.0,1,,0.0,0,final_language,,0,1,1,1,0,,1321.1;1531.2;1341.7,1341.7,0,0,,,3,3,19.5,,1.0,2.0,2.0,0
+vl-gpt41mini-dns,3,codeswitch-01,de_DE,grounded_qa,1,1.0,1,,1.0,1,,,0,1,1,1,0,,1321.1;1531.2;1341.7,1341.7,0,0,,,3,3,19.5,,1.0,2.0,2.0,0
 vl-gpt41mini-semvad,3,book-de-01,de_DE,book_appointment,5,0.8,0,first_name,0.6,0,"first_name,phone",end_call,1,0,0,1,0,,1283.9;1500.8;1411.7;1281.5;1905.5,1411.7,0,0,,,5,5,39.2,,0.0,2.0,2.0,0
 vl-gpt41mini-semvad,3,hours-de-01,de_DE,grounded_qa,0,,,,,,,,0,2,2,1,0,,1311.1;1307.5;1220.3,1307.5,0,0,,,3,3,16.6,,1.0,2.0,2.0,0
 vl-gpt41mini-semvad,3,holiday-de-01,de_DE,grounded_qa,0,,,,,,,end_call,1,1,1,1,0,,1331.1;1231.6,1331.1,0,0,,,2,3,39.2,,1.0,2.0,1.0,1
