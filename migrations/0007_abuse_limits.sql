@@ -28,6 +28,13 @@ ALTER TABLE calls ADD COLUMN connected_at TEXT;
 
 CREATE INDEX idx_calls_sweep ON calls(status, started_at);
 
+-- The sweep deletes expired sessions every five minutes. Without this the table
+-- has only its token primary key, so that DELETE is a full scan 288 times a day
+-- over a table the login allowance permits growing by thousands of rows daily —
+-- enough reads to threaten the free tier's row-read ceiling while removing
+-- nothing. The write budget's read-side twin.
+CREATE INDEX idx_sessions_expires ON sessions(expires_at);
+
 -- Every historical row starts with connected_at NULL, which the dashboard reads
 -- as "never connected". Applied to real history that is a lie: a stranded call
 -- with a saved transcript, and a message a customer left, would be presented as

@@ -713,41 +713,37 @@ app.post('/api/public/call/start', async (c) => {
   // Daily ceiling on the owner's provider spend. It is an availability trade the
   // owner controls: better to go quiet than to wake up to a six-figure bill.
   //
-  // Insert first and count inside the same batch, i.e. one D1 transaction.
-  // Counting and then inserting is a TOCTOU the measured burst walks straight
-  // through: at 576 requests/sec every concurrent request reads a count under
-  // the cap and every one of them inserts. Claiming first can only ever refuse
-  // too many, never too few.
+  // One conditional statement: the row is inserted only if the day's count is
+  // under the cap, so a refusal writes nothing at all. Counting first and then
+  // inserting would be a TOCTOU the measured burst walks straight through — at
+  // 576 requests/sec every concurrent request reads a count under the cap and
+  // every one of them inserts — and inserting first and deleting on refusal, as
+  // this did, charged two `calls` writes plus their index updates for every
+  // rejection. That is the refusal-is-free property the limiter already has,
+  // applied to the row the limiter is protecting.
+  //
+  // A swept never-connected row is excluded from the count, because it is the one
+  // shape that provably cost nothing: the sweeper retired it, so its id can no
+  // longer attach, and it never reached a Durable Object to spend anything.
+  // Counting those turns a cap on *spend* into a cap on junk — a pre-upgrade
+  // burst above the limit would leave a business dark for a day the moment it
+  // migrated, and one address could reproduce that on purpose at ten ids a minute
+  // without ever opening a socket.
+  //
+  // Still-'active' rows do count even with no connection yet: an unattached but
+  // live ticket is a real reservation someone can still redeem. It stops counting
+  // when the sweep retires it, not before.
   const callId = newId();
-  const claim = await c.env.DB.batch<{ n: number }>([
-    c.env.DB.prepare('INSERT INTO calls (id, business_id, channel, caller_id) VALUES (?, ?, ?, ?)').bind(
-      callId,
-      biz.id,
-      'web',
-      addr === 'local' ? 'anonymous' : addr
-    ),
-    // A swept never-connected row is excluded, because it is the one shape that
-    // provably cost nothing: the sweeper retired it, so its id can no longer
-    // attach, and it never reached a Durable Object to spend anything. Counting
-    // those turns a cap on *spend* into a cap on junk — a pre-upgrade burst above
-    // the limit would leave a business dark for a day the moment it migrated, and
-    // one address could reproduce that on purpose at ten ids a minute without
-    // ever opening a socket.
-    //
-    // Still-'active' rows do count even with no connection yet: an unattached but
-    // live ticket is a real reservation someone can still redeem. It stops
-    // counting when the sweep retires it, not before.
-    c.env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM calls
-        WHERE business_id = ? AND started_at > datetime('now', '-1 day')
-          AND NOT (status = 'abandoned' AND connected_at IS NULL)`
-    ).bind(biz.id),
-  ]);
-  if ((claim[1].results[0]?.n ?? 0) > biz.max_calls_per_day) {
-    // Delete rather than mark 'abandoned': the daily count is over every row in
-    // the rolling day, so a refused attempt that left a row behind would let a
-    // burst keep the business blocked with the rows its own rejections created.
-    await c.env.DB.prepare('DELETE FROM calls WHERE id = ?').bind(callId).run();
+  const claim = await c.env.DB.prepare(
+    `INSERT INTO calls (id, business_id, channel, caller_id)
+     SELECT ?, ?, 'web', ?
+      WHERE (SELECT COUNT(*) FROM calls
+              WHERE business_id = ? AND started_at > datetime('now', '-1 day')
+                AND NOT (status = 'abandoned' AND connected_at IS NULL)) < ?`
+  )
+    .bind(callId, biz.id, addr === 'local' ? 'anonymous' : addr, biz.id, biz.max_calls_per_day)
+    .run();
+  if ((claim.meta.changes ?? 0) !== 1) {
     return tooMany(c, 'This agent has reached its daily call limit. Please try again tomorrow.', 3600);
   }
   return c.json({ callId });
@@ -828,9 +824,18 @@ app.get('/ws/call/:callId', async (c) => {
   // little too long is recoverable, releasing a live one is not.
   const releaseSlot = () =>
     c.env.DB.prepare('UPDATE calls SET connected_at = NULL WHERE id = ?').bind(callId).run();
+  // Normalized, because the two checks are not the same check. This route
+  // compares case-insensitively, as RFC 6455 requires; CallSession compares
+  // against the literal 'websocket'. So `Upgrade: WebSocket` passed here, claimed
+  // the slot, and came back 426 — which then released it without retiring the
+  // row, leaving the id replayable until the stale cutoff, two UPDATEs a go, on a
+  // path that sits outside the rate limiter. Sending the canonical value means
+  // both checks reach the same verdict.
+  const headers = new Headers(c.req.raw.headers);
+  headers.set('Upgrade', 'websocket');
   let res: Response;
   try {
-    res = await stub.fetch(new Request(url.toString(), c.req.raw));
+    res = await stub.fetch(new Request(url.toString(), { method: 'GET', headers }));
   } catch (err) {
     await releaseSlot();
     console.error('call session unreachable', err);
@@ -910,7 +915,13 @@ export async function sweepStaleCalls(env: Env, now = Date.now()): Promise<numbe
     // rows only arrived when a person signed in; it stopped being survivable once
     // it became clear a caller with valid credentials can mint them in a loop.
     // The login allowance bounds the rate, this bounds the residue.
-    env.DB.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')"),
+    //
+    // The cutoff is generated here rather than by datetime('now') because
+    // createSession stores toISOString() and SQLite compares these as TEXT: the
+    // 'T' separator sorts after datetime()'s space, so every session that expired
+    // earlier *today* sorted above the cutoff and survived until the date rolled
+    // over. Same producer on both sides is the only way that comparison is sound.
+    env.DB.prepare('DELETE FROM sessions WHERE expires_at < ?').bind(new Date(now).toISOString()),
   ]);
   // Retired rows only — the reconciliation at res[0] repairs, it does not retire.
   return (res[1].meta.changes ?? 0) + (res[2].meta.changes ?? 0);

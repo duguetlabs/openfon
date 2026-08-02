@@ -202,6 +202,20 @@ describe('per-business call caps', () => {
     expect(db.calls).toHaveLength(3);
   });
 
+  it('writes nothing at all when the daily cap refuses a call', async () => {
+    const { db, start } = setup();
+    db.businesses[0].max_calls_per_day = 3;
+    for (let i = 0; i < 3; i++) await start();
+
+    db.rowsWritten = 0;
+    expect((await start()).status).toBe(429);
+    // Only the limiter's own counter row. Inserting and then deleting on refusal
+    // charged two `calls` writes plus their index updates for every rejection —
+    // the refusal-is-free property the limiter has, missing from the row the
+    // limiter exists to protect.
+    expect(db.rowsWritten).toBe(1);
+  });
+
   it('keeps counting a long call until the sweep is the thing that releases it', async () => {
     const { db, env, attach, start } = setup();
     db.businesses[0].max_concurrent_calls = 1;
@@ -265,6 +279,41 @@ describe('GET /ws/call/:callId', () => {
     // "Never connected", not as a real call that got cut off.
     expect(refused?.status).toBe('abandoned');
     expect(refused?.connected_at).toBeNull();
+  });
+
+  it('normalizes the upgrade header so the session agrees the request is one', async () => {
+    const db = new FakeD1();
+    db.seedBusiness({ id: 'biz1', slug: 'riverside-dental-1377' });
+    const env = fakeEnv(db);
+    // Exactly CallSession's check: a literal, case-sensitive 'websocket'. This
+    // route accepts any casing, as RFC 6455 requires, so `Upgrade: WebSocket`
+    // used to pass here, claim the slot, and come back 426 — releasing without
+    // retiring the row and leaving the id replayable, two UPDATEs a go, on a path
+    // outside the limiter.
+    let seen: string | null = null;
+    env.CALL_SESSION = {
+      idFromName: (n: string) => n,
+      get: () => ({
+        fetch: async (req: Request) => {
+          seen = req.headers.get('Upgrade');
+          if (seen !== 'websocket') return new Response('expected websocket', { status: 426 });
+          return new Response(null, { headers: { [UPGRADED]: '1' } });
+        },
+      }),
+    };
+    const req = (path: string, init?: RequestInit) => worker.fetch(new Request(`https://openfon.test${path}`, init), env, fakeCtx);
+    const { callId } = (await (
+      await req('/api/public/call/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: 'riverside-dental-1377' }),
+      })
+    ).json()) as { callId: string };
+
+    const res = await req(`/ws/call/${callId}`, { headers: { Upgrade: 'WebSocket' } });
+    expect(seen).toBe('websocket');
+    expect(res.headers.get(UPGRADED)).toBe('1');
+    expect(db.calls.find((c) => c.id === callId)?.connected_at).toBeTypeOf('number');
   });
 
   it('will not let a plain GET claim a concurrency slot', async () => {
@@ -633,10 +682,17 @@ describe('POST /api/auth/login', () => {
     expect(db.sessions.length).toBe(codes.filter((s) => s === 200).length);
   });
 
-  it('clears expired sessions in the sweep', async () => {
+  it('clears expired sessions in the sweep, including ones that expired today', async () => {
     const db = new FakeD1();
     db.sessions.push({ token: 'live', user_id: 'u1', expires_at: new Date(Date.now() + 86_400_000).toISOString() });
-    db.sessions.push({ token: 'stale', user_id: 'u1', expires_at: new Date(Date.now() - 1000).toISOString() });
+    db.sessions.push({ token: 'yesterday', user_id: 'u1', expires_at: new Date(Date.now() - 86_400_000).toISOString() });
+    // The one that matters. createSession stores toISOString(), and SQLite
+    // compares that against datetime('now') as TEXT — the 'T' separator sorts
+    // after a space, so anything that expired earlier on the current UTC date
+    // sorted above the cutoff and survived. The cleanup removed nothing it was
+    // added for until the date rolled over.
+    db.sessions.push({ token: 'an-hour-ago', user_id: 'u1', expires_at: new Date(Date.now() - 3_600_000).toISOString() });
+
     await sweepStaleCalls(fakeEnv(db));
     expect(db.sessions.map((s) => s.token)).toEqual(['live']);
   });

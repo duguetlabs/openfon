@@ -182,26 +182,19 @@ class FakeStatement {
       ).length;
       return { rows: [{ n }], changes: 0 };
     }
-    if (q.startsWith('SELECT COUNT(*) AS n FROM calls')) {
+    // Conditional insert: the row appears only if the day's count is under the
+    // cap, so a refusal writes nothing. changes === 0 is the refusal.
+    if (q.startsWith('INSERT INTO calls') && q.includes('WHERE (SELECT COUNT(*)')) {
       const since = cutoff('-1 day');
       const n = this.db.calls.filter(
         (c) =>
-          c.business_id === a[0] &&
+          c.business_id === a[3] &&
           c.started_at > since &&
-          // A swept never-connected row provably cost nothing, so it is not
-          // charged against a cap that exists to bound spend.
           !(c.status === 'abandoned' && c.connected_at === null)
       ).length;
-      return { rows: [{ n }], changes: 0 };
-    }
-    if (q.startsWith('INSERT INTO calls')) {
-      this.db.seedCall({ id: String(a[0]), business_id: String(a[1]), caller_id: String(a[3]) });
+      if (n >= Number(a[4])) return { rows: [], changes: 0 };
+      this.db.seedCall({ id: String(a[0]), business_id: String(a[1]), caller_id: String(a[2]) });
       return { rows: [], changes: 1 };
-    }
-    if (q.startsWith('DELETE FROM calls WHERE id')) {
-      const i = this.db.calls.findIndex((x) => x.id === a[0]);
-      if (i >= 0) this.db.calls.splice(i, 1);
-      return { rows: [], changes: i >= 0 ? 1 : 0 };
     }
     if (q.startsWith('SELECT calls.id, calls.business_id, businesses.max_concurrent_calls')) {
       const since = cutoff(a[1]);
@@ -270,8 +263,18 @@ class FakeStatement {
       return { rows: u ? [u] : [], changes: 0 };
     }
     if (q.startsWith('DELETE FROM sessions WHERE expires_at')) {
+      // Compared as TEXT, the way SQLite actually does it, and against a cutoff
+      // in whichever format the statement supplies. Parsing both sides into
+      // dates here would make the fake kinder than the database and hide the one
+      // failure this branch exists to catch: datetime('now') yields
+      // "2026-08-02 11:00:00" while createSession stores
+      // "2026-08-02T10:00:00.000Z", and 'T' sorts after ' ', so a session that
+      // expired earlier today compares as greater and survives.
+      const cut = q.includes("datetime('now')")
+        ? new Date(Date.now()).toISOString().replace('T', ' ').slice(0, 19)
+        : String(a[0]);
       const before = this.db.sessions.length;
-      this.db.sessions = this.db.sessions.filter((s) => Date.parse(String(s.expires_at)) >= Date.now());
+      this.db.sessions = this.db.sessions.filter((s) => !(String(s.expires_at) < cut));
       return { rows: [], changes: before - this.db.sessions.length };
     }
     if (q.startsWith('INSERT INTO sessions')) {
