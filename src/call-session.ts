@@ -261,6 +261,11 @@ export class CallSession implements DurableObject {
   // deadline is retired in armWatchdog, not here — see there.)
   private sendReady(payload: Record<string, unknown>): void {
     this.announced = true;
+    // An earlier attempt may have recorded a failure that this one has just
+    // disproved. The marker decides the row's status, so carrying it forward
+    // would file a call that ran perfectly well as failed — and a working call
+    // disappearing from the owner's counts gives them nothing to notice.
+    this.failure = null;
     this.send({ type: 'ready', ...payload });
   }
 
@@ -1072,12 +1077,21 @@ export class CallSession implements DurableObject {
   // became an eleven minute call in the owner's talk-time total, with nothing
   // to indicate anything had gone wrong. Persisted because an eviction between
   // attempts is expected: by then every socket is closed.
-  private async endedAtMs(): Promise<number> {
-    const stored = await this.state.storage.get<number>('endedAt');
-    if (stored) return stored;
-    const at = Date.now();
-    await this.state.storage.put('endedAt', at);
-    return at;
+  // Everything a retry must not recompute, decided once and kept together.
+  // `endedAt` because recomputing it billed the outage to the owner's talk
+  // time; `failure` because losing it across an eviction flipped a failed call
+  // to 'completed' on the retry that finally landed. Frozen before the first
+  // fallible statement, so an attempt that dies on the SELECT leaves the same
+  // record behind as one that dies on the UPDATE.
+  private async rememberEnding(): Promise<number> {
+    const stored = await this.state.storage.get<{ endedAt: number; failure: string | null }>('ending');
+    if (stored) {
+      this.failure ??= stored.failure;
+      return stored.endedAt;
+    }
+    const ending = { endedAt: Date.now(), failure: this.failure };
+    await this.state.storage.put('ending', ending);
+    return ending.endedAt;
   }
 
   // SQLite's datetime('now') format, in UTC, so a frozen timestamp is stored
@@ -1123,6 +1137,7 @@ export class CallSession implements DurableObject {
     } catch {
       /* already gone */
     }
+    const endedAt = await this.rememberEnding();
     const call = await this.env.DB.prepare('SELECT started_at, business_id FROM calls WHERE id = ? AND status = ?')
       .bind(this.callId, 'active')
       .first<{ started_at: string; business_id: string }>();
@@ -1137,7 +1152,6 @@ export class CallSession implements DurableObject {
       await this.clearWatchdog();
       return;
     }
-    const endedAt = await this.endedAtMs();
     const duration = Math.max(0, Math.round((endedAt - new Date(call.started_at + 'Z').getTime()) / 1000));
     await this.rehydrateHistory(call.business_id);
     // Survives eviction between attempts, so a retry never pays the
@@ -1205,11 +1219,21 @@ export class CallSession implements DurableObject {
     // If this throws, `finalized` stays false and the watchdog is still armed,
     // so the alarm retries. Clearing the watchdog first would strand the row
     // as 'active' with nothing left to ever reclaim it.
-    await this.env.DB.prepare(
-      `UPDATE calls SET status = ?, ended_at = ?, duration_s = ?, summary = ?, intent = ?, message_json = ? WHERE id = ?`
+    //
+    // Still predicated on 'active': the sweep can retire the row between the
+    // select above and here, and summarization is long enough to make that a
+    // real window. Without the predicate this would overwrite the sweep's
+    // status and duration — the salvage path exists to cooperate with the
+    // sweep, and unconditionally overriding it is the opposite.
+    const res = await this.env.DB.prepare(
+      `UPDATE calls SET status = ?, ended_at = ?, duration_s = ?, summary = ?, intent = ?, message_json = ?
+        WHERE id = ? AND status = 'active'`
     )
       .bind(status, CallSession.sqlTime(endedAt), duration, summary, intent, messageJson, this.callId)
       .run();
+    // `changes` missing means the driver did not report one, not that nothing
+    // matched — only an explicit zero means the sweep got there first.
+    if ((res?.meta?.changes ?? 1) === 0) await this.salvageSummary();
     this.finalized = true;
     await this.clearWatchdog();
   }

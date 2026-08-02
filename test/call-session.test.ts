@@ -96,6 +96,7 @@ function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline') {
   const ctl = {
     failUpdates: false, // transient failure writing the finished call row
     failCallReads: false, // transient failure inside loadCall()
+    failFinalizeReads: false, // transient failure on finalize's own row read
     failTurnWrites: false, // transient failure inserting a turn
     callRowActive: true, // false once the cron sweep has retired the row
     turns: [] as { role: string; text: string }[], // rows call_turns should return
@@ -113,6 +114,7 @@ function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline') {
                 // own read must stay working so teardown can still be observed.
                 if (ctl.gate && sql.includes('status, started_at')) await ctl.gate.promise;
                 if (ctl.failCallReads && sql.includes('SELECT id, business_id')) throw new Error('D1 unavailable');
+                if (ctl.failFinalizeReads && sql.includes('SELECT started_at')) throw new Error('D1 unavailable');
                 // finalize selects `... AND status = 'active'`; a swept row misses.
                 if (!ctl.callRowActive && sql.includes("status = ?")) return null;
                 return CALL_ROW;
@@ -129,7 +131,11 @@ function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline') {
               if (ctl.failUpdates && sql.includes('UPDATE calls')) throw new Error('D1 unavailable');
               if (ctl.failTurnWrites && sql.includes('INSERT INTO call_turns')) throw new Error('D1 unavailable');
               writes.push({ sql, args });
-              return {};
+              // A statement predicated on `status = 'active'` matches nothing
+              // once the sweep has retired the row, which is how the real D1
+              // reports the race this code has to notice.
+              const matched = ctl.callRowActive || !sql.includes("status = 'active'");
+              return { meta: { changes: matched ? 1 : 0 } };
             },
           };
         },
@@ -319,6 +325,49 @@ describe('handleStart idempotency', () => {
 
     expect(sock.countOf('ready')).toBe(1);
     expect(turnWrites()).toHaveLength(1);
+  });
+
+  it('does not carry a failed attempt forward onto a call that then works', async () => {
+    // `failure` decides the row's status, so a marker left behind by an aborted
+    // pre-ready attempt filed a call that ran perfectly well as failed — and a
+    // working call vanishing from the owner's counts shows them nothing.
+    const { session, callUpdates } = newSession();
+    await session.fetch(upgradeRequest());
+    const sock = serverSockets[0];
+
+    Object.assign(session, { failure: 'Call failed: a previous attempt blew up' });
+    sock.receive({ type: 'start' });
+    await flush();
+    expect(sock.countOf('ready')).toBe(1); // this attempt succeeded
+
+    sock.receive({ type: 'hangup' });
+    await flush();
+    expect(callUpdates()[0].args[0]).toBe('completed');
+    expect(String(callUpdates()[0].args[3] ?? '')).not.toContain('blew up');
+  });
+
+  it('freezes the end of the call before the first fallible statement', async () => {
+    // Freezing after the select meant an attempt that died *on* the select
+    // stored nothing, so the retry timed the call from its own clock and the
+    // outage landed in the owner's talk time again.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(CALL_ROW.started_at + 'Z').getTime());
+    const { session, storage, ctl, callUpdates } = newSession();
+    await session.fetch(upgradeRequest());
+    serverSockets[0].receive({ type: 'start' });
+    await flush();
+
+    vi.setSystemTime(Date.now() + 25_000); // a 25 s call
+    ctl.failFinalizeReads = true; // …and finalize dies on its own select
+    serverSockets[0].receive({ type: 'hangup' });
+    await flush();
+    expect(storage.map.get('ending')).toBeDefined(); // frozen anyway
+
+    ctl.failFinalizeReads = false;
+    vi.setSystemTime(Date.now() + 8 * 60_000);
+    await session.alarm();
+
+    expect(callUpdates()[0].args[2]).toBe(25); // not 505
   });
 
   it('ends the call when startup fails, instead of leaving it half-alive', async () => {
@@ -974,6 +1023,68 @@ describe('watchdog alarm', () => {
     await session.alarm();
     expect(callUpdates()).toHaveLength(1);
     expect(storage.alarmAt).toBeNull();
+  });
+
+  it('does not overwrite the sweep when it retires the row mid-summarization', async () => {
+    // The window between finalize's active-row select and its update is as long
+    // as a summarization call, which is plenty. An unconditional WHERE id = ?
+    // put 'completed' and a duration over the sweep's terminal verdict — the
+    // salvage path exists to cooperate with the sweep, not to override it.
+    vi.useFakeTimers();
+    const { session, storage, ctl, writes } = newSession();
+    storage.map.set('callId', 'call-1');
+    storage.map.set('hardDeadline', Date.now() - 1000);
+    ctl.turns = [
+      { role: 'agent', text: 'Riverside Dental.' },
+      { role: 'caller', text: 'Ring me back on 0664 1234567.' },
+      { role: 'agent', text: 'Will do.' },
+    ];
+    (globalThis as never).fetch = async () => {
+      ctl.callRowActive = false; // the cron lands while we are summarizing
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: '{"summary":"Callback requested.","intent":"message"}' } }],
+        }),
+      };
+    };
+
+    await session.alarm();
+
+    const main = writes.find((w) => w.sql.includes('SET status'));
+    expect(main!.sql).toContain("status = 'active'"); // predicated, so it matched nothing
+    // ...and the content was salvaged instead of the verdict being overwritten.
+    const salvage = writes.find((w) => w.sql.includes('COALESCE'));
+    expect(salvage).toBeDefined();
+    expect(salvage!.args[0]).toBe('Callback requested.');
+  });
+
+  it('keeps a failed call failed when the retry lands on a rebuilt instance', async () => {
+    // `failure` decides the row's status. Held only in memory, an eviction
+    // between attempts dropped it, and the attempt that finally landed wrote
+    // 'completed' for a call that had broken.
+    vi.useFakeTimers();
+    const { session, storage, ctl, callUpdates, evictAndRebuild } = newSession();
+    await session.fetch(upgradeRequest());
+    const sock = serverSockets[0];
+    sock.receive({ type: 'start' });
+    await flush();
+
+    ctl.failUpdates = true;
+    ctl.failTurnWrites = true;
+    sock.receive({ type: 'text', text: 'hello?' }); // breaks mid-call
+    await flush();
+    expect(callUpdates()).toHaveLength(0);
+    expect(storage.map.get('ending')).toBeDefined();
+
+    ctl.failUpdates = false;
+    ctl.failTurnWrites = false;
+    vi.setSystemTime(Date.now() + 200_000);
+    await evictAndRebuild().alarm(); // fresh instance, in-memory failure gone
+
+    expect(callUpdates()).toHaveLength(1);
+    expect(callUpdates()[0].args[0]).toBe('failed');
+    expect(String(callUpdates()[0].args[3])).toContain('Call failed');
   });
 
   it('salvages the caller message when the sweep retires the row first', async () => {
