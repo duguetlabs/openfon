@@ -36,33 +36,34 @@ capture, and it never lost a phone number. On a phone call the latency gap is
 the difference between a receptionist and a bad connection.
 
 What you give up is sharper than the latency gap. gpt-realtime-2 got a **perfect
-groundedness score — 0 unsupported claims** — against 24 for the Voice Live arms,
+groundedness score — 0 unsupported claims in 54 scored runs** — against 21 for
+the Voice Live arms,
 and it completes the whole call correctly **three times out of three in 55.6 % of
 scenarios against 22.2 %**. The two engines fail differently: one
 mishears a name, the other says something that is not true.
 
 **What gpt-4.1-mini actually gets wrong matters for a booking business.** Six of
-its 24 groundedness failures are the agent telling a caller a specific slot *is
+its 21 groundedness failures are the agent telling a caller a specific slot *is
 available* — "Thursday, August 6th, after 3 PM is available" — when the prompt
 says in as many words *"Do not promise a confirmed slot."* gpt-realtime-2 never
 did this. A practice would have to either honour those slots or ring the caller
 back to apologise.
 
-The remaining ~9 are the judge applying "no unsupported business fact" to
+The remaining 9 are the judge applying "no unsupported business fact" to
 conversational framing such as *"Dr. Weber is not available right now"* while
 taking a message. That is defensible behaviour and arguably a judge false
-positive, so **the raw 0.697 overstates the problem** — but the over-promising
+positive, so **the raw 0.704 overstates the problem** — but the over-promising
 subset does not, and it is concentrated exactly where money changes hands.
 
 **The most decision-relevant number:** `vl-native-brain` (Voice Live serving
 gpt-realtime-2) scores like gpt-realtime-2 on groundedness (1.000) and like
-gpt-realtime-2 on latency (2408 ms p50 — the *worst* p50 of any arm). So **the
+gpt-realtime-2 on latency (2369 ms p50 — the *worst* p50 of any arm). So **the
 quality difference is the brain, and the speed difference is also the brain, not
 the serving stack.** Switching serving stack buys nothing on its own. There is
 no configuration that gets you gpt-realtime-2's judgement at gpt-4.1-mini's
 latency.
 
-### Two things to change now
+### Three things to change now
 
 1. **Never enable `input_audio_noise_reduction`.** Azure's
    `azure_deep_noise_suppression` makes recognition **worse under exactly the
@@ -73,7 +74,7 @@ latency.
    see §"Noise suppression" for the full teardown. OpenFon does not set this
    knob today, so the shipped config is already correct — this is a "do not
    'improve' this later" finding and is worth a comment in `call-session.ts`.
-2. **`end_call` is unreliable on every arm** — 23–25 of 33 runs, with no
+2. **`end_call` is unreliable on every arm** — 17–19 of 27 scored runs, with no
    meaningful spread between engines. It is the single biggest drag on strict
    task success, and on `reschedule-en-01` it fired **1 time in 15**: the agent
    captured every detail correctly and then would not close the call. The
@@ -363,13 +364,47 @@ task-success rates. The figure that did not survive is barge-in.
 
 Stated rather than smoothed over.
 
-1. **VAD is not held constant between stacks.** Voice Live **rejects**
-   `server_vad` on the gpt-realtime-2 brain ("turn_detection must be of type
-   AzureSemanticVAD"), so `vl-native-brain` runs Azure semantic VAD while
-   `native-gpt-realtime-2` runs server VAD. I added `vl-gpt41mini-semvad` as a
-   control: on the same brain, semantic vs server VAD moves TTFA p50 by −69 ms
-   and success not at all, so the VAD is **not** driving the brain comparison.
-   But the native-vs-voice-live comparison still crosses a VAD boundary.
+1. **VAD is not held constant between stacks, and semantic VAD is not free.**
+   Voice Live **rejects** `server_vad` on the gpt-realtime-2 brain
+   ("turn_detection must be of type AzureSemanticVAD"), so `vl-native-brain`
+   runs Azure semantic VAD while `native-gpt-realtime-2` runs server VAD.
+   `vl-gpt41mini-semvad` is the control. On the final scored dataset, holding
+   brain and stack constant:
+
+   | server → semantic VAD, gpt-4.1-mini on Voice Live | change |
+   |---|---|
+   | strict success | 0.333 → 0.259 (**−0.074**) |
+   | pass^3 | 0.222 → 0.111 (**−0.111**) |
+   | slots heard | 0.960 → 0.920 (−0.040) |
+   | judge groundedness | 0.704 → 0.704 (no change) |
+   | `end_call` | 18/27 → 19/27 (+1) |
+   | TTFA p50 / p95 | 1315 → 1320 ms / 1719 → 1852 ms (**+5 / +133**) |
+
+   An earlier draft of this report claimed −69 ms and no effect on success. That
+   was wrong in both directions and is withdrawn: semantic VAD is **marginally
+   slower and scores slightly worse** on this brain. At 27 runs per arm the
+   success delta is two runs and the pass^3 delta is one scenario, so treat the
+   magnitude as noise — but the *direction* is against semantic VAD, not for it.
+   Anyone adopting it for false-start suppression should verify that benefit
+   separately; this study does not show it paying for itself.
+
+   **The attribution survives, via a cleaner cell than the control.** Holding
+   *both* stack and VAD constant — Voice Live, semantic VAD, brain varied —
+   `vl-gpt41mini-semvad` vs `vl-native-brain` is the one fully-controlled
+   comparison in the design:
+
+   | gpt-4.1-mini → gpt-realtime-2, Voice Live, semantic VAD | change |
+   |---|---|
+   | strict success | 0.259 → 0.407 (**+0.148**) |
+   | judge groundedness | 0.704 → 1.000 (**+0.296**) |
+   | TTFA p50 | 1320 → 2369 ms (**+1049**) |
+
+   The brain effect is twice the VAD effect on success and unambiguous on
+   groundedness. It also runs the *opposite* way to the confound: semantic VAD
+   costs success, and `vl-native-brain` is itself on semantic VAD, so its
+   advantage over `vl-gpt41mini` is if anything understated. The
+   native-vs-Voice-Live comparison still crosses a VAD boundary and should be
+   read as directional; the within-Voice-Live brain comparison does not.
 2. **Track A could not include `vl-native-brain`** for the same reason —
    manual-commit transcription is rejected on that brain. Voice Live's STT is
    azure-speech regardless of brain, and Track B's caller transcripts are

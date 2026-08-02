@@ -82,9 +82,19 @@ async def probe(arm_name: str, wav: Path | None) -> dict:
                         "audio": base64.b64encode(pcm[i:i + 9600]).decode(),
                     }))
                 await ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
-                transcript, saw = None, []
+                # Keep the longest text rather than the first, and drain for a
+                # moment after it: with noise reduction on, Voice Live emits an
+                # empty and a non-empty completion for the same item in either
+                # order. `caller_transcript` returns a truthy tuple for the empty
+                # one too, so stopping at the first match makes the preflight
+                # probe report "no transcript" while the real one is still
+                # queued — on the arm most likely to send someone here.
+                transcript, saw = "", []
                 deadline = loop.time() + 40
+                settle = None
                 while loop.time() < deadline:
+                    if settle is not None and loop.time() > settle:
+                        break
                     try:
                         ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
                     except asyncio.TimeoutError:
@@ -93,10 +103,13 @@ async def probe(arm_name: str, wav: Path | None) -> dict:
                     if ev.get("type") == "error":
                         errors.append(ev.get("error"))
                         break
-                    tr = arm.caller_transcript(ev)
-                    if tr:
-                        transcript = tr
-                        break
+                    got = arm.caller_transcript(ev)
+                    if got is not None:
+                        if len(got[1]) > len(transcript):
+                            transcript = got[1]
+                        if settle is None:
+                            settle = loop.time() + 3   # let a duplicate land
+                transcript = transcript or None
                 res["transcript"] = transcript
                 res["events_seen"] = saw[:14]
                 res["audio_seconds"] = round(len(pcm) / 48000, 2)
