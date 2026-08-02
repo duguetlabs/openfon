@@ -84,10 +84,6 @@ interface CallRow {
   started_at: string;
 }
 
-// WebSocket.OPEN. The numeric value is fixed by the WebSocket spec, and the
-// constant is not exposed on the Workers WebSocket instance type.
-const WS_OPEN = 1;
-
 export class CallSession implements DurableObject {
   private ws: WebSocket | null = null;
   private callId = '';
@@ -99,6 +95,7 @@ export class CallSession implements DurableObject {
   private finalized = false; // the call row has been written; gates retries
   private finalizing: Promise<void> | null = null;
   private starting: Promise<void> | null = null; // in-flight or completed start
+  private announced = false; // `ready` sent: the session exists, retries are off
   private lang = 'en'; // follows the caller; starts as the business default
   private mode: 'pipeline' | 'realtime' = 'pipeline';
   private upstream: WebSocket | null = null; // realtime engine connection
@@ -115,10 +112,17 @@ export class CallSession implements DurableObject {
     if (request.headers.get('Upgrade') !== 'websocket' || !callId) {
       return new Response('expected websocket', { status: 426 });
     }
-    // One caller per call. Accepting a second socket would replace `this.ws`,
-    // so every reply — transcripts, agent audio — would go to the newcomer
-    // while the real caller sat in silence. Refuse instead of taking over.
-    if (this.ws && this.ws.readyState === WS_OPEN) {
+    // One socket per call, for its whole life. Replacing `this.ws` would send
+    // every reply — transcripts, agent audio — to the newcomer while the real
+    // caller sat in silence. Rejecting a socket that is merely CLOSING matters
+    // just as much: `starting` is already resolved by then, so the replacement's
+    // {type:"start"} would return without a `ready` and the client would never
+    // begin capturing audio — connected, and useless.
+    //
+    // Reject rather than replay the handshake: the widget never reattaches
+    // (web/src/voice.ts always POSTs /api/public/call/start for a fresh id), and
+    // re-greeting mid-conversation would be wrong for any client that did.
+    if (this.ws) {
       return new Response('call already connected', { status: 409 });
     }
     this.callId = callId;
@@ -216,22 +220,33 @@ export class CallSession implements DurableObject {
 
   // Answer the phone once. A repeated {type:"start"} would open a second engine
   // connection, greet again, and write another agent turn, so concurrent starts
-  // join the attempt already in flight. A failed attempt clears the slot: a
-  // latching boolean would leave a caller stuck on a live socket that can never
-  // produce a `ready`, because a transient D1 blip in loadCall() consumed their
-  // one chance.
+  // join the attempt already in flight.
+  //
+  // Retryable only up to the point where we announce `ready`. Before then a
+  // failure — a D1 blip in loadCall(), a storage write — cost the caller
+  // nothing, and latching would strand them on a live socket that can never be
+  // answered. After `ready` the session exists: an engine may be connected and
+  // a greeting turn written, so re-running would duplicate exactly what this
+  // guard is here to prevent. Those surface as an error instead.
   private handleStart(): Promise<void> {
     if (!this.starting) {
       this.starting = this.runStart().catch((err) => {
-        this.starting = null;
+        if (!this.announced) this.starting = null;
         throw err;
       });
     }
     return this.starting;
   }
 
+  // Announcing `ready` is the point of no return for retries.
+  private sendReady(payload: Record<string, unknown>): void {
+    this.announced = true;
+    this.send({ type: 'ready', ...payload });
+  }
+
   private async runStart(): Promise<void> {
     await this.loadCall();
+    if (this.ended) return; // hung up while we were loading
     // Resolve the LLM config before saying hello: a rejected AI-provider setup
     // must fail at pickup with a message the owner can act on, not stall the
     // caller mid-conversation (realtime calls would only notice at summary time).
@@ -247,13 +262,17 @@ export class CallSession implements DurableObject {
       console.error(`call ${this.callId}: ${this.failure}`);
       this.sendError('This agent is not available right now. Please try again later.');
       // finalize() owns the rest: it sends `ended`, closes the socket, and
-      // writes the row. Doing any of that here would duplicate it.
+      // writes the row. Doing any of that here would duplicate it. Returning
+      // normally also leaves `starting` resolved, so a retry cannot restart a
+      // call we have already given up on — a misconfigured agent stays
+      // misconfigured until the owner changes something.
       await this.finalize();
       return;
     }
     // Armed only once the call is actually going ahead — nothing to watch over
     // a call that is being torn down at pickup.
     await this.armWatchdog();
+    if (this.ended) return;
     this.lang = this.settings!.language in SUPPORTED_LANGUAGES ? this.settings!.language : 'en';
     const greeting = defaultGreeting(this.biz!, this.settings!);
     const systemPrompt = buildSystemPrompt(this.biz!, this.settings!, new Date());
@@ -263,6 +282,10 @@ export class CallSession implements DurableObject {
         console.error('realtime engine failed, falling back to pipeline:', err);
         return false;
       });
+      if (this.ended) {
+        this.closeUpstream(); // hung up while the engine was connecting
+        return;
+      }
       if (ok) {
         this.mode = 'realtime';
         const engineLabel = `realtime · ${this.realtimeModel}`;
@@ -271,7 +294,7 @@ export class CallSession implements DurableObject {
           // transcript turn arrive through the normal event stream.
           this.history = [{ role: 'system', content: systemPrompt }];
           const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-          this.send({ type: 'ready', mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
+          this.sendReady({ mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
           return;
         }
         this.history = [
@@ -279,7 +302,7 @@ export class CallSession implements DurableObject {
           { role: 'assistant', content: greeting },
         ];
         const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-        this.send({ type: 'ready', mode: 'realtime', ttsMode, greeting, engine: engineLabel });
+        this.sendReady({ mode: 'realtime', ttsMode, greeting, engine: engineLabel });
         await this.saveTurn('agent', greeting);
         // The greeting is ours, not the model's: synthesize it deterministically
         // and stream it as PCM so it matches the realtime audio path.
@@ -309,8 +332,7 @@ export class CallSession implements DurableObject {
       { role: 'assistant', content: greeting },
     ];
     const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-    this.send({
-      type: 'ready',
+    this.sendReady({
       mode: 'pipeline',
       ttsMode,
       greeting,
@@ -840,6 +862,33 @@ export class CallSession implements DurableObject {
     return this.finalizing;
   }
 
+  // An alarm can finalize a call on a Durable Object rebuilt after eviction,
+  // which has lost `history` and `settings` while call_turns still holds the
+  // whole conversation. Without this the watchdog would rescue the row and
+  // write it `completed` with a null summary and null message_json — turning
+  // "call stuck in progress" into "call completed, caller's message gone",
+  // which looks fine on the dashboard and is therefore worse. Read the same
+  // data back out of D1 and summarize normally.
+  private async rehydrateHistory(businessId: string): Promise<void> {
+    if (this.history.length > 0) return; // live session: memory is authoritative
+    this.settings ??= await this.env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?')
+      .bind(businessId)
+      .first<AgentSettings>();
+    const { results } = await this.env.DB.prepare('SELECT role, text FROM call_turns WHERE call_id = ? ORDER BY id')
+      .bind(this.callId)
+      .all<{ role: string; text: string }>();
+    if (!results.length) return;
+    console.log(`call ${this.callId}: rehydrated ${results.length} turns for summarization`);
+    // Index 0 stands in for the system prompt, which the summary path skips.
+    this.history = [
+      { role: 'system', content: '' },
+      ...results.map((t) => ({
+        role: t.role === 'caller' ? ('user' as const) : ('assistant' as const),
+        content: t.text,
+      })),
+    ];
+  }
+
   private async clearWatchdog(): Promise<void> {
     try {
       await this.state.storage.deleteAlarm();
@@ -869,9 +918,9 @@ export class CallSession implements DurableObject {
     } catch {
       /* already gone */
     }
-    const call = await this.env.DB.prepare('SELECT started_at FROM calls WHERE id = ? AND status = ?')
+    const call = await this.env.DB.prepare('SELECT started_at, business_id FROM calls WHERE id = ? AND status = ?')
       .bind(this.callId, 'active')
-      .first<{ started_at: string }>();
+      .first<{ started_at: string; business_id: string }>();
     if (!call) {
       // Already completed by someone else — nothing left to reconcile.
       this.finalized = true;
@@ -879,6 +928,7 @@ export class CallSession implements DurableObject {
       return;
     }
     const duration = Math.max(0, Math.round((Date.now() - new Date(call.started_at + 'Z').getTime()) / 1000));
+    await this.rehydrateHistory(call.business_id);
     // A failure reason takes the summary slot: the call log renders it, so the
     // owner reads why the call died where they already look for what happened.
     let summary: string | null = this.failure;

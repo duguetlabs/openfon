@@ -87,8 +87,14 @@ const SETTINGS_ROW = {
 
 function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline') {
   const writes: { sql: string; args: unknown[] }[] = [];
-  // let a test force transient D1 failures on either side of the call row
-  const ctl = { failUpdates: false, failCallReads: false };
+  const ctl = {
+    failUpdates: false, // transient failure writing the finished call row
+    failCallReads: false, // transient failure inside loadCall()
+    failTurnWrites: false, // transient failure inserting a turn
+    turns: [] as { role: string; text: string }[], // rows call_turns should return
+    /** Resolve to release a gated loadCall(), letting a test interleave a hangup. */
+    gate: null as { promise: Promise<void>; release: () => void } | null,
+  };
   const db = {
     prepare(sql: string) {
       return {
@@ -96,6 +102,8 @@ function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline') {
           return {
             async first() {
               if (sql.includes('FROM calls')) {
+                // loadCall's read is the one tests gate; finalize's must not block
+                if (ctl.gate && sql.includes('status, started_at')) await ctl.gate.promise;
                 if (ctl.failCallReads) throw new Error('D1 unavailable');
                 return CALL_ROW;
               }
@@ -104,10 +112,12 @@ function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline') {
               return null;
             },
             async all() {
+              if (sql.includes('FROM call_turns')) return { results: ctl.turns };
               return { results: [] };
             },
             async run() {
               if (ctl.failUpdates && sql.includes('UPDATE calls')) throw new Error('D1 unavailable');
+              if (ctl.failTurnWrites && sql.includes('INSERT INTO call_turns')) throw new Error('D1 unavailable');
               writes.push({ sql, args });
               return {};
             },
@@ -235,33 +245,37 @@ describe('second attach to a live call', () => {
     expect(serverSockets[0].countOf('ready')).toBe(1);
   });
 
-  it('allows a fresh attach once the previous socket has closed', async () => {
+  it('refuses a replacement socket even after the first one closes', async () => {
+    // A replacement would be accepted while `starting` is already resolved, so
+    // its {type:"start"} returns with no `ready` and the client never begins
+    // capturing audio — connected and useless. One socket per call, for life.
     const { session } = newSession();
     await session.fetch(upgradeRequest());
-    serverSockets[0].readyState = 3; // caller hung up / dropped
-    const again = await session.fetch(upgradeRequest());
-    expect(again.status).toBe(101);
-  });
-
-  it('does not let a superseded socket finalize the call that replaced it', async () => {
-    // A socket still CLOSING does not block a new attach, so its close event
-    // arrives after this.ws has moved on. Unscoped, that event tore down the
-    // new caller's call.
-    const { session, callUpdates } = newSession();
-    await session.fetch(upgradeRequest());
-    const stale = serverSockets[0];
-    stale.readyState = 2; // CLOSING
-
-    const second = await session.fetch(upgradeRequest());
-    expect(second.status).toBe(101);
-    const fresh = serverSockets[1];
-
-    stale.close(1006, 'late close of the old socket');
+    serverSockets[0].receive({ type: 'start' });
     await flush();
 
-    expect(fresh.readyState).toBe(1); // still connected
-    expect(fresh.typesSent()).not.toContain('ended');
-    expect(callUpdates()).toHaveLength(0); // call was not finalized
+    serverSockets[0].readyState = 3; // caller dropped
+    const again = await session.fetch(upgradeRequest());
+    expect(again.status).toBe(409);
+    expect(serverSockets).toHaveLength(1);
+  });
+
+  it('refuses a replacement while the first socket is still CLOSING', async () => {
+    const { session, callUpdates } = newSession();
+    await session.fetch(upgradeRequest());
+    const sock = serverSockets[0];
+    sock.receive({ type: 'start' });
+    await flush();
+    sock.readyState = 2; // CLOSING, finalization has not run yet
+
+    expect((await session.fetch(upgradeRequest())).status).toBe(409);
+    expect(callUpdates()).toHaveLength(0); // the refusal did not end the call
+
+    // The owning socket's own close still finalizes normally.
+    sock.readyState = 1;
+    sock.close(1006, 'caller dropped');
+    await flush();
+    expect(callUpdates()).toHaveLength(1);
   });
 });
 
@@ -315,6 +329,52 @@ describe('handleStart idempotency', () => {
     sock.receive({ type: 'start' });
     await flush();
     expect(sock.countOf('ready')).toBe(1); // the caller is finally answered
+  });
+
+  it('does not re-run startup when a failure happens after ready is sent', async () => {
+    // Retrying past this point would redo everything the idempotency guard
+    // exists to prevent: a second greeting turn, and in realtime mode a second
+    // engine connection with the first never closed.
+    const { session, ctl, turnWrites } = newSession();
+    await session.fetch(upgradeRequest());
+    const sock = serverSockets[0];
+
+    ctl.failTurnWrites = true; // fails in saveTurn(), after `ready` has gone out
+    sock.receive({ type: 'start' });
+    await flush();
+    expect(sock.countOf('ready')).toBe(1);
+    expect(sock.typesSent()).toContain('error');
+
+    ctl.failTurnWrites = false;
+    sock.receive({ type: 'start' });
+    await flush();
+    expect(sock.countOf('ready')).toBe(1); // not announced twice
+    expect(turnWrites()).toHaveLength(0); // and no duplicate greeting row
+  });
+
+  it('abandons startup if the caller hangs up mid-way', async () => {
+    // finalize() can complete while runStart() is parked on an await. Resuming
+    // would re-arm the watchdog after cleanup and write a greeting turn for an
+    // already-completed call.
+    const { session, ctl, storage, turnWrites } = newSession();
+    await session.fetch(upgradeRequest());
+    const sock = serverSockets[0];
+
+    let release!: () => void;
+    ctl.gate = { promise: new Promise<void>((r) => (release = r)), release: () => release() };
+
+    sock.receive({ type: 'start' }); // parks inside loadCall()
+    await flush();
+    sock.receive({ type: 'hangup' }); // caller gives up
+    await flush();
+
+    ctl.gate.release();
+    await flush();
+
+    expect(sock.countOf('ready')).toBe(0);
+    expect(turnWrites()).toHaveLength(0);
+    expect(upstreamSockets).toHaveLength(0);
+    expect(storage.alarmAt).toBeNull(); // watchdog not re-armed after cleanup
   });
 });
 
@@ -538,6 +598,52 @@ describe('watchdog alarm', () => {
     expect(callUpdates()).toHaveLength(1);
     expect(storage.alarmAt).toBeNull();
     expect(storage.map.size).toBe(0);
+  });
+
+  it('summarizes from call_turns when finalizing on a rebuilt instance', async () => {
+    // The watchdog exists to prevent data loss, so it must not cause any. A
+    // rebuilt object has no in-memory history; without reading the turns back
+    // it wrote `completed` with a null summary and null message_json while
+    // call_turns held the whole conversation — the caller's message gone, and
+    // the dashboard showing a perfectly normal completed call.
+    const { session, storage, ctl, callUpdates } = newSession();
+    storage.map.set('callId', 'call-1');
+    storage.map.set('hardDeadline', Date.now() - 1000); // past the wall-clock cap
+    ctl.turns = [
+      { role: 'agent', text: 'Thanks for calling Riverside Dental! How can I help?' },
+      { role: 'caller', text: 'This is Maria on 0664 1234567, please call me back about a crown.' },
+      { role: 'agent', text: 'Got it Maria, I will pass that on.' },
+    ];
+
+    let sentTranscript = '';
+    (globalThis as never).fetch = async (_url: string, init: { body: string }) => {
+      sentTranscript = init.body;
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content:
+                  '{"summary":"Maria asked for a callback about a crown.","intent":"message","caller_name":"Maria","caller_phone":"0664 1234567","message":"Call back about a crown."}',
+              },
+            },
+          ],
+        }),
+      };
+    };
+
+    await session.alarm();
+
+    // bind order: duration, summary, intent, message_json, callId
+    const update = callUpdates()[0];
+    expect(update).toBeDefined();
+    expect(update.args[1]).toBe('Maria asked for a callback about a crown.');
+    expect(update.args[2]).toBe('message');
+    expect(String(update.args[3])).toContain('0664 1234567');
+    // and the conversation genuinely reached the model
+    expect(sentTranscript).toContain('This is Maria');
+    expect(sentTranscript).toContain('crown');
   });
 
   it('completes the call when the retry lands on a rebuilt instance', async () => {
