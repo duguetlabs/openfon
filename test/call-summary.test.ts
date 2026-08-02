@@ -41,16 +41,37 @@ const HISTORY = [
   { role: 'assistant', content: 'Of course — how about Friday?' },
 ];
 
+// finalize() freezes the call's end time in Durable Object storage so a retry
+// cannot report the delay before it as call duration, so the state stub needs
+// somewhere to keep that.
+function fakeState() {
+  const map = new Map<string, unknown>();
+  return {
+    storage: {
+      get: async (k: string) => map.get(k),
+      put: async (kv: string | Record<string, unknown>, v?: unknown) => {
+        if (typeof kv === 'string') map.set(kv, v);
+        else for (const [k, val] of Object.entries(kv)) map.set(k, val);
+      },
+      delete: async (k: string) => map.delete(k),
+      deleteAll: async () => map.clear(),
+      setAlarm: async () => {},
+      deleteAlarm: async () => {},
+    },
+  };
+}
+
 function session(failure: string | null) {
   const calls: Bound[] = [];
-  const s = new CallSession({} as never, fakeEnv(calls) as never);
+  const s = new CallSession(fakeState() as never, fakeEnv(calls) as never);
   Object.assign(s, { callId: 'call-1', history: HISTORY, settings: { language: 'en' }, failure });
   return { s: s as unknown as { finalize(): Promise<void> }, calls };
 }
 
+// bind order: status, ended_at, duration_s, summary, intent, message_json, id
 function written(calls: Bound[]): { status: string | null; summary: string | null } {
   const update = calls.find((c) => c.sql.startsWith('UPDATE calls'));
-  return { status: (update?.args[0] ?? null) as string | null, summary: (update?.args[2] ?? null) as string | null };
+  return { status: (update?.args[0] ?? null) as string | null, summary: (update?.args[3] ?? null) as string | null };
 }
 
 describe('finalize', () => {

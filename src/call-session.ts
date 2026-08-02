@@ -213,7 +213,12 @@ export class CallSession implements DurableObject {
         break;
       case 'hangup':
         // finalize() owns the whole teardown: engine, client socket, DB row.
-        await this.finalize();
+        // Its errors are caught here rather than reaching failInternally: a row
+        // that fails to write is retried by the watchdog and is not the call
+        // failing. Letting it through recorded a transient D1 blip as the
+        // caller's outcome, so a perfectly normal conversation that wrote on
+        // the second attempt was reported to the owner as a failed call.
+        await this.finalize().catch((err) => console.error('finalize failed', err));
         break;
       default:
         if (msg.contentType) this.pendingContentType = msg.contentType;
@@ -242,13 +247,11 @@ export class CallSession implements DurableObject {
     return this.starting;
   }
 
-  // Announcing `ready` is the point of no return for retries, and the point at
-  // which the call has made real progress — so the start deadline is retired
-  // and the idle timer takes over from here.
-  private async sendReady(payload: Record<string, unknown>): Promise<void> {
+  // Announcing `ready` is the point of no return for retries. (The start
+  // deadline is retired in armWatchdog, not here — see there.)
+  private sendReady(payload: Record<string, unknown>): void {
     this.announced = true;
     this.send({ type: 'ready', ...payload });
-    await this.state.storage.delete('startDeadline');
   }
 
   private async runStart(): Promise<void> {
@@ -301,7 +304,7 @@ export class CallSession implements DurableObject {
           // transcript turn arrive through the normal event stream.
           this.history = [{ role: 'system', content: systemPrompt }];
           const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-          await this.sendReady({ mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
+          this.sendReady({ mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
           return;
         }
         this.history = [
@@ -309,7 +312,7 @@ export class CallSession implements DurableObject {
           { role: 'assistant', content: greeting },
         ];
         const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-        await this.sendReady({ mode: 'realtime', ttsMode, greeting, engine: engineLabel });
+        this.sendReady({ mode: 'realtime', ttsMode, greeting, engine: engineLabel });
         await this.saveTurn('agent', greeting);
         // The greeting is ours, not the model's: synthesize it deterministically
         // and stream it as PCM so it matches the realtime audio path.
@@ -339,7 +342,7 @@ export class CallSession implements DurableObject {
       { role: 'assistant', content: greeting },
     ];
     const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-    await this.sendReady({
+    this.sendReady({
       mode: 'pipeline',
       ttsMode,
       greeting,
@@ -859,7 +862,6 @@ export class CallSession implements DurableObject {
   private static readonly MAX_TURNS = 200;
   // A real widget sends {type:"start"} immediately; 30 s is generous.
   private static readonly START_DEADLINE_MS = 30_000;
-  private static readonly MAX_RETRY_MS = 15 * 60_000; // backoff ceiling
   // 0 = this instance has seen no activity of its own. Not the same as "the
   // call was just active": an alarm can run on an object rebuilt after
   // eviction, where any Date.now() initializer would look like fresh activity
@@ -882,8 +884,15 @@ export class CallSession implements DurableObject {
   private async armWatchdog(): Promise<void> {
     const now = Date.now();
     this.lastActivity = now;
+    // Retiring the start deadline is part of this same write rather than a
+    // separate delete once `ready` goes out. A standalone delete can fail on
+    // its own, and then the call is live with a stale deadline that the
+    // watchdog will honour — it would hang up on a caller mid-conversation.
+    // Folded in here it either lands with the rest of the watchdog state or
+    // not at all, and by this point the call is going ahead.
     await this.state.storage.put({
       callId: this.callId,
+      startDeadline: 0,
       hardDeadline: now + CallSession.MAX_CALL_MS,
       lastActivity: now,
     });
@@ -907,8 +916,7 @@ export class CallSession implements DurableObject {
       // where a connection that produced nothing belongs — and the recorded
       // reason means the row explains itself instead of sitting there blank.
       this.failure ??= 'Call failed: the caller connected but never started the call.';
-      await this.finalize();
-      return;
+      return this.finalizeFromAlarm(now);
     }
 
     // Absent between the upgrade and a successful start. Treat that as "not
@@ -930,25 +938,32 @@ export class CallSession implements DurableObject {
       // dashboard's counts and talk time, which is the opposite of what someone
       // reading their call log needs. Only a call that never began (the start
       // deadline above) or one we cut off ourselves records a failure.
-      try {
-        await this.finalize();
-      } catch (err) {
-        // Own the retry rather than propagating. Cloudflare retries a throwing
-        // alarm about six times and then stops, so a D1 outage lasting longer
-        // than that would strand the row as 'active' forever — the exact state
-        // this watchdog exists to prevent, reached through its own failure
-        // path. Catching and rescheduling is the documented way to retry
-        // indefinitely. Back off: an outage is when hammering helps least.
-        const attempts = ((await this.state.storage.get<number>('finalizeAttempts')) ?? 0) + 1;
-        const delay = Math.min(CallSession.MAX_RETRY_MS, CallSession.WATCHDOG_TICK_MS * 2 ** (attempts - 1));
-        console.error(`call ${this.callId}: finalize failed (attempt ${attempts}), retrying in ${delay / 1000}s`, err);
-        await this.state.storage.put('finalizeAttempts', attempts);
-        await this.state.storage.setAlarm(now + delay);
-      }
-      return;
+      return this.finalizeFromAlarm(now);
     }
     await this.state.storage.put('lastActivity', activity);
     await this.state.storage.setAlarm(now + CallSession.WATCHDOG_TICK_MS);
+  }
+
+  // The single exit for every watchdog-initiated finalize, so no branch can
+  // reach one without the retry handling — an earlier version had two, and the
+  // one that skipped it recreated the stranding this watchdog exists to stop.
+  //
+  // Retry at the ordinary tick rather than propagating: a throwing alarm gets
+  // roughly six platform retries and then nothing, leaving the row 'active'.
+  // No backoff ladder. One Durable Object retrying one row by primary key once
+  // a minute is not a herd worth protecting D1 from, and spacing the attempts
+  // out only delays recovering the caller's summary — which is the entire
+  // reason to retry rather than let the sweep take it. The sweep is also the
+  // termination condition: once it retires the row, the next attempt finds no
+  // active call, marks itself finalized and clears the watchdog, so this needs
+  // no attempt counter or ceiling of its own.
+  private async finalizeFromAlarm(now: number): Promise<void> {
+    try {
+      await this.finalize();
+    } catch (err) {
+      console.error(`call ${this.callId}: finalize failed, retrying at the next tick`, err);
+      await this.state.storage.setAlarm(now + CallSession.WATCHDOG_TICK_MS);
+    }
   }
 
   // Retryable: `finalized` flips only once the row is written, so a failed
@@ -1016,6 +1031,26 @@ export class CallSession implements DurableObject {
   // fields and no caller can reintroduce the split. ('failed' is the schema's
   // own vocabulary, and the dashboard's stats read 'completed', so these drop
   // out of call counts and talk time.)
+  // When the call actually ended, decided once and persisted. Every retry
+  // recomputed Date.now(), so an outage plus the wait before the next attempt
+  // was reported as call duration — a 40 second call retried ten minutes later
+  // became an eleven minute call in the owner's talk-time total, with nothing
+  // to indicate anything had gone wrong. Persisted because an eviction between
+  // attempts is expected: by then every socket is closed.
+  private async endedAtMs(): Promise<number> {
+    const stored = await this.state.storage.get<number>('endedAt');
+    if (stored) return stored;
+    const at = Date.now();
+    await this.state.storage.put('endedAt', at);
+    return at;
+  }
+
+  // SQLite's datetime('now') format, in UTC, so a frozen timestamp is stored
+  // exactly as the column's other writers would have written it.
+  private static sqlTime(ms: number): string {
+    return new Date(ms).toISOString().replace('T', ' ').slice(0, 19);
+  }
+
   private async runFinalize(): Promise<void> {
     this.ended = true;
     this.closeUpstream();
@@ -1037,8 +1072,12 @@ export class CallSession implements DurableObject {
       await this.clearWatchdog();
       return;
     }
-    const duration = Math.max(0, Math.round((Date.now() - new Date(call.started_at + 'Z').getTime()) / 1000));
+    const endedAt = await this.endedAtMs();
+    const duration = Math.max(0, Math.round((endedAt - new Date(call.started_at + 'Z').getTime()) / 1000));
     await this.rehydrateHistory(call.business_id);
+    // Survives eviction between attempts, so a retry never pays the
+    // summarization model a second time for the same conversation.
+    this.summarized ??= (await this.state.storage.get<typeof this.summarized>('summarized')) ?? null;
     // A failure reason takes the summary slot: the call log renders it, so the
     // owner reads why the call died where they already look for what happened.
     let summary: string | null = this.failure;
@@ -1089,6 +1128,7 @@ export class CallSession implements DurableObject {
     // Memoize the *unprefixed* summary: the failure prefix below is applied on
     // every attempt, so caching the combined string would stack it on a retry.
     this.summarized = { summary, intent, messageJson };
+    await this.state.storage.put('summarized', this.summarized);
     // Two writers, one column, so the precedence is decided here rather than by
     // whoever assigns last: a call that broke leads with why. The log truncates
     // the row, and "it failed" is the fact the owner needs first; a summary, if
@@ -1101,9 +1141,9 @@ export class CallSession implements DurableObject {
     // so the alarm retries. Clearing the watchdog first would strand the row
     // as 'active' with nothing left to ever reclaim it.
     await this.env.DB.prepare(
-      `UPDATE calls SET status = ?, ended_at = datetime('now'), duration_s = ?, summary = ?, intent = ?, message_json = ? WHERE id = ?`
+      `UPDATE calls SET status = ?, ended_at = ?, duration_s = ?, summary = ?, intent = ?, message_json = ? WHERE id = ?`
     )
-      .bind(status, duration, summary, intent, messageJson, this.callId)
+      .bind(status, CallSession.sqlTime(endedAt), duration, summary, intent, messageJson, this.callId)
       .run();
     this.finalized = true;
     await this.clearWatchdog();

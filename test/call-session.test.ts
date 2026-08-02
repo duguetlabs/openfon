@@ -97,6 +97,7 @@ function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline') {
     failUpdates: false, // transient failure writing the finished call row
     failCallReads: false, // transient failure inside loadCall()
     failTurnWrites: false, // transient failure inserting a turn
+    callRowActive: true, // false once the cron sweep has retired the row
     turns: [] as { role: string; text: string }[], // rows call_turns should return
     /** Resolve to release a gated loadCall(), letting a test interleave a hangup. */
     gate: null as { promise: Promise<void>; release: () => void } | null,
@@ -111,6 +112,8 @@ function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline') {
                 // loadCall's read is the one tests gate; finalize's must not block
                 if (ctl.gate && sql.includes('status, started_at')) await ctl.gate.promise;
                 if (ctl.failCallReads) throw new Error('D1 unavailable');
+                // finalize selects `... AND status = 'active'`; a swept row misses.
+                if (!ctl.callRowActive && sql.includes("status = ?")) return null;
                 return CALL_ROW;
               }
               if (sql.includes('FROM businesses')) return BIZ_ROW;
@@ -733,7 +736,23 @@ describe('watchdog alarm', () => {
     // Never became a call, so it must not count as one: 'failed' is what keeps
     // it out of the owner's call count and talk time.
     expect(callUpdates()[0].args[0]).toBe('failed');
-    expect(String(callUpdates()[0].args[2])).toContain('never started the call');
+    expect(String(callUpdates()[0].args[3])).toContain('never started the call');
+  });
+
+  it('retires the start deadline in the same write that arms the watchdog', async () => {
+    // A standalone delete after `ready` could fail on its own, and then the
+    // call is live with a stale deadline the watchdog would honour — hanging
+    // up on a caller mid-conversation. Folded into armWatchdog's write it
+    // either lands with the rest of the watchdog state or not at all.
+    const { session, storage } = newSession();
+    await session.fetch(upgradeRequest());
+    expect(storage.map.get('startDeadline')).toBeGreaterThan(0); // armed at upgrade
+
+    serverSockets[0].receive({ type: 'start' });
+    await flush();
+
+    expect(storage.map.get('startDeadline')).toBe(0); // retired
+    expect(storage.map.get('hardDeadline')).toBeGreaterThan(0); // same write
   });
 
   it('does not apply the start deadline once the call is under way', async () => {
@@ -743,7 +762,7 @@ describe('watchdog alarm', () => {
     const sock = serverSockets[0];
     sock.receive({ type: 'start' });
     await flush();
-    expect(storage.map.has('startDeadline')).toBe(false); // retired by `ready`
+    expect(storage.map.get('startDeadline')).toBe(0); // retired when the watchdog armed
 
     // Well past the start deadline, but the caller is talking.
     vi.setSystemTime(Date.now() + 90_000);
@@ -818,23 +837,23 @@ describe('watchdog alarm', () => {
 
     await session.alarm();
 
-    // bind order: status, duration, summary, intent, message_json, callId
+    // bind order: status, ended_at, duration, summary, intent, message_json, callId
     const update = callUpdates()[0];
     expect(update).toBeDefined();
     expect(update.args[0]).toBe('completed'); // recovered, not a failure
-    expect(update.args[2]).toBe('Maria asked for a callback about a crown.');
-    expect(update.args[3]).toBe('message');
-    expect(String(update.args[4])).toContain('0664 1234567');
+    expect(update.args[3]).toBe('Maria asked for a callback about a crown.');
+    expect(update.args[4]).toBe('message');
+    expect(String(update.args[5])).toContain('0664 1234567');
     // and the conversation genuinely reached the model
     expect(sentTranscript).toContain('This is Maria');
     expect(sentTranscript).toContain('crown');
   });
 
-  it('backs off across repeated finalize failures instead of giving up', async () => {
-    // Cloudflare stops retrying a throwing alarm after about six attempts. An
-    // outage lasting longer than that would leave the row 'active' forever, so
-    // the watchdog schedules its own retries — and spaces them out, because an
-    // outage is exactly when hammering helps least.
+  it('retries finalize at the ordinary tick until it lands', async () => {
+    // Cloudflare stops retrying a throwing alarm after about six attempts, so
+    // the watchdog schedules its own. Flat, not a ladder: one object retrying
+    // one row by primary key is not a herd, and spacing attempts out only
+    // delays recovering the caller's summary.
     vi.useFakeTimers();
     const { session, storage, ctl, callUpdates } = newSession();
     await session.fetch(upgradeRequest());
@@ -851,15 +870,102 @@ describe('watchdog alarm', () => {
 
     expect(callUpdates()).toHaveLength(0);
     expect(storage.map.get('callId')).toBe('call-1'); // still reclaimable
-    expect(delays[1]).toBeGreaterThan(delays[0]); // backing off
-    expect(delays[2]).toBeGreaterThan(delays[1]);
+    expect(new Set(delays).size).toBe(1); // same cadence every time
+    expect(delays[0]).toBe(60_000);
 
-    // And it still completes once D1 comes back.
+    // And it completes as soon as D1 comes back.
     ctl.failUpdates = false;
-    vi.setSystemTime(Date.now() + 20 * 60_000);
     await session.alarm();
     expect(callUpdates()).toHaveLength(1);
     expect(storage.alarmAt).toBeNull();
+  });
+
+  it('stops retrying once the sweep has retired the row', async () => {
+    // The sweep is the termination condition, which is why this needs no
+    // attempt counter: a row it marks 'abandoned' is no longer active, so the
+    // next attempt finds nothing to reconcile and cleans itself up.
+    vi.useFakeTimers();
+    const { session, storage, ctl, callUpdates } = newSession();
+    await session.fetch(upgradeRequest());
+    serverSockets[0].receive({ type: 'start' });
+    await flush();
+
+    ctl.failUpdates = true;
+    vi.setSystemTime(Date.now() + 200_000);
+    await session.alarm();
+    expect(storage.alarmAt).not.toBeNull(); // still trying
+
+    ctl.callRowActive = false; // the cron retired it
+    ctl.failUpdates = false;
+    await session.alarm();
+
+    expect(callUpdates()).toHaveLength(0); // nothing left to write
+    expect(storage.alarmAt).toBeNull(); // and it stopped waking up
+    expect(storage.map.size).toBe(0);
+  });
+
+  it('reports the duration the call actually had, not the retry delay', async () => {
+    // runFinalize recomputed Date.now() per attempt, so an outage plus the wait
+    // before the next attempt landed in the owner's talk-time total.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(CALL_ROW.started_at + 'Z').getTime());
+    const { session, ctl, callUpdates } = newSession();
+    await session.fetch(upgradeRequest());
+    serverSockets[0].receive({ type: 'start' });
+    await flush();
+
+    vi.setSystemTime(Date.now() + 40_000); // 40 seconds of conversation
+    const trueEnd = Date.now();
+    ctl.failUpdates = true;
+    serverSockets[0].receive({ type: 'hangup' }); // the write fails
+    await flush();
+    expect(callUpdates()).toHaveLength(0);
+
+    ctl.failUpdates = false;
+    vi.setSystemTime(Date.now() + 10 * 60_000); // ten minute outage
+    await session.alarm(); // watchdog retry
+
+    // bind order: status, ended_at, duration, ...
+    const args = callUpdates()[0].args;
+    expect(args[2]).toBe(40); // not 640
+    expect(args[1]).toBe(new Date(trueEnd).toISOString().replace('T', ' ').slice(0, 19));
+    expect(args[0]).toBe('completed');
+  });
+
+  it('does not re-bill summarization when the retry lands on a rebuilt instance', async () => {
+    // Eviction between attempts is expected — every socket is closed by then —
+    // so an in-memory memo alone let a replacement instance rehydrate the turns
+    // and pay the summarization model all over again, once per retry.
+    vi.useFakeTimers();
+    const { session, storage, ctl, callUpdates, evictAndRebuild } = newSession();
+    storage.map.set('callId', 'call-1');
+    storage.map.set('hardDeadline', Date.now() - 1000);
+    ctl.turns = [
+      { role: 'agent', text: 'Riverside Dental, how can I help?' },
+      { role: 'caller', text: 'Call me back on 0664 1234567 please.' },
+      { role: 'agent', text: 'Will do.' },
+    ];
+    let summaryCalls = 0;
+    (globalThis as never).fetch = async () => {
+      summaryCalls++;
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: '{"summary":"Callback requested.","intent":"message"}' } }],
+        }),
+      };
+    };
+
+    ctl.failUpdates = true;
+    await session.alarm();
+    expect(summaryCalls).toBe(1);
+
+    ctl.failUpdates = false;
+    await evictAndRebuild().alarm(); // fresh instance, memo gone with it
+
+    expect(callUpdates()).toHaveLength(1);
+    expect(callUpdates()[0].args[3]).toBe('Callback requested.');
+    expect(summaryCalls).toBe(1); // read back from storage, not re-billed
   });
 
   it('does not re-bill summarization on a finalize retry', async () => {
@@ -892,7 +998,7 @@ describe('watchdog alarm', () => {
     await session.alarm();
 
     expect(callUpdates()).toHaveLength(1);
-    expect(callUpdates()[0].args[2]).toBe('Callback requested.'); // kept the result
+    expect(callUpdates()[0].args[3]).toBe('Callback requested.'); // kept the result
     expect(summaryCalls).toBe(1); // and did not pay for it twice
   });
 
