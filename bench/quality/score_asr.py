@@ -85,17 +85,43 @@ def main() -> None:
     arms = sorted({r["arm"] for r in rows})
     langs = sorted({r["lang"] for r in rows})
     conds = sorted({r["condition"] for r in rows})
+    #
+    # By clip IDENTITY, not by count. A duplicated id alongside a missing one
+    # still totals the right number, marks the cell complete, and
+    # double-weights the duplicate in the WER — silently moving the headline
+    # number. Corresponding cells must also contain the *same* clips, or the
+    # arms are being compared on different audio.
     expect = a.expect_clips or max(len(v) for v in groups.values())
     problems = []
     for arm in arms:
         for lang in langs:
             for cond in conds:
-                got = len(groups.get((arm, lang, cond), []))
-                if got != expect:
-                    problems.append(f"{arm}/{lang}/{cond}: {got} of {expect}")
+                ids = [r["id"] for r in groups.get((arm, lang, cond), [])]
+                dupes = sorted({i for i in ids if ids.count(i) > 1})
+                if dupes:
+                    problems.append(f"{arm}/{lang}/{cond}: duplicate clip "
+                                    f"{','.join(dupes[:3])}")
+                elif len(ids) != expect:
+                    problems.append(f"{arm}/{lang}/{cond}: {len(ids)} of {expect}")
+
+    # Same (lang, condition) across arms must mean the same clips.
+    for lang in langs:
+        for cond in conds:
+            sets = {arm: frozenset(r["id"] for r in groups.get((arm, lang, cond), []))
+                    for arm in arms}
+            distinct = {s for s in sets.values() if s}
+            if len(distinct) > 1:
+                ref = max(distinct, key=len)
+                for arm, s in sets.items():
+                    if s and s != ref:
+                        problems.append(
+                            f"{arm}/{lang}/{cond}: clip set differs from the other "
+                            f"arms (missing {sorted(ref - s)[:3]}, "
+                            f"extra {sorted(s - ref)[:3]})")
+
     if problems and not a.allow_incomplete:
-        sys.exit(f"{len(problems)} (arm, lang, condition) cell(s) do not have "
-                 f"{expect} clips ({'; '.join(problems[:6])}"
+        sys.exit(f"{len(problems)} (arm, lang, condition) cell problem(s) "
+                 f"({'; '.join(problems[:6])}"
                  f"{'…' if len(problems) > 6 else ''}). Re-run the gaps, pass "
                  f"--expect-clips, or use --allow-incomplete.")
 
@@ -139,7 +165,18 @@ def main() -> None:
             row["d" + k[3:]] = (round(row[k] - clean, 2) if row[k] is not None else None)
         summary.append(row)
 
+    # Every robustness figure is relative to that arm's own clean WER, so
+    # without a `clean` condition there is nothing to be robust *against*. A
+    # condition-only run (`--conditions tel`) produced an empty list and then an
+    # IndexError on `summary[0]` — after the detailed CSV had already been
+    # written, so the run looked half-successful.
     dest = a.summary or a.out.replace(".csv", "_summary.csv")
+    if not summary:
+        print(f"no robustness summary: none of the {len(arms) * len(langs)} "
+              f"(arm, language) pairs has a `clean` baseline, and dWER/SNR50 are "
+              f"both defined relative to it. Detailed WER is in {a.out}.",
+              file=sys.stderr)
+        return
     with open(dest, "w", newline="") as f:
         wcsv = csv.DictWriter(f, fieldnames=list(summary[0].keys()))
         wcsv.writeheader()

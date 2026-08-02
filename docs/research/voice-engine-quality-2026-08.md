@@ -237,7 +237,7 @@ the recommendation is "leave the knob alone" rather than "enable it for German".
 
 ---
 
-## Track B — task success, responsiveness, barge-in
+## Track B — task success and responsiveness
 
 11 Riverside Dental scenarios (7 DE, 4 EN) × 5 arms × 3 trials = **165 live
 calls**, 0 errors. Run against the real system prompt: `gen_prompt.ts` calls
@@ -288,50 +288,70 @@ recognition, and is fixable in the prompt; a recognition gap is not.
 **Code-switching:** every Voice Live arm followed the German→English switch on
 3/3 trials. Native gpt-realtime-2 failed it once (2/3).
 
-### Barge-in
+### Barge-in — measured, and withdrawn
 
-**The stop-latency number is withdrawn.** Earlier drafts reported
-`bargein_stop_p50_ms` (8–373 ms). It measured when agent audio stopped arriving
-*on the wire*, which is not when the agent stopped speaking: these services push
-a whole response's audio far faster than real time — a ~4 s reply is fully
-delivered with `response.done` about 600 ms after it starts. The statistic had
-three separate defects across review and is not recoverable from this design, so
-it is gone rather than caveated. **Barge-in timing is not measurable
-server-side on this stack.**
+**No barge-in numbers are reported.** Interruption handling was measured four
+times across four rounds of review, and each round found the previous
+measurement wrong:
 
-Two things about interruption *are* directly observable, and both survive:
+1. *Stop latency* timed when agent audio stopped arriving on the wire — which is
+   not when the agent stopped speaking, because these services deliver a whole
+   response far faster than real time.
+2. *Adoption of the correction* read the **caller's** transcript, so a perfectly
+   transcribed correction counted as adopted even when the agent ignored it.
+3. *Cancellation* watched for a top-level `response.cancelled` event that neither
+   service emits, so it read false for every real cancellation.
+4. *In-flight state* was recorded **after** the quiescence wait, so a response
+   that finished during the wait read as "nothing in flight"; and when the
+   previous response was silent or tool-only, the barge-in turn's audio was
+   **skipped entirely** — the scripted correction was never spoken and the rest
+   of that scenario was silently invalid.
 
-**Was there anything to interrupt?** An interrupted generation arrives as
-`response.done` carrying `response.status == "cancelled"` — there is no
-top-level `response.cancelled` event on either service, which is why an earlier
-version of this measurement read false for every real cancellation.
+The fourth is not a mismeasurement but an invalidated run, with no error raised.
+Four independent defects in one metric is not a metric, so the numbers are gone
+rather than caveated. **Barge-in is not measurable server-side with this design.**
 
-| arm | responses cancelled by the caller's interruption |
-|---|---|
-| `native-gpt-realtime-2` | **6 / 6** |
-| `vl-native-brain` | 1 / 6 |
-| `vl-gpt41mini`, `-dns`, `-semvad` | **0 / 6** |
+The two barge-in scenarios still run — they exercise interruption end to end and
+their transcripts are useful to read — but nothing is scored from them.
 
-The Voice Live gpt-4.1-mini arms were never cancelled because they had already
-finished: their replies complete before a caller 500–700 ms in could interrupt.
-gpt-realtime-2 generates slowly enough that there is still a response in flight,
-and it does stop. This is the same speed difference the latency table shows,
-seen from the other side.
+For the product, the qualitative finding stands and does not depend on any of
+the withdrawn numbers: **interruption is the client's responsibility.**
+OpenFon's `CallSession` must discard its own playback buffer. Nothing in either
+engine will do it, and on Voice Live there is often no server-side generation
+left to cancel by the time a caller interrupts, because the reply has already
+been delivered in full.
 
-**Did the agent adopt the correction?** Measured on the agent's
-post-interruption reply: **24 of 30** across all arms. An earlier draft claimed
-3/3 everywhere; that came from inspecting the *caller* transcript, which scored
-a perfectly transcribed correction as adopted even when the agent ignored it.
+## How much to trust these numbers
 
-**Barge-in is the weakest part of this study.** Three of its measurements were
-wrong at some point, two are now direct observations rather than inferences, and
-the third is withdrawn. Treat the cancellation counts as sound and the rest of
-the section as directional.
+Written down because a reader deciding on the strength of this study deserves the
+same summary the reviewers had.
 
-For the product: **interruption is the client's responsibility.** OpenFon's
-`CallSession` must discard its own playback buffer; nothing in either engine
-will do it for you, and on Voice Live there is frequently no server-side
-generation left to cancel by the time a caller interrupts.
+**Eleven instances of one bug class** were found across six rounds of review, in
+which missing or unverified data read as a passing result — a missing judge row,
+an empty judge file, a missing trial, duplicate trials counted as distinct ones,
+a scenario an arm never ran, an unparseable numeric, an errored run, a call the
+agent never joined, a runner that swallowed its own errors, a shell that reported
+success anyway, and a duplicated ASR clip double-weighted in a WER. Three
+successive sweeps each missed instances of the class they were sweeping for,
+which is why the checks are now enumerated in
+[`bench/quality/COMPLETENESS.md`](../../bench/quality/COMPLETENESS.md) rather
+than held in anyone's head.
+
+**One metric was withdrawn.** Barge-in had four independent defects in four
+rounds and is not reported at all — see above.
+
+**The recommendation never moved.** Across every correction, the ordering of the
+arms and the shape of the trade-off stayed the same: Voice Live is faster,
+cheaper and hears better; gpt-realtime-2 is markedly more reliable at completing
+a call without asserting something untrue. Corrections changed magnitudes — the
+p95 latency gap narrowed substantially, strict success rose on every arm once
+time-valued facts became matchable — but never the direction.
+
+So: **treat the ordering as solid and the absolute values as approximate.** The
+figures that survived scrutiny unchanged are the WER table, the slot-capture
+rates and the judge groundedness verdicts. The figures that moved under
+correction, and could move again, are the latency percentiles and the strict
+task-success rates. The figure that did not survive is barge-in.
 
 ## Confounds and limits
 
@@ -452,7 +472,7 @@ Stated rather than smoothed over.
      `forbidden_hit` in the whole study was this false positive and is now zero.
    * *`bargein_correct` inspected the caller transcript*, so an accurately
      transcribed correction counted as adopted even when the agent ignored it.
-     It now reads the agent's post-interruption reply: 24/30, not 30/30.
+     One of the four barge-in defects that led to dropping the metric entirely.
    * *A missing judge verdict counted as a pass.* `summarize.py` treated an
      absent groundedness row as "no objection", so a judge outage would have
      *raised* success rates. It now aborts, or scores such runs as failures under

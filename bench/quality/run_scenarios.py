@@ -386,6 +386,16 @@ async def main() -> None:
         print(f"  {sc['id']:16s} turns={len(r['turns'])} "
               f"ttfa_p50={sorted(ttfa)[len(ttfa)//2] if ttfa else '-'} "
               f"tools={r['tool_calls']} err={r.get('error')}", file=sys.stderr)
+        # A scenario that connects, says nothing, and exits cleanly is a
+        # failure the runner should report, not one the scorer discovers later.
+        # (COMPLETENESS.md check #1.)
+        if not r.get("error") and not any(
+                m["role"] == "agent" for m in r.get("transcript", [])):
+            r["error"] = "agent produced no turns"
+            with open(a.out, "r+") as f:
+                lines = f.read().splitlines()
+                lines[-1] = json.dumps(r, ensure_ascii=False)
+                f.seek(0); f.write("\n".join(lines) + "\n"); f.truncate()
         if r.get("error"):
             failed.append(sc["id"])
         await asyncio.sleep(1.5)   # stagger session opens

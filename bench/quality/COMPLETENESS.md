@@ -3,7 +3,7 @@
 Every place this harness decides **"this run is complete / this arm is verified /
 this result counts"** — what each check compares, and how it can be fooled.
 
-This file exists because twelve instances of one bug were found across five
+This file exists because eleven instances of one bug were found across five
 review rounds, and three separate sweeps each missed instances of the class they
 were sweeping for. The shapes are not memorable. The inventory is.
 
@@ -21,7 +21,7 @@ correct ones, which is worse than no numbers.
 
 | # | Where | Decides | Compares | Fooled by |
 |---|---|---|---|---|
-| 1 | `run_scenarios.py` `main()` | did this arm/trial complete | every scenario ran without raising; **exits non-zero** if any errored | a scenario that fails *silently* — produces a transcript but no agent turns. Caught downstream by #6, not here. |
+| 1 | `run_scenarios.py` `main()` | did this arm/trial complete | every scenario ran without raising **and** produced at least one agent turn; **exits non-zero** if any failed | nothing known. A silently-empty scenario used to reach the scorer as a valid row. |
 | 2 | `run_asr.py` `transcribe_batch()` | is this session still coherent | each clip gets `input_audio_buffer.committed`; a timeout **raises** `CommitDesync` rather than continuing | nothing known. Continuing was the bug: a late commit was consumed as the next clip's, cascading wrong hypotheses. |
 | 3 | `run_all.sh` | did the matrix complete | every runner invocation's exit code; collects failures and **exits non-zero** | a runner that exits 0 having swallowed its errors — which is why #1 exists. Also `OUT` must point somewhere disposable in tests: the `: >` truncation writes to `$HERE` by default and once destroyed a finished run. |
 | 4 | `summarize.py` trial check | did every arm run everything | **set of trial ids** per `(arm, scenario)` equals `{1..k}`, no duplicates, no extras | nothing known. Counting rows was the bug: three copies of trial 1 satisfied `--trials 3`. Runners append to JSONL, so re-runs duplicate rather than replace. |
@@ -31,16 +31,14 @@ correct ones, which is worse than no numbers.
 | 8 | `summarize.py` `pass_k` | did it pass every trial | trial ids `{1..k}` each present exactly once **and** all succeeded; denominator is every scenario | nothing known. |
 | 9 | `summarize.py` descriptives | `slot_heard`, `judge_*` | carries its own n, flagged `(of n/expected)` when short | these cannot be imputed, only reported. A short n is visible, not corrected. |
 | 10 | `summarize.py` TTFA | latency percentiles | **nothing** — deliberately | a turn only yields a latency if the agent replied, and the closing turn usually gets none by design, so there is no a-priori denominator. Run-level completeness (#4, #7) carries it. This is the one check that cannot be tightened. |
-| 11 | `score_asr.py` cell check | is every ASR cell whole | clip count per `(arm, lang, condition)` equals `--expect-clips`; emits `complete` | clips present but with empty references — surfaced separately as `unscorable_refs`. |
+| 11 | `score_asr.py` cell check | is every ASR cell whole | **set of clip ids** per `(arm, lang, condition)`: no duplicates, size equals `--expect-clips`, and identical across arms for the same `(lang, condition)` | clips present but with empty references — surfaced separately as `unscorable_refs`. Counting rows was the bug: a duplicated id beside a missing one totals correctly and double-weights the duplicate in the WER. |
+| 13 | `score_asr.py` robustness rows | can dWER/SNR50 be computed | a `clean` baseline exists per `(arm, lang)`; **emits nothing and says so** if not | nothing known. `summary[0]` used to raise `IndexError` after the detailed CSV had been written. |
 | 12 | `judge.py` `parse_verdicts` | is this verdict usable | one verdict per expected candidate id, scores literally `int` in range | nothing known. `bool` passing as `int` was the bug: `true` became `0.0` downstream. |
 
 ## Not verified, and knowingly so
 
 - **TTFA has no expected denominator** (#10). A missing reply is invisible to the
   latency statistic; it shows up as a task failure instead.
-- **Silent scenario failure** — an arm that connects, says nothing useful, and
-  exits cleanly is not caught by #1. It fails the conjunction at #6 on
-  `agent_turns` or on slots, which is the right outcome but a later one.
 - **`n_turns_expected` is recorded but unused.** It is the caller-turn count, not
   the expected-reply count; using it as a denominator produced false shortfalls.
 - **Judge non-determinism** is measured (two seeds, reported in the report) but

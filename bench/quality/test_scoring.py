@@ -617,7 +617,7 @@ class TestAggregatesKnowTheirDenominator(unittest.TestCase):
                    "--out", str(Path(tmp) / "out.csv")]
             r = subprocess.run(cmd, capture_output=True, text=True)
             self.assertNotEqual(r.returncode, 0)
-            self.assertIn("do not have", r.stderr)
+            self.assertIn("cell problem", r.stderr)
             # ...and says so explicitly when allowed through.
             r2 = subprocess.run(cmd + ["--allow-incomplete"],
                                 capture_output=True, text=True)
@@ -626,6 +626,60 @@ class TestAggregatesKnowTheirDenominator(unittest.TestCase):
                 out = {x["condition"]: x for x in csv.DictReader(fh)}
             self.assertEqual(out["clean"]["complete"], "1")
             self.assertEqual(out["tel"]["complete"], "0")
+
+    def test_score_asr_rejects_a_duplicated_clip_id(self):
+        """A duplicate beside a missing clip totals correctly and skews the WER."""
+        with tempfile.TemporaryDirectory() as tmp:
+            hyp = Path(tmp) / "asr.jsonl"
+            ids = ["c0", "c1", "c0"]        # count is 3, identity is not
+            rows = [{"arm": "a", "lang": "en_us", "condition": "clean", "id": i,
+                     "reference": "hello world", "hypothesis": "hello world",
+                     "error": None, "audio_seconds": 1.0, "latency_s": 0.1}
+                    for i in ids]
+            hyp.write_text("".join(json.dumps(r) + "\n" for r in rows))
+            r = subprocess.run(
+                [sys.executable, str(HERE / "score_asr.py"), "--hyp", str(hyp),
+                 "--expect-clips", "3", "--out", str(Path(tmp) / "out.csv")],
+                capture_output=True, text=True)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("duplicate clip c0", r.stderr)
+
+    def test_score_asr_rejects_arms_scored_on_different_clips(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            hyp = Path(tmp) / "asr.jsonl"
+            rows = []
+            for arm, ids in (("a", ["c0", "c1"]), ("b", ["c0", "c2"])):
+                for i in ids:
+                    rows.append({"arm": arm, "lang": "en_us", "condition": "clean",
+                                 "id": i, "reference": "hello world",
+                                 "hypothesis": "hello world", "error": None,
+                                 "audio_seconds": 1.0, "latency_s": 0.1})
+            hyp.write_text("".join(json.dumps(r) + "\n" for r in rows))
+            r = subprocess.run(
+                [sys.executable, str(HERE / "score_asr.py"), "--hyp", str(hyp),
+                 "--expect-clips", "2", "--out", str(Path(tmp) / "out.csv")],
+                capture_output=True, text=True)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("clip set differs", r.stderr)
+
+    def test_score_asr_without_a_clean_baseline_emits_no_robustness_rows(self):
+        """`--conditions tel` used to IndexError after writing the detail CSV."""
+        with tempfile.TemporaryDirectory() as tmp:
+            hyp = Path(tmp) / "asr.jsonl"
+            rows = [{"arm": "a", "lang": "en_us", "condition": "tel", "id": f"c{i}",
+                     "reference": "hello world", "hypothesis": "hello world",
+                     "error": None, "audio_seconds": 1.0, "latency_s": 0.1}
+                    for i in range(2)]
+            hyp.write_text("".join(json.dumps(r) + "\n" for r in rows))
+            out = Path(tmp) / "out.csv"
+            r = subprocess.run(
+                [sys.executable, str(HERE / "score_asr.py"), "--hyp", str(hyp),
+                 "--expect-clips", "2", "--out", str(out)],
+                capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("no robustness summary", r.stderr)
+            self.assertTrue(out.exists())
+            self.assertFalse(Path(str(out).replace(".csv", "_summary.csv")).exists())
 
 
 class TestCompletenessByIdentity(unittest.TestCase):
