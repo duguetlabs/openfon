@@ -27,6 +27,10 @@ import websockets
 
 from engines import ARMS, connect_kwargs
 
+class CommitDesync(RuntimeError):
+    """The commit stream fell out of sync; the session must not be reused."""
+
+
 MARKER = "openfon-bench-asr"
 FRAME_MS = 200
 LANG_CODE = {"en_us": "en", "de_de": "de", "fr_fr": "fr", "es_419": "es",
@@ -117,8 +121,15 @@ async def transcribe_batch(arm_name: str, lang: str, clips: list[dict],
                 try:
                     ev = await pump(30)
                 except asyncio.TimeoutError:
-                    err = "timeout waiting for committed"
-                    break
+                    # Do NOT carry on. The commit may still be in flight; if it
+                    # arrives during the next clip it is consumed as *that*
+                    # clip's, and every subsequent clip is bound to the previous
+                    # one's transcript — silently, with no error on any affected
+                    # row. Corrupt scoring input is worse than a crash, so the
+                    # batch aborts and the caller reconnects on a fresh socket.
+                    raise CommitDesync(
+                        f"{clip['id']}: no input_audio_buffer.committed within 30 s; "
+                        f"the commit stream is out of sync, abandoning this session")
                 if ev.get("type") == "error":
                     err = json.dumps(ev.get("error"))
                     break
@@ -134,6 +145,9 @@ async def transcribe_batch(arm_name: str, lang: str, clips: list[dict],
             # timeout on every such clip (this cost ~30 s per clip and turned a
             # 20-minute run into a 90-minute one). The final drain upgrades any
             # empty to the longer text if the real one lands later.
+            # Unlike the commit wait, a slow transcript is safe to wait out and
+            # then move on: this clip is already bound to its item_id, and the
+            # end-of-batch drain attributes any late arrival correctly.
             while item_id and not err and item_id not in seen and loop.time() < deadline:
                 try:
                     ev = await pump(30)

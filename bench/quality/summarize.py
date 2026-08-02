@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import statistics
 import sys
 from collections import defaultdict
@@ -55,10 +56,14 @@ def strict_num(v, field: str, key: tuple) -> float:
 
 
 def pct(values: list[float], q: float) -> float:
-    """Nearest-rank percentile over the values actually supplied."""
+    """Nearest-rank percentile: the smallest value at or above rank ceil(q*n).
+
+    `round()` is not this. Python rounds half to even, so `round(q*n + 0.5)`
+    picks rank 20 of 20 and rank 96 of 100 where nearest-rank picks 19 and 95 —
+    and the Track B arms have 96–106 turns each, squarely in that range.
+    """
     s = sorted(values)
-    idx = max(0, min(len(s) - 1, int(round(q * len(s) + 0.5)) - 1))
-    return s[idx]
+    return s[max(0, min(len(s) - 1, math.ceil(q * len(s)) - 1))]
 
 
 def main() -> None:
@@ -154,8 +159,19 @@ def main() -> None:
         by_arm_sc[(r["arm"], r["scenario"])].append(r["success"])
 
     rows = []
+    expected_runs = len(scenarios) * a.trials
     for arm in arms:
         runs = [r for r in per_run if r["arm"] == arm]
+        # THE RULE: every aggregate compares what it observed against what was
+        # expected. A rate whose denominator is "the rows that happened to be
+        # there" reports 1.0 for two successes out of three — which is exactly
+        # what --allow-incomplete promises not to do.
+        missing_runs = expected_runs - len(runs)
+
+        def rate(pred) -> float:
+            """Fraction over *expected* runs; anything absent counts as a miss."""
+            return (sum(1 for r in runs if pred(r))) / expected_runs
+
         # Denominator is every scenario, not just the ones this arm has rows for,
         # and a scenario only passes if it has the full k trials and all passed.
         passed_k = sum(1 for sc in scenarios
@@ -174,30 +190,50 @@ def main() -> None:
         jr = [r["judge_resolution"] for r in runs if r["judge_resolution"] is not None]
         jt = [r["judge_tone"] for r in runs if r["judge_tone"] is not None]
 
-        def agg(vals, fn, label):
-            # An empty cell reads as zero to a spreadsheet and as "fine" to a
-            # reader. Say "not measured" instead.
-            return round(fn(vals)) if vals else f"no {label}"
+        # Descriptive statistics cannot impute a missing observation the way a
+        # rate can, so they carry their own n and are flagged when short of a
+        # denominator that is actually known.
+        #
+        # TTFA has no such denominator: a caller turn only yields a latency if
+        # the agent replied, and the last turn of a call (the caller's goodbye)
+        # usually gets no reply by design. Comparing against the caller-turn
+        # count would flag every complete run as short. Run-level completeness
+        # is carried by `missing_runs`, which is the denominator that exists.
+        def descr(vals, fn, label, expected=None, ndigits=0):
+            if not vals:
+                return f"no {label}"
+            out = round(fn(vals), ndigits) if ndigits else round(fn(vals))
+            short = expected is not None and len(vals) < expected
+            return f"{out} (of {len(vals)}/{expected} {label})" if short else out
 
         rows.append({
             "arm": arm,
             "runs": len(runs),
+            "runs_expected": expected_runs,
+            "missing_runs": missing_runs,
             "scenarios": len(scenarios),
             "trials": a.trials,
-            "success_mean": round(statistics.mean(r["success"] for r in runs), 3),
+            # Rates: denominated on expected, so a missing run is a failure.
+            "success_mean": round(rate(lambda r: r["success"]), 3),
             "pass_k": round(passed_k / len(scenarios), 3),
-            "slot_heard": round(statistics.mean(slot_accs), 3) if slot_accs else "not measured",
-            "slot_echoed": round(statistics.mean(echoed), 3) if echoed else "not measured",
-            "tool_ok": round(statistics.mean(int(r["tool_ok"]) for r in runs), 3),
-            "grounded_ok": round(statistics.mean(int(r["grounded_ok"]) for r in runs), 3),
+            "tool_ok": round(rate(lambda r: r["tool_ok"] == "1"), 3),
+            "grounded_ok": round(rate(lambda r: r["grounded_ok"] == "1"), 3),
+            # Descriptive: cannot be imputed, so report n and flag shortfalls.
+            "slot_heard": descr(slot_accs, statistics.mean, "runs", ndigits=3) if slot_accs
+            else "not measured",
+            "slot_echoed": descr(echoed, statistics.mean, "runs", ndigits=3) if echoed
+            else "not measured",
             "forbidden_hits": sum(int(num(r["forbidden_hit"], 0)) for r in runs),
-            "judge_grounded": round(statistics.mean(jg), 3) if jg else "not measured",
-            "judge_resolution": round(statistics.mean(jr), 3) if jr else "not measured",
-            "judge_tone": round(statistics.mean(jt), 3) if jt else "not measured",
+            "judge_grounded": descr(jg, statistics.mean, "verdicts", expected_runs, ndigits=3)
+            if jg else "not measured",
+            "judge_resolution": descr(jr, statistics.mean, "verdicts", expected_runs, ndigits=3)
+            if jr else "not measured",
+            "judge_tone": descr(jt, statistics.mean, "verdicts", expected_runs, ndigits=3)
+            if jt else "not measured",
             "ttfa_turns_n": len(ttfa),
-            "ttfa_p50_ms": agg(ttfa, statistics.median, "turns"),
-            "ttfa_p95_ms": agg(ttfa, lambda v: pct(v, 0.95), "turns"),
-            "bargein_stop_p50_ms": agg(barge, statistics.median, "barge-ins"),
+            "ttfa_p50_ms": descr(ttfa, statistics.median, "turns"),
+            "ttfa_p95_ms": descr(ttfa, lambda v: pct(v, 0.95), "turns"),
+            "bargein_stop_p50_ms": descr(barge, statistics.median, "barge-ins"),
             "errors": sum(1 for r in runs if r["error"]),
             "session_min": round(sum(num(r["session_s"], 0) for r in runs) / 60, 1),
         })

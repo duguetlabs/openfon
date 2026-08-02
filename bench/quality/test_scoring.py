@@ -14,6 +14,9 @@ arm had in fact got it right. `test_time_twelve_hour_forms` is that bug.
 from __future__ import annotations
 
 import csv
+import json
+import math
+import os
 import subprocess
 import sys
 import tempfile
@@ -30,6 +33,7 @@ from score_slots import (  # noqa: E402
     detect_lang, fact_present, score_run, slot_present, time_forms,
 )
 from score_wer import normalize  # noqa: E402
+from summarize import pct  # noqa: E402
 
 
 class TestNormalize(unittest.TestCase):
@@ -390,7 +394,8 @@ class TestAbsentDataNeverPasses(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             r = self.summarize(tmp, [self.slot_row()], [self.judge_row()])
             self.assertEqual(r.returncode, 0, r.stderr)
-            out = list(csv.DictReader(open(Path(tmp) / "out.csv")))
+            with open(Path(tmp) / "out.csv") as fh:
+                out = list(csv.DictReader(fh))
             self.assertEqual(float(out[0]["success_mean"]), 1.0)
 
     def test_empty_judge_file_is_not_no_judge(self):
@@ -410,7 +415,8 @@ class TestAbsentDataNeverPasses(unittest.TestCase):
             r = self.summarize(tmp, [self.slot_row()], [self.judge_row(scenario="other")],
                                extra=("--allow-missing-judge",))
             self.assertEqual(r.returncode, 0, r.stderr)
-            out = list(csv.DictReader(open(Path(tmp) / "out.csv")))
+            with open(Path(tmp) / "out.csv") as fh:
+                out = list(csv.DictReader(fh))
             self.assertEqual(float(out[0]["success_mean"]), 0.0)
 
     def test_missing_trial_aborts_rather_than_counting_as_pass_k(self):
@@ -439,7 +445,8 @@ class TestAbsentDataNeverPasses(unittest.TestCase):
                      self.judge_row(arm="b", scenario="s1")]
             r = self.summarize(tmp, rows, judge, extra=("--allow-incomplete",))
             self.assertEqual(r.returncode, 0, r.stderr)
-            out = {x["arm"]: x for x in csv.DictReader(open(Path(tmp) / "out.csv"))}
+            with open(Path(tmp) / "out.csv") as fh:
+                out = {x["arm"]: x for x in csv.DictReader(fh)}
             self.assertEqual(float(out["a"]["pass_k"]), 1.0)
             self.assertEqual(float(out["b"]["pass_k"]), 0.5)
 
@@ -448,14 +455,16 @@ class TestAbsentDataNeverPasses(unittest.TestCase):
             r = self.summarize(tmp, [self.slot_row(error="websocket closed")],
                                [self.judge_row()])
             self.assertEqual(r.returncode, 0, r.stderr)
-            out = list(csv.DictReader(open(Path(tmp) / "out.csv")))
+            with open(Path(tmp) / "out.csv") as fh:
+                out = list(csv.DictReader(fh))
             self.assertEqual(float(out[0]["success_mean"]), 0.0)
 
     def test_call_the_agent_never_joined_is_never_a_success(self):
         with tempfile.TemporaryDirectory() as tmp:
             r = self.summarize(tmp, [self.slot_row(agent_turns=0)], [self.judge_row()])
             self.assertEqual(r.returncode, 0, r.stderr)
-            out = list(csv.DictReader(open(Path(tmp) / "out.csv")))
+            with open(Path(tmp) / "out.csv") as fh:
+                out = list(csv.DictReader(fh))
             self.assertEqual(float(out[0]["success_mean"]), 0.0)
 
     def test_unparseable_conjunction_input_aborts(self):
@@ -479,7 +488,8 @@ class TestAbsentDataNeverPasses(unittest.TestCase):
                 judge.append(self.judge_row(scenario=f"s{i}"))
             r = self.summarize(tmp, rows, judge)
             self.assertEqual(r.returncode, 0, r.stderr)
-            out = list(csv.DictReader(open(Path(tmp) / "out.csv")))[0]
+            with open(Path(tmp) / "out.csv") as fh:
+                out = list(csv.DictReader(fh))[0]
             self.assertEqual(out["ttfa_turns_n"], "100")
             self.assertEqual(out["ttfa_p95_ms"], "9000")
 
@@ -487,8 +497,130 @@ class TestAbsentDataNeverPasses(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             r = self.summarize(tmp, [self.slot_row(ttfa_ms_all="")], [self.judge_row()])
             self.assertEqual(r.returncode, 0, r.stderr)
-            out = list(csv.DictReader(open(Path(tmp) / "out.csv")))[0]
+            with open(Path(tmp) / "out.csv") as fh:
+                out = list(csv.DictReader(fh))[0]
             self.assertEqual(out["ttfa_p95_ms"], "no turns")
+
+
+class TestPercentile(unittest.TestCase):
+    """Nearest-rank, not `round()`. Three lines that would have caught it."""
+
+    def test_matches_nearest_rank_definition(self):
+        for n in range(1, 201):
+            s = list(range(1, n + 1))
+            for q in (0.5, 0.9, 0.95, 0.99):
+                with self.subTest(n=n, q=q):
+                    self.assertEqual(pct(s, q), math.ceil(q * n))
+
+    def test_the_cases_round_gets_wrong(self):
+        # round() is banker's rounding: round(20*0.95 + 0.5) == round(19.5) == 20,
+        # selecting rank 20 of 20 where nearest-rank selects 19.
+        self.assertEqual(pct(list(range(1, 21)), 0.95), 19)
+        self.assertEqual(pct(list(range(1, 101)), 0.95), 95)
+
+    def test_p95_is_not_the_maximum(self):
+        vals = [1.0] * 95 + [100.0] * 5
+        self.assertEqual(pct(vals, 0.95), 1.0)
+        self.assertEqual(pct(vals, 0.96), 100.0)
+
+    def test_single_value(self):
+        self.assertEqual(pct([7.0], 0.95), 7.0)
+
+
+class TestAggregatesKnowTheirDenominator(unittest.TestCase):
+    """The rule: observations can differ from expectations, so compare them.
+
+    Two instances of this survived the first fail-closed sweep — `success_mean`
+    averaging only the rows present under `--allow-incomplete`, and `run_all.sh`
+    exiting 0 after a failed runner.
+    """
+
+    def test_success_mean_denominates_on_expected_not_present(self):
+        """Two successes out of an expected three is 0.667, never 1.0."""
+        helper = TestAbsentDataNeverPasses()
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = [helper.slot_row(scenario="s1", trial=1),
+                    helper.slot_row(scenario="s1", trial=2)]
+            judge = [helper.judge_row(scenario="s1", trial=1),
+                     helper.judge_row(scenario="s1", trial=2)]
+            slots = helper.write(tmp, "slots.csv", helper.SLOTS_HEADER, rows)
+            jh = ("scenario,arm,trial,lang,seed,groundedness,resolution,tone,"
+                  "groundedness_evidence,note")
+            j = helper.write(tmp, "judge.csv", jh, judge)
+            r = subprocess.run(
+                [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
+                 "--judge", str(j), "--trials", "3", "--allow-incomplete",
+                 "--out", str(Path(tmp) / "out.csv")], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            with open(Path(tmp) / "out.csv") as fh:
+                out = list(csv.DictReader(fh))[0]
+            self.assertEqual(float(out["success_mean"]), round(2 / 3, 3))
+            self.assertEqual(int(out["missing_runs"]), 1)
+            self.assertEqual(int(out["runs_expected"]), 3)
+
+    def test_tool_ok_and_grounded_ok_also_denominate_on_expected(self):
+        helper = TestAbsentDataNeverPasses()
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = [helper.slot_row(scenario="s1", trial=1)]
+            judge = [helper.judge_row(scenario="s1", trial=1)]
+            slots = helper.write(tmp, "slots.csv", helper.SLOTS_HEADER, rows)
+            jh = ("scenario,arm,trial,lang,seed,groundedness,resolution,tone,"
+                  "groundedness_evidence,note")
+            j = helper.write(tmp, "judge.csv", jh, judge)
+            r = subprocess.run(
+                [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
+                 "--judge", str(j), "--trials", "2", "--allow-incomplete",
+                 "--out", str(Path(tmp) / "out.csv")], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            with open(Path(tmp) / "out.csv") as fh:
+                out = list(csv.DictReader(fh))[0]
+            for col in ("tool_ok", "grounded_ok", "success_mean"):
+                with self.subTest(col=col):
+                    self.assertEqual(float(out[col]), 0.5)
+
+    def test_run_all_propagates_runner_failure(self):
+        """A failed runner must make the matrix script exit non-zero."""
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp) / "data"
+            (data / "conditions").mkdir(parents=True)
+            (data / "scenarios").mkdir(parents=True)
+            failing = Path(tmp) / "fail.py"
+            failing.write_text("import sys; sys.exit(3)\n")
+            r = subprocess.run(
+                ["bash", str(HERE / "run_all.sh")],
+                env={**os.environ, "DATA": str(data), "PY": f"{sys.executable} {failing}",
+                     "TRACK": "b", "TRIALS": "1", "SC_ARMS": "vl-gpt41mini"},
+                capture_output=True, text=True, cwd=tmp)
+            self.assertNotEqual(r.returncode, 0,
+                                "run_all.sh exited 0 despite a failing runner")
+            self.assertIn("INCOMPLETE", r.stderr)
+
+    def test_score_asr_rejects_a_short_cell(self):
+        """A WER over 8 of 25 clips must not be reported like one over 25."""
+        with tempfile.TemporaryDirectory() as tmp:
+            hyp = Path(tmp) / "asr.jsonl"
+            rows = []
+            for cond in ("clean", "tel"):
+                n = 3 if cond == "clean" else 1      # deliberately ragged
+                for i in range(n):
+                    rows.append({"arm": "a", "lang": "en_us", "condition": cond,
+                                 "id": f"{cond}{i}", "reference": "hello world",
+                                 "hypothesis": "hello world", "error": None,
+                                 "audio_seconds": 1.0, "latency_s": 0.1})
+            hyp.write_text("".join(json.dumps(r) + "\n" for r in rows))
+            cmd = [sys.executable, str(HERE / "score_asr.py"), "--hyp", str(hyp),
+                   "--out", str(Path(tmp) / "out.csv")]
+            r = subprocess.run(cmd, capture_output=True, text=True)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("do not have", r.stderr)
+            # ...and says so explicitly when allowed through.
+            r2 = subprocess.run(cmd + ["--allow-incomplete"],
+                                capture_output=True, text=True)
+            self.assertEqual(r2.returncode, 0, r2.stderr)
+            with open(Path(tmp) / "out.csv") as fh:
+                out = {x["condition"]: x for x in csv.DictReader(fh)}
+            self.assertEqual(out["clean"]["complete"], "1")
+            self.assertEqual(out["tel"]["complete"], "0")
 
 
 class TestFixtureHygiene(unittest.TestCase):

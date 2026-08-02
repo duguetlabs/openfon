@@ -367,8 +367,8 @@ Stated rather than smoothed over.
    real subscriber. A test fails the build if a fixture number leaves those
    ranges.
 
-12. **The harness had a systemic bias: absent data read as a pass.** Ten
-   separate places, found across three review rounds, turned missing or
+12. **The harness had a systemic bias: absent data read as a pass.** Twelve
+   separate places, found across four review rounds, turned missing or
    unparseable data into a passing result — a missing judge row, a judge file
    that was empty rather than absent, a missing trial, a scenario an arm never
    ran, an unparseable numeric in the conjunction, a run that errored on the
@@ -383,10 +383,22 @@ Stated rather than smoothed over.
    of it; each case is a separate process invocation, because the point is that
    the run refuses, not that a helper returns False.
 
-   None of these were firing on the final dataset — all 165 runs are complete,
-   judged and error-free, so the corrected guards leave every reported number
-   unchanged. They exist so that the next run cannot quietly report a partial
-   one as a good one.
+   The first sweep found six and **missed two**, because it matched the shapes
+   that had been pointed out rather than deriving the rule. The rule is: *any
+   place where the number of observations can differ from the number expected,
+   and nothing compares the two.* Re-run against that statement, it also caught
+   `success_mean` averaging only the rows present under `--allow-incomplete`
+   (reporting 1.0 for two successes out of three, precisely what that flag
+   promises not to do), and `run_all.sh` exiting 0 after a runner failed, so a
+   half-finished matrix scored as a whole one. Every rate is now denominated on
+   expected runs; every descriptive statistic carries its own n and is flagged
+   when short; `score_asr.py`, which had no completeness check at all, now
+   validates every (arm, language, condition) cell and emits `complete`.
+
+   None of these were firing on the final dataset — all 165 Track B runs and all
+   48 Track A cells are complete, judged and error-free, so the corrected guards
+   leave every reported number unchanged. They exist so that the next run cannot
+   quietly report a partial one as a good one.
 
 11. **Six scoring bugs were found in code review and fixed; three moved
    reported numbers.** All were scoring-side, so they were corrected by
@@ -423,6 +435,17 @@ Stated rather than smoothed over.
      in **both** directions: Voice Live's p95 rose 1654 → 1748 ms (the old
      figure was too flattering) while native gpt-realtime-2's fell 3812 →
      3048 ms (too harsh). The gap is real but smaller than first reported.
+   * *Percentiles used `round()`, which is not nearest-rank.* Python rounds
+     half to even, so `round(q*n + 0.5)` selects rank 20 of 20 and rank 96 of
+     100 where nearest-rank selects 19 and 95. Now `ceil(q*n) - 1`. The Track B
+     arms have 96–106 turns, where `q*n` is non-integral, so both agree and no
+     published latency figure moved — but at n=100 it would have.
+   * *A late `input_audio_buffer.committed` could bind a clip to the previous
+     transcript.* On timeout the runner recorded the clip without an item id and
+     kept the socket, so a late commit was consumed as the *next* clip's and
+     every subsequent clip inherited its predecessor's hypothesis — silent WER
+     corruption with no error on any affected row. The batch now aborts and
+     reconnects.
    * *A JSON `true` passed as a judge score.* `bool` is a subclass of `int` in
      Python, so `true` satisfied a `value in (0, 1)` membership test, landed
      `True` in the CSV, and was then coerced to `0.0` — turning a *positive*

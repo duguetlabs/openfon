@@ -82,7 +82,7 @@ DATA=/path/to/data
 cd bench/quality && DATA=$DATA PY=../../.venv/bin/python ./run_all.sh
 
 # 5. Score.
-python score_asr.py   --hyp results/asr.jsonl      --out results/asr_scores.csv
+python score_asr.py   --hyp results/asr.jsonl --expect-clips 25 --out results/asr_scores.csv
 python score_slots.py --runs results/scenarios.jsonl --out results/slots.csv
 KATALEPTIC_KEY=... python judge.py --runs results/scenarios.jsonl --out results/judge.csv --seed 1
 KATALEPTIC_KEY=... python judge.py --runs results/scenarios.jsonl --out results/judge_seed2.csv --seed 2

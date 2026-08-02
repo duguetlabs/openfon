@@ -30,16 +30,23 @@ from score_wer import normalize  # noqa: E402
 SNR_RE = re.compile(r"_snr(-?\d+)$")
 
 
-def wer_cer(rows: list[dict], lang: str) -> tuple[float, float, int]:
+def wer_cer(rows: list[dict], lang: str) -> tuple[float, float, int, int]:
+    """WER/CER over `rows`, plus how many rows were usable out of how many given.
+
+    A row whose *reference* is empty cannot be scored at all — it contributes no
+    words to the denominator — so it is dropped, but the count is returned so the
+    caller can see the scored n differ from the submitted n. An empty
+    *hypothesis* is kept: that is a real recognition failure and scores as one.
+    """
     refs = [normalize(r["reference"], lang) for r in rows]
     hyps = [normalize(r["hypothesis"], lang) for r in rows]
     keep = [(a, b) for a, b in zip(refs, hyps) if a]
     if not keep:
-        return float("nan"), float("nan"), 0
+        return float("nan"), float("nan"), 0, len(rows)
     refs, hyps = [k[0] for k in keep], [k[1] for k in keep]
     return (jiwer.process_words(refs, hyps).wer * 100,
             jiwer.process_characters(refs, hyps).cer * 100,
-            len(refs))
+            len(refs), len(rows))
 
 
 def snr50(curve: dict[int, float], clean: float) -> str:
@@ -60,6 +67,10 @@ def main() -> None:
     ap.add_argument("--hyp", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--summary", help="write the robustness summary CSV here")
+    ap.add_argument("--expect-clips", type=int,
+                    help="clips expected per (arm, lang, condition); mismatches abort")
+    ap.add_argument("--allow-incomplete", action="store_true",
+                    help="report incomplete cells instead of aborting")
     a = ap.parse_args()
 
     rows = [json.loads(l) for l in Path(a.hyp).read_text().splitlines() if l.strip()]
@@ -67,13 +78,37 @@ def main() -> None:
     for r in rows:
         groups[(r["arm"], r["lang"], r["condition"])].append(r)
 
+    # Every cell must be present and the same size. Track A previously had no
+    # completeness check at all: a condition that failed mid-run simply produced
+    # a smaller cell, and a WER computed over 8 of 25 clips is reported in the
+    # same column, in the same units, as one computed over all 25.
+    arms = sorted({r["arm"] for r in rows})
+    langs = sorted({r["lang"] for r in rows})
+    conds = sorted({r["condition"] for r in rows})
+    expect = a.expect_clips or max(len(v) for v in groups.values())
+    problems = []
+    for arm in arms:
+        for lang in langs:
+            for cond in conds:
+                got = len(groups.get((arm, lang, cond), []))
+                if got != expect:
+                    problems.append(f"{arm}/{lang}/{cond}: {got} of {expect}")
+    if problems and not a.allow_incomplete:
+        sys.exit(f"{len(problems)} (arm, lang, condition) cell(s) do not have "
+                 f"{expect} clips ({'; '.join(problems[:6])}"
+                 f"{'…' if len(problems) > 6 else ''}). Re-run the gaps, pass "
+                 f"--expect-clips, or use --allow-incomplete.")
+
     out = []
     for (arm, lang, cond), rs in sorted(groups.items()):
-        w, c, n = wer_cer(rs, lang)
+        w, c, n, submitted = wer_cer(rs, lang)
         misses = sum(1 for r in rs if not r["hypothesis"].strip())
-        out.append({"arm": arm, "lang": lang, "condition": cond, "n": n,
+        out.append({"arm": arm, "lang": lang, "condition": cond,
+                    "n": n, "n_expected": expect,
+                    "complete": int(n == expect),
                     "wer": round(w, 2), "cer": round(c, 2),
                     "empty_hyp": misses,
+                    "unscorable_refs": submitted - n,
                     "errors": sum(1 for r in rs if r.get("error")),
                     "audio_min": round(sum(r["audio_seconds"] for r in rs) / 60, 2)})
 
