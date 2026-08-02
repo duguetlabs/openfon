@@ -24,8 +24,29 @@ ALTER TABLE calls ADD COLUMN connected_at TEXT;
 
 CREATE INDEX idx_calls_sweep ON calls(status, started_at);
 
+-- Every historical row starts with connected_at NULL, which the dashboard reads
+-- as "never connected". Applied to real history that is a lie: a stranded call
+-- with a saved transcript, and a message a customer left, would be presented as
+-- a call that never happened. Any row with turns did reach a Durable Object, so
+-- give it a connected_at before the reclassification below can label it.
+--
+-- Both values here are estimates and the migration should admit it. call_turns.ts
+-- is when a turn was *written*, so MIN(ts) trails the real connect by one
+-- greeting — a few seconds late, and it is the closest thing the schema records.
+-- Where a turn somehow carries no timestamp we fall back to started_at, which is
+-- early by at most the attach window (15 minutes). Either beats NULL, which would
+-- assert something known to be false. Nothing downstream needs this to be exact:
+-- it decides a dashboard label, and an age compared against a 60-minute cutoff.
+UPDATE calls SET connected_at = COALESCE(
+    (SELECT MIN(ts) FROM call_turns WHERE call_turns.call_id = calls.id),
+    started_at
+  )
+ WHERE connected_at IS NULL
+   AND EXISTS (SELECT 1 FROM call_turns WHERE call_turns.call_id = calls.id);
+
 -- calls.status gains 'abandoned' (still 'active' past the stale window). Clear
 -- out the rows that were already stranded before the sweeper existed, so the
--- dashboard stops showing them as "Call in progress…" forever.
+-- dashboard stops showing them as "Call in progress…" forever. Rows backfilled
+-- above now read as "Call interrupted" instead, which is what they were.
 UPDATE calls SET status = 'abandoned', ended_at = datetime('now')
  WHERE status = 'active' AND started_at < datetime('now', '-60 minutes');
