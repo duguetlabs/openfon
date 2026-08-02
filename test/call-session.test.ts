@@ -72,7 +72,9 @@ class FakeStorage {
   async deleteAll(): Promise<void> {
     this.map.clear();
   }
+  failAlarms = false; // setAlarm rejecting while put succeeds
   async setAlarm(at: number): Promise<void> {
+    if (this.failAlarms) throw new Error('alarm unavailable');
     this.alarmAt = at;
   }
   async deleteAlarm(): Promise<void> {
@@ -278,6 +280,28 @@ describe('second attach to a live call', () => {
     storage.failPuts = false;
     const retry = await session.fetch(upgradeRequest());
     expect(retry.status).toBe(101);
+    serverSockets.at(-1)!.receive({ type: 'start' });
+    await flush();
+    expect(serverSockets.at(-1)!.countOf('ready')).toBe(1);
+  });
+
+  it('recovers cleanly when the alarm half of arming fails', async () => {
+    // Arming persists state and schedules the alarm that acts on it; if only
+    // the first half lands, the row sits active with nothing that will ever
+    // finalize it. The atomicity itself comes from Workers coalescing writes
+    // issued without an intervening await, which a hand-written double cannot
+    // reproduce — so this asserts the part that is observable here: a failed
+    // arm leaves no socket and the next attach is a clean one.
+    const { session, storage } = newSession();
+    storage.failAlarms = true;
+
+    await expect(session.fetch(upgradeRequest())).rejects.toThrow('alarm unavailable');
+    expect(storage.alarmAt).toBeNull();
+
+    storage.failAlarms = false;
+    const retry = await session.fetch(upgradeRequest());
+    expect(retry.status).toBe(101); // no stale socket left behind
+    expect(storage.alarmAt).not.toBeNull(); // armed properly this time
     serverSockets.at(-1)!.receive({ type: 'start' });
     await flush();
     expect(serverSockets.at(-1)!.countOf('ready')).toBe(1);
@@ -1155,6 +1179,31 @@ describe('watchdog alarm', () => {
     expect(storage.alarmAt).toBeNull(); // and it stops
   });
 
+  it('stops retrying on its own, without relying on a sweep existing', async () => {
+    // This has to be correct standing alone: `main` has no scheduled handler
+    // and no cron, so an unbounded loop would keep the object alive and hit D1
+    // once a minute forever. The ceiling is the DO's own, not the sweep's.
+    vi.useFakeTimers();
+    const { session, storage, ctl, callUpdates } = newSession();
+    await session.fetch(upgradeRequest());
+    serverSockets[0].receive({ type: 'start' });
+    await flush();
+
+    ctl.failUpdates = true;
+    let ticks = 0;
+    while (storage.alarmAt !== null && ticks < 500) {
+      vi.setSystemTime(storage.alarmAt);
+      storage.alarmAt = null;
+      await session.alarm();
+      ticks++;
+    }
+
+    expect(storage.alarmAt).toBeNull(); // it gave up rather than looping forever
+    expect(ticks).toBeLessThan(60); // ~30 min at a one-minute cadence
+    expect(callUpdates()).toHaveLength(0);
+    expect(storage.map.get('callId')).toBe('call-1'); // left for a later sweep
+  });
+
   it('retries often enough to land inside the sweep window', async () => {
     // The sweep retires a connected call at 60 minutes and forecloses recovery,
     // so the retry cadence has to fit many attempts inside that hour — this is
@@ -1333,6 +1382,12 @@ describe('watchdog alarm', () => {
 // NOT COVERED by this file, and worth stating plainly:
 //   * Real Workers runtime semantics — DO eviction, hibernation, and whether an
 //     alarm survives a deploy. These fakes assert our logic, not the platform's.
+//   * Storage write coalescing. `commit()` relies on writes issued without an
+//     intervening await landing in one transaction; FakeStorage applies each
+//     write as it is called, so a test here cannot tell an atomic arm from a
+//     partial one. What is asserted instead is the recoverable state a failed
+//     arm leaves behind. If someone reorders those writes to await one first,
+//     these tests will still pass — the guard is the comment on commit().
 //   * The realtime audio path end to end (base64 PCM framing, barge-in flushes).
 //   * D1 behaviour: the fake never enforces constraints or returns errors.
 //   * The /ws/call/:callId route in src/index.ts, which decides who reaches the

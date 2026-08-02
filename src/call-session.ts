@@ -895,6 +895,9 @@ export class CallSession implements DurableObject {
   // arrived and is still working, which normally takes under ten seconds but
   // has D1, an engine handshake and TTS behind it.
   private static readonly START_CEILING_MS = 90_000;
+  // How long finalize keeps retrying before leaving the row to a sweep.
+  private static readonly MAX_FINALIZE_RETRY_MS = 30 * 60_000;
+  private firstFinalizeFailure = 0; // fallback clock when storage is unreadable
   // 0 = this instance has seen no activity of its own. Not the same as "the
   // call was just active": an alarm can run on an object rebuilt after
   // eviction, where any Date.now() initializer would look like fresh activity
@@ -908,10 +911,22 @@ export class CallSession implements DurableObject {
   // squatter pinging every 20 s looks perfectly alive. Liveness and progress are
   // different properties, so this gets its own deadline, armed at upgrade and
   // retired by `ready`. Persisted rather than a timer, so it survives eviction.
+  // Durable Object writes issued without an await between them are coalesced
+  // into one transaction, so they land together or not at all. Every place this
+  // class persists state and schedules the alarm that acts on it needs that:
+  // a put that commits while its setAlarm fails leaves a row with nothing left
+  // to finalize it, which is the stranding this whole class exists to prevent.
+  // Callers must pass the started promises, never await one first.
+  private async commit(...writes: Promise<unknown>[]): Promise<void> {
+    await Promise.all(writes);
+  }
+
   private async armStartDeadline(): Promise<void> {
     const deadline = Date.now() + CallSession.START_DEADLINE_MS;
-    await this.state.storage.put({ callId: this.callId, startDeadline: deadline });
-    await this.state.storage.setAlarm(deadline);
+    await this.commit(
+      this.state.storage.put({ callId: this.callId, startDeadline: deadline }),
+      this.state.storage.setAlarm(deadline)
+    );
   }
 
   private async armWatchdog(): Promise<void> {
@@ -923,13 +938,15 @@ export class CallSession implements DurableObject {
     // watchdog will honour — it would hang up on a caller mid-conversation.
     // Folded in here it either lands with the rest of the watchdog state or
     // not at all, and by this point the call is going ahead.
-    await this.state.storage.put({
-      callId: this.callId,
-      startDeadline: 0,
-      hardDeadline: now + CallSession.MAX_CALL_MS,
-      lastActivity: now,
-    });
-    await this.state.storage.setAlarm(now + CallSession.WATCHDOG_TICK_MS);
+    await this.commit(
+      this.state.storage.put({
+        callId: this.callId,
+        startDeadline: 0,
+        hardDeadline: now + CallSession.MAX_CALL_MS,
+        lastActivity: now,
+      }),
+      this.state.storage.setAlarm(now + CallSession.WATCHDOG_TICK_MS)
+    );
   }
 
   async alarm(): Promise<void> {
@@ -988,8 +1005,10 @@ export class CallSession implements DurableObject {
       // deadline above) or one we cut off ourselves records a failure.
       return this.finalizeFromAlarm(now);
     }
-    await this.state.storage.put('lastActivity', activity);
-    await this.state.storage.setAlarm(now + CallSession.WATCHDOG_TICK_MS);
+    await this.commit(
+      this.state.storage.put('lastActivity', activity),
+      this.state.storage.setAlarm(now + CallSession.WATCHDOG_TICK_MS)
+    );
   }
 
   // The single exit for every watchdog-initiated finalize, so no branch can
@@ -1009,6 +1028,22 @@ export class CallSession implements DurableObject {
     try {
       await this.finalize();
     } catch (err) {
+      // Its own ceiling, not one borrowed from the sweep. This has to be
+      // correct standing alone: on main there is no scheduled handler and no
+      // cron, so an unbounded loop here would keep a Durable Object alive and
+      // hit D1 once a minute forever. Measured from the frozen end of the call,
+      // which is already persisted for the retry, so it costs no extra state
+      // and survives eviction.
+      this.firstFinalizeFailure ||= now;
+      const ending = await this.state.storage.get<{ endedAt: number }>('ending');
+      const trying = now - (ending?.endedAt ?? this.firstFinalizeFailure);
+      if (trying >= CallSession.MAX_FINALIZE_RETRY_MS) {
+        console.error(
+          `call ${this.callId}: giving up on finalize after ${Math.round(trying / 60_000)}m — leaving the row to be swept`,
+          err
+        );
+        return; // stop rescheduling; the row stays 'active' for a later sweep
+      }
       console.error(`call ${this.callId}: finalize failed, retrying at the next tick`, err);
       await this.state.storage.setAlarm(now + CallSession.WATCHDOG_TICK_MS);
     }
@@ -1064,8 +1099,7 @@ export class CallSession implements DurableObject {
 
   private async clearWatchdog(): Promise<void> {
     try {
-      await this.state.storage.deleteAlarm();
-      await this.state.storage.deleteAll();
+      await this.commit(this.state.storage.deleteAlarm(), this.state.storage.deleteAll());
     } catch (err) {
       console.error('watchdog cleanup failed', err);
     }
