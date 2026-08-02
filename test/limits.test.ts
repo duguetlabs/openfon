@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import worker, { sweepStaleCalls } from '../src/index';
 import { FakeD1, UPGRADED, fakeCtx, fakeEnv } from './fake-d1';
 import { hashPassword } from '../src/auth';
+import { CallSession } from '../src/call-session';
 
 const MINUTE = 60_000;
 
@@ -176,8 +177,10 @@ describe('per-business call caps', () => {
     expect(busy.status).toBe(429);
     expect(await busy.json()).toEqual({ error: expect.stringContaining('All lines are busy') });
 
-    // Only the sweep releases it, and only once the row is past STALE_CONNECTED.
-    vi.setSystemTime(new Date('2026-08-01T13:10:00Z'));
+    // Only the sweep releases it, and only once the row is past STALE_CONNECTED
+    // — 90 minutes, chosen to sit clear of CallSession's own 30-minute call cap
+    // plus its 30 minutes of finalize retries.
+    vi.setSystemTime(new Date('2026-08-01T13:35:00Z'));
     expect(await sweepStaleCalls(env)).toBe(1);
     expect((await start()).status).toBe(200);
   });
@@ -320,13 +323,36 @@ describe('sweepStaleCalls', () => {
     expect(late.status).toBe('active');
   });
 
-  it('retires a connected call stranded by a worker restart', async () => {
+  it('leaves a connected row alone until the Durable Object has spent its own budget', async () => {
     const db = new FakeD1();
-    const stranded = db.seedCall({
-      id: 'deploy-victim',
+    // The one place two PRs' timing budgets have to agree. CallSession caps a
+    // call at MAX_CALL_MS and then retries finalize for up to
+    // MAX_FINALIZE_RETRY_MS before giving up and leaving the row to be swept, so
+    // until that total is spent the row is still its to finish — and sweeping it
+    // early throws away the summary a retry could still write. Read off the real
+    // constants rather than restated here: if either budget grows, this fails and
+    // STALE_CONNECTED gets looked at again, which a comment could never force.
+    const owned = CallSession as unknown as { MAX_CALL_MS: number; MAX_FINALIZE_RETRY_MS: number };
+    const budget = owned.MAX_CALL_MS + owned.MAX_FINALIZE_RETRY_MS;
+    const stillTheirs = db.seedCall({
+      id: 'do-still-trying',
       business_id: 'biz1',
-      started_at: Date.now() - 90 * MINUTE,
-      connected_at: Date.now() - 90 * MINUTE,
+      started_at: Date.now() - budget - MINUTE,
+      connected_at: Date.now() - budget - MINUTE,
+    });
+    expect(await sweepStaleCalls(fakeEnv(db))).toBe(0);
+    expect(stillTheirs.status).toBe('active');
+  });
+
+  it('retires a connected call the Durable Object could not clear itself', async () => {
+    const db = new FakeD1();
+    // Past CallSession's 30-minute call cap and its 30 minutes of finalize
+    // retries, so the DO has definitively given up and handed this over.
+    const stranded = db.seedCall({
+      id: 'do-gave-up',
+      business_id: 'biz1',
+      started_at: Date.now() - 100 * MINUTE,
+      connected_at: Date.now() - 100 * MINUTE,
     });
     expect(await sweepStaleCalls(fakeEnv(db))).toBe(1);
     expect(stranded.status).toBe('abandoned');

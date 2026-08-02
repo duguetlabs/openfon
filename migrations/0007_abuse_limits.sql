@@ -62,4 +62,4 @@ UPDATE calls SET status = 'abandoned', ended_at = datetime('now')
 
 UPDATE calls SET status = 'abandoned', ended_at = datetime('now')
  WHERE status = 'active' AND connected_at IS NOT NULL
-   AND connected_at < datetime('now', '-60 minutes');
+   AND connected_at < datetime('now', '-90 minutes');

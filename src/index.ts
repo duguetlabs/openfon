@@ -64,12 +64,20 @@ const LIMITS = {
 // connects immediately, so a longer gap means nobody is coming. Doubles as the
 // attach window, which stops a leaked callId from being reusable forever.
 const STALE_UNCONNECTED = '-15 minutes';
-// A connected call this old is a leftover from a worker restart (every deploy
-// strands the calls in flight). Measured from connected_at, not started_at:
-// attachment is allowed for STALE_UNCONNECTED after the row is created, so the
-// two are up to 15 minutes apart and only one of them is when the call began.
-// Deliberately longer than any plausible call so the sweeper can never cut a
-// live conversation off.
+// A connected call this old is a leftover the Durable Object could not clear
+// itself. Measured from connected_at, not started_at: attachment is allowed for
+// STALE_UNCONNECTED after the row is created, so the two are up to 15 minutes
+// apart and only one of them is when the call began.
+//
+// The number is set by CallSession's own budgets, not by guesswork. It caps a
+// call at MAX_CALL_MS (30 min), and if the finalize that follows keeps failing
+// it retries for MAX_FINALIZE_RETRY_MS (30 min) before giving up and — in its
+// own words — leaving the row to be swept. So a row can be legitimately owned by
+// a live Durable Object for a full hour, and a sweep at exactly 60 minutes would
+// hand over at the same instant the DO gives up: the last retry would find the
+// row already 'abandoned' (finalize writes WHERE status = 'active') and the call
+// would lose the summary that retry was about to produce. 90 leaves a 30-minute
+// margin so the DO always finishes losing before this starts trying.
 //
 // This is the *only* place a connected call's age is judged. The concurrency
 // count deliberately has no window of its own: it counts every connected row
@@ -77,7 +85,7 @@ const STALE_UNCONNECTED = '-15 minutes';
 // is the single event that releases one. Two independent windows would disagree
 // about whether a call is live, and the shorter one would silently admit callers
 // past the cap.
-const STALE_CONNECTED = '-60 minutes';
+const STALE_CONNECTED = '-90 minutes';
 
 function clientIp(c: Ctx): string {
   // Set by Cloudflare on every edge request; absent under `wrangler dev`, where

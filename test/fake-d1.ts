@@ -10,7 +10,7 @@ type Row = Record<string, unknown>;
 
 const OFFSETS: Record<string, number> = {
   '-15 minutes': -15 * 60_000,
-  '-60 minutes': -60 * 60_000,
+  '-90 minutes': -90 * 60_000,
   '-1 day': -86_400_000,
 };
 
