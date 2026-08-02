@@ -15,6 +15,7 @@ export default function Widget() {
   const [agentName, setAgentName] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [notFound, setNotFound] = useState(false);
+  const [throttled, setThrottled] = useState(false);
   const [phase, setPhase] = useState<Phase>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [lines, setLines] = useState<CaptionLine[]>([]);
@@ -31,6 +32,10 @@ export default function Widget() {
     if (!slug) return;
     fetch(`/api/public/agent/${slug}`)
       .then(async (r) => {
+        // A rate-limited caller is not a caller at the wrong address. Offices
+        // share one IP, so telling a real customer the line doesn't exist is
+        // both wrong and unrecoverable — they have no reason to retry.
+        if (r.status === 429) return setThrottled(true);
         if (!r.ok) throw new Error();
         const d = (await r.json()) as { businessName: string; agentName: string };
         setBusinessName(d.businessName);
@@ -79,6 +84,13 @@ export default function Widget() {
 
   async function startCall() {
     if (!slug) return;
+    // Hang up whatever was here first. A call that ended in an error leaves its
+    // socket open — the server tells the caller the call broke but does not close
+    // it — so replacing the ref without this leaks a live session per retry. Each
+    // one holds a line against the business's concurrency cap until the sweep
+    // retires it, which is how one person clicking "try again" through a provider
+    // blip can put their own agent on "all lines are busy" for the next hour.
+    callRef.current?.hangup();
     setPhase('connecting');
     setLines([]);
     const call = new VoiceCall();
@@ -102,6 +114,25 @@ export default function Widget() {
     if (!textInput.trim()) return;
     callRef.current?.sendText(textInput.trim());
     setTextInput('');
+  }
+
+  if (throttled) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-pine-night text-paper">
+        <Logo dark />
+        <p className="font-display text-2xl">Too many calls from your network.</p>
+        <p className="max-w-sm text-center text-paper/60">
+          The line is fine — this connection has just made a lot of calls in the last minute. Wait a moment and
+          reload.
+        </p>
+        <button
+          onClick={() => location.reload()}
+          className="rounded-[10px] border border-paper/15 bg-paper/10 px-4 py-2 font-mono text-xs font-semibold transition-colors hover:border-paper/30 hover:bg-paper/15"
+        >
+          try again
+        </button>
+      </div>
+    );
   }
 
   if (notFound) {

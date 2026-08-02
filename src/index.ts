@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import type { Env, Business, AgentSettings } from './types';
 import { createSession, deleteSession, getUserIdFromSession, hashPassword, newId, verifyPassword } from './auth';
@@ -8,6 +9,7 @@ import { CallSession } from './call-session';
 export { CallSession };
 
 type Vars = { userId: string };
+type Ctx = Context<{ Bindings: Env; Variables: Vars }>;
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 
 const COOKIE = 'ofs';
@@ -26,6 +28,189 @@ function newToken4(): string {
   return [...crypto.getRandomValues(new Uint8Array(2))].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// ---------- abuse limits ----------
+// /api/public/* and /api/auth/login are reachable by anyone on the internet, and
+// a call row is a ticket to a Durable Object that spends the owner's LLM key.
+// Counters live in D1 (fixed windows) rather than in the Cloudflare Rate
+// Limiting binding: D1 is already a hard dependency and needs no account-level
+// resource, the binding cannot express per-day or per-business counts, and its
+// per-colo scope would let a distributed burst through anyway. Self-hosters on
+// the free plan get the same behaviour as everyone else.
+//
+// Everything tunable lives in LIMITS and the two staleness constants below.
+interface Limit {
+  name: string;
+  window: number; // seconds
+  max: number; // requests allowed per window
+}
+const LIMITS = {
+  // Every /api/public/* request. A widget page load is two of them — the agent
+  // lookup and the call start — so 30 is fifteen page loads a minute from one
+  // address, well past any legitimate NAT and still cheap to store.
+  //
+  // This number is also the instance's write budget, which is why it is not
+  // larger. Each request that lands inside it costs exactly one D1 row write, so
+  // an address saturating it for a full day costs 30 x 60 x 24 = 43,200 writes
+  // against D1's free-tier ceiling of 100,000/day, leaving the rest for call
+  // rows, transcripts and the sweep. At the old 60 — with call starts billing a
+  // second row on top — a client breaking no rule at all reached 100,800 and
+  // took the instance's own limiter offline with it.
+  publicApi: { name: 'pub', window: 60, max: 30 },
+  // Both are reserved on every attempt, and they do different jobs.
+  //
+  // Per-IP is the only real ceiling: it bounds how much work one address can
+  // demand across every email it tries, and a success gives back only its own
+  // reservation, never the bucket's history.
+  //
+  // Per-email refuses a wrong password from a repeat guesser and slows the next
+  // one down. It is deliberately *not* a bound on guesses or on work — the only
+  // version that would be also locks an owner out of their own account for the
+  // price of five requests. The login handler sets out the trade in full; it is
+  // a choice, not a limiter that quietly failed.
+  loginIp: { name: 'lgip', window: 900, max: 20 },
+  // How many *successful* sign-ins an address gets refunded before they start
+  // spending the per-IP allowance like everything else. Far beyond what a shared
+  // office does in a quarter of an hour — sessions last thirty days — and finite,
+  // so a loop of deliberately correct logins cannot run for ever.
+  loginOk: { name: 'lgok', window: 900, max: 30 },
+  loginEmail: { name: 'lgem', window: 900, max: 5 },
+} satisfies Record<string, Limit>;
+
+// Call creation, counted in a second column of the *same* row as publicApi
+// rather than a bucket of its own. Two buckets meant one call start billed two
+// D1 row writes for one request, which is how the limiter's own cost came to
+// exceed the quota it was protecting. They share a window, so they can share a
+// row: one upsert, both ceilings. A caller who reloads the widget a few times is
+// fine, and office NAT means several legitimate callers share one address.
+const MAX_STARTS_PER_WINDOW = 10;
+
+// A call row whose WebSocket never opened is dead after this: the widget
+// connects immediately, so a longer gap means nobody is coming. Doubles as the
+// attach window, which stops a leaked callId from being reusable forever.
+const STALE_UNCONNECTED = '-15 minutes';
+// A connected call this old is a leftover the Durable Object could not clear
+// itself. Measured from connected_at, not started_at: attachment is allowed for
+// STALE_UNCONNECTED after the row is created, so the two are up to 15 minutes
+// apart and only one of them is when the call began.
+//
+// The number is set by CallSession's own budgets, not by guesswork. It caps a
+// call at MAX_CALL_MS (30 min), and if the finalize that follows keeps failing
+// it retries for MAX_FINALIZE_RETRY_MS (30 min) before giving up and — in its
+// own words — leaving the row to be swept. So a row can be legitimately owned by
+// a live Durable Object for a full hour, and a sweep at exactly 60 minutes would
+// hand over at the same instant the DO gives up: the last retry would find the
+// row already 'abandoned' (finalize writes WHERE status = 'active') and the call
+// would lose the summary that retry was about to produce. 90 leaves a 30-minute
+// margin so the DO always finishes losing before this starts trying.
+//
+// This is the *only* place a connected call's age is judged. The concurrency
+// count deliberately has no window of its own: it counts every connected row
+// that is still 'active', so a genuinely long call keeps its slot and the sweep
+// is the single event that releases one. Two independent windows would disagree
+// about whether a call is live, and the shorter one would silently admit callers
+// past the cap.
+const STALE_CONNECTED = '-90 minutes';
+
+function clientIp(c: Ctx): string {
+  // Set by Cloudflare on every edge request; absent under `wrangler dev`, where
+  // one shared bucket is the safe answer.
+  return c.req.header('CF-Connecting-IP') ?? 'local';
+}
+
+function windowStart(limit: Limit, now = Date.now()): number {
+  return Math.floor(now / 1000 / limit.window) * limit.window;
+}
+
+// What a request took from a bucket. The window travels with it: a refund has to
+// land on the row the reservation was made in, and a request that starts near a
+// boundary finishes on the other side of one. Recomputing the window at refund
+// time leaves the old window over-counted and decrements a new window the
+// request never touched — wrong in both directions at once.
+interface Reservation {
+  over: boolean; // this request took the count past the limit
+  window: number;
+}
+
+// Counts this request and reports whether it busted the limit. One round trip:
+// D1 supports INSERT ... ON CONFLICT ... RETURNING.
+//
+// The WHERE on the conflict branch is what makes a refusal free. Without it, a
+// source that keeps hammering after being blocked buys a row write per request,
+// forever — so the harder the flood, the more D1 quota the limiter itself burns,
+// and when that quota runs out `consume` starts throwing and takes every public
+// and login route down with it. A limiter that costs the operator more the
+// harder it is attacked is worth less than no limiter at all. When the count is
+// already at the ceiling the upsert matches nothing, writes nothing, and returns
+// no row — an empty result is the refusal.
+async function consume(env: Env, limit: Limit, subject: string): Promise<Reservation> {
+  const window = windowStart(limit);
+  const row = await env.DB.prepare(
+    `INSERT INTO rate_counters (bucket, window_start, count) VALUES (?, ?, 1)
+     ON CONFLICT(bucket, window_start) DO UPDATE SET count = rate_counters.count + 1
+       WHERE rate_counters.count < ?
+     RETURNING count`
+  )
+    .bind(`${limit.name}:${subject}`, window, limit.max)
+    .first<{ count: number }>();
+  // No row means the conflict branch declined to write: already at the ceiling.
+  return { over: !row || row.count > limit.max, window };
+}
+
+async function clearLimit(env: Env, limit: Limit, subject: string): Promise<void> {
+  await env.DB.prepare('DELETE FROM rate_counters WHERE bucket = ?').bind(`${limit.name}:${subject}`).run();
+}
+
+// Give back exactly the one reservation this request made — not the bucket's
+// history. Clearing the whole bucket on success is a bypass wherever the bucket
+// spans more than the thing that succeeded.
+async function refundOne(env: Env, limit: Limit, subject: string, taken: Reservation): Promise<void> {
+  await env.DB.prepare('UPDATE rate_counters SET count = count - 1 WHERE bucket = ? AND window_start = ? AND count > 0')
+    .bind(`${limit.name}:${subject}`, taken.window)
+    .run();
+}
+
+function tooMany(c: Ctx, message: string, retryAfter: number) {
+  return c.json({ error: message }, 429, { 'Retry-After': String(retryAfter) });
+}
+
+// Both public ceilings in one row write. `count` gates in SQL, so anything past
+// it costs nothing at all; `starts` is judged on the returned value, so a start
+// refused for exceeding its own ceiling does write — but only up to the `count`
+// gate, which is what bounds the instance's write budget either way.
+async function consumePublic(
+  env: Env,
+  subject: string,
+  isStart: boolean
+): Promise<{ overAll: boolean; overStart: boolean }> {
+  const limit = LIMITS.publicApi;
+  const row = await env.DB.prepare(
+    `INSERT INTO rate_counters (bucket, window_start, count, starts) VALUES (?, ?, 1, ?)
+     ON CONFLICT(bucket, window_start) DO UPDATE SET
+         count = rate_counters.count + 1,
+         starts = rate_counters.starts + excluded.starts
+       WHERE rate_counters.count < ?
+     RETURNING count, starts`
+  )
+    .bind(`${limit.name}:${subject}`, windowStart(limit), isStart ? 1 : 0, limit.max)
+    .first<{ count: number; starts: number }>();
+  if (!row) return { overAll: true, overStart: false };
+  return { overAll: false, overStart: isStart && row.starts > MAX_STARTS_PER_WINDOW };
+}
+
+app.use('/api/public/*', async (c, next) => {
+  // The middleware owns both ceilings now: it is the one place that sees every
+  // public request, so counting here is what lets a start cost one write.
+  const isStart = c.req.method === 'POST' && new URL(c.req.url).pathname === '/api/public/call/start';
+  const taken = await consumePublic(c.env, clientIp(c), isStart);
+  if (taken.overAll) {
+    return tooMany(c, 'Too many requests. Please wait a moment and try again.', LIMITS.publicApi.window);
+  }
+  if (taken.overStart) {
+    return tooMany(c, 'Too many calls started from this connection. Please wait a minute.', LIMITS.publicApi.window);
+  }
+  await next();
+});
+
 // ---------- auth ----------
 app.post('/api/auth/signup', async (c) => {
   const { email, password } = await c.req.json<{ email?: string; password?: string }>();
@@ -42,13 +227,89 @@ app.post('/api/auth/signup', async (c) => {
   return c.json({ id, email: email.toLowerCase() });
 });
 
+// Well-formed but unmatchable: 16 zero-ish salt bytes and a 32-byte digest no
+// password derives to. Verifying against it on the miss path burns the same
+// 100k PBKDF2 iterations a real account pays, so the response time stops
+// disclosing whether the email exists. (POST /api/auth/signup still answers the
+// same question outright with its 409 — that is a deliberate UX call, and this
+// only closes the silent channel.)
+const DUMMY_HASH = 'BwcHBwcHBwcHBwcHBwcHBw==:CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws=';
+
+const TOO_MANY_LOGINS = 'Too many sign-in attempts. Please try again later.';
+
+// Applied to a wrong password once its email is over the limit. Long enough to
+// cost a sequential guesser an order of magnitude, short enough that an owner
+// who mistyped twice does not think the app has hung.
+const OVER_LIMIT_DELAY_MS = 1000;
+
 app.post('/api/auth/login', async (c) => {
   const { email, password } = await c.req.json<{ email?: string; password?: string }>();
+  const addr = clientIp(c);
+  const key = (email ?? '').toLowerCase();
+
+  // Reserve before working, never after. Reading a counter and incrementing it
+  // only on failure is the same count-then-act race as the daily cap: a parallel
+  // burst all reads a count under the limit and all of it goes on to run PBKDF2.
+  //
+  // Per-IP is reserved and checked first, and nothing else here runs until it
+  // passes. It is what bounds how much work this worker will do for one address
+  // across all the emails they care to try — and the email bucket is keyed on
+  // attacker-supplied text, so reserving it first would let a client that is
+  // already blocked mint a fresh counter row per request forever. A refused
+  // attacker must cost less than a served one, not more.
+  const ipTaken = await consume(c.env, LIMITS.loginIp, addr);
+  if (ipTaken.over) return tooMany(c, TOO_MANY_LOGINS, LIMITS.loginIp.window);
+
+  const emailTaken = await consume(c.env, LIMITS.loginEmail, key);
+
   const user = await c.env.DB.prepare('SELECT id, password_hash FROM users WHERE email = ?')
-    .bind((email ?? '').toLowerCase())
+    .bind(key)
     .first<{ id: string; password_hash: string }>();
-  if (!user || !password || !(await verifyPassword(password, user.password_hash))) {
+  const ok = await verifyPassword(password ?? '', user?.password_hash ?? DUMMY_HASH);
+  if (!user || !ok) {
+    // What the per-email bucket does, stated exactly, because it is easy to
+    // credit it with more: it refuses a *wrong* password once an address has had
+    // its five in the window, and it slows the next guess down. That is all.
+    //
+    // It is not a bound on guesses and not a bound on work. A correct password
+    // still gets in from here, and the verify above already ran, so an attacker
+    // spread over many addresses is limited by LIMITS.loginIp per address and by
+    // nothing at all per account. Making it a real bound means refusing before
+    // the password is checked, and then five wrong guesses from anyone who knows
+    // an owner's email locks that owner out of the only control surface this
+    // product has — with no 2FA, no email verification and no recovery flow to
+    // get back in. Between an account that can be shut off by a stranger for the
+    // price of five requests and an account whose defence against distributed
+    // guessing is password strength plus the per-IP ceiling, this takes the
+    // second. The trade is the point; it is not a limiter that quietly failed.
+    //
+    // The delay is worth what it is worth: a sequential guesser drops from ~10
+    // attempts a second to ~1, and it costs the operator no CPU, because Workers
+    // bill compute and this is a sleep. A parallel attacker is unaffected.
+    if (emailTaken.over) {
+      await new Promise((r) => setTimeout(r, OVER_LIMIT_DELAY_MS));
+      return tooMany(c, TOO_MANY_LOGINS, LIMITS.loginEmail.window);
+    }
     return c.json({ error: 'Invalid email or password' }, 401);
+  }
+  // Per-email is cleared outright: its whole job is to keep one account from
+  // being locked out, and a correct password proves ownership of that account.
+  //
+  // Per-IP gets its reservation back, but only while successes stay inside an
+  // allowance of their own. An unconditional refund made succeeding free, and
+  // signup is public, so anyone can hold valid credentials and loop /login
+  // forever: PBKDF2 every time, a handful of counter writes, and a session row
+  // that nothing ever removes, from one address that never advances a counter.
+  // Once loginOk is spent the refund stops, the per-IP counter starts climbing
+  // again, and the gate above — which runs before any verification — closes.
+  // That is what bounds the CPU as well as the writes; a check down here could
+  // only ever refuse after the work was already done.
+  //
+  // The refund goes back to the window the reservation came from, which a
+  // PBKDF2-length request can outlive.
+  await clearLimit(c.env, LIMITS.loginEmail, key);
+  if (!(await consume(c.env, LIMITS.loginOk, addr)).over) {
+    await refundOne(c.env, LIMITS.loginIp, addr, ipTaken);
   }
   const token = await createSession(c.env, user.id);
   setCookie(c, COOKIE, token, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 86400 });
@@ -125,7 +386,7 @@ app.put('/api/me/business/:id', async (c) => {
   if (!biz) return c.json({ error: 'Not found' }, 404);
   const b = await c.req.json<Partial<Business>>();
   await c.env.DB.prepare(
-    `UPDATE businesses SET name=?, description=?, address=?, phone=?, website=?, timezone=?, hours_json=?, services_json=?, faqs_json=?, closures_json=? WHERE id=?`
+    `UPDATE businesses SET name=?, description=?, address=?, phone=?, website=?, timezone=?, hours_json=?, services_json=?, faqs_json=?, closures_json=?, max_concurrent_calls=?, max_calls_per_day=? WHERE id=?`
   )
     .bind(
       b.name?.trim() || biz.name,
@@ -138,11 +399,19 @@ app.put('/api/me/business/:id', async (c) => {
       b.services_json ?? biz.services_json,
       b.faqs_json ?? biz.faqs_json,
       b.closures_json ?? biz.closures_json,
+      clampCap(b.max_concurrent_calls, biz.max_concurrent_calls, 50),
+      clampCap(b.max_calls_per_day, biz.max_calls_per_day, 100_000),
       biz.id
     )
     .run();
   return c.json({ ok: true });
 });
+
+// Caps always apply — there is no "unlimited", because an unlimited public
+// endpoint is exactly the bug this is fixing. Junk input keeps the old value.
+function clampCap(v: unknown, current: number, max: number): number {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= max ? v : current;
+}
 
 app.put('/api/me/business/:id/agent', async (c) => {
   const biz = await ownedBusiness(c.env, c.get('userId'), c.req.param('id'));
@@ -187,7 +456,7 @@ app.get('/api/me/business/:id/calls', async (c) => {
   const biz = await ownedBusiness(c.env, c.get('userId'), c.req.param('id'));
   if (!biz) return c.json({ error: 'Not found' }, 404);
   const { results } = await c.env.DB.prepare(
-    `SELECT id, channel, caller_id, status, started_at, ended_at, duration_s, summary, intent, message_json
+    `SELECT id, channel, caller_id, status, started_at, connected_at, ended_at, duration_s, summary, intent, message_json
      FROM calls WHERE business_id = ? ORDER BY started_at DESC LIMIT 100`
   )
     .bind(biz.id)
@@ -392,6 +661,30 @@ app.get('/api/me/voices', async (c) => {
   return c.json(out);
 });
 
+const BUSY = 'All lines are busy right now. Please try again in a moment.';
+
+// Only calls that actually opened a WebSocket count, so a caller reloading the
+// widget — which leaves a trail of unconnected rows — can never exhaust the
+// business's own budget. No age cutoff here on purpose: see STALE_CONNECTED.
+//
+// Known bound, not a guarantee: this counts *rows*, and only the Durable Object
+// can end a session. A row the sweep retires at 60 minutes frees its slot even
+// though the socket may still be open, so a caller who holds one that long is no
+// longer counted. Terminating that session needs a change inside CallSession,
+// which is not in this PR. What still holds meanwhile is the per-business daily
+// cap — it counts row creation, so session lifetime cannot dodge it — and the
+// per-IP call-start limit.
+function countLive(env: Env, businessId: string, exceptId: string) {
+  return env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM calls
+      WHERE business_id = ? AND id != ? AND status = 'active' AND connected_at IS NOT NULL`
+  ).bind(businessId, exceptId);
+}
+
+async function liveCalls(env: Env, businessId: string): Promise<number> {
+  return (await countLive(env, businessId, '').first<{ n: number }>())?.n ?? 0;
+}
+
 // ---------- public widget API ----------
 app.get('/api/public/agent/:slug', async (c) => {
   const biz = await c.env.DB.prepare('SELECT id, name, slug FROM businesses WHERE slug = ?')
@@ -406,31 +699,237 @@ app.get('/api/public/agent/:slug', async (c) => {
 
 app.post('/api/public/call/start', async (c) => {
   const { slug } = await c.req.json<{ slug?: string }>();
-  const biz = await c.env.DB.prepare('SELECT id FROM businesses WHERE slug = ?')
+  // The per-IP ceilings were already applied by the /api/public/* middleware.
+  const addr = clientIp(c);
+  const biz = await c.env.DB.prepare('SELECT id, max_concurrent_calls, max_calls_per_day FROM businesses WHERE slug = ?')
     .bind(slug ?? '')
-    .first<{ id: string }>();
+    .first<{ id: string; max_concurrent_calls: number; max_calls_per_day: number }>();
   if (!biz) return c.json({ error: 'Unknown agent' }, 404);
+
+  if ((await liveCalls(c.env, biz.id)) >= biz.max_concurrent_calls) {
+    return tooMany(c, BUSY, 30);
+  }
+
+  // Daily ceiling on the owner's provider spend. It is an availability trade the
+  // owner controls: better to go quiet than to wake up to a six-figure bill.
+  //
+  // One conditional statement: the row is inserted only if the day's count is
+  // under the cap, so a refusal writes nothing at all. Counting first and then
+  // inserting would be a TOCTOU the measured burst walks straight through — at
+  // 576 requests/sec every concurrent request reads a count under the cap and
+  // every one of them inserts — and inserting first and deleting on refusal, as
+  // this did, charged two `calls` writes plus their index updates for every
+  // rejection. That is the refusal-is-free property the limiter already has,
+  // applied to the row the limiter is protecting.
+  //
+  // A swept never-connected row is excluded from the count, because it is the one
+  // shape that provably cost nothing: the sweeper retired it, so its id can no
+  // longer attach, and it never reached a Durable Object to spend anything.
+  // Counting those turns a cap on *spend* into a cap on junk — a pre-upgrade
+  // burst above the limit would leave a business dark for a day the moment it
+  // migrated, and one address could reproduce that on purpose at ten ids a minute
+  // without ever opening a socket.
+  //
+  // Still-'active' rows do count even with no connection yet: an unattached but
+  // live ticket is a real reservation someone can still redeem. It stops counting
+  // when the sweep retires it, not before.
   const callId = newId();
-  await c.env.DB.prepare('INSERT INTO calls (id, business_id, channel, caller_id) VALUES (?, ?, ?, ?)')
-    .bind(callId, biz.id, 'web', c.req.header('CF-Connecting-IP') ?? 'anonymous')
+  const claim = await c.env.DB.prepare(
+    `INSERT INTO calls (id, business_id, channel, caller_id)
+     SELECT ?, ?, 'web', ?
+      WHERE (SELECT COUNT(*) FROM calls
+              WHERE business_id = ? AND started_at > datetime('now', '-1 day')
+                AND NOT (status = 'abandoned' AND connected_at IS NULL)) < ?`
+  )
+    .bind(callId, biz.id, addr === 'local' ? 'anonymous' : addr, biz.id, biz.max_calls_per_day)
     .run();
+  if ((claim.meta.changes ?? 0) !== 1) {
+    return tooMany(c, 'This agent has reached its daily call limit. Please try again tomorrow.', 3600);
+  }
   return c.json({ callId });
 });
 
 // ---------- websocket -> Durable Object ----------
 app.get('/ws/call/:callId', async (c) => {
   const callId = c.req.param('callId');
-  const exists = await c.env.DB.prepare('SELECT id FROM calls WHERE id = ? AND status = ?')
-    .bind(callId, 'active')
-    .first();
-  if (!exists) return c.json({ error: 'call not found' }, 404);
+  // Before anything touches the database. connected_at is what the concurrency
+  // cap counts, so a plain GET that could write it would let anyone make a
+  // business look busy for the length of the stale window at no cost — and
+  // without ever opening a socket. CallSession answers 426 to the same check.
+  if (c.req.header('Upgrade')?.toLowerCase() !== 'websocket') {
+    return c.json({ error: 'expected websocket' }, 426);
+  }
+  // Bounded by started_at, not just status: a callId that has sat unused past
+  // the stale window is not attachable, even before the sweeper retires it.
+  const call = await c.env.DB.prepare(
+    `SELECT calls.id, calls.business_id, businesses.max_concurrent_calls
+       FROM calls JOIN businesses ON businesses.id = calls.business_id
+      WHERE calls.id = ? AND calls.status = 'active' AND calls.started_at > datetime('now', ?)`
+  )
+    .bind(callId, STALE_UNCONNECTED)
+    .first<{ id: string; business_id: string; max_concurrent_calls: number }>();
+  if (!call) return c.json({ error: 'call not found' }, 404);
+  // The Durable Object — and every provider request it makes — starts here, so
+  // this is where the concurrency cap has to bite. Checking only at /call/start
+  // would let a minute's worth of call ids become that many simultaneous
+  // sessions, which is the shape of the measured attack.
+  //
+  // Claim the slot and count it in one batch, i.e. one D1 transaction. Counting
+  // first and marking after loses the race: fifty sockets opened at once all
+  // read zero live calls and all get in.
+  //
+  // The UPDATE is conditional, so its affected-row count says whether *this*
+  // request is the one that took the slot. Zero means the id was already
+  // connected, and a second attach on a live id is refused outright: it would
+  // ride one row's slot while driving a second session's worth of provider work,
+  // and both caps would count it once. (CallSession's own half of that bug — the
+  // socket swap — is fixed separately; refusing at the route is cheap and does
+  // not depend on which lands first.)
+  const claim = await c.env.DB.batch<{ n: number }>([
+    c.env.DB.prepare("UPDATE calls SET connected_at = datetime('now') WHERE id = ? AND connected_at IS NULL").bind(callId),
+    countLive(c.env, call.business_id, callId),
+  ]);
+  if ((claim[0].meta.changes ?? 0) !== 1) {
+    return c.json({ error: 'call already connected' }, 409);
+  }
+  if ((claim[1].results[0]?.n ?? 0) >= call.max_concurrent_calls) {
+    // Release the slot we just claimed, so a refused attach cannot hold a line
+    // open until the sweeper next runs. connected_at goes back to NULL with it:
+    // this row never reached a Durable Object, and leaving the marker set would
+    // show it in the dashboard as a real conversation that got cut off.
+    await c.env.DB.prepare(
+      "UPDATE calls SET status = 'abandoned', connected_at = NULL, ended_at = datetime('now') WHERE id = ?"
+    )
+      .bind(callId)
+      .run();
+    return c.json({ error: BUSY }, 429, { 'Retry-After': '30' });
+  }
   const id = c.env.CALL_SESSION.idFromName(callId);
   const stub = c.env.CALL_SESSION.get(id);
   const url = new URL(c.req.raw.url);
   url.searchParams.set('call', callId);
-  return stub.fetch(new Request(url.toString(), c.req.raw));
+  // Hand the slot back only on an answer that proves no session owns this call.
+  //
+  // Not every error qualifies, and 409 is the counter-example that matters:
+  // CallSession returns it for "already connected", meaning a session *is* live
+  // on this row. Releasing then clears a live call's slot. That is reachable
+  // without any race — during a rollout an older worker serves calls without
+  // writing connected_at, so a second attach can claim a row whose session is
+  // already running, get the 409, and knock the live call out of the concurrency
+  // count until the sweep repairs it from its turns.
+  //
+  // 426 is the safe one: CallSession answers it before touching any state, so
+  // nothing was started. A rejected fetch is safe for the same reason — the
+  // object was never reached. Anything else keeps the marker; holding a slot a
+  // little too long is recoverable, releasing a live one is not.
+  const releaseSlot = () =>
+    c.env.DB.prepare('UPDATE calls SET connected_at = NULL WHERE id = ?').bind(callId).run();
+  // Normalized, because the two checks are not the same check. This route
+  // compares case-insensitively, as RFC 6455 requires; CallSession compares
+  // against the literal 'websocket'. So `Upgrade: WebSocket` passed here, claimed
+  // the slot, and came back 426 — which then released it without retiring the
+  // row, leaving the id replayable until the stale cutoff, two UPDATEs a go, on a
+  // path that sits outside the rate limiter. Sending the canonical value means
+  // both checks reach the same verdict.
+  const headers = new Headers(c.req.raw.headers);
+  headers.set('Upgrade', 'websocket');
+  let res: Response;
+  try {
+    res = await stub.fetch(new Request(url.toString(), { method: 'GET', headers }));
+  } catch (err) {
+    await releaseSlot();
+    console.error('call session unreachable', err);
+    return c.json({ error: 'could not reach the call session' }, 502);
+  }
+  if (res.status === 426) await releaseSlot();
+  return res;
 });
 
 app.get('/api/health', (c) => c.json({ ok: true, service: 'openfon' }));
 
-export default app;
+// ---------- cron sweep ----------
+// A row whose WebSocket never opened has no Durable Object, so no alarm inside
+// CallSession can ever rescue it — only a scheduled pass over the table can.
+// The second query covers the other stranding path: a worker restart (i.e. every
+// deploy) leaves whatever was in flight 'active' with no ended_at.
+// The two branches age from different columns, so they are written out rather
+// than sharing a template — the column is the part that differs, and hiding it
+// behind a parameter is how it came to be wrong in the first place.
+//
+// connected_at's NULL-ness is a moving target for as long as two worker versions
+// can serve, so the sweep repairs it at runtime rather than trusting a migration
+// to have established it. See the first statement.
+//
+// This is a FLOOR, not a retry, and the difference matters to anything thinking
+// of leaning on it. The write is terminal: CallSession.finalize() selects
+// `WHERE id = ? AND status = 'active'` and returns early when that misses, so
+// once a row is swept no later attempt can ever complete it. summary, intent,
+// message_json and duration_s are written only by that one finalize UPDATE, so a
+// call this sweep retires never gets any of them — including the structured
+// callback message a caller left. call_turns are written per turn, so the raw
+// transcript survives and the row reads "Call interrupted"; the extracted
+// message does not. Recovering a failed finalize is worth doing where the
+// session still exists, because only there can a summary still be produced.
+export async function sweepStaleCalls(env: Env, now = Date.now()): Promise<number> {
+  const res = await env.DB.batch([
+    // Reconcile before classifying. A row with saved turns reached a Durable
+    // Object by definition, so connected_at IS NULL there means the row was
+    // served by a worker that predates the column — which is not only ancient
+    // history: `npm run deploy` applies migrations *before* uploading, so the old
+    // worker keeps serving through the rollout and every call it takes in that
+    // window lands with a NULL. The migration's one-time backfill cannot see
+    // those; it already ran. Classified as-is they take the never-dialled branch
+    // and a real transcript gets labelled "Never connected".
+    //
+    // Same COALESCE rule the migration uses, for the same reason: MIN(ts) trails
+    // the real connect by one greeting, started_at is early by at most the attach
+    // window, and either beats NULL, which asserts something known to be false.
+    // Runs inside the batch, so the two statements below see the repair.
+    env.DB.prepare(
+      `UPDATE calls SET connected_at = COALESCE(
+           (SELECT MIN(ts) FROM call_turns WHERE call_turns.call_id = calls.id),
+           started_at
+         )
+        WHERE status = 'active' AND connected_at IS NULL
+          AND EXISTS (SELECT 1 FROM call_turns WHERE call_turns.call_id = calls.id)`
+    ),
+    // Never dialled: measured from when the id was handed out, because that is
+    // the only timestamp such a row has.
+    env.DB.prepare(
+      `UPDATE calls SET status = 'abandoned', ended_at = datetime('now')
+        WHERE status = 'active' AND connected_at IS NULL AND started_at < datetime('now', ?)`
+    ).bind(STALE_UNCONNECTED),
+    // Connected: measured from when the session began, not when the row was
+    // created. Attachment is allowed for 15 minutes after creation, so ageing
+    // this branch from started_at would retire a caller who connected at minute
+    // 14 only 46 minutes into their call — cut off mid-conversation, and
+    // mislabelled as interrupted on the way out.
+    env.DB.prepare(
+      `UPDATE calls SET status = 'abandoned', ended_at = datetime('now')
+        WHERE status = 'active' AND connected_at IS NOT NULL AND connected_at < datetime('now', ?)`
+    ).bind(STALE_CONNECTED),
+    // Fixed-window counters are only read for the current window; a day of
+    // history is plenty of slack for the longest limiter.
+    env.DB.prepare('DELETE FROM rate_counters WHERE window_start < ?').bind(Math.floor(now / 1000) - 86400),
+    // Expired sessions were never removed by anything. That was survivable while
+    // rows only arrived when a person signed in; it stopped being survivable once
+    // it became clear a caller with valid credentials can mint them in a loop.
+    // The login allowance bounds the rate, this bounds the residue.
+    //
+    // The cutoff is generated here rather than by datetime('now') because
+    // createSession stores toISOString() and SQLite compares these as TEXT: the
+    // 'T' separator sorts after datetime()'s space, so every session that expired
+    // earlier *today* sorted above the cutoff and survived until the date rolled
+    // over. Same producer on both sides is the only way that comparison is sound.
+    env.DB.prepare('DELETE FROM sessions WHERE expires_at < ?').bind(new Date(now).toISOString()),
+  ]);
+  // Retired rows only — the reconciliation at res[0] repairs, it does not retire.
+  return (res[1].meta.changes ?? 0) + (res[2].meta.changes ?? 0);
+}
+
+export default {
+  fetch: app.fetch,
+  scheduled: (_event, env, ctx) => {
+    ctx.waitUntil(sweepStaleCalls(env));
+  },
+} satisfies ExportedHandler<Env>;

@@ -19,9 +19,28 @@ jobs:
       - run: npm test
       - run: npm run build
 
-  # Deploys on push to main when a Cloudflare API token is configured.
-  # Create one at dash.cloudflare.com -> My Profile -> API Tokens ("Edit Cloudflare
-  # Workers" template) and save it as the CLOUDFLARE_API_TOKEN repo secret.
+  # Deploys on push to main when Cloudflare credentials are configured. Two repo
+  # secrets, and both are needed:
+  #
+  #   CLOUDFLARE_API_TOKEN   dash.cloudflare.com -> My Profile -> API Tokens,
+  #                          as a **Custom Token** with:
+  #                              Account | Workers Scripts | Edit
+  #                              Account | D1              | Edit
+  #   CLOUDFLARE_ACCOUNT_ID  dash.cloudflare.com -> Workers & Pages, in the
+  #                          right-hand sidebar
+  #
+  # Two traps, both of which fail before anything ships:
+  #
+  # The "Edit Cloudflare Workers" template does NOT grant D1 Edit, and `npm run
+  # deploy` applies pending D1 migrations before uploading the worker.
+  #
+  # And a runner has no cached account, so without CLOUDFLARE_ACCOUNT_ID wrangler
+  # tries to discover one by listing /accounts — which the two permissions above
+  # do not allow, and which cannot pick between accounts non-interactively
+  # anyway. Supplying the id is the fix rather than widening the token: it needs
+  # no extra permission and no guessing. (Adding `Account Settings: Read` also
+  # works, but grants more and still fails if the token can see more than one
+  # account.)
   deploy:
     needs: check
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -33,12 +52,25 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # `npm run deploy` applies D1 migrations before uploading the worker.
+      # The worker queries columns and tables the migrations create, so shipping
+      # it against an unmigrated database takes every route that touches them
+      # down. Migrations here are additive, so the running worker keeps serving
+      # while they apply.
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
             echo "CLOUDFLARE_API_TOKEN not set — skipping deploy."
             exit 0
           fi
-          npm run deploy
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::CLOUDFLARE_ACCOUNT_ID is not set. A runner has no cached account, so wrangler would try to list /accounts to find one — which this token's permissions do not allow. Add the id from dash.cloudflare.com -> Workers & Pages (right-hand sidebar) as a repo secret."
+            exit 1
+          fi
+          if ! npm run deploy; then
+            echo "::error::Deploy failed. It applies D1 migrations before uploading, so CLOUDFLARE_API_TOKEN needs 'D1: Edit' as well as 'Workers Scripts: Edit'. Cloudflare's 'Edit Cloudflare Workers' template does not include D1 — use a Custom Token."
+            exit 1
+          fi

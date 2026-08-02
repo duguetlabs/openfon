@@ -32,6 +32,8 @@ export interface Business {
   services_json: string;
   faqs_json: string;
   closures_json: string;
+  max_concurrent_calls: number;
+  max_calls_per_day: number;
   agent: Agent | null;
 }
 
@@ -41,6 +43,7 @@ export interface CallRow {
   caller_id: string;
   status: string;
   started_at: string;
+  connected_at: string | null;
   ended_at: string | null;
   duration_s: number | null;
   summary: string | null;

@@ -11,6 +11,26 @@ const INTENT_BADGE: Record<string, string> = {
   other: 'bg-wash-iris text-ink-soft shadow-[inset_0_0_0_1px_rgb(88_73_190/0.12)]',
 };
 
+// Fallback wording for a row with no summary. Four statuses now share this list,
+// and the two that mean "no conversation happened" have to stay distinguishable:
+//
+//   failed     — the socket connected and the session broke mid-call. finalize()
+//                always writes a "Call failed: …" summary, so this is nearly
+//                unreachable; it reads "Call failed" rather than "didn't connect"
+//                because a call that failed plainly did connect.
+//   abandoned  — the cron sweep retired it. Covers two very different things,
+//                and connected_at is what tells them apart: a row whose caller
+//                never opened a WebSocket, versus a real conversation a deploy
+//                cut off, which has saved turns worth reading.
+//
+// 'active' is the only status that should ever blink.
+function statusLabel(c: CallRow): string {
+  if (c.status === 'active') return 'Call in progress…';
+  if (c.status === 'abandoned') return c.connected_at ? 'Call interrupted' : 'Never connected';
+  if (c.status === 'failed') return 'Call failed';
+  return 'Call';
+}
+
 export default function Dashboard() {
   const { business } = useSession();
   const [calls, setCalls] = useState<CallRow[] | null>(null);
@@ -73,12 +93,24 @@ export default function Dashboard() {
               >
                 <span
                   className={`h-2 w-2 shrink-0 rounded-full ${
-                    c.status === 'active' ? 'blink bg-rose' : c.status === 'failed' ? 'bg-rose/70' : 'bg-ok/70'
+                    c.status === 'active'
+                      ? 'blink bg-rose'
+                      : c.status === 'failed'
+                        ? 'bg-rose/70'
+                        : c.status === 'abandoned'
+                          ? c.connected_at
+                            ? 'bg-rose/40'
+                            : 'bg-ink-faint/40'
+                          : 'bg-ok/70'
                   }`}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink">
-                    {c.summary ?? (c.status === 'active' ? 'Call in progress…' : c.status === 'failed' ? "Call didn't connect" : 'Call')}
+                  <p
+                    className={`truncate text-sm font-semibold ${
+                      c.status === 'abandoned' && !c.summary && !c.connected_at ? 'text-ink-faint' : 'text-ink'
+                    }`}
+                  >
+                    {c.summary ?? statusLabel(c)}
                   </p>
                   <p className="mt-1 font-mono text-[11px] text-ink-faint">
                     {fmtTime(c.started_at)} · {fmtDuration(c.duration_s)} · {c.channel}

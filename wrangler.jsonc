@@ -23,6 +23,10 @@
     "bindings": [{ "name": "CALL_SESSION", "class_name": "CallSession" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CallSession"] }],
+  // Retires call rows left 'active' by a start that never connected or by a
+  // deploy that restarted the worker mid-call. Cron Triggers are on the free
+  // plan, so self-hosters get the sweep too.
+  "triggers": { "crons": ["*/5 * * * *"] },
   "vars": {
     // Non-secret defaults. Override secrets with `wrangler secret put`:
     //   DEFAULT_LLM_API_KEY, DEFAULT_STT_API_KEY, AZURE_SPEECH_KEY
