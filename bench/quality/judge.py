@@ -86,6 +86,20 @@ class JudgeParseError(ValueError):
     """The judge returned something that is not a usable set of verdicts."""
 
 
+def _require_score(cid: str, dim: str, value, allowed: tuple[int, ...]) -> None:
+    """Reject anything that is not literally one of the allowed integers.
+
+    `bool` is a subclass of `int` in Python, so a reply containing `true` passes
+    a bare `value in (0, 1)` membership test, lands `True` in the CSV, and is
+    then coerced to 0.0 by `float()` downstream — turning a *positive* verdict
+    into a failure with no parse error raised anywhere.
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value not in allowed:
+        raise JudgeParseError(
+            f"{cid}: {dim} must be one of {allowed} as a JSON number, "
+            f"got {value!r} ({type(value).__name__})")
+
+
 def parse_verdicts(raw: str, expected_ids: set[str]) -> list[dict]:
     """Parse the judge's reply into verdicts, or raise.
 
@@ -112,11 +126,9 @@ def parse_verdicts(raw: str, expected_ids: set[str]) -> list[dict]:
         cid = v.get("id")
         if cid not in expected_ids:
             raise JudgeParseError(f"unknown candidate id {cid!r}")
-        if v.get("groundedness") not in (0, 1):
-            raise JudgeParseError(f"{cid}: groundedness must be 0 or 1, got {v.get('groundedness')!r}")
-        for dim in ("resolution", "tone"):
-            if v.get(dim) not in (0, 1, 2):
-                raise JudgeParseError(f"{cid}: {dim} must be 0, 1 or 2, got {v.get(dim)!r}")
+        _require_score(cid, "groundedness", v.get("groundedness"), (0, 1))
+        _require_score(cid, "resolution", v.get("resolution"), (0, 1, 2))
+        _require_score(cid, "tone", v.get("tone"), (0, 1, 2))
         out.append(v)
 
     seen = [v["id"] for v in out]
@@ -163,6 +175,10 @@ def main() -> None:
     for sc in spec["scenarios"]:
         cands = by_scenario.get(sc["id"]) or []
         if not cands:
+            # Not silently skipped: a scenario with no runs is a hole in the
+            # data, and summarize.py's completeness check must see it.
+            print(f"  {sc['id']}: no runs to judge", file=sys.stderr)
+            failures.append(sc["id"])
             continue
         rng = random.Random(f"{a.seed}:{sc['id']}")
         order = list(range(len(cands)))

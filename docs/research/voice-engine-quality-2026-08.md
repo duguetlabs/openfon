@@ -21,8 +21,8 @@ settings default, not a rebuild.
 
 | | Voice Live + gpt-4.1-mini | gpt-realtime-2 (either stack) |
 |---|---|---|
-| Time to first audio, p50 | **1393 ms** | 2079–2408 ms |
-| Time to first audio, p95 | **1654 ms** | 3468–3812 ms |
+| Time to first audio, p50 | **1331 ms** | 2017–2367 ms |
+| Time to first audio, p95 | **1748 ms** | 3048–3468 ms |
 | Caller-slot capture, heard | **0.967** | 0.856–0.933 |
 | Caller-slot capture, echoed back | 0.719 | **0.812–0.819** |
 | Judge groundedness | 0.697 | **1.000** |
@@ -30,8 +30,8 @@ settings default, not a rebuild.
 | pass^3 | 0.182 | **0.273–0.545** |
 | Cost | **$0.03/min** | $0.07/min |
 
-Voice Live answers **~690 ms sooner at p50 and over two seconds sooner at p95**,
-at 43 % of the cost, and it *hears* the caller better — 0.967 vs 0.856 slot
+Voice Live answers **~690 ms sooner at p50 and ~1.3 s sooner at p95**, at 43 %
+of the cost, and it *hears* the caller better — 0.967 vs 0.856 slot
 capture, and it never lost a phone number. On a phone call the latency gap is
 the difference between a receptionist and a bad connection.
 
@@ -149,6 +149,12 @@ German, 20.5 % vs 34.5 %, a 41 % relative advantage in the condition that most
 resembles a caller standing outside a café. That is the one recognition result
 that should carry weight in the decision.
 
+All latency percentiles here are over **individual caller turns** (96–106 turns
+per arm), not over per-call medians. A p95 of per-call medians discards the one
+slow reply inside an otherwise normal call, which is the event a p95 exists to
+capture; it read 1654 ms for Voice Live and up to 3812 ms for gpt-realtime-2,
+both wrong in opposite directions.
+
 **SNR₅₀** is the signal-to-noise ratio, in dB, at which an arm's WER reaches
 **twice its own clean-audio WER**, linearly interpolated between the measured
 20 / 10 / 5 / 0 dB points. It compresses a whole degradation curve into one
@@ -240,11 +246,11 @@ question depends on is the genuine one, pinned to Monday 2026-08-03.
 
 | arm | success | pass^3 | slots heard | slots echoed | end_call | grounded (judge) | resolution | tone | TTFA p50 | TTFA p95 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `native-gpt-realtime-2` | **0.606** | **0.545** | 0.856 | **0.819** | 24/33 | **1.000** | 1.697 | 1.576 | 2079 | 3812 |
-| `vl-gpt41mini-dns` | 0.455 | 0.273 | **0.967** | 0.651 | 23/33 | 0.818 | 1.727 | 1.697 | 1450 | 1803 |
-| `vl-native-brain` | 0.424 | 0.273 | 0.933 | 0.812 | 23/33 | **1.000** | 1.727 | 1.576 | 2408 | 3468 |
-| `vl-gpt41mini` | 0.394 | 0.182 | **0.967** | 0.719 | 24/33 | 0.697 | 1.727 | **1.788** | 1393 | 1654 |
-| `vl-gpt41mini-semvad` | 0.364 | 0.182 | 0.933 | 0.767 | **25/33** | 0.758 | **1.788** | 1.697 | **1364** | **1527** |
+| `native-gpt-realtime-2` | **0.606** | **0.545** | 0.856 | **0.819** | 24/33 | **1.000** | 1.697 | 1.576 | 2017 | 3048 |
+| `vl-gpt41mini-dns` | 0.455 | 0.273 | **0.967** | 0.651 | 23/33 | 0.818 | 1.727 | 1.697 | 1431 | 1994 |
+| `vl-native-brain` | 0.424 | 0.273 | 0.933 | 0.812 | 23/33 | **1.000** | 1.727 | 1.576 | 2367 | 3468 |
+| `vl-gpt41mini` | 0.394 | 0.182 | **0.967** | 0.719 | 24/33 | 0.697 | 1.727 | **1.788** | 1331 | 1748 |
+| `vl-gpt41mini-semvad` | 0.364 | 0.182 | 0.933 | 0.767 | **25/33** | 0.758 | **1.788** | 1.697 | **1321** | **1852** |
 
 `success` is a strict conjunction: every expected slot heard correctly, `end_call`
 invoked where expected, every grounded fact stated, no forbidden claim, and the
@@ -361,6 +367,27 @@ Stated rather than smoothed over.
    real subscriber. A test fails the build if a fixture number leaves those
    ranges.
 
+12. **The harness had a systemic bias: absent data read as a pass.** Ten
+   separate places, found across three review rounds, turned missing or
+   unparseable data into a passing result — a missing judge row, a judge file
+   that was empty rather than absent, a missing trial, a scenario an arm never
+   ran, an unparseable numeric in the conjunction, a run that errored on the
+   wire, and a call the agent never joined. Each individually looks like a small
+   oversight; together they are a default the harness was written with, and they
+   all pushed the same way. `summarize.py` now **fails closed everywhere**: it
+   validates that every arm ran every scenario exactly `k` times, treats an
+   empty `--judge` file as an error rather than as "no judge requested", aborts
+   on any value it cannot parse rather than guessing, scores errored and
+   agent-absent runs as failures, and prints "not measured" instead of an empty
+   cell that a reader would take for zero. `TestAbsentDataNeverPasses` pins all
+   of it; each case is a separate process invocation, because the point is that
+   the run refuses, not that a helper returns False.
+
+   None of these were firing on the final dataset — all 165 runs are complete,
+   judged and error-free, so the corrected guards leave every reported number
+   unchanged. They exist so that the next run cannot quietly report a partial
+   one as a good one.
+
 11. **Six scoring bugs were found in code review and fixed; three moved
    reported numbers.** All were scoring-side, so they were corrected by
    re-deriving from the existing raw logs rather than re-running calls.
@@ -389,6 +416,17 @@ Stated rather than smoothed over.
    * *`run_all.sh` omitted `vl-gpt41mini-semvad`*, so the documented default
      produced 132 calls where this report describes 165, dropping the control
      that keeps the brain comparison VAD-neutral. Now included by default.
+   * *`ttfa_p95_ms` was a percentile of per-call medians.* Each multi-turn call
+     was collapsed to its median before aggregation, so a single slow reply
+     inside an otherwise normal call never reached the tail statistic. Now
+     computed over all 96–106 individual turns per arm. This moved the numbers
+     in **both** directions: Voice Live's p95 rose 1654 → 1748 ms (the old
+     figure was too flattering) while native gpt-realtime-2's fell 3812 →
+     3048 ms (too harsh). The gap is real but smaller than first reported.
+   * *A JSON `true` passed as a judge score.* `bool` is a subclass of `int` in
+     Python, so `true` satisfied a `value in (0, 1)` membership test, landed
+     `True` in the CSV, and was then coerced to `0.0` — turning a *positive*
+     groundedness verdict into a failure with no error raised anywhere.
 
    All six are pinned by tests in `bench/quality/test_scoring.py` (39 tests,
    run in CI as a separate `bench-scoring` job).

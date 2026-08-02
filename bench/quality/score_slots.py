@@ -231,6 +231,11 @@ def score_run(run: dict, spec: dict) -> dict:
         "grounded_ok": int(len(grounded) == len(exp.get("grounded_facts") or [])),
         "forbidden_hit": len(forbidden),
         "forbidden_terms": ",".join(forbidden),
+        # Every caller turn's latency, not just this call's median. Collapsing
+        # to a median here and taking a percentile of medians in summarize.py
+        # discards the single slow response inside an otherwise normal call —
+        # exactly the event a p95 exists to capture.
+        "ttfa_ms_all": ";".join(f"{v:.1f}" for v in ttfa),
         "ttfa_p50_ms": round(sorted(ttfa)[len(ttfa) // 2], 1) if ttfa else "",
         "bargein_attempts": len(barges),
         "bargein_inflight": len(inflight),
@@ -239,6 +244,7 @@ def score_run(run: dict, spec: dict) -> dict:
         # not the stop latency, is what a caller actually cares about.
         "bargein_correct": bargein_correct,
         "agent_turns": sum(1 for m in run.get("transcript", []) if m["role"] == "agent"),
+        "n_turns_expected": len(sc["turns"]),
         "session_s": run.get("session_s", ""),
         "error": run.get("error") or "",
     }

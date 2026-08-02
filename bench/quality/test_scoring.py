@@ -13,7 +13,10 @@ arm had in fact got it right. `test_time_twelve_hour_forms` is that bug.
 """
 from __future__ import annotations
 
+import csv
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -302,8 +305,13 @@ class TestJudgeParsing(unittest.TestCase):
 
     def test_rejects_out_of_range_scores(self):
         import json
+        # `True`/`False` matter specially: bool is a subclass of int, so a bare
+        # membership test accepted them and float() then turned a positive
+        # verdict into 0.0 with no error raised anywhere.
         for bad in ({"groundedness": 2}, {"resolution": 5}, {"tone": -1},
-                    {"groundedness": None}, {"tone": "good"}):
+                    {"groundedness": None}, {"tone": "good"},
+                    {"groundedness": True}, {"groundedness": False},
+                    {"resolution": True}, {"tone": 1.0}, {"groundedness": "1"}):
             with self.subTest(bad=bad):
                 raw = json.dumps([self.good(**bad), self.good(id="cand2")])
                 with self.assertRaises(JudgeParseError):
@@ -325,6 +333,162 @@ class TestJudgeParsing(unittest.TestCase):
         raw = json.dumps([self.good(), self.good(), self.good(id="cand2")])
         with self.assertRaises(JudgeParseError):
             parse_verdicts(raw, self.IDS)
+
+
+class TestAbsentDataNeverPasses(unittest.TestCase):
+    """The class of bug this harness kept reproducing.
+
+    Six independent places once let missing data read as a pass. Each is a
+    separate `summarize.py` invocation here, because the guards live in `main()`
+    and the point is that the *process* refuses, not that a helper returns False.
+    """
+
+    SLOTS_HEADER = (
+        "arm,trial,scenario,lang,intent,n_slots,slot_heard,slots_all_heard,"
+        "missed_heard,slot_echoed,slots_all_echoed,missed_echoed,tools_called,"
+        "tool_ok,grounded_n,grounded_hit,grounded_ok,forbidden_hit,forbidden_terms,"
+        "ttfa_ms_all,ttfa_p50_ms,bargein_attempts,bargein_inflight,bargein_stop_ms,"
+        "bargein_correct,agent_turns,n_turns_expected,session_s,error")
+
+    def slot_row(self, arm="a", trial=1, scenario="s1", **over):
+        row = {"arm": arm, "trial": trial, "scenario": scenario, "lang": "en_US",
+               "intent": "grounded_qa", "n_slots": 0, "slot_heard": "",
+               "slots_all_heard": "", "missed_heard": "", "slot_echoed": "",
+               "slots_all_echoed": "", "missed_echoed": "", "tools_called": "",
+               "tool_ok": 1, "grounded_n": 0, "grounded_hit": 0, "grounded_ok": 1,
+               "forbidden_hit": 0, "forbidden_terms": "", "ttfa_ms_all": "900",
+               "ttfa_p50_ms": 900, "bargein_attempts": 0, "bargein_inflight": 0,
+               "bargein_stop_ms": "", "bargein_correct": "", "agent_turns": 2,
+               "n_turns_expected": 2, "session_s": 20, "error": ""}
+        row.update(over)
+        return row
+
+    def write(self, tmp, name, header, rows):
+        p = Path(tmp) / name
+        with open(p, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=header.split(","))
+            w.writeheader()
+            for r in rows:
+                w.writerow(r)
+        return p
+
+    def summarize(self, tmp, slot_rows, judge_rows=None, extra=()):
+        slots = self.write(tmp, "slots.csv", self.SLOTS_HEADER, slot_rows)
+        cmd = [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
+               "--out", str(Path(tmp) / "out.csv"), "--trials", "1", *extra]
+        if judge_rows is not None:
+            jh = "scenario,arm,trial,lang,seed,groundedness,resolution,tone,groundedness_evidence,note"
+            cmd += ["--judge", str(self.write(tmp, "judge.csv", jh, judge_rows))]
+        return subprocess.run(cmd, capture_output=True, text=True)
+
+    def judge_row(self, arm="a", trial=1, scenario="s1", groundedness=1):
+        return {"scenario": scenario, "arm": arm, "trial": trial, "lang": "en_US",
+                "seed": 1, "groundedness": groundedness, "resolution": 2, "tone": 2,
+                "groundedness_evidence": "", "note": ""}
+
+    def test_baseline_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self.summarize(tmp, [self.slot_row()], [self.judge_row()])
+            self.assertEqual(r.returncode, 0, r.stderr)
+            out = list(csv.DictReader(open(Path(tmp) / "out.csv")))
+            self.assertEqual(float(out[0]["success_mean"]), 1.0)
+
+    def test_empty_judge_file_is_not_no_judge(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self.summarize(tmp, [self.slot_row()], [])
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("no verdict rows", r.stderr)
+
+    def test_missing_judge_row_aborts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self.summarize(tmp, [self.slot_row()], [self.judge_row(scenario="other")])
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("no judge verdict", r.stderr)
+
+    def test_missing_judge_row_scores_as_failure_when_allowed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self.summarize(tmp, [self.slot_row()], [self.judge_row(scenario="other")],
+                               extra=("--allow-missing-judge",))
+            self.assertEqual(r.returncode, 0, r.stderr)
+            out = list(csv.DictReader(open(Path(tmp) / "out.csv")))
+            self.assertEqual(float(out[0]["success_mean"]), 0.0)
+
+    def test_missing_trial_aborts_rather_than_counting_as_pass_k(self):
+        # Two of three trials must never satisfy pass^3.
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = [self.slot_row(trial=1), self.slot_row(trial=2)]
+            judge = [self.judge_row(trial=1), self.judge_row(trial=2)]
+            slots = self.write(tmp, "slots.csv", self.SLOTS_HEADER, rows)
+            jh = "scenario,arm,trial,lang,seed,groundedness,resolution,tone,groundedness_evidence,note"
+            j = self.write(tmp, "judge.csv", jh, judge)
+            r = subprocess.run(
+                [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
+                 "--judge", str(j), "--trials", "3",
+                 "--out", str(Path(tmp) / "out.csv")], capture_output=True, text=True)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("do not have exactly 3 trials", r.stderr)
+
+    def test_missing_scenario_stays_in_the_pass_k_denominator(self):
+        # Arm "b" never ran s2. Its pass^k must be 0.5, not 1.0.
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = [self.slot_row(arm="a", scenario="s1"),
+                    self.slot_row(arm="a", scenario="s2"),
+                    self.slot_row(arm="b", scenario="s1")]
+            judge = [self.judge_row(arm="a", scenario="s1"),
+                     self.judge_row(arm="a", scenario="s2"),
+                     self.judge_row(arm="b", scenario="s1")]
+            r = self.summarize(tmp, rows, judge, extra=("--allow-incomplete",))
+            self.assertEqual(r.returncode, 0, r.stderr)
+            out = {x["arm"]: x for x in csv.DictReader(open(Path(tmp) / "out.csv"))}
+            self.assertEqual(float(out["a"]["pass_k"]), 1.0)
+            self.assertEqual(float(out["b"]["pass_k"]), 0.5)
+
+    def test_errored_run_is_never_a_success(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self.summarize(tmp, [self.slot_row(error="websocket closed")],
+                               [self.judge_row()])
+            self.assertEqual(r.returncode, 0, r.stderr)
+            out = list(csv.DictReader(open(Path(tmp) / "out.csv")))
+            self.assertEqual(float(out[0]["success_mean"]), 0.0)
+
+    def test_call_the_agent_never_joined_is_never_a_success(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self.summarize(tmp, [self.slot_row(agent_turns=0)], [self.judge_row()])
+            self.assertEqual(r.returncode, 0, r.stderr)
+            out = list(csv.DictReader(open(Path(tmp) / "out.csv")))
+            self.assertEqual(float(out[0]["success_mean"]), 0.0)
+
+    def test_unparseable_conjunction_input_aborts(self):
+        # Defaulting a garbage forbidden_hit to 0 would read as "no forbidden claim".
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self.summarize(tmp, [self.slot_row(forbidden_hit="n/a")],
+                               [self.judge_row()])
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("not numeric", r.stderr)
+
+    def test_ttfa_p95_is_over_turns_not_per_call_medians(self):
+        """One slow turn inside an otherwise fast call must reach the p95."""
+        with tempfile.TemporaryDirectory() as tmp:
+            rows, judge = [], []
+            for i in range(1, 11):
+                # Each call: nine fast turns and one very slow one. The median of
+                # each call is ~900; only turn-level aggregation sees the 9000.
+                rows.append(self.slot_row(scenario=f"s{i}",
+                                          ttfa_ms_all=";".join(["900"] * 9 + ["9000"]),
+                                          ttfa_p50_ms=900))
+                judge.append(self.judge_row(scenario=f"s{i}"))
+            r = self.summarize(tmp, rows, judge)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            out = list(csv.DictReader(open(Path(tmp) / "out.csv")))[0]
+            self.assertEqual(out["ttfa_turns_n"], "100")
+            self.assertEqual(out["ttfa_p95_ms"], "9000")
+
+    def test_unmeasured_metric_says_so_instead_of_blank(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self.summarize(tmp, [self.slot_row(ttfa_ms_all="")], [self.judge_row()])
+            self.assertEqual(r.returncode, 0, r.stderr)
+            out = list(csv.DictReader(open(Path(tmp) / "out.csv")))[0]
+            self.assertEqual(out["ttfa_p95_ms"], "no turns")
 
 
 class TestFixtureHygiene(unittest.TestCase):
