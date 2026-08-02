@@ -1,0 +1,35 @@
+{
+  "_comment": "Riverside Dental — the demo business, as a committed fixture. Deliberately NOT read from production D1: a benchmark that reads live data is not reproducible, and the numbers stop being comparable the moment someone edits the demo business in the dashboard. Facts match the placeholders the product itself ships (web/src/pages/Onboarding.tsx, test/lang.test.ts).",
+  "business": {
+    "id": "bench-riverside",
+    "user_id": "bench",
+    "slug": "riverside-dental",
+    "name": "Riverside Dental",
+    "description": "Family dental practice offering checkups, cleanings, and cosmetic dentistry.",
+    "address": "12 River St, Vienna",
+    "phone": "+43 1 234 5678",
+    "website": "https://riverside-dental.example",
+    "timezone": "Europe/Vienna",
+    "hours_json": "[{\"day\":\"Monday\",\"open\":\"09:00\",\"close\":\"17:00\"},{\"day\":\"Tuesday\",\"open\":\"09:00\",\"close\":\"17:00\"},{\"day\":\"Wednesday\",\"open\":\"09:00\",\"close\":\"17:00\"},{\"day\":\"Thursday\",\"open\":\"09:00\",\"close\":\"17:00\"},{\"day\":\"Friday\",\"open\":\"09:00\",\"close\":\"14:00\"},{\"day\":\"Saturday\",\"open\":\"\",\"close\":\"\",\"closed\":true},{\"day\":\"Sunday\",\"open\":\"\",\"close\":\"\",\"closed\":true}]",
+    "services_json": "[{\"name\":\"Checkup\",\"price\":\"60 EUR\",\"duration\":\"30 min\",\"notes\":\"First appointment needs 45 minutes\"},{\"name\":\"Cleaning\",\"price\":\"90 EUR\",\"duration\":\"45 min\"},{\"name\":\"Cosmetic consultation\",\"price\":\"from 120 EUR\",\"duration\":\"30 min\"}]",
+    "faqs_json": "[{\"q\":\"Do you accept statutory insurance?\",\"a\":\"Yes, we accept all statutory (gesetzlich) insurers and most private plans. We do not bill Heilpraktiker services.\"},{\"q\":\"Is there parking?\",\"a\":\"We have no on-site parking. There is paid street parking on River Street.\"},{\"q\":\"Are you taking new patients?\",\"a\":\"Yes, we are accepting new patients. A first appointment needs 45 minutes.\"},{\"q\":\"What should I do in an out-of-hours emergency?\",\"a\":\"Call the Vienna dental emergency line on 01 512 2078.\"}]",
+    "closures_json": "[{\"date\":\"2026-08-15\",\"reason\":\"Assumption Day\"}]"
+  },
+  "settings": {
+    "business_id": "bench-riverside",
+    "agent_name": "Alex",
+    "greeting": "",
+    "persona": "warm, efficient and concise",
+    "language": "de",
+    "voice": "",
+    "take_messages": 1,
+    "custom_instructions": "",
+    "llm_base_url": "",
+    "llm_api_key": "",
+    "llm_model": "",
+    "engine": "realtime",
+    "realtime_model": "",
+    "realtime_voice": ""
+  },
+  "now": "2026-08-03T10:00:00+02:00"
+}

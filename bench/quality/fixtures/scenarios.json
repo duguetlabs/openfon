@@ -1,0 +1,397 @@
+{
+  "_comment": "Riverside Dental caller scripts. Every date, time and fact here is checked against fixtures/riverside-prompt.json — the calendar the agent actually receives, pinned to now = 2026-08-03 (Monday). Changing the fixture's `now` invalidates these expectations; regenerate the prompt and re-check the dates. German turns use real umlauts: Azure TTS reads the ASCII transliteration 'fuenfzehn' as 'fuer-enf-zehn', which corrupted the audio and made a fixture defect look like an engine failure. All names and phone numbers are fictional; the numbers come from ranges reserved for dramatic use (German BNetzA 0152 288173xx / 030 23125xxx, and the 555-01xx convention for English) so they cannot reach a real subscriber.",
+  "scenarios": [
+    {
+      "id": "book-en-01",
+      "lang": "en_US",
+      "intent": "book_appointment",
+      "description": "New-patient booking with a stated preference. Thu 2026-08-06 is open 09:00-17:00, so 15:00 is valid.",
+      "turns": [
+        {
+          "text": "Hi, I'd like to book a check-up appointment please."
+        },
+        {
+          "text": "Thursday afternoon would work best for me, ideally after three."
+        },
+        {
+          "text": "My name is Jonathan Reeves, that's R-E-E-V-E-S."
+        },
+        {
+          "text": "Yes that's right, and my number is five five five, zero one four three."
+        },
+        {
+          "text": "Perfect, thank you. Goodbye."
+        }
+      ],
+      "expected": {
+        "tool_calls": [
+          "end_call"
+        ],
+        "slots": {
+          "last_name": [
+            "Reeves"
+          ],
+          "first_name": [
+            "Jonathan"
+          ],
+          "phone": [
+            "5550143"
+          ],
+          "day_of_week": [
+            "Thursday"
+          ],
+          "time_after": [
+            "15:00"
+          ]
+        },
+        "grounded_facts": [],
+        "forbidden": [
+          "Saturday",
+          "Sunday",
+          "on-site parking",
+          "confirmed slot"
+        ]
+      }
+    },
+    {
+      "id": "book-de-01",
+      "lang": "de_DE",
+      "intent": "book_appointment",
+      "description": "German booking, spelled surname with umlaut, digit-string phone number.",
+      "turns": [
+        {
+          "text": "Guten Tag, ich hätte gerne einen Termin zur Kontrolle."
+        },
+        {
+          "text": "Am liebsten Donnerstagnachmittag, möglichst nach fünfzehn Uhr."
+        },
+        {
+          "text": "Mein Name ist Kathrin Schröder, S-C-H-R-Ö-D-E-R."
+        },
+        {
+          "text": "Genau, und meine Nummer ist null eins fünf zwei, zwei acht acht eins, sieben drei acht sechs."
+        },
+        {
+          "text": "Wunderbar, vielen Dank. Auf Wiederhören."
+        }
+      ],
+      "expected": {
+        "tool_calls": [
+          "end_call"
+        ],
+        "slots": {
+          "last_name": [
+            "Schröder",
+            "Schroeder"
+          ],
+          "first_name": [
+            "Kathrin"
+          ],
+          "phone": [
+            "015228817386"
+          ],
+          "day_of_week": [
+            "Donnerstag"
+          ],
+          "time_after": [
+            "15:00"
+          ]
+        },
+        "grounded_facts": [],
+        "forbidden": [
+          "Samstag",
+          "Sonntag"
+        ]
+      }
+    },
+    {
+      "id": "hours-en-01",
+      "lang": "en_US",
+      "intent": "grounded_qa",
+      "description": "Closed-day trap plus the Friday early close (14:00, not 17:00).",
+      "turns": [
+        {
+          "text": "Hello, are you open on Saturday morning?"
+        },
+        {
+          "text": "And what time do you close on Fridays?"
+        },
+        {
+          "text": "Okay, thanks very much."
+        }
+      ],
+      "expected": {
+        "tool_calls": [
+          "end_call"
+        ],
+        "slots": {},
+        "grounded_facts": [
+          "closed",
+          "Saturday",
+          "14:00"
+        ],
+        "forbidden": [
+          "17:00 on Friday",
+          "open on Saturday"
+        ]
+      }
+    },
+    {
+      "id": "hours-de-01",
+      "lang": "de_DE",
+      "intent": "grounded_qa",
+      "description": "German closed-day trap and Friday early close.",
+      "turns": [
+        {
+          "text": "Hallo, haben Sie am Samstagvormittag geöffnet?"
+        },
+        {
+          "text": "Und wann schließen Sie freitags?"
+        },
+        {
+          "text": "Alles klar, danke schön."
+        }
+      ],
+      "expected": {
+        "tool_calls": [
+          "end_call"
+        ],
+        "slots": {},
+        "grounded_facts": [
+          "geschlossen",
+          "14:00"
+        ],
+        "forbidden": [
+          "17:00 am Freitag",
+          "Samstag geöffnet"
+        ]
+      }
+    },
+    {
+      "id": "holiday-de-01",
+      "lang": "de_DE",
+      "intent": "grounded_qa",
+      "description": "Sat 2026-08-15 is a special closure (Assumption Day). Tests whether the agent uses the CALENDAR block rather than weekly hours.",
+      "turns": [
+        {
+          "text": "Haben Sie am fünfzehnten August offen?"
+        },
+        {
+          "text": "Und am Montag darauf?"
+        },
+        {
+          "text": "Danke, auf Wiederhören."
+        }
+      ],
+      "expected": {
+        "tool_calls": [
+          "end_call"
+        ],
+        "slots": {},
+        "grounded_facts": [
+          "geschlossen"
+        ],
+        "forbidden": [
+          "geöffnet am 15"
+        ]
+      }
+    },
+    {
+      "id": "message-de-01",
+      "lang": "de_DE",
+      "intent": "take_message",
+      "description": "Callback request; tests exact capture of an unfamiliar name and a number.",
+      "turns": [
+        {
+          "text": "Guten Tag, können Sie Doktor Weber bitte etwas ausrichten?"
+        },
+        {
+          "text": "Es geht um meine Krone, die sich gelöst hat. Ich brauche einen Rückruf."
+        },
+        {
+          "text": "Mein Name ist Ferenc Nagy, N-A-G-Y, und die Nummer ist null drei null, zwei drei eins zwei fünf, eins null null."
+        },
+        {
+          "text": "Danke, tschüss."
+        }
+      ],
+      "expected": {
+        "tool_calls": [
+          "end_call"
+        ],
+        "slots": {
+          "last_name": [
+            "Nagy"
+          ],
+          "first_name": [
+            "Ferenc"
+          ],
+          "phone": [
+            "03023125100"
+          ]
+        },
+        "grounded_facts": [],
+        "forbidden": []
+      }
+    },
+    {
+      "id": "reschedule-en-01",
+      "lang": "en_US",
+      "intent": "reschedule",
+      "description": "Caller self-corrects mid-turn; tests slot overwrite rather than accumulation. Wed 2026-08-05 is open until 17:00.",
+      "turns": [
+        {
+          "text": "Hi, I need to move my appointment that's on Tuesday."
+        },
+        {
+          "text": "Could we do Wednesday at ten instead? Actually no, sorry, make it Wednesday at two."
+        },
+        {
+          "text": "It's under Amelia Hart, H-A-R-T."
+        },
+        {
+          "text": "Great, thank you."
+        }
+      ],
+      "expected": {
+        "tool_calls": [
+          "end_call"
+        ],
+        "slots": {
+          "last_name": [
+            "Hart"
+          ],
+          "first_name": [
+            "Amelia"
+          ],
+          "new_day": [
+            "Wednesday"
+          ],
+          "new_time": [
+            "14:00"
+          ]
+        },
+        "grounded_facts": [],
+        "forbidden": [
+          "10:00"
+        ]
+      }
+    },
+    {
+      "id": "emergency-de-01",
+      "lang": "de_DE",
+      "intent": "handoff",
+      "description": "Out-of-hours emergency. The agent must surface the emergency line from the FAQ, not book an appointment.",
+      "turns": [
+        {
+          "text": "Ich habe seit gestern Abend starke Schmerzen und mein Zahn blutet."
+        },
+        {
+          "text": "Es ist außerhalb Ihrer Öffnungszeiten, was soll ich jetzt machen?"
+        }
+      ],
+      "expected": {
+        "tool_calls": [],
+        "slots": {},
+        "grounded_facts": [
+          "512 2078"
+        ],
+        "forbidden": []
+      }
+    },
+    {
+      "id": "bargein-en-01",
+      "lang": "en_US",
+      "intent": "book_appointment",
+      "description": "Caller interrupts 700 ms into the agent's reply and corrects the date. Mon 2026-08-10 and Mon 2026-08-17 are both open, so only the correction distinguishes a pass.",
+      "turns": [
+        {
+          "text": "I'd like an appointment on Monday the tenth."
+        },
+        {
+          "text": "Sorry, no, I meant the seventeenth.",
+          "barge_in_after_ms": 700
+        },
+        {
+          "text": "Yes, the seventeenth. Under Priya Raman, R-A-M-A-N."
+        },
+        {
+          "text": "Thanks, bye."
+        }
+      ],
+      "expected": {
+        "tool_calls": [
+          "end_call"
+        ],
+        "slots": {
+          "day_of_month": [
+            "17"
+          ],
+          "last_name": [
+            "Raman"
+          ]
+        },
+        "grounded_facts": [],
+        "forbidden": [
+          "the tenth"
+        ]
+      }
+    },
+    {
+      "id": "bargein-de-01",
+      "lang": "de_DE",
+      "intent": "grounded_qa",
+      "description": "German barge-in 500 ms in; measures stop latency and whether the agent answers the new question.",
+      "turns": [
+        {
+          "text": "Nehmen Sie eigentlich noch neue Patienten an?"
+        },
+        {
+          "text": "Entschuldigung, eine Frage noch: gibt es bei Ihnen Parkplätze?",
+          "barge_in_after_ms": 500
+        }
+      ],
+      "expected": {
+        "tool_calls": [],
+        "slots": {},
+        "grounded_facts": [
+          "keine eigenen"
+        ],
+        "forbidden": [
+          "eigene Parkplätze vorhanden"
+        ]
+      }
+    },
+    {
+      "id": "codeswitch-01",
+      "lang": "de_DE",
+      "intent": "grounded_qa",
+      "description": "Caller opens in German then switches to English. The prompt's VOICE RULES require following the switch.",
+      "turns": [
+        {
+          "text": "Guten Tag, nehmen Sie gesetzlich Versicherte?"
+        },
+        {
+          "text": "Sorry, could we continue in English? Do you take statutory insurance?"
+        },
+        {
+          "text": "Great, thank you."
+        }
+      ],
+      "expected": {
+        "tool_calls": [
+          "end_call"
+        ],
+        "slots": {
+          "final_language": [
+            "en"
+          ]
+        },
+        "grounded_facts": [
+          "statutory"
+        ],
+        "forbidden": []
+      }
+    }
+  ]
+}

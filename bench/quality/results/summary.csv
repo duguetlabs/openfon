@@ -1,0 +1,6 @@
+arm,runs,success_mean,pass_k,slot_heard,slot_echoed,tool_ok,grounded_ok,forbidden_hits,judge_grounded,judge_resolution,judge_tone,ttfa_p50_ms,ttfa_p95_ms,bargein_stop_p50_ms,errors,session_min
+native-gpt-realtime-2,33,0.424,0.273,0.856,0.819,0.727,0.879,1,0.939,1.697,1.636,2079,3812,285,0,18.9
+vl-gpt41mini,33,0.364,0.091,0.967,0.719,0.727,0.909,0,0.667,1.636,1.818,1393,1654,22,0,18.1
+vl-gpt41mini-dns,33,0.424,0.273,0.967,0.651,0.697,0.909,0,0.758,1.667,1.667,1450,1803,,0,18.7
+vl-gpt41mini-semvad,33,0.303,0.182,0.933,0.767,0.758,0.848,0,0.727,1.727,1.636,1364,1527,74,0,19.3
+vl-native-brain,33,0.394,0.182,0.933,0.812,0.697,0.909,0,0.939,1.697,1.606,2408,3468,22,0,17.2

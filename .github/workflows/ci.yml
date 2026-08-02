@@ -19,6 +19,20 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  # The benchmark scoring code is Python and computes the numbers in
+  # docs/research/. A wrong normaliser or a slot matcher that fails closed would
+  # move every figure in the report without failing anything, so it is pinned.
+  # Separate job: these deps are irrelevant to the Worker build.
+  bench-scoring:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install jiwer num2words
+      - run: python -m unittest discover -s bench/quality -p 'test_*.py' -v
+
   # Deploys on push to main when Cloudflare credentials are configured. Two repo
   # secrets, and both are needed:
   #
