@@ -63,6 +63,27 @@ def redact(ev: dict) -> dict:
     return out
 
 
+def function_call(ev: dict) -> tuple[str, str] | None:
+    """Return (call_id, name) if this event announces a tool call, else None.
+
+    Several event types describe the same invocation; the caller deduplicates on
+    call_id. Events that carry a call_id but no name (the argument deltas) are
+    ignored, since the name is what we record.
+    """
+    t = ev.get("type", "")
+    item = ev.get("item") or {}
+    if t in ("response.function_call_arguments.done", "response.output_item.done",
+             "response.output_item.added"):
+        name = ev.get("name") or item.get("name")
+        cid = ev.get("call_id") or item.get("call_id") or ev.get("item_id")
+        if name and cid:
+            return (cid, name)
+    if t == "conversation.item.created" and item.get("type") == "function_call":
+        if item.get("name") and (item.get("call_id") or item.get("id")):
+            return (item.get("call_id") or item.get("id"), item["name"])
+    return None
+
+
 class Turn:
     """Accumulates everything the agent did in response to one caller turn."""
 
@@ -114,6 +135,7 @@ async def run_scenario(arm_name: str, sc: dict, audio_dir: Path, trial: int,
             return result
 
         cur = Turn()
+        seen_calls: set[str] = set()
 
         async def pump() -> None:
             """Drain server events into `cur` until the task is cancelled.
@@ -146,14 +168,16 @@ async def run_scenario(arm_name: str, sc: dict, audio_dir: Path, trial: int,
                 elif t == "conversation.item.input_audio_transcription.completed":
                     result["transcript"].append(
                         {"role": "caller_asr", "text": ev.get("transcript") or ""})
-                elif t in ("response.function_call_arguments.done",):
-                    if (name := ev.get("name")):
-                        cur.tools.append(name)
-                        result["tool_calls"].append(name)
-                elif t == "conversation.item.created" and \
-                        (ev.get("item") or {}).get("type") == "function_call":
-                    name = (ev.get("item") or {}).get("name")
-                    if name:
+                elif (call := function_call(ev)):
+                    # One invocation surfaces on several events
+                    # (`conversation.item.created`, `response.output_item.done`,
+                    # `response.function_call_arguments.done`), all carrying the
+                    # same call_id. Appending on each produced the
+                    # ['end_call', 'end_call'] visible in earlier logs — a
+                    # fictitious duplicate that was then shown to the blind judge.
+                    call_id, name = call
+                    if call_id not in seen_calls:
+                        seen_calls.add(call_id)
                         cur.tools.append(name)
                         result["tool_calls"].append(name)
                 elif t == "response.done":

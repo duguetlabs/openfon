@@ -121,6 +121,43 @@ def slot_present(agent_text: str, key: str, accepted: list[str], lang: str) -> b
     return any(normalize(v, lang) in hay for v in accepted)
 
 
+CLOCK_RE = re.compile(r"\b([01]?\d|2[0-3]):([0-5]\d)\b")
+
+
+def time_in(text: str, value: str, lang: str) -> bool:
+    """Does `text` assert the clock time `value` (HH:MM), however it is spoken?"""
+    hays = (text.lower(), normalize(text, lang))
+    return any(re.search(f, h) for f in time_forms(value, lang) for h in hays)
+
+
+def fact_present(utterances: list[str], fact: str, lang: str) -> bool:
+    """Is `fact` asserted inside a *single* utterance?
+
+    Two things this must not do.
+
+    Match across turn boundaries: joining every agent turn into one string and
+    substring-matching lets "…Monday, 17:00…" from one turn plus "On Fridays…
+    14:00" from another synthesise the forbidden claim "17:00 on Friday" out of
+    two correct answers. Facts are asserted in an utterance, so that is the unit.
+
+    Compare clock times as text: `normalize("14:00")` is "vierzehn null", which
+    never matches "vierzehn uhr" or "2 PM". Every time-valued grounded fact was
+    therefore unsatisfiable, and a correct answer scored as ungrounded. Clock
+    components are compared temporally via `time_forms`; the rest of the fact is
+    still a normalised substring, and both must hold in the same utterance.
+    """
+    m = CLOCK_RE.search(fact)
+    rest = (fact[:m.start()] + " " + fact[m.end():]).strip() if m else fact
+    want_rest = normalize(rest, lang) if rest else ""
+    for u in utterances:
+        if m and not time_in(u, m.group(0), lang):
+            continue
+        if want_rest and want_rest not in normalize(u, lang):
+            continue
+        return True
+    return False
+
+
 def score_run(run: dict, spec: dict) -> dict:
     sc = next(s for s in spec["scenarios"] if s["id"] == run["scenario"])
     exp = sc["expected"]
@@ -149,15 +186,33 @@ def score_run(run: dict, spec: dict) -> dict:
     called = set(run.get("tool_calls") or [])
     want_tools = set(exp.get("tool_calls") or [])
 
+    agent_utterances = [m["text"] for m in run.get("transcript", [])
+                        if m["role"] == "agent"]
     grounded = [g for g in exp.get("grounded_facts") or []
-                if normalize(g, lang) in normalize(agent_text, lang)]
+                if fact_present(agent_utterances, g, lang)]
     forbidden = [f for f in exp.get("forbidden") or []
-                 if normalize(f, lang) in normalize(agent_text, lang)]
+                 if fact_present(agent_utterances, f, lang)]
 
-    ttfa = [t["ttfa_ms"] for t in run.get("turns", []) if t.get("ttfa_ms")]
-    barges = [t for t in run.get("turns", []) if t.get("barge_in")]
+    turns = run.get("turns", [])
+    ttfa = [t["ttfa_ms"] for t in turns if t.get("ttfa_ms")]
+    barges = [t for t in turns if t.get("barge_in")]
     barge = [t["bargein_stop_ms"] for t in barges if t.get("bargein_stop_ms") is not None]
     inflight = [t for t in barges if t.get("response_inflight")]
+
+    # Barge-in adoption is a property of what the agent said *after* being
+    # interrupted, not of the caller transcript. Deriving it from `heard` (the
+    # first version) scored an accurately transcribed correction as adopted even
+    # when the agent carried on using the old value — i.e. it could not detect
+    # the failure it exists to detect.
+    bargein_correct = ""
+    if barges:
+        first = next(i for i, t in enumerate(turns) if t.get("barge_in"))
+        post = [t.get("agent_text") or "" for t in turns[first:]]
+        post_joined = " ".join(post)
+        checks = [slot_present(post_joined, k, v, lang) for k, v in slots.items()]
+        checks += [not fact_present(post, f, lang)
+                   for f in exp.get("forbidden") or []]
+        bargein_correct = int(all(checks)) if checks else ""
 
     return {
         "arm": run["arm"], "trial": run["trial"], "scenario": run["scenario"],
@@ -182,7 +237,7 @@ def score_run(run: dict, spec: dict) -> dict:
         "bargein_stop_ms": round(barge[0], 1) if barge else "",
         # Did the agent adopt the corrected value after being interrupted? This,
         # not the stop latency, is what a caller actually cares about.
-        "bargein_correct": (int(all(heard.values())) if barges and slots else ""),
+        "bargein_correct": bargein_correct,
         "agent_turns": sum(1 for m in run.get("transcript", []) if m["role"] == "agent"),
         "session_s": run.get("session_s", ""),
         "error": run.get("error") or "",

@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import csv
 import statistics
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -39,6 +40,8 @@ def main() -> None:
     ap.add_argument("--slots", required=True)
     ap.add_argument("--judge")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--allow-missing-judge", action="store_true",
+                    help="score runs with no judge verdict as failures instead of aborting")
     a = ap.parse_args()
 
     slots = read(a.slots)
@@ -48,6 +51,22 @@ def main() -> None:
     jmap: dict[tuple, list[dict]] = defaultdict(list)
     for j in judge:
         jmap[(j["arm"], j["trial"], j["scenario"])].append(j)
+
+    # A run with no judge row must not sail through. `judge.py` skips a scenario
+    # it cannot parse, and treating the resulting absence as "no groundedness
+    # objection" makes the conjunction vacuously true — so a judge outage would
+    # silently *raise* success rates, which is the worst direction for a
+    # measurement to fail in. If judge data was supplied at all, every scored run
+    # must have a verdict.
+    if judge:
+        missing = [(s["arm"], s["trial"], s["scenario"]) for s in slots
+                   if not jmap.get((s["arm"], s["trial"], s["scenario"]))]
+        if missing and not a.allow_missing_judge:
+            preview = ", ".join(f"{m[0]}/t{m[1]}/{m[2]}" for m in missing[:5])
+            sys.exit(f"{len(missing)} run(s) have no judge verdict "
+                     f"({preview}{'…' if len(missing) > 5 else ''}). "
+                     f"Re-run judge.py, or pass --allow-missing-judge to score "
+                     f"them as failures.")
 
     per_run = []
     for s in slots:
@@ -63,7 +82,8 @@ def main() -> None:
               and s["tool_ok"] == "1"
               and s["grounded_ok"] == "1"
               and num(s["forbidden_hit"], 0) == 0
-              and (grounded_judge is None or grounded_judge >= 0.5))
+              and (grounded_judge is not None and grounded_judge >= 0.5
+                   if judge else True))
         per_run.append({**s, "judge_grounded": grounded_judge,
                         "judge_resolution": resolution, "judge_tone": tone,
                         "success": int(ok)})

@@ -2,18 +2,22 @@
 
 Run 2026-08-02. Harness, raw logs and CSVs: [`bench/quality/`](../../bench/quality/).
 Datasets: [`voice-eval-datasets.md`](./voice-eval-datasets.md).
-Actual spend **$22.29** at catalog sell rates (direct Azure retail is lower).
+Actual spend **$23.19** at catalog sell rates (direct Azure retail is lower).
 
 ---
 
 ## The answer
 
-**Keep `kataleptic-realtime-hd` (Voice Live + gpt-4.1-mini) as the default, and do
-not turn on Azure's noise suppression.** Then offer gpt-realtime-2 as an opt-in
-"more capable, slower" tier for businesses that take bookings with names and
-numbers.
+**Keep `kataleptic-realtime-hd` (Voice Live + gpt-4.1-mini) as the default for
+information-only businesses, route booking businesses to gpt-realtime-2, and
+never turn on Azure's noise suppression.**
 
-The reasoning is a straight speed/accuracy trade, and it is not close on either axis:
+That split is sharper than the earlier draft of this report, because fixing the
+scoring bugs in §Confounds 11 widened the quality gap rather than closing it.
+Voice Live is faster and cheaper and hears better; gpt-realtime-2 is
+substantially more reliable at completing a whole call without saying something
+untrue. OpenFon already stores `realtime_model` per business, so this is a
+settings default, not a rebuild.
 
 | | Voice Live + gpt-4.1-mini | gpt-realtime-2 (either stack) |
 |---|---|---|
@@ -21,26 +25,37 @@ The reasoning is a straight speed/accuracy trade, and it is not close on either 
 | Time to first audio, p95 | **1654 ms** | 3468–3812 ms |
 | Caller-slot capture, heard | **0.967** | 0.856–0.933 |
 | Caller-slot capture, echoed back | 0.719 | **0.812–0.819** |
-| Judge groundedness | 0.667 | **0.939** |
-| Strict task success (pass^3) | 0.091 | **0.182–0.273** |
+| Judge groundedness | 0.697 | **1.000** |
+| Strict task success | 0.394 | **0.424–0.606** |
+| pass^3 | 0.182 | **0.273–0.545** |
 | Cost | **$0.03/min** | $0.07/min |
 
 Voice Live answers **~690 ms sooner at p50 and over two seconds sooner at p95**,
 at 43 % of the cost, and it *hears* the caller better — 0.967 vs 0.856 slot
 capture, and it never lost a phone number. On a phone call the latency gap is
-the difference between a receptionist and a bad connection, and it is the first
-thing a caller notices.
+the difference between a receptionist and a bad connection.
 
-What you give up is narrower than the latency gap but sharper than it looks:
-gpt-realtime-2 is **much better at not inventing facts** (judge groundedness
-0.939 vs 0.667 — the largest single gap anywhere in this study) and confirms
-details back far more often (0.819 vs 0.719). The two engines fail differently:
-one mishears a name, the other invents an opening time. For a dental practice
-taking bookings that distinction matters, which is why gpt-realtime-2 belongs in
-the product as a tier rather than as the default.
+What you give up is sharper than the latency gap. gpt-realtime-2 got a **perfect
+groundedness score — 0 unsupported claims in 66 runs** — against 24 for the Voice
+Live arms, and it completes the whole call correctly **three times out of three
+in 54.5 % of scenarios against 18.2 %**. The two engines fail differently: one
+mishears a name, the other says something that is not true.
+
+**What gpt-4.1-mini actually gets wrong matters for a booking business.** Six of
+its 24 groundedness failures are the agent telling a caller a specific slot *is
+available* — "Thursday, August 6th, after 3 PM is available" — when the prompt
+says in as many words *"Do not promise a confirmed slot."* gpt-realtime-2 never
+did this. A practice would have to either honour those slots or ring the caller
+back to apologise.
+
+The remaining ~9 are the judge applying "no unsupported business fact" to
+conversational framing such as *"Dr. Weber is not available right now"* while
+taking a message. That is defensible behaviour and arguably a judge false
+positive, so **the raw 0.697 overstates the problem** — but the over-promising
+subset does not, and it is concentrated exactly where money changes hands.
 
 **The most decision-relevant number:** `vl-native-brain` (Voice Live serving
-gpt-realtime-2) scores like gpt-realtime-2 on groundedness (0.939) and like
+gpt-realtime-2) scores like gpt-realtime-2 on groundedness (1.000) and like
 gpt-realtime-2 on latency (2408 ms p50 — the *worst* p50 of any arm). So **the
 quality difference is the brain, and the speed difference is also the brain, not
 the serving stack.** Switching serving stack buys nothing on its own. There is
@@ -64,6 +79,10 @@ latency.
    captured every detail correctly and then would not close the call. The
    existing `isFarewell` heuristic and 15 s DO safety net are load-bearing, not
    belt-and-braces. Do not remove them.
+3. **Route booking businesses to gpt-realtime-2.** The one thing gpt-4.1-mini
+   gets wrong that costs real money is promising appointment slots the business
+   has not confirmed, against an explicit prompt rule. `realtime_model` is
+   already per-business in `agent_settings`, so this is a default, not a build.
 
 ---
 
@@ -221,11 +240,11 @@ question depends on is the genuine one, pinned to Monday 2026-08-03.
 
 | arm | success | pass^3 | slots heard | slots echoed | end_call | grounded (judge) | resolution | tone | TTFA p50 | TTFA p95 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `native-gpt-realtime-2` | **0.424** | **0.273** | 0.856 | **0.819** | 24/33 | **0.939** | **1.697** | 1.636 | 2079 | 3812 |
-| `vl-gpt41mini-dns` | **0.424** | **0.273** | **0.967** | 0.651 | 23/33 | 0.758 | 1.667 | 1.667 | 1450 | 1803 |
-| `vl-native-brain` | 0.394 | 0.182 | 0.933 | 0.812 | 23/33 | **0.939** | **1.697** | 1.606 | 2408 | 3468 |
-| `vl-gpt41mini` | 0.364 | 0.091 | **0.967** | 0.719 | 24/33 | 0.667 | 1.636 | **1.818** | 1393 | 1654 |
-| `vl-gpt41mini-semvad` | 0.303 | 0.182 | 0.933 | 0.767 | **25/33** | 0.727 | 1.727 | 1.636 | **1364** | **1527** |
+| `native-gpt-realtime-2` | **0.606** | **0.545** | 0.856 | **0.819** | 24/33 | **1.000** | 1.697 | 1.576 | 2079 | 3812 |
+| `vl-gpt41mini-dns` | 0.455 | 0.273 | **0.967** | 0.651 | 23/33 | 0.818 | 1.727 | 1.697 | 1450 | 1803 |
+| `vl-native-brain` | 0.424 | 0.273 | 0.933 | 0.812 | 23/33 | **1.000** | 1.727 | 1.576 | 2408 | 3468 |
+| `vl-gpt41mini` | 0.394 | 0.182 | **0.967** | 0.719 | 24/33 | 0.697 | 1.727 | **1.788** | 1393 | 1654 |
+| `vl-gpt41mini-semvad` | 0.364 | 0.182 | 0.933 | 0.767 | **25/33** | 0.758 | **1.788** | 1.697 | **1364** | **1527** |
 
 `success` is a strict conjunction: every expected slot heard correctly, `end_call`
 invoked where expected, every grounded fact stated, no forbidden claim, and the
@@ -234,44 +253,34 @@ trials.
 
 **The two capabilities separate cleanly.** Voice Live *hears* better — 0.967 vs
 0.856 slot capture, and it never lost a phone number. gpt-realtime-2 *reasons*
-better — judge groundedness 0.939 vs 0.667, the largest single gap in the table,
-and it confirms details back far more often (0.819 vs 0.719 echoed). An engine
-that hears the number but invents the opening hours and an engine that mishears
-the number but never makes a fact up fail differently, and which failure a
-business can live with is a product decision, not a benchmark one.
+better — a perfect 1.000 groundedness against 0.697, and it completes the whole
+call correctly on all three trials in 54.5 % of scenarios against 18.2 %.
 
-**Absolute success is low for everyone** — 0.30–0.42, pass^3 at most 0.27. That
-is the strict conjunction biting, dominated by `end_call` (23–25 of 33). It is a
-useful reading nonetheless: on a five-turn booking call with a spelled surname
-and a twelve-digit phone number, **no configuration tested gets everything right
-three times out of three more than a quarter of the time.** Whichever engine
-ships, the product needs the human-in-the-loop confirmation it already has.
+**`end_call` is the biggest single drag on strict success and is equally bad
+everywhere** (23–25 of 33; `tool_ok` 0.697–0.758). Because no arm is meaningfully
+better, it does not separate the engines — but it is a real product bug, and on
+`reschedule-en-01` it fired **1 time in 15**: the agent captured every detail
+correctly and then would not close the call.
 
-Where the remaining failures actually come from, now that the fixture and scorer
-defects are out of the way (see Confounds 9 and 10):
+Where the remaining failures come from, now that the fixture and scoring defects
+are out of the way (Confounds 9 and 11):
 
 | scenario | success | what fails |
 |---|---|---|
-| `reschedule-en-01` | 0/15 | every slot captured; `end_call` fires 1/15 — the agent keeps asking for a phone number instead of closing |
-| `book-de-01` | 0/15 | every slot but one; the ASR hears **"Katrin"** for "Kathrin" on 15/15 — a one-letter error that is nonetheless the wrong name in the booking |
-| `hours-de-01` | 1/15 | slots fine; `end_call` 4/15, grounded 10/15 |
+| `book-de-01` | 0/15 | the ASR hears **"Katrin"** for "Kathrin" on 15/15 — one letter, but the wrong name in the booking |
+| `reschedule-en-01` | 1/15 | every slot captured; `end_call` fires 1/15 |
 | `codeswitch-01` | 1/15 | language switch followed 14/15; `end_call` 0/15 |
-| `holiday-de-01` | 13/15 | mostly passes — the special-closure calendar lookup works |
-| `bargein-en-01` | 13/15 | correction adopted every time |
+| `message-de-01` | 2/15 | `end_call`, plus the judge objecting to "Dr. Weber is not available right now" |
+| `holiday-de-01` | 15/15 | the special-closure calendar lookup works on every arm and trial |
+| `bargein-en-01` | 13/15 | correction adopted 24/30 across arms |
 
 **Heard vs echoed.** `slots heard` is whether the engine's own caller transcript
 contains the value — did it *hear* the phone number. `slots echoed` is whether
 the agent repeated it back. The confirmation gap is brain/prompt behaviour, not
 recognition, and is fixable in the prompt; a recognition gap is not.
 
-**`end_call` is the single biggest drag on task success**, and it is bad on every
-arm (23–25 of 33). It is not an engine-selection criterion — no arm is
-meaningfully better — but it is a product bug: the agent says goodbye and then
-leaves the line open.
-
 **Code-switching:** every Voice Live arm followed the German→English switch on
-3/3 trials. Native gpt-realtime-2 failed it once (2/3). The multilingual Azure
-voice is doing real work here.
+3/3 trials. Native gpt-realtime-2 failed it once (2/3).
 
 ### Barge-in: the finding is that you cannot test it server-side
 
@@ -322,8 +331,8 @@ Stated rather than smoothed over.
 6. **n is small**: 25 utterances per Track A cell, 3 trials per Track B cell.
    Differences under ~1 pp of WER, or one scenario of success, are noise.
 7. **The judge was validated, not assumed.** Two seeds with different
-   presentation orders agreed on groundedness 157/165 (**95.2 %**), resolution
-   98.2 %, tone 83.0 %. Groundedness — the only judge output feeding the
+   presentation orders agreed on groundedness 163/165 (**98.8 %**), resolution
+   99.4 %, tone 83.6 %. Groundedness — the only judge output feeding the
    pass/fail conjunction — is among the most reliable. Tone is too noisy to rank
    arms on and is not used for anything load-bearing. The parser now *raises* on
    a malformed reply rather than defaulting, and the runner exits non-zero: a
@@ -352,6 +361,38 @@ Stated rather than smoothed over.
    real subscriber. A test fails the build if a fixture number leaves those
    ranges.
 
+11. **Six scoring bugs were found in code review and fixed; three moved
+   reported numbers.** All were scoring-side, so they were corrected by
+   re-deriving from the existing raw logs rather than re-running calls.
+   * *Clock times were compared as text.* `normalize("14:00")` is
+     "vierzehn null", which cannot match "vierzehn uhr" or "2 PM", so **every
+     time-valued grounded fact was unsatisfiable** and correct answers scored as
+     ungrounded. Times are now canonicalised temporally. `grounded_ok` rose from
+     147/165 to 159/165 and strict success rose on every arm.
+   * *Forbidden claims were matched across turn boundaries.* Joining all agent
+     turns let "…Monday until 17:00" plus "On Fridays we close at 14:00"
+     synthesise the forbidden claim "17:00 on Friday" out of two correct
+     answers. Facts are now matched within a single utterance; the one
+     `forbidden_hit` in the whole study was this false positive and is now zero.
+   * *`bargein_correct` inspected the caller transcript*, so an accurately
+     transcribed correction counted as adopted even when the agent ignored it.
+     It now reads the agent's post-interruption reply: 24/30, not 30/30.
+   * *A missing judge verdict counted as a pass.* `summarize.py` treated an
+     absent groundedness row as "no objection", so a judge outage would have
+     *raised* success rates. It now aborts, or scores such runs as failures under
+     `--allow-missing-judge`.
+   * *`end_call` was double-counted.* One invocation surfaces on several events
+     sharing a `call_id`; all were appended, producing `['end_call','end_call']`.
+     This never affected `tool_ok`, which compares sets — **the 23–25/33
+     reliability figures are unchanged** — but the duplicate was shown to the
+     blind judge. Deduplicated on `call_id` and the judge re-run.
+   * *`run_all.sh` omitted `vl-gpt41mini-semvad`*, so the documented default
+     produced 132 calls where this report describes 165, dropping the control
+     that keeps the brain comparison VAD-neutral. Now included by default.
+
+   All six are pinned by tests in `bench/quality/test_scoring.py` (39 tests,
+   run in CI as a separate `bench-scoring` job).
+
 8. **A harness bug was found and fixed mid-run.** The first Track A pass scored
    `vl-gpt41mini-dns` with a collector that took the first transcript-shaped
    event per item; with the service double-emitting, this dropped 64 of 200
@@ -374,8 +415,8 @@ Stated rather than smoothed over.
 | pilots and probes | ~15 | — | ~0.05 | 0.75 |
 | DNS teardown (`probe_dns.py`, 8 legs x 50) | 62.0 | — | 0.03 | 1.86 |
 | re-runs after the review fixes (150 calls) | — | 63.0 | ~0.045 | 2.83 |
-| judge (gpt-5.5, 4 full passes + 1 partial) | | | | 0.90 |
-| **total** | | | | **22.29** |
+| judge (gpt-5.5, 6 full passes + 1 partial) | | | | 1.35 |
+| **total** | | | | **23.19** |
 
 Catalog sell rates; billed direct to the Azure sponsorship subscription, so the
 true cost is lower. The gateway's `DAILY_CAP_USD` breaker was never approached.

@@ -22,7 +22,10 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "prepare"))
 
 from judge import JudgeParseError, parse_verdicts  # noqa: E402
-from score_slots import detect_lang, slot_present, time_forms  # noqa: E402
+from run_scenarios import function_call  # noqa: E402
+from score_slots import (  # noqa: E402
+    detect_lang, fact_present, score_run, slot_present, time_forms,
+)
 from score_wer import normalize  # noqa: E402
 
 
@@ -132,6 +135,133 @@ class TestSlotMatching(unittest.TestCase):
             for f in time_forms("14:00", lang):
                 with self.subTest(lang=lang, form=f):
                     re.compile(f)
+
+
+class TestFactMatching(unittest.TestCase):
+    """Grounded / forbidden claims. Both bugs here inverted real results."""
+
+    def test_clock_times_compare_temporally(self):
+        # normalize("14:00") is "fourteen zero"/"vierzehn null", which can never
+        # match a spoken time. Every time-valued grounded fact was unsatisfiable,
+        # so a correct answer scored as ungrounded.
+        for utt in ("We close at 2 PM on Fridays.", "On Fridays we close at 14:00.",
+                    "Fridays, two o'clock."):
+            with self.subTest(utt=utt):
+                self.assertTrue(fact_present([utt], "14:00", "en"))
+        for utt in ("Freitags schließen wir um 14 Uhr.",
+                    "Wir schließen freitags um vierzehn Uhr."):
+            with self.subTest(utt=utt):
+                self.assertTrue(fact_present([utt], "14:00", "de"))
+
+    def test_clock_times_reject_the_wrong_hour(self):
+        self.assertFalse(fact_present(["We close at 5 PM on Fridays."], "14:00", "en"))
+        self.assertFalse(fact_present(["Wir schließen um 17 Uhr."], "14:00", "de"))
+
+    def test_facts_do_not_span_utterances(self):
+        """Two correct answers must not synthesise a forbidden claim."""
+        utterances = ["We are open Monday until 17:00.",
+                      "On Fridays we close at 14:00."]
+        # Joining these and substring-matching yields "17:00 on Friday" — a
+        # forbidden claim neither turn actually made.
+        self.assertFalse(fact_present(utterances, "17:00 on Friday", "en"))
+        # ...but a single utterance that really does say it must still fire.
+        self.assertTrue(fact_present(["We close at 17:00 on Friday."],
+                                     "17:00 on Friday", "en"))
+
+    def test_plain_facts_still_match(self):
+        self.assertTrue(fact_present(["We are closed on Saturday."], "closed", "en"))
+        self.assertTrue(fact_present(["Samstags sind wir geschlossen."],
+                                     "geschlossen", "de"))
+        self.assertFalse(fact_present(["We are open."], "geschlossen", "de"))
+
+
+class TestBargeInAdoption(unittest.TestCase):
+    """`bargein_correct` must read the agent's reply, not the caller transcript."""
+
+    SPEC = {"scenarios": [{
+        "id": "b", "lang": "en_US", "intent": "book_appointment",
+        "turns": [{"text": "the tenth"}, {"text": "no, the seventeenth",
+                                          "barge_in_after_ms": 700}],
+        "expected": {"tool_calls": [], "slots": {"day_of_month": ["17"]},
+                     "grounded_facts": [], "forbidden": ["the tenth"]}}]}
+
+    def run_with(self, agent_reply):
+        return score_run({
+            "arm": "a", "trial": 1, "scenario": "b", "lang": "en_US",
+            "intent": "book_appointment", "tool_calls": [], "error": None,
+            "transcript": [{"role": "caller_asr", "text": "no, the seventeenth"},
+                           {"role": "agent", "text": agent_reply}],
+            "turns": [{"index": 0, "agent_text": "What time on the tenth?"},
+                      {"index": 1, "barge_in": True, "agent_text": agent_reply}],
+        }, self.SPEC)
+
+    def test_adopted_correction_passes(self):
+        self.assertEqual(self.run_with("Certainly, the 17th it is.")["bargein_correct"], 1)
+
+    def test_ignored_correction_fails(self):
+        # The caller was transcribed perfectly, but the agent carried on with the
+        # old date. Deriving this from the caller ASR scored it as adopted.
+        self.assertEqual(self.run_with("What time on the tenth suits you?")["bargein_correct"], 0)
+
+
+class TestToolCallDedup(unittest.TestCase):
+    """One invocation, several events, one recorded call."""
+
+    def test_same_call_id_across_event_types_is_one_call(self):
+        cid = "call_abc"
+        evs = [
+            {"type": "response.output_item.added", "call_id": cid,
+             "item": {"name": "end_call"}},
+            {"type": "conversation.item.created",
+             "item": {"type": "function_call", "name": "end_call", "call_id": cid}},
+            {"type": "response.function_call_arguments.done", "call_id": cid,
+             "name": "end_call"},
+        ]
+        seen, names = set(), []
+        for ev in evs:
+            got = function_call(ev)
+            self.assertIsNotNone(got)
+            call_id, name = got
+            self.assertEqual(call_id, cid)
+            if call_id not in seen:
+                seen.add(call_id)
+                names.append(name)
+        self.assertEqual(names, ["end_call"])
+
+    def test_two_distinct_calls_are_both_kept(self):
+        seen, names = set(), []
+        for cid in ("call_1", "call_2"):
+            call_id, name = function_call(
+                {"type": "response.function_call_arguments.done",
+                 "call_id": cid, "name": "end_call"})
+            if call_id not in seen:
+                seen.add(call_id)
+                names.append(name)
+        self.assertEqual(names, ["end_call", "end_call"])
+
+    def test_non_tool_events_are_ignored(self):
+        for ev in ({"type": "response.audio.delta", "delta": "x"},
+                   {"type": "response.function_call_arguments.delta",
+                    "call_id": "c"},
+                   {"type": "conversation.item.created",
+                    "item": {"type": "message", "role": "assistant"}}):
+            with self.subTest(ev=ev["type"]):
+                self.assertIsNone(function_call(ev))
+
+
+class TestRunAllReproducesTheReport(unittest.TestCase):
+    def test_default_scenario_arms_include_the_vad_control(self):
+        """The report is 165 calls across 5 arms; the default must produce that.
+
+        Omitting vl-gpt41mini-semvad yields 132 calls and removes the control
+        that keeps the brain comparison VAD-neutral.
+        """
+        sh = (HERE / "run_all.sh").read_text()
+        line = next(l for l in sh.splitlines() if l.startswith("SC_ARMS="))
+        for arm in ("vl-gpt41mini", "vl-gpt41mini-dns", "vl-gpt41mini-semvad",
+                    "vl-native-brain", "native-gpt-realtime-2"):
+            with self.subTest(arm=arm):
+                self.assertIn(arm, line)
 
 
 class TestJudgeParsing(unittest.TestCase):
