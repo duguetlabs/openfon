@@ -333,7 +333,7 @@ been delivered in full.
 Written down because a reader deciding on the strength of this study deserves the
 same summary the reviewers had.
 
-**Twelve instances of one bug class** were found across seven rounds of review, in
+**Thirteen instances of one bug class** were found across eight rounds of review, in
 which missing or unverified data read as a passing result — a missing judge row,
 an empty judge file, a missing trial, duplicate trials counted as distinct ones,
 a scenario an arm never ran, an unparseable numeric, an errored run, a call the

@@ -86,7 +86,8 @@ python score_asr.py   --hyp results/asr.jsonl --expect-clips 25 --out results/as
 python score_slots.py --runs results/scenarios.jsonl --out results/slots.csv
 KATALEPTIC_KEY=... python judge.py --runs results/scenarios.jsonl --out results/judge.csv --seed 1
 KATALEPTIC_KEY=... python judge.py --runs results/scenarios.jsonl --out results/judge_seed2.csv --seed 2
-python summarize.py --slots results/slots.csv --judge results/judge.csv --trials 3 --out results/summary.csv
+python summarize.py --slots results/slots.csv --judge results/judge.csv \
+  --scenarios fixtures/scenarios.json --trials 3 --out results/summary.csv
 
 # What every completeness check compares, and how it can be fooled:
 #   bench/quality/COMPLETENESS.md

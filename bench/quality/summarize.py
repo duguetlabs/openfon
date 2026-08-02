@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import math
 import statistics
 import sys
@@ -85,6 +86,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--slots", required=True)
     ap.add_argument("--judge")
+    ap.add_argument("--scenarios", default="fixtures/scenarios.json",
+                    help="fixture defining the expected scenario set")
     ap.add_argument("--out", required=True)
     ap.add_argument("--trials", type=int, default=3,
                     help="expected trials per (arm, scenario); pass^k uses this k")
@@ -127,7 +130,37 @@ def main() -> None:
         jmap[(j["arm"], j["trial"], j["scenario"])].append(j)
 
     arms = sorted({s["arm"] for s in slots})
-    scenarios = sorted({s["scenario"] for s in slots})
+
+    # The scenario universe comes from the FIXTURE, never from the results.
+    #
+    # Inferring it from the rows present is the one place left where the harness
+    # trusted its own output to define what that output should contain: omit a
+    # scenario across every arm and it vanishes from `expected_runs` and the
+    # `pass_k` denominator alike, so the completeness check passes and every
+    # aggregate is computed over a smaller, quieter matrix. The per-scenario
+    # trial-identity checks cannot see it, because they verify trials *within* a
+    # scenario and this loses the scenario.
+    spec_path = Path(a.scenarios)
+    if not spec_path.exists():
+        sys.exit(f"scenario fixture {a.scenarios} not found. The expected scenario "
+                 f"set must come from the fixture; inferring it from the results "
+                 f"lets a globally missing scenario pass unnoticed. Pass --scenarios.")
+    spec = json.loads(spec_path.read_text())
+    scenarios = sorted(s["id"] for s in spec["scenarios"] if s.get("scored", True) is not False)
+    if not scenarios:
+        sys.exit(f"{a.scenarios} declares no scored scenarios")
+
+    seen_scenarios = {s["scenario"] for s in slots}
+    if unknown := seen_scenarios - set(scenarios):
+        sys.exit(f"{a.slots} contains scenario(s) absent from {a.scenarios} or marked "
+                 f"unscored: {', '.join(sorted(unknown))}")
+    if absent := set(scenarios) - seen_scenarios:
+        msg = (f"{len(absent)} fixture scenario(s) have no rows at all: "
+               f"{', '.join(sorted(absent))}")
+        if not a.allow_incomplete:
+            sys.exit(f"{msg}. Re-run them, or use --allow-incomplete to score them "
+                     f"as failures across every arm.")
+        print(f"{msg} — scored as failures for every arm.", file=sys.stderr)
 
     # Every arm must have run every scenario once per trial id 1..k.
     #

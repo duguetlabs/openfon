@@ -376,9 +376,16 @@ class TestAbsentDataNeverPasses(unittest.TestCase):
                 w.writerow(r)
         return p
 
+    def scenario_fixture(self, tmp, ids):
+        p = Path(tmp) / "scenarios.json"
+        p.write_text(json.dumps({"scenarios": [{"id": i} for i in sorted(set(ids))]}))
+        return p
+
     def summarize(self, tmp, slot_rows, judge_rows=None, extra=()):
         slots = self.write(tmp, "slots.csv", self.SLOTS_HEADER, slot_rows)
+        spec = self.scenario_fixture(tmp, [r["scenario"] for r in slot_rows])
         cmd = [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
+               "--scenarios", str(spec),
                "--out", str(Path(tmp) / "out.csv"), "--trials", "1", *extra]
         if judge_rows is not None:
             jh = "scenario,arm,trial,lang,seed,groundedness,resolution,tone,groundedness_evidence,note"
@@ -427,9 +434,10 @@ class TestAbsentDataNeverPasses(unittest.TestCase):
             slots = self.write(tmp, "slots.csv", self.SLOTS_HEADER, rows)
             jh = "scenario,arm,trial,lang,seed,groundedness,resolution,tone,groundedness_evidence,note"
             j = self.write(tmp, "judge.csv", jh, judge)
+            spec = self.scenario_fixture(tmp, [r["scenario"] for r in rows])
             r = subprocess.run(
                 [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
-                 "--judge", str(j), "--trials", "3",
+                 "--judge", str(j), "--trials", "3", "--scenarios", str(spec),
                  "--out", str(Path(tmp) / "out.csv")], capture_output=True, text=True)
             self.assertNotEqual(r.returncode, 0)
             self.assertIn("do not have exactly one row per trial 1..3", r.stderr)
@@ -547,9 +555,11 @@ class TestAggregatesKnowTheirDenominator(unittest.TestCase):
             jh = ("scenario,arm,trial,lang,seed,groundedness,resolution,tone,"
                   "groundedness_evidence,note")
             j = helper.write(tmp, "judge.csv", jh, judge)
+            spec = helper.scenario_fixture(tmp, [r["scenario"] for r in rows])
             r = subprocess.run(
                 [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
                  "--judge", str(j), "--trials", "3", "--allow-incomplete",
+                 "--scenarios", str(spec),
                  "--out", str(Path(tmp) / "out.csv")], capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stderr)
             with open(Path(tmp) / "out.csv") as fh:
@@ -567,9 +577,11 @@ class TestAggregatesKnowTheirDenominator(unittest.TestCase):
             jh = ("scenario,arm,trial,lang,seed,groundedness,resolution,tone,"
                   "groundedness_evidence,note")
             j = helper.write(tmp, "judge.csv", jh, judge)
+            spec = helper.scenario_fixture(tmp, [r["scenario"] for r in rows])
             r = subprocess.run(
                 [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
                  "--judge", str(j), "--trials", "2", "--allow-incomplete",
+                 "--scenarios", str(spec),
                  "--out", str(Path(tmp) / "out.csv")], capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stderr)
             with open(Path(tmp) / "out.csv") as fh:
@@ -695,9 +707,10 @@ class TestCompletenessByIdentity(unittest.TestCase):
         judge = [self.h.judge_row(arm=r["arm"], trial=r["trial"],
                                   scenario=r["scenario"]) for r in slot_rows]
         j = self.h.write(tmp, "judge.csv", jh, judge)
+        spec = self.h.scenario_fixture(tmp, [r["scenario"] for r in slot_rows])
         return subprocess.run(
             [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
-             "--judge", str(j), "--trials", str(trials),
+             "--judge", str(j), "--trials", str(trials), "--scenarios", str(spec),
              "--out", str(Path(tmp) / "out.csv"), *extra],
             capture_output=True, text=True)
 
@@ -749,6 +762,53 @@ class TestCompletenessByIdentity(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stderr)
             with open(Path(tmp) / "out.csv") as fh:
                 self.assertEqual([x["arm"] for x in csv.DictReader(fh)], ["a"])
+
+    def test_a_globally_missing_scenario_is_caught(self):
+        """The one gap the per-scenario trial checks cannot see.
+
+        Omit a scenario from every arm and, if the universe is inferred from the
+        rows, it vanishes from expected_runs and the pass_k denominator alike.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = [self.h.slot_row(arm=arm, scenario="s1", trial=t)
+                    for arm in ("a", "b") for t in (1, 2)]
+            slots = self.h.write(tmp, "slots.csv", self.h.SLOTS_HEADER, rows)
+            # The fixture declares two scenarios; the results contain one.
+            spec = self.h.scenario_fixture(tmp, ["s1", "s2"])
+            r = subprocess.run(
+                [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
+                 "--trials", "2", "--scenarios", str(spec),
+                 "--out", str(Path(tmp) / "out.csv")], capture_output=True, text=True)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("no rows at all: s2", r.stderr)
+
+    def test_a_globally_missing_scenario_stays_in_the_denominator(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = [self.h.slot_row(arm="a", scenario="s1", trial=t) for t in (1, 2)]
+            slots = self.h.write(tmp, "slots.csv", self.h.SLOTS_HEADER, rows)
+            spec = self.h.scenario_fixture(tmp, ["s1", "s2"])
+            r = subprocess.run(
+                [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
+                 "--trials", "2", "--scenarios", str(spec), "--allow-incomplete",
+                 "--out", str(Path(tmp) / "out.csv")], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            with open(Path(tmp) / "out.csv") as fh:
+                out = list(csv.DictReader(fh))[0]
+            # Two scenarios expected, one passing -> 0.5, not 1.0.
+            self.assertEqual(int(out["scenarios"]), 2)
+            self.assertEqual(float(out["pass_k"]), 0.5)
+
+    def test_results_cannot_introduce_a_scenario_the_fixture_lacks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = [self.h.slot_row(scenario=sc, trial=1) for sc in ("s1", "rogue")]
+            slots = self.h.write(tmp, "slots.csv", self.h.SLOTS_HEADER, rows)
+            spec = self.h.scenario_fixture(tmp, ["s1"])
+            r = subprocess.run(
+                [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
+                 "--trials", "1", "--scenarios", str(spec),
+                 "--out", str(Path(tmp) / "out.csv")], capture_output=True, text=True)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("rogue", r.stderr)
 
     def test_complete_data_passes(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -877,10 +937,13 @@ class TestCompanionFilePaths(unittest.TestCase):
         """`out.replace('.csv', ...)` returns `out`, so the detail write clobbers it."""
         with tempfile.TemporaryDirectory() as tmp:
             h = TestAbsentDataNeverPasses()
-            slots = h.write(tmp, "slots.csv", h.SLOTS_HEADER, [h.slot_row()])
+            rows = [h.slot_row()]
+            slots = h.write(tmp, "slots.csv", h.SLOTS_HEADER, rows)
+            spec = h.scenario_fixture(tmp, [r["scenario"] for r in rows])
             r = subprocess.run(
                 [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
-                 "--trials", "1", "--out", str(Path(tmp) / "noext")],
+                 "--trials", "1", "--scenarios", str(spec),
+                 "--out", str(Path(tmp) / "noext")],
                 capture_output=True, text=True)
             self.assertNotEqual(r.returncode, 0)
             self.assertIn("no file extension", r.stderr)
@@ -917,9 +980,12 @@ class TestUnscoredScenariosAreExcluded(unittest.TestCase):
                      h.judge_row(scenario="s2", trial=1)]
             slots = h.write(tmp, "slots.csv", h.SLOTS_HEADER, rows)
             j = h.write(tmp, "judge.csv", jh, judge)
+            spec = Path(tmp) / "scenarios.json"
+            spec.write_text(json.dumps({"scenarios": [
+                {"id": "s1"}, {"id": "s2", "scored": False}]}))
             r = subprocess.run(
                 [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
-                 "--judge", str(j), "--trials", "1",
+                 "--judge", str(j), "--trials", "1", "--scenarios", str(spec),
                  "--out", str(Path(tmp) / "out.csv")], capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertIn("excluded 1 unscored scenario", r.stderr)

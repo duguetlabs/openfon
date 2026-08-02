@@ -3,7 +3,7 @@
 Every place this harness decides **"this run is complete / this arm is verified /
 this result counts"** — what each check compares, and how it can be fooled.
 
-This file exists because **the same bug class was found twelve times across seven
+This file exists because **the same bug class was found thirteen times across eight
 review rounds**, and three separate sweeps each missed instances of the class
 they were sweeping for. That is not a run of bad luck — it is the failure mode
 this code attracts, and anyone extending the harness should expect to introduce
@@ -30,6 +30,7 @@ correct ones, which is worse than no numbers.
 | 3 | `run_all.sh` | did the matrix complete | every runner invocation's exit code; collects failures and **exits non-zero** | a runner that exits 0 having swallowed its errors — which is why #1 exists. Also `OUT` must point somewhere disposable in tests: the `: >` truncation writes to `$HERE` by default and once destroyed a finished run. |
 | 4 | `summarize.py` trial check | did every arm run everything | **set of trial ids** per `(arm, scenario)` equals `{1..k}`, no duplicates, no extras | nothing known. Counting rows was the bug: three copies of trial 1 satisfied `--trials 3`. Runners append to JSONL, so re-runs duplicate rather than replace. |
 | 5 | `summarize.py` judge check | was every run judged | a verdict row exists for every `(arm, trial, scenario)`; empty `--judge` file is an **error**, not "no judge" | a judge that returns verdicts for the wrong candidates — blocked in `parse_verdicts` by id membership. |
+| 5b | `summarize.py` scenario universe | which scenarios should exist | the **fixture's** scored scenario ids, against the ids present; rejects both gaps and rogues | nothing known. Inferring the set from the results was the bug, and the only one the per-scenario trial checks could not see: they verify trials *within* a scenario, this loses the scenario. |
 | 6 | `summarize.py` conjunction | did this run succeed | `error` empty **and** `agent_turns > 0` **and** slots/tools/grounded/forbidden **and** a judge verdict | an unparseable numeric — blocked by `strict_num`, which aborts rather than defaulting. |
 | 7 | `summarize.py` rates | `success_mean`, `tool_ok`, `grounded_ok` | numerator over **expected** runs (`scenarios × trials`), not rows present | nothing known. Averaging present rows was the bug: 2 of an expected 3 reported 1.0. |
 | 8 | `summarize.py` `pass_k` | did it pass every trial | trial ids `{1..k}` each present exactly once **and** all succeeded; denominator is every scenario | nothing known. |
@@ -54,6 +55,19 @@ anything that fails visibly, or only under a debug flag, gets written down.**
   rows is absent from the output rather than present with `complete=0`, because
   arms and conditions are discovered from the data. Same reasoning: the default
   path aborts instead.
+- **`response.done` with `status == "failed"` reads as a normal finish.**
+  `run_scenarios.py` only special-cases `cancelled`; a response the service marks
+  failed, with no separate `error` event, sets `done` like any other. A partially
+  failed call can therefore enter scoring if another turn produced text. Needs a
+  specific upstream misbehaviour to trigger and did not occur in this run — all
+  165 runs are error-free — but a future run could be scored on a call the
+  service considered failed.
+- **The final drain in `run_asr.py` catches `Exception`.** A websocket closure or
+  JSON decode error during the end-of-batch drain is indistinguishable from the
+  ordinary timeout that ends it, so the clip yields an empty, error-free
+  hypothesis and is scored as a recognition miss rather than retried. The
+  `CommitDesync` guard (#2) covers the equivalent failure during the main loop;
+  this is the tail.
 - **A mid-stream `ws.send()` failure can hang the run.** The mic task can die
   without setting the `last` event the turn is awaiting, so the run stops rather
   than erroring. This is operational, not a correctness defect: it halts a run
