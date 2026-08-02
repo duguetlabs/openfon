@@ -113,7 +113,7 @@ export class CallSession implements DurableObject {
     server.accept();
     this.ws = server;
     server.addEventListener('message', (ev) => {
-      this.onMessage(ev).catch((err) => this.sendError(`${err}`));
+      this.onMessage(ev).catch((err) => this.failInternally(err));
     });
     server.addEventListener('close', () => {
       this.closeUpstream();
@@ -130,9 +130,23 @@ export class CallSession implements DurableObject {
     }
   }
 
+  // Only for messages written to be read by a caller. Anything derived from a
+  // thrown error goes through failInternally instead.
   private sendError(message: string): void {
     console.error('call error:', message);
     this.send({ type: 'error', message });
+  }
+
+  // The disclosure boundary for the public call socket. Thrown errors quote
+  // whatever the failure carried — an upstream response body, a redirect
+  // target, an endpoint hostname — and this widget is reachable by anyone with
+  // the business's public link. So the detail is logged and kept for the
+  // owner's call log, and the caller is told only that the call broke.
+  private failInternally(err: unknown): void {
+    const detail = `${err}`;
+    console.error(`call ${this.callId}: ${detail}`);
+    this.failure ??= `Call failed: ${detail}`;
+    this.send({ type: 'error', message: 'Sorry — this call ran into a problem. Please try again.' });
   }
 
   private async loadCall(): Promise<void> {

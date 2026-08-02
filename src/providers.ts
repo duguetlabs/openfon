@@ -180,7 +180,10 @@ export async function chatComplete(
     }),
   });
   if (res.status >= 300 && res.status < 400) {
-    throw new Error(`LLM error ${res.status}: endpoint redirected to ${res.headers.get('location') ?? 'an undisclosed location'}; redirects are not followed`);
+    // The target can name an internal host or carry signed query parameters,
+    // and these errors surface on a public socket — log it, don't throw it.
+    console.error(`LLM endpoint redirected to ${res.headers.get('location') ?? 'an undisclosed location'}`);
+    throw new Error(`LLM error ${res.status}: endpoint redirected; redirects are not followed`);
   }
   if (!res.ok) {
     const body = await res.text();

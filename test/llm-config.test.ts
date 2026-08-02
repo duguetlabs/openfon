@@ -202,6 +202,9 @@ describe('chatComplete', () => {
     await expect(chatComplete(cfg, [{ role: 'user', content: 'hi' }])).rejects.toThrow(/redirects are not followed/);
     expect(fetchStub).toHaveBeenCalledTimes(1);
     expect((fetchStub.mock.calls[0] as unknown as [string, RequestInit])[1].redirect).toBe('manual');
+    // The target is logged, never thrown: these errors surface on a public
+    // socket, and it can name an internal host or a signed URL.
+    await expect(chatComplete(cfg, [{ role: 'user', content: 'hi' }])).rejects.not.toThrow(/169\.254/);
   });
 
   it('appends the endpoint path to every shape of base URL', async () => {
