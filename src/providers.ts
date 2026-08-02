@@ -27,10 +27,15 @@ export function sameLlmEndpoint(a: string, b: string): boolean {
       const p = new URL(u.trim());
       const cred = p.username || p.password ? `${p.username}:${p.password}@` : '';
       const port = p.port ? `:${p.port}` : '';
-      // Brackets stay on IPv6 literals: strip them and "[2001:db8::1]:8443"
-      // flattens into "[2001:db8::1:8443]", two different hosts reading as one.
-      const host = p.hostname.startsWith('[') ? p.hostname.toLowerCase() : normalizeHost(p.hostname);
-      return `${p.protocol}//${cred}${host}${port}${p.pathname.replace(/\/+$/, '')}${p.search}`;
+      // The host goes in exactly as the parser reports it — brackets on IPv6
+      // literals, DNS root dot and all. Identity asks "is this the same
+      // destination", and fetch sends "api.example.com." in the Host header,
+      // which a virtual host may route elsewhere than "api.example.com".
+      // isInternalHost normalizes both away because it asks a different
+      // question — "is this the same machine". Two questions, two
+      // normalizations: collapsing them is what let "[2001:db8::1]:8443" and
+      // "[2001:db8::1:8443]" read as one endpoint.
+      return `${p.protocol}//${cred}${p.hostname.toLowerCase()}${port}${p.pathname.replace(/\/+$/, '')}${p.search}`;
     } catch {
       return u.trim().replace(/\/+$/, '');
     }
@@ -67,11 +72,12 @@ export function resolveLlm(env: Env, settings: AgentSettings | null): LlmConfig 
   return { baseUrl: custom, apiKey: settings.llm_api_key, model };
 }
 
-// The URL parser already folds case, punycodes IDNs, and canonicalizes IP
-// literals for us, but it keeps the DNS root dot: "localhost." and
-// "svc.internal." are the same host to every resolver, so they must not read
-// as different ones here. Brackets come off so IPv6 literals can be inspected
-// as addresses — callers that compare hosts keep them (see sameLlmEndpoint).
+// Normalization for *address inspection* — "which machine is this" — not for
+// endpoint identity, which keeps both of these (see sameLlmEndpoint). The URL
+// parser already folds case, punycodes IDNs, and canonicalizes IP literals,
+// but it keeps the DNS root dot: "localhost." resolves exactly where
+// "localhost" does, so it must not read as a different machine. Brackets come
+// off so an IPv6 literal can be matched as an address.
 function normalizeHost(hostname: string): string {
   return hostname.replace(/^\[|\]$/g, '').replace(/\.+$/, '').toLowerCase();
 }

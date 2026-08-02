@@ -258,10 +258,18 @@ describe('sameLlmEndpoint', () => {
     expect(sameLlmEndpoint('https://[2001:db8::1]:8443/v1', 'https://[2001:DB8::1]:8443/v1/')).toBe(true);
   });
 
-  it('ignores the DNS root dot and the fragment', () => {
-    expect(sameLlmEndpoint('https://api.example.com./v1', 'https://api.example.com/v1')).toBe(true);
-    expect(sameLlmEndpoint('https://api.example.com:8443/v1', 'https://api.example.com.:8443/v1')).toBe(true);
-    // fetch never sends a fragment, so it cannot change where the call lands.
+  it('keeps the DNS root dot, which fetch puts in the Host header', () => {
+    // Identity asks "same destination", and a virtual host may route
+    // "api.example.com." elsewhere than "api.example.com" — so a business
+    // saving the dotted form is configuring its own endpoint, with its own key,
+    // not the instance's. (isInternalHost strips the dot: different question.)
+    expect(sameLlmEndpoint('https://api.example.com./v1', 'https://api.example.com/v1')).toBe(false);
+    expect(sameLlmEndpoint('https://api.example.com:8443/v1', 'https://api.example.com.:8443/v1')).toBe(false);
+    expect(sameLlmEndpoint('https://api.example.com./v1', 'https://API.example.com./v1/')).toBe(true);
+  });
+
+  it('ignores the fragment', () => {
+    // fetch never sends it, so it cannot change where the call lands.
     expect(sameLlmEndpoint('https://api.example.com/v1#x', 'https://api.example.com/v1')).toBe(true);
   });
 });
