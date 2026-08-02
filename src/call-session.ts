@@ -129,11 +129,19 @@ export class CallSession implements DurableObject {
       return new Response('call already connected', { status: 409 });
     }
     this.callId = callId;
+    // Armed before the socket is accepted, so a storage failure here leaves no
+    // trace. Assigning `this.ws` first meant a failed arm returned an error
+    // with a socket in place but no listeners and no watchdog: every later
+    // attach got the 409 above, and nothing existed to finalize the row — an
+    // active call that could neither be recovered nor replaced, which is the
+    // exact state this class exists to prevent, reached through the guard that
+    // prevents it. Ordering it this way rather than unwinding in a catch: the
+    // undo path would be one more thing to get right.
+    await this.armStartDeadline();
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     server.accept();
     this.ws = server;
-    await this.armStartDeadline();
     server.addEventListener('message', (ev) => {
       this.onMessage(ev).catch((err) => this.failInternally(err));
     });

@@ -57,10 +57,12 @@ class FakeSocket {
 class FakeStorage {
   map = new Map<string, unknown>();
   alarmAt: number | null = null;
+  failPuts = false; // durable storage having a bad moment
   async get<T>(key: string): Promise<T | undefined> {
     return this.map.get(key) as T | undefined;
   }
   async put(keyOrEntries: string | Record<string, unknown>, value?: unknown): Promise<void> {
+    if (this.failPuts) throw new Error('storage unavailable');
     if (typeof keyOrEntries === 'string') this.map.set(keyOrEntries, value);
     else for (const [k, v] of Object.entries(keyOrEntries)) this.map.set(k, v);
   }
@@ -259,6 +261,26 @@ describe('second attach to a live call', () => {
     serverSockets[0].receive({ type: 'start' });
     await flush();
     expect(serverSockets[0].countOf('ready')).toBe(1);
+  });
+
+  it('leaves no socket behind when arming the watchdog fails', async () => {
+    // Assigning this.ws before arming meant a storage failure returned an error
+    // with a socket in place but no listeners and no watchdog: every later
+    // attach hit the 409, and nothing existed to finalize the row. An active
+    // call that could neither be recovered nor replaced — reached through the
+    // guard that exists to prevent exactly that.
+    const { session, storage } = newSession();
+    storage.failPuts = true;
+
+    await expect(session.fetch(upgradeRequest())).rejects.toThrow('storage unavailable');
+
+    // Nothing was retained, so the next attempt is a clean one.
+    storage.failPuts = false;
+    const retry = await session.fetch(upgradeRequest());
+    expect(retry.status).toBe(101);
+    serverSockets.at(-1)!.receive({ type: 'start' });
+    await flush();
+    expect(serverSockets.at(-1)!.countOf('ready')).toBe(1);
   });
 
   it('refuses a replacement socket even after the first one closes', async () => {
@@ -1301,6 +1323,13 @@ describe('watchdog alarm', () => {
   });
 });
 
+// A trap for whoever widens the typecheck: `tsconfig.worker.json` includes only
+// `src/**/*.ts`, so nothing here is type-checked today, and the `globalThis as
+// never` casts below rely on that. Extending the typecheck to cover `test/` is
+// a reasonable thing to want given how much logic now lives here, and it will
+// fail on those casts first, for a reason that looks unrelated to the change.
+// Rewrite them as a typed global augmentation at that point, not before.
+//
 // NOT COVERED by this file, and worth stating plainly:
 //   * Real Workers runtime semantics — DO eviction, hibernation, and whether an
 //     alarm survives a deploy. These fakes assert our logic, not the platform's.
