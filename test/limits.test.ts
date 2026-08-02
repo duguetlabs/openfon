@@ -39,6 +39,22 @@ describe('POST /api/public/call/start burst', () => {
     expect(db.calls).toHaveLength(10); // and only those ten rows reached D1
   });
 
+  it('performs no database write for a request it refuses', async () => {
+    const { db, start } = setup();
+    // Exhaust both the per-IP call-start allowance (10) and the wider
+    // /api/public/* one (60), so everything after this is refused outright.
+    for (let i = 0; i < 60; i++) await start();
+    const settled = db.rowsWritten;
+
+    for (let i = 0; i < 300; i++) expect((await start()).status).toBe(429);
+
+    // Incrementing a counter that is already over its limit is a write the
+    // attacker buys and the operator pays for, unbounded, for as long as they
+    // keep going — and when D1's write quota runs out, `consume` itself starts
+    // failing and takes every public and login route with it.
+    expect(db.rowsWritten).toBe(settled);
+  });
+
   it('answers 429 with a Retry-After the widget can honour', async () => {
     const { start } = setup();
     for (let i = 0; i < 10; i++) await start();

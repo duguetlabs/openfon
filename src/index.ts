@@ -101,16 +101,27 @@ interface Reservation {
 
 // Counts this request and reports whether it busted the limit. One round trip:
 // D1 supports INSERT ... ON CONFLICT ... RETURNING.
+//
+// The WHERE on the conflict branch is what makes a refusal free. Without it, a
+// source that keeps hammering after being blocked buys a row write per request,
+// forever — so the harder the flood, the more D1 quota the limiter itself burns,
+// and when that quota runs out `consume` starts throwing and takes every public
+// and login route down with it. A limiter that costs the operator more the
+// harder it is attacked is worth less than no limiter at all. When the count is
+// already at the ceiling the upsert matches nothing, writes nothing, and returns
+// no row — an empty result is the refusal.
 async function consume(env: Env, limit: Limit, subject: string): Promise<Reservation> {
   const window = windowStart(limit);
   const row = await env.DB.prepare(
     `INSERT INTO rate_counters (bucket, window_start, count) VALUES (?, ?, 1)
-     ON CONFLICT(bucket, window_start) DO UPDATE SET count = count + 1
+     ON CONFLICT(bucket, window_start) DO UPDATE SET count = rate_counters.count + 1
+       WHERE rate_counters.count < ?
      RETURNING count`
   )
-    .bind(`${limit.name}:${subject}`, window)
+    .bind(`${limit.name}:${subject}`, window, limit.max)
     .first<{ count: number }>();
-  return { over: (row?.count ?? 1) > limit.max, window };
+  // No row means the conflict branch declined to write: already at the ceiling.
+  return { over: !row || row.count > limit.max, window };
 }
 
 async function clearLimit(env: Env, limit: Limit, subject: string): Promise<void> {

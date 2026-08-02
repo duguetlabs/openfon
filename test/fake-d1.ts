@@ -40,6 +40,10 @@ export class FakeD1 {
   // one handler the way a slow PBKDF2 login does in production.
   hook: ((sql: string) => void) | null = null;
 
+  // Rows actually written, the way D1 bills. Row *count* can look healthy while
+  // the writes underneath run away, so tests assert on this.
+  rowsWritten = 0;
+
   prepare(sql: string): FakeStatement {
     return new FakeStatement(this, sql.replace(/\s+/g, ' ').trim());
   }
@@ -89,6 +93,12 @@ class FakeStatement {
   }
 
   private exec(): { rows: Row[]; changes: number } {
+    const r = this.execRaw();
+    if (/^(INSERT|UPDATE|DELETE)/.test(this.sql)) this.db.rowsWritten += r.changes;
+    return r;
+  }
+
+  private execRaw(): { rows: Row[]; changes: number } {
     const q = this.sql;
     const a = this.args;
     this.db.hook?.(q);
@@ -96,9 +106,20 @@ class FakeStatement {
     // ---- rate_counters ----
     if (q.startsWith('INSERT INTO rate_counters')) {
       const key = `${a[0]}|${a[1]}`;
-      const n = (this.db.counters.get(key) ?? 0) + 1;
-      this.db.counters.set(key, n);
-      return { rows: [{ count: n }], changes: 1 };
+      const max = Number(a[2]);
+      const cur = this.db.counters.get(key);
+      if (cur === undefined) {
+        this.db.counters.set(key, 1);
+        return { rows: [{ count: 1 }], changes: 1 };
+      }
+      // The conflict branch carries a WHERE. When it fails, SQLite writes
+      // nothing and RETURNING yields no row — that is the refusal, and it must
+      // cost zero writes.
+      if (cur < max) {
+        this.db.counters.set(key, cur + 1);
+        return { rows: [{ count: cur + 1 }], changes: 1 };
+      }
+      return { rows: [], changes: 0 };
     }
     if (q.startsWith('SELECT count FROM rate_counters')) {
       const n = this.db.counters.get(`${a[0]}|${a[1]}`);

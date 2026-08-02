@@ -48,5 +48,18 @@ UPDATE calls SET connected_at = COALESCE(
 -- out the rows that were already stranded before the sweeper existed, so the
 -- dashboard stops showing them as "Call in progress…" forever. Rows backfilled
 -- above now read as "Call interrupted" instead, which is what they were.
+--
+-- These two must stay identical to sweepStaleCalls() in src/index.ts, including
+-- which column each one ages from: an upgrade that runs while a call is live has
+-- to reach the same verdict the cron would five minutes later. Ageing the
+-- connected branch from started_at would abandon a call created over an hour ago
+-- but connected moments ago — and once the status flips, CallSession.finalize()
+-- no longer matches the row, so a perfectly ordinary conversation is recorded as
+-- interrupted for good.
 UPDATE calls SET status = 'abandoned', ended_at = datetime('now')
- WHERE status = 'active' AND started_at < datetime('now', '-60 minutes');
+ WHERE status = 'active' AND connected_at IS NULL
+   AND started_at < datetime('now', '-15 minutes');
+
+UPDATE calls SET status = 'abandoned', ended_at = datetime('now')
+ WHERE status = 'active' AND connected_at IS NOT NULL
+   AND connected_at < datetime('now', '-60 minutes');
