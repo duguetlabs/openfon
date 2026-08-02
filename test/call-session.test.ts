@@ -755,6 +755,62 @@ describe('watchdog alarm', () => {
     expect(storage.map.get('hardDeadline')).toBeGreaterThan(0); // same write
   });
 
+  it('does not kill a start that is still in flight', async () => {
+    // The deadline could only see "startup has not finished", which is also
+    // what a slow D1 read or engine handshake looks like — so a caller sitting
+    // mid-connect was hung up on and told they had never started the call.
+    vi.useFakeTimers();
+    const { session, ctl, callUpdates } = newSession();
+    await session.fetch(upgradeRequest());
+    const sock = serverSockets[0];
+
+    let release!: () => void;
+    ctl.gate = { promise: new Promise<void>((r) => (release = r)), release: () => release() };
+    sock.receive({ type: 'start' }); // parks inside loadCall()
+    await flush();
+
+    vi.setSystemTime(Date.now() + 45_000); // well past the 30 s deadline
+    await session.alarm();
+    await flush();
+
+    expect(callUpdates()).toHaveLength(0); // survived
+    expect(sock.readyState).toBe(1);
+    expect(sock.typesSent()).not.toContain('ended');
+
+    ctl.gate.release();
+    ctl.gate = null;
+    await flush();
+    expect(sock.countOf('ready')).toBe(1); // and finishes normally
+  });
+
+  it('gives up on a start that never completes, with an accurate reason', async () => {
+    // A client that keeps pinging would otherwise hold a half-started call
+    // open forever: nothing else bounds the window before armWatchdog runs.
+    vi.useFakeTimers();
+    const { session, ctl, callUpdates } = newSession();
+    await session.fetch(upgradeRequest());
+    const sock = serverSockets[0];
+
+    let release!: () => void;
+    ctl.gate = { promise: new Promise<void>((r) => (release = r)), release: () => release() };
+    sock.receive({ type: 'start' });
+    await flush();
+
+    for (let i = 0; i < 6; i++) {
+      vi.setSystemTime(Date.now() + 20_000);
+      sock.receive({ type: 'ping' }); // keeps the idle timer happy
+      await flush();
+    }
+    await session.alarm();
+    await flush();
+
+    expect(callUpdates()).toHaveLength(1);
+    expect(callUpdates()[0].args[0]).toBe('failed');
+    // Not "never started the call" — it did start, it just never finished.
+    expect(String(callUpdates()[0].args[3])).toContain('did not finish starting');
+    ctl.gate.release();
+  });
+
   it('does not apply the start deadline once the call is under way', async () => {
     vi.useFakeTimers();
     const { session, storage, callUpdates } = newSession();

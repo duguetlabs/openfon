@@ -255,6 +255,12 @@ export class CallSession implements DurableObject {
   }
 
   private async runStart(): Promise<void> {
+    // Recorded before anything that can block. The start deadline is for a
+    // socket that never sends a start, not for a start that is slow — and
+    // "startup has not finished" cannot tell those apart, so a legitimate
+    // caller whose loadCall or engine handshake ran long was hung up on
+    // mid-connect and told they had never started the call.
+    await this.state.storage.put('startedAt', Date.now());
     await this.loadCall();
     if (this.ended) return; // hung up while we were loading
     // Resolve the LLM config before saying hello: a rejected AI-provider setup
@@ -862,6 +868,10 @@ export class CallSession implements DurableObject {
   private static readonly MAX_TURNS = 200;
   // A real widget sends {type:"start"} immediately; 30 s is generous.
   private static readonly START_DEADLINE_MS = 30_000;
+  // Deliberately a separate, larger budget: this one covers a start that has
+  // arrived and is still working, which normally takes under ten seconds but
+  // has D1, an engine handshake and TTS behind it.
+  private static readonly START_CEILING_MS = 90_000;
   // 0 = this instance has seen no activity of its own. Not the same as "the
   // call was just active": an alarm can run on an object rebuilt after
   // eviction, where any Date.now() initializer would look like fresh activity
@@ -908,15 +918,30 @@ export class CallSession implements DurableObject {
     // Checked before the idle logic and never refreshed by inbound traffic:
     // pings keep an established call alive, but must not extend the grace
     // period for one that never began.
+    // Both of these are skipped once armWatchdog zeroes the deadline, so
+    // neither can touch a call that is under way.
     const startDeadline = await this.state.storage.get<number>('startDeadline');
-    if (startDeadline && now >= startDeadline) {
-      console.log(`call ${this.callId}: no start within the deadline, releasing the call`);
-      // Never became a call: no start, no turns, no conversation. 'failed' is
-      // what keeps it out of the owner's call count and talk time, which is
-      // where a connection that produced nothing belongs — and the recorded
-      // reason means the row explains itself instead of sitting there blank.
-      this.failure ??= 'Call failed: the caller connected but never started the call.';
-      return this.finalizeFromAlarm(now);
+    if (startDeadline) {
+      const startedAt = await this.state.storage.get<number>('startedAt');
+      if (!startedAt && now >= startDeadline) {
+        console.log(`call ${this.callId}: no start within the deadline, releasing the call`);
+        // Never became a call: no start, no turns, no conversation. 'failed' is
+        // what keeps it out of the owner's call count and talk time, which is
+        // where a connection that produced nothing belongs — and the recorded
+        // reason means the row explains itself instead of sitting there blank.
+        this.failure ??= 'Call failed: the caller connected but never started the call.';
+        return this.finalizeFromAlarm(now);
+      }
+      // A start that arrived but never finished gets its own, longer budget:
+      // it has real work behind it — D1 reads, an engine handshake, the
+      // greeting — and deserves a different verdict from a caller who never
+      // said anything. Without it a client that keeps pinging could hold a
+      // half-started call open forever, since nothing else bounds this window.
+      if (startedAt && now - startedAt >= CallSession.START_CEILING_MS) {
+        console.log(`call ${this.callId}: start never completed, releasing the call`);
+        this.failure ??= 'Call failed: the call did not finish starting.';
+        return this.finalizeFromAlarm(now);
+      }
     }
 
     // Absent between the upgrade and a successful start. Treat that as "not
