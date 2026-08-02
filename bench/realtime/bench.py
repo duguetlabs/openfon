@@ -89,9 +89,11 @@ class Turn:
     # responses server VAD started and cancelled mid-utterance (a clause pause
     # longer than silence_duration_ms); their timings are discarded
     false_starts: int = 0
-    # fields the endpoint echoed back differently from what we asked for —
-    # empty means the controls this benchmark claims actually held
+    # fields the endpoint echoed back differently from what we asked for.
+    # config_fatal means a measurement-critical control could not be confirmed
+    # and the turn was aborted; config_warnings is recorded but not fatal.
     config_warnings: list = field(default_factory=list)
+    config_fatal: list = field(default_factory=list)
     # the caller transcript never arrived within TRANSCRIPT_GRACE_S of
     # response.done, so transcript_ms is genuinely missing rather than fast
     transcript_timed_out: bool = False
@@ -149,7 +151,16 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
             # The marker proves our update was processed; it does not prove the
             # endpoint honoured every field. Check what was actually echoed, so
             # the claim that controls are held constant rests on data.
-            t.config_warnings = arm.verify_echo(ev.get("session") or {})
+            fatal, advisory = arm.verify_echo(ev.get("session") or {})
+            t.config_warnings = advisory
+            t.config_fatal = fatal
+            if fatal:
+                # A control we cannot confirm is not a control. Abort rather
+                # than emit a measurement that would look identical to a valid
+                # one — a substituted codec, for instance, silently corrupts
+                # audio_out_ms, which is derived from a byte count.
+                t.error = "config unverified: " + "; ".join(fatal)
+                return t
 
             # ── stream the caller, real-time paced ───────────────────
             frames = utt.frames()

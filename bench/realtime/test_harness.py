@@ -53,53 +53,127 @@ def vl_echo(**over):
 
 class TestVerifyEcho(unittest.TestCase):
     """Matching the marker proves our update was processed; it does not prove
-    the endpoint honoured every field. The README claims the controls held —
-    this is what backs that claim."""
+    the endpoint honoured every field. The governing rule is ABSENT MUST NOT
+    READ AS VALID — a control that cannot be confirmed is not a control."""
 
-    def test_clean_ga_echo_has_no_warnings(self):
-        self.assertEqual(GA_ARM.verify_echo(ga_echo()), [])
+    # — clean echoes verify —
 
-    def test_clean_vl_echo_has_no_warnings(self):
-        self.assertEqual(VL_ARM.verify_echo(vl_echo()), [])
+    def test_clean_ga_echo_is_clean(self):
+        self.assertEqual(GA_ARM.verify_echo(ga_echo()), ([], []))
+
+    def test_clean_vl_echo_is_clean(self):
+        self.assertEqual(VL_ARM.verify_echo(vl_echo()), ([], []))
 
     def test_semantic_arm_accepts_its_own_detector(self):
         echo = ga_echo(turn_detection={"type": "semantic_vad", "eagerness": "auto"})
-        # the semantic arm asks for no threshold/silence, so only type matters
-        self.assertEqual(SEM_ARM.verify_echo(echo), [])
+        self.assertEqual(SEM_ARM.verify_echo(echo), ([], []))
 
-    def test_detects_a_substituted_detector(self):
-        echo = ga_echo(turn_detection={"type": "semantic_vad"})
-        w = GA_ARM.verify_echo(echo)
-        self.assertTrue(any("turn_detection.type" in x for x in w), w)
+    # — format substitution is FATAL, both branches, both directions —
 
-    def test_detects_a_silently_changed_hangover(self):
+    def test_ga_output_codec_substitution_is_fatal(self):
+        echo = ga_echo()
+        echo["audio"]["output"]["format"] = {"type": "audio/pcmu"}
+        fatal, _ = GA_ARM.verify_echo(echo)
+        self.assertTrue(any("output format.type" in x for x in fatal), fatal)
+
+    def test_ga_input_codec_substitution_is_fatal(self):
+        echo = ga_echo()
+        echo["audio"]["input"]["format"] = {"type": "audio/pcma", "rate": 8000}
+        fatal, _ = GA_ARM.verify_echo(echo)
+        self.assertTrue(any("input format.type" in x for x in fatal), fatal)
+
+    def test_vl_output_codec_substitution_is_fatal(self):
+        echo = vl_echo()
+        echo["output_audio_format"] = "g711_ulaw"
+        fatal, _ = VL_ARM.verify_echo(echo)
+        self.assertTrue(any("output_audio_format" in x for x in fatal), fatal)
+
+    def test_vl_input_codec_substitution_is_fatal(self):
+        """input_audio_format was previously not checked at all."""
+        echo = vl_echo()
+        echo["input_audio_format"] = "g711_alaw"
+        fatal, _ = VL_ARM.verify_echo(echo)
+        self.assertTrue(any("input_audio_format" in x for x in fatal), fatal)
+
+    # — absent must not read as valid —
+
+    def test_ga_absent_format_is_fatal_not_skipped(self):
+        echo = ga_echo()
+        del echo["audio"]["output"]["format"]
+        fatal, _ = GA_ARM.verify_echo(echo)
+        self.assertTrue(any("output format absent" in x for x in fatal), fatal)
+
+    def test_ga_absent_rate_is_fatal_not_skipped(self):
+        echo = ga_echo()
+        echo["audio"]["input"]["format"] = {"type": "audio/pcm"}      # no rate
+        fatal, _ = GA_ARM.verify_echo(echo)
+        self.assertTrue(any("input format.rate absent" in x for x in fatal), fatal)
+
+    def test_vl_absent_format_is_fatal_not_skipped(self):
+        echo = vl_echo()
+        del echo["output_audio_format"]
+        fatal, _ = VL_ARM.verify_echo(echo)
+        self.assertTrue(any("output_audio_format absent" in x for x in fatal), fatal)
+
+    def test_vl_absent_rate_is_fatal_not_skipped(self):
+        echo = vl_echo()
+        del echo["input_audio_sampling_rate"]
+        fatal, _ = VL_ARM.verify_echo(echo)
+        self.assertTrue(any("sampling_rate absent" in x for x in fatal), fatal)
+
+    def test_missing_audio_block_is_fatal(self):
+        fatal, _ = GA_ARM.verify_echo({"instructions": "x"})
+        self.assertTrue(any("session.audio absent" in x for x in fatal), fatal)
+
+    def test_empty_echo_is_fatal_on_both_branches(self):
+        self.assertTrue(GA_ARM.verify_echo({})[0])
+        self.assertTrue(VL_ARM.verify_echo({})[0])
+
+    def test_absent_turn_detection_param_is_fatal(self):
+        echo = vl_echo()
+        del echo["turn_detection"]["silence_duration_ms"]
+        fatal, _ = VL_ARM.verify_echo(echo)
+        self.assertTrue(any("silence_duration_ms absent" in x for x in fatal), fatal)
+
+    # — wrong rate / detector are fatal —
+
+    def test_wrong_sample_rate_is_fatal(self):
+        fatal, _ = VL_ARM.verify_echo(vl_echo(rate=16000))
+        self.assertTrue(any("rate=16000" in x for x in fatal), fatal)
+
+    def test_substituted_detector_is_fatal(self):
+        fatal, _ = GA_ARM.verify_echo(ga_echo(turn_detection={"type": "semantic_vad"}))
+        self.assertTrue(any("turn_detection.type" in x for x in fatal), fatal)
+
+    def test_silently_changed_hangover_is_fatal(self):
         # Voice Live defaults silence_duration_ms to 200; unpinned that is a
-        # 350 ms artefact, so it must not pass unnoticed
-        echo = vl_echo(turn_detection={"silence_duration_ms": 200})
-        w = VL_ARM.verify_echo(echo)
-        self.assertTrue(any("silence_duration_ms=200" in x for x in w), w)
+        # 350 ms artefact and must not pass as a warning
+        fatal, _ = VL_ARM.verify_echo(vl_echo(turn_detection={"silence_duration_ms": 200}))
+        self.assertTrue(any("silence_duration_ms=200" in x for x in fatal), fatal)
 
-    def test_detects_a_substituted_stt_model(self):
-        w = GA_ARM.verify_echo(ga_echo(stt="azure-speech"))
-        self.assertTrue(any("transcription.model" in x for x in w), w)
+    # — divergences that cannot corrupt a timing stay advisory —
 
-    def test_detects_a_substituted_voice(self):
-        w = GA_ARM.verify_echo(ga_echo(voice="alloy"))
-        self.assertTrue(any("voice=" in x for x in w), w)
+    def test_substituted_stt_model_is_advisory(self):
+        fatal, advisory = GA_ARM.verify_echo(ga_echo(stt="azure-speech"))
+        self.assertEqual(fatal, [])
+        self.assertTrue(any("transcription.model" in x for x in advisory), advisory)
 
-    def test_detects_a_wrong_sample_rate(self):
-        w = VL_ARM.verify_echo(vl_echo(rate=16000))
-        self.assertTrue(any("rate=16000" in x for x in w), w)
+    def test_substituted_voice_is_advisory(self):
+        fatal, advisory = GA_ARM.verify_echo(ga_echo(voice="alloy"))
+        self.assertEqual(fatal, [])
+        self.assertTrue(any("voice=" in x for x in advisory), advisory)
 
-    def test_missing_fields_are_not_reported_as_mismatches(self):
-        # an endpoint that simply omits a field is not evidence it ignored it
-        self.assertEqual(VL_ARM.verify_echo({"turn_detection": {
-            "type": "server_vad", "threshold": 0.7,
-            "prefix_padding_ms": 300, "silence_duration_ms": 550},
-            "input_audio_transcription": {"model": "azure-speech"}}), [])
+    def test_absent_voice_is_reported_not_silently_passed(self):
+        echo = ga_echo()
+        del echo["audio"]["output"]["voice"]
+        _, advisory = GA_ARM.verify_echo(echo)
+        self.assertTrue(any("voice=None" in x for x in advisory), advisory)
 
-    def test_empty_echo_reports_the_detector(self):
-        self.assertTrue(GA_ARM.verify_echo({}))
+    def test_dialect_selects_the_branch_not_the_payload_shape(self):
+        """A GA arm handed a Voice-Live-shaped echo must fail, not silently
+        pass by matching whichever branch happens to fit."""
+        fatal, _ = GA_ARM.verify_echo(vl_echo())
+        self.assertTrue(any("session.audio absent" in x for x in fatal), fatal)
 
 
 class TestCacheName(unittest.TestCase):

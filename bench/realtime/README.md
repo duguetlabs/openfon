@@ -105,11 +105,23 @@ a half-configured session.
 * **Conversation context** — one fresh session per turn, so no arm accumulates a longer
   prompt than another.
 * **Verified, not assumed** — every arm's `session.updated` echo is checked field by field
-  (`Arm.verify_echo`) against what was asked for, and any divergence is recorded per turn
-  in `config_warnings` and summarised at the top of the analysis. Matching the marker only
-  proves the update was *processed*; it does not prove the endpoint *honoured* it. The
-  check found a real breach — see the report's caveats — so treat an empty
-  `config_warnings` as evidence, not decoration.
+  (`Arm.verify_echo`) against what was asked for. Matching the marker only proves the
+  update was *processed*; it does not prove the endpoint *honoured* it.
+
+  The governing rule is **absent must not read as valid**: a missing field is a mismatch,
+  not a skip, because a control you cannot confirm is not a control. Divergences split two
+  ways. **Fatal** ones abort the turn — audio codec and sample rate in both directions,
+  and the turn detector's type and numeric parameters. Those are the settings whose
+  violation makes a measurement *wrong* rather than merely different: `audio_out_ms` is
+  derived from a byte count assuming PCM16 @ 24 kHz, so a silent codec substitution would
+  corrupt every reply-length figure while looking entirely plausible. **Advisory** ones
+  (STT model, voice) are recorded and reported but do not abort, since they cannot corrupt
+  a timing. Both are summarised at the top of the analysis.
+
+  `verify_live.py` checks the checker against the real endpoints: it captures each arm's
+  actual echo, asserts it verifies clean (no false aborts), then mutates it — codec
+  substituted, field removed, rate changed, detector swapped — and asserts every mutation
+  is caught. Run it after touching `verify_echo`.
 * **Ordering** — turns are strictly serial (parallel handshakes inflate `connect_ms` to
   several seconds) and interleaved round-robin, with the arm order rotated each round.
 
@@ -238,3 +250,4 @@ turns on the shortest utterance, scaling with utterance length). Before a bigger
 | `bench.py` | the harness: one turn = one session, round-robin driver, JSONL + CSV output |
 | `analyze.py` | marginal and paired statistics, markdown tables |
 | `utterances.json` | the fixed caller utterances (EN + DE, short + long) |
+| `verify_live.py` | checks `verify_echo` against the live endpoints, both directions |

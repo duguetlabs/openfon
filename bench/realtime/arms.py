@@ -102,50 +102,103 @@ class Arm:
             sess["audio"]["output"]["voice"] = self.voice
         return sess
 
-    def verify_echo(self, session: dict) -> list[str]:
+    def verify_echo(self, session: dict) -> tuple[list[str], list[str]]:
         """Compare what the endpoint echoed against what we asked for.
 
-        The controls this benchmark claims — identical turn detection, audio
-        format and STT across arms — are only real if the service actually
-        applied them. Matching the marker proves our update was processed;
-        it does not prove the endpoint honoured every field. Returns a list of
-        human-readable mismatches (empty when clean).
+        Returns `(fatal, advisory)`.
+
+        The governing rule is **absent must not read as valid**. A control we
+        cannot confirm is not a control, and a benchmark that quietly proceeds
+        on unverified settings produces numbers indistinguishable from correct
+        ones. So a missing field is a mismatch, not a skip.
+
+        `fatal` aborts the turn — these are the settings whose violation would
+        make the measurement wrong rather than merely different:
+
+          * audio format and sample rate, both directions. `audio_out_ms` is
+            derived from a byte count assuming PCM16 @ 24 kHz, so a silent
+            codec substitution would corrupt every reply-length figure while
+            looking entirely plausible.
+          * turn detector type and its numeric parameters. The whole design
+            holds these constant across arms; Voice Live defaults
+            silence_duration_ms to 200 against the native endpoint's 500, so
+            an unnoticed substitution is a 350 ms artefact.
+
+        `advisory` is recorded and reported but does not abort: real
+        divergences that cannot corrupt a timing (the gateway substituting its
+        own transcription deployment, a voice coerced to the tier's default).
         """
         s = session or {}
-        problems: list[str] = []
-        if "audio" in s:                       # GA nested echo
-            inp = (s.get("audio") or {}).get("input") or {}
-            outp = (s.get("audio") or {}).get("output") or {}
-            td = inp.get("turn_detection") or {}
-            tr = inp.get("transcription") or {}
-            in_fmt, out_fmt = inp.get("format") or {}, outp.get("format") or {}
-            in_rate = in_fmt.get("rate")
-            out_rate = out_fmt.get("rate")
-            voice = outp.get("voice")
-        else:                                  # Voice Live flat echo
+        fatal: list[str] = []
+        advisory: list[str] = []
+
+        # Which echo shape to expect is determined by the dialect we spoke —
+        # not sniffed from the payload, so a malformed echo cannot silently
+        # select the branch that happens to pass.
+        if self.dialect == "vl":
             td = s.get("turn_detection") or {}
             tr = s.get("input_audio_transcription") or {}
-            in_rate = s.get("input_audio_sampling_rate")
-            out_rate = 24000 if s.get("output_audio_format") == "pcm16" else None
             v = s.get("voice")
             voice = v.get("name") if isinstance(v, dict) else v
+            # Voice Live names the codec; "pcm16" *means* 24 kHz, and the
+            # input rate is carried separately.
+            for label, key in (("input", "input_audio_format"),
+                               ("output", "output_audio_format")):
+                got = s.get(key)
+                if got != "pcm16":
+                    fatal.append(f"{key}={got!r} (asked 'pcm16')"
+                                 if got is not None else
+                                 f"{key} absent — audio contract unverifiable")
+            rate = s.get("input_audio_sampling_rate")
+            if rate is None:
+                fatal.append("input_audio_sampling_rate absent — unverifiable")
+            elif int(rate) != SAMPLE_RATE:
+                fatal.append(f"input rate={rate} (asked {SAMPLE_RATE})")
+        else:
+            audio = s.get("audio")
+            if not isinstance(audio, dict):
+                fatal.append("session.audio absent — audio contract unverifiable")
+                audio = {}
+            inp = audio.get("input") or {}
+            outp = audio.get("output") or {}
+            td = inp.get("turn_detection") or {}
+            tr = inp.get("transcription") or {}
+            voice = outp.get("voice")
+            for label, side in (("input", inp), ("output", outp)):
+                fmt = side.get("format")
+                if not isinstance(fmt, dict):
+                    fatal.append(f"{label} format absent — audio contract unverifiable")
+                    continue
+                if fmt.get("type") != "audio/pcm":
+                    fatal.append(f"{label} format.type={fmt.get('type')!r} "
+                                 f"(asked 'audio/pcm')")
+                rate = fmt.get("rate")
+                if rate is None:
+                    fatal.append(f"{label} format.rate absent — unverifiable")
+                elif int(rate) != SAMPLE_RATE:
+                    fatal.append(f"{label} rate={rate} (asked {SAMPLE_RATE})")
 
         want_td = self.turn_detection
         if td.get("type") != want_td.get("type"):
-            problems.append(f"turn_detection.type={td.get('type')!r} "
-                            f"(asked {want_td.get('type')!r})")
+            fatal.append(f"turn_detection.type={td.get('type')!r} "
+                         f"(asked {want_td.get('type')!r})")
         for k in ("threshold", "prefix_padding_ms", "silence_duration_ms"):
-            if k in want_td and td.get(k) is not None and td.get(k) != want_td[k]:
-                problems.append(f"turn_detection.{k}={td.get(k)} (asked {want_td[k]})")
+            if k not in want_td:
+                continue
+            got = td.get(k)
+            if got is None:
+                fatal.append(f"turn_detection.{k} absent — unverifiable "
+                             f"(asked {want_td[k]})")
+            elif got != want_td[k]:
+                fatal.append(f"turn_detection.{k}={got} (asked {want_td[k]})")
+
         want_stt = self.transcription.get("model")
         if want_stt and tr.get("model") != want_stt:
-            problems.append(f"transcription.model={tr.get('model')!r} (asked {want_stt!r})")
-        if self.voice and voice and voice != self.voice:
-            problems.append(f"voice={voice!r} (asked {self.voice!r})")
-        for label, rate in (("input", in_rate), ("output", out_rate)):
-            if rate is not None and int(rate) != SAMPLE_RATE:
-                problems.append(f"{label} rate={rate} (asked {SAMPLE_RATE})")
-        return problems
+            advisory.append(f"transcription.model={tr.get('model')!r} "
+                            f"(asked {want_stt!r})")
+        if self.voice and voice != self.voice:
+            advisory.append(f"voice={voice!r} (asked {self.voice!r})")
+        return fatal, advisory
 
 
 WHISPER = {"model": "whisper-1"}          # no `language` key: Voice Live rejects ""

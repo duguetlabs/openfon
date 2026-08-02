@@ -346,19 +346,31 @@ def main() -> int:
 
     # Controls are only real if the endpoints honoured them. Surface any field
     # that came back different from what was asked for, before any results.
+    fatals: dict[str, int] = defaultdict(int)
     warns: dict[str, int] = defaultdict(int)
     for t in turns:
+        for fmsg in t.get("config_fatal") or []:
+            fatals[f'{t["arm"]}: {fmsg}'] += 1
         for wmsg in t.get("config_warnings") or []:
             warns[f'{t["arm"]}: {wmsg}'] += 1
+    if fatals:
+        w("### Aborted: measurement-critical controls could not be confirmed")
+        w()
+        w("These turns were discarded, not measured. A codec or turn-detector "
+          "substitution would corrupt derived figures while looking plausible.")
+        w()
+        for k, v in sorted(fatals.items()):
+            w(f"- {v}x {k}")
+        w()
     if warns:
-        w("### Control breaches (endpoint echoed something other than what was asked)")
+        w("### Control divergences (recorded, not fatal)")
         w()
         for k, v in sorted(warns.items()):
             w(f"- {v}x {k}")
         w()
-    elif any("config_warnings" in t for t in turns):
-        w("Controls verified: every arm echoed back the turn detection, audio "
-          "format, voice and STT model it was asked for.")
+    if not fatals and not warns and any("config_fatal" in t for t in turns):
+        w("Controls verified: every arm echoed back the audio format, sample "
+          "rate, turn detection, voice and STT model it was asked for.")
         w()
     n_tr_timeout = sum(1 for t in turns if t.get("transcript_timed_out"))
     if n_tr_timeout:

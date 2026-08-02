@@ -284,17 +284,24 @@ comparisons are unaffected, and `speech_stopped_ms` shows end-of-turn *timing* i
 across arms regardless. The native-vs-Voice-Live *cross* comparison on `de-short` is not
 strictly apples-to-apples.
 
-**One control did not hold, and the harness now detects it.** Every arm's
-`session.updated` echo is checked field by field against what was asked for. That check
-found the `native-gateway` arm reporting `transcription.model = "whisper"` where the
-client sent `whisper-1`: the gateway injects its own transcription deployment
-(`AZURE_REALTIME_TRANSCRIPTION_MODEL`) and it wins over the client's value. So the
-gpt-realtime-2 proxy pair runs slightly different STT on each side — `whisper-1` direct,
-the `whisper` deployment through the gateway. Measured impact is nil (`transcript_ms`
-paired delta +4 ms, p = 0.69, and STT runs in parallel with generation so it does not gate
-`ttfa`), but the earlier claim that this control was pinned on both sides was wrong, and
-it is stated here rather than quietly fixed. Every other field on every other arm echoed
-back exactly as asked.
+**One control did not hold, and it is a race rather than a substitution.** Every arm's
+`session.updated` echo is now checked field by field against what was asked for, and
+anything that could corrupt a measurement — audio codec, sample rate, turn detector —
+aborts the turn instead of being recorded and ignored. That check found the
+`native-gateway` arm reporting `transcription.model = "whisper"` where the client sent
+`whisper-1`: the gateway dials its upstream lazily and injects its own transcription
+deployment (`AZURE_REALTIME_TRANSCRIPTION_MODEL`), which races with the client's value.
+
+Measured over 10 consecutive sessions, **the gateway's `whisper` deployment won 8 times
+and the client's `whisper-1` won 2** — so the STT model on that arm is not merely
+different from the direct arm, it varies session to session. Measured impact on timing is
+nil (`transcript_ms` paired delta +4 ms, p = 0.69; STT runs in parallel with generation
+and cannot gate `ttfa`), and it does not touch the headline at all. But the earlier claim
+that this control was pinned on both sides was wrong, and the honest description is
+"nondeterministic", not "substituted". Every other field on every other arm echoes back
+exactly as asked — verified against live payloads by `verify_live.py`, which also mutates
+each real echo to confirm the checker catches codec, rate, detector and missing-field
+substitutions rather than passing them.
 
 **Unremovable dialect asymmetry.** Voice Live speaks the flat/beta wire format while the
 native endpoint and the gateway speak GA nested. Each arm is sent its own native dialect.
