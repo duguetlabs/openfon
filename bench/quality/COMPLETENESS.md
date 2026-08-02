@@ -68,6 +68,18 @@ anything that fails visibly, or only under a debug flag, gets written down.**
   hypothesis and is scored as a recognition miss rather than retried. The
   `CommitDesync` guard (#2) covers the equivalent failure during the main loop;
   this is the tail.
+- **A cancelled response used to be attributed to the next turn.** VAD stopping
+  at an intra-utterance pause ends the tentative response `cancelled`; treating
+  that as turn completion let the wait exit early and recorded the replacement
+  against the following turn, producing time-to-first-audio down to −5.4 s.
+  Fixed in the runner; the committed runs cannot be repaired because the log
+  does not record when the harness finished streaming the caller clip, so the
+  14 affected runs carry `ttfa_trustworthy=0` and are excluded from the latency
+  percentiles. Transcripts were never affected — they append in arrival order —
+  so slots, grounding and success are sound.
+- **Time-slot matching is approximate.** Numeric strings (phone numbers, dates)
+  parse as clock mentions, and spoken composite times record only the hour, so
+  both inflate. Stated in the report's limitations rather than chased further.
 - **A mid-stream `ws.send()` failure can hang the run.** The mic task can die
   without setting the `last` event the turn is awaiting, so the run stops rather
   than erroring. This is operational, not a correctness defect: it halts a run

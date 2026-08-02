@@ -1,6 +1,6 @@
-arm,runs,runs_expected,missing_runs,scenarios,trials,success_mean,pass_k,tool_ok,grounded_ok,slot_heard,slot_echoed,forbidden_hits,judge_grounded,judge_resolution,judge_tone,ttfa_turns_n,ttfa_p50_ms,ttfa_p95_ms,bargein_stop_p50_ms,errors,session_min
-native-gpt-realtime-2,27,27,0,9,3,0.593,0.556,0.667,1.0,0.893,0.816,0,1.0,1.741,1.519,88,2022,3262,no barge-ins,0,15.8
-vl-gpt41mini,27,27,0,9,3,0.333,0.222,0.667,0.963,0.96,0.697,0,0.704,1.778,1.778,84,1315,1719,no barge-ins,0,15.2
-vl-gpt41mini-dns,27,27,0,9,3,0.37,0.222,0.63,0.852,0.96,0.681,0,0.815,1.778,1.667,83,1408,1891,no barge-ins,0,15.8
-vl-gpt41mini-semvad,27,27,0,9,3,0.259,0.111,0.704,0.889,0.92,0.74,0,0.704,1.852,1.667,81,1320,1852,no barge-ins,0,16.4
-vl-native-brain,27,27,0,9,3,0.407,0.222,0.63,1.0,0.92,0.908,0,1.0,1.778,1.556,90,2369,3474,no barge-ins,0,14.5
+arm,runs,runs_expected,missing_runs,scenarios,trials,success_mean,pass_k,tool_ok,grounded_ok,slot_heard,slot_echoed,forbidden_hits,judge_grounded,judge_resolution,judge_tone,ttfa_turns_n,ttfa_runs_dropped,ttfa_p50_ms,ttfa_p95_ms,bargein_stop_p50_ms,errors,session_min
+native-gpt-realtime-2,27,27,0,9,3,0.593,0.556,0.667,1.0,0.893,0.816,0,1.0,1.741,1.519,74,4,2077,3325,no barge-ins,0,15.8
+vl-gpt41mini,27,27,0,9,3,0.333,0.222,0.667,0.963,0.96,0.697,0,0.704,1.778,1.778,84,0,1315,1719,no barge-ins,0,15.2
+vl-gpt41mini-dns,27,27,0,9,3,0.37,0.222,0.63,0.852,0.96,0.681,0,0.815,1.778,1.667,83,0,1408,1891,no barge-ins,0,15.8
+vl-gpt41mini-semvad,27,27,0,9,3,0.259,0.111,0.704,0.889,0.92,0.74,0,0.704,1.852,1.667,81,0,1320,1852,no barge-ins,0,16.4
+vl-native-brain,27,27,0,9,3,0.407,0.222,0.63,1.0,0.92,0.908,0,1.0,1.778,1.556,79,3,2408,3722,no barge-ins,0,14.5

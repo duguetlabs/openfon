@@ -224,6 +224,20 @@ class TestFactMatching(unittest.TestCase):
         self.assertTrue(fact_present(["Wir sind samstags geschlossen."],
                                      "geschlossen", "de"))
 
+    def test_contracted_negation(self):
+        """The normaliser turns "aren't" into "aren t", not "arent"."""
+        for utt, fact in [("We aren't open on Saturday.", "open on Saturday"),
+                          ("We don't close at 17:00 on Friday.", "17:00 on Friday"),
+                          ("We can't do 10:00.", "10:00"),
+                          ("We couldn't offer 10:00.", "10:00"),
+                          ("We won't be open on Saturday.", "open on Saturday")]:
+            with self.subTest(utt=utt):
+                self.assertFalse(fact_present([utt], fact, "en"))
+
+    def test_typographic_apostrophe_too(self):
+        self.assertFalse(fact_present(["We aren\u2019t open on Saturday."],
+                                      "open on Saturday", "en"))
+
     def test_plain_facts_still_match(self):
         self.assertTrue(fact_present(["We are closed on Saturday."], "closed", "en"))
         self.assertTrue(fact_present(["Samstags sind wir geschlossen."],
@@ -869,6 +883,35 @@ class TestCompletenessByIdentity(unittest.TestCase):
                 out = {x["arm"]: x for x in csv.DictReader(fh)}
             self.assertEqual(float(out["a"]["pass_k"]), 1.0)
             self.assertEqual(int(out["a"]["missing_runs"]), 0)
+
+
+class TestCancellationAttribution(unittest.TestCase):
+    """A cancelled response is not the turn's answer."""
+
+    def test_runner_does_not_mark_a_cancelled_response_done(self):
+        src = (HERE / "run_scenarios.py").read_text()
+        # The cancelled branch must reset the turn and keep waiting; only the
+        # non-cancelled branch may set `done`.
+        self.assertIn("cur.first_audio_t = None", src)
+        self.assertIn("del result[\"transcript\"][cur.transcript_mark:]", src)
+        cancelled_block = src.split("if response_cancelled(ev):")[1].split("else:")[0]
+        self.assertNotIn("cur.done = True", cancelled_block)
+
+    def test_no_committed_run_has_a_negative_ttfa_in_the_scored_set(self):
+        """A negative time-to-first-audio is proof of mis-attribution."""
+        path = HERE / "results" / "slots.csv"
+        if not path.exists():
+            self.skipTest("no committed results")
+        with open(path) as fh:
+            rows = list(csv.DictReader(fh))
+        bad = []
+        for r in rows:
+            if r.get("ttfa_trustworthy") == "0":
+                continue          # excluded from the percentiles by design
+            for v in (r.get("ttfa_ms_all") or "").split(";"):
+                if v and float(v) < 0:
+                    bad.append((r["arm"], r["scenario"], r["trial"], v))
+        self.assertEqual(bad, [], f"negative TTFA in trusted rows: {bad[:5]}")
 
 
 class TestCancellationDetection(unittest.TestCase):

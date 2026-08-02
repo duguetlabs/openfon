@@ -271,8 +271,14 @@ def main() -> None:
         # Turn-level, not per-call medians: a p95 over per-call medians discards
         # the one slow reply inside an otherwise normal call, which is exactly
         # the event a p95 exists to capture.
-        ttfa = [float(x) for r in runs
+        # Latencies only from runs whose turn attribution is sound. A cancelled
+        # response shifted the replacement onto the next turn, which produced
+        # time-to-first-audio values as low as −5.4 s; those runs are excluded
+        # here rather than corrected, because the log cannot reconstruct when the
+        # harness finished streaming the caller clip.
+        ttfa = [float(x) for r in runs if r.get("ttfa_trustworthy") != "0"
                 for x in (r.get("ttfa_ms_all") or "").split(";") if x]
+        ttfa_dropped = sum(1 for r in runs if r.get("ttfa_trustworthy") == "0")
         barge = [num(r["bargein_stop_ms"]) for r in runs if num(r["bargein_stop_ms"])]
         slot_accs = [num(r["slot_heard"]) for r in runs if num(r["slot_heard"]) is not None]
         echoed = [num(r["slot_echoed"]) for r in runs if num(r["slot_echoed"]) is not None]
@@ -321,6 +327,7 @@ def main() -> None:
             "judge_tone": descr(jt, statistics.mean, "verdicts", expected_runs, ndigits=3)
             if jt else "not measured",
             "ttfa_turns_n": len(ttfa),
+            "ttfa_runs_dropped": ttfa_dropped,
             "ttfa_p50_ms": descr(ttfa, statistics.median, "turns"),
             "ttfa_p95_ms": descr(ttfa, lambda v: pct(v, 0.95), "turns"),
             "bargein_stop_p50_ms": descr(barge, statistics.median, "barge-ins"),

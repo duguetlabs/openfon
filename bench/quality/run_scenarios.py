@@ -58,6 +58,7 @@ class Turn:
         self.tools: list[str] = []
         self.done = False
         self.cancelled = False
+        self.transcript_mark = 0
 
 
 async def run_scenario(arm_name: str, sc: dict, audio_dir: Path, trial: int,
@@ -146,12 +147,29 @@ async def run_scenario(arm_name: str, sc: dict, audio_dir: Path, trial: int,
                 elif t == "response.done":
                     # An interrupted generation is `response.done` carrying
                     # `response.status == "cancelled"`. There is no top-level
-                    # `response.cancelled` event on either service — zero were
-                    # seen in any committed log — so the old check never fired
-                    # and `agent_cancelled` was false even for real cancellations.
-                    cur.done = True
+                    # `response.cancelled` event on either service.
                     if response_cancelled(ev):
+                        # A cancellation is NOT the turn's answer. VAD stopping
+                        # at an intra-utterance pause and resuming mid-clip ends
+                        # the tentative response `cancelled` and a replacement
+                        # follows. Marking the turn done here let the post-stream
+                        # wait exit immediately, so the replacement was recorded
+                        # against the *next* turn — which produced time-to-first-
+                        # audio values as low as −5.4 s in the committed
+                        # `message-de-01` runs. Discard the abandoned response
+                        # and keep waiting for the real one.
                         cur.cancelled = True
+                        cur.first_audio_t = None
+                        cur.last_audio_t = None
+                        cur.audio_bytes = 0
+                        cur.text.clear()
+                        del result["transcript"][cur.transcript_mark:]
+                    else:
+                        cur.done = True
+                elif t == "response.created":
+                    # Where this response's agent text starts, so a cancellation
+                    # can drop exactly what it contributed.
+                    cur.transcript_mark = len(result["transcript"])
 
         pump_task = asyncio.create_task(pump())
 

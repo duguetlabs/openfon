@@ -81,7 +81,9 @@ def times_mentioned(text: str, lang: str) -> list[tuple[int | None, int | None]]
     # Each entry carries the string it was found in and the offset within it, so
     # a caller can ask whether the mention sits inside a negation.
     found: list[tuple[int | None, int | None, str, int]] = []
-    low = text.lower()
+    # Apostrophes become spaces so "can't" tokenises the way NEGATORS expects.
+    # Same-length substitution, so the offsets recorded below stay valid.
+    low = text.lower().replace("'", " ").replace("\u2019", " ")
     for m in CLOCK_MENTION.finditer(text):
         hour, minute, suffix, mer = (int(m.group(1)), m.group(2),
                                      (m.group(3) or "").lower(), (m.group(4) or "").lower())
@@ -174,11 +176,20 @@ def slot_present(agent_text: str, key: str, accepted: list[str], lang: str) -> b
 
 CLOCK_RE = re.compile(r"\b([01]?\d|2[0-3]):([0-5]\d)\b")
 
-# Negators, post-normalisation (punctuation stripped, so "isn't" -> "isnt").
+# Negators as they appear AFTER normalisation. The normaliser replaces
+# punctuation with a space, so "aren't" becomes "aren t" — two tokens, not
+# "arent". The first version of this list assumed the latter and therefore
+# matched only phrasings nobody uses: "We aren't open on Saturday" and "We
+# don't close at 17:00" both sailed through as forbidden claims. Both the
+# split stem and the joined form are listed, since which one appears depends
+# on whether the source text used a typographic or ASCII apostrophe.
 NEGATORS = {
-    "not", "no", "never", "isnt", "arent", "dont", "doesnt", "wont", "cannot",
-    "cant", "unfortunately", "afraid",
-    "nicht", "kein", "keine", "keinen", "keiner", "nie", "leider",
+    "not", "no", "never", "cannot", "unfortunately", "afraid", "without",
+    # split stems left behind by apostrophe removal: aren't -> "aren" + "t"
+    "aren", "arent", "isn", "isnt", "don", "dont", "doesn", "doesnt",
+    "won", "wont", "can", "cant", "couldn", "couldnt", "wouldn", "wouldnt",
+    "haven", "havent", "hasn", "hasnt", "didn", "didnt",
+    "nicht", "kein", "keine", "keinen", "keiner", "keinem", "nie", "leider",
 }
 NEGATION_WINDOW = 6
 
@@ -327,6 +338,12 @@ def score_run(run: dict, spec: dict) -> dict:
         # to a median here and taking a percentile of medians in summarize.py
         # discards the single slow response inside an otherwise normal call —
         # exactly the event a p95 exists to capture.
+        # Turn attribution is unreliable once a response was cancelled: the
+        # replacement used to be recorded against the *next* turn (see the
+        # runner). Transcripts are unaffected — they are appended in arrival
+        # order — so slots, grounding and success are sound either way; only
+        # the per-turn latencies are suspect, and summarize.py drops them.
+        "ttfa_trustworthy": int(not run.get("response_cancellations")),
         "ttfa_ms_all": ";".join(f"{v:.1f}" for v in ttfa),
         "ttfa_p50_ms": round(sorted(ttfa)[len(ttfa) // 2], 1) if ttfa else "",
         "bargein_attempts": len(barges),

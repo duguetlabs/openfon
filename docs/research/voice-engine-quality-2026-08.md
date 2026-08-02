@@ -21,8 +21,8 @@ settings default, not a rebuild.
 
 | | Voice Live + gpt-4.1-mini | gpt-realtime-2 (either stack) |
 |---|---|---|
-| Time to first audio, p50 | **1315 ms** | 2022–2369 ms |
-| Time to first audio, p95 | **1719 ms** | 3262–3474 ms |
+| Time to first audio, p50 | **1315 ms** | 2077–2408 ms |
+| Time to first audio, p95 | **1719 ms** | 3325–3722 ms |
 | Caller-slot capture, heard | **0.960** | 0.893–0.920 |
 | Caller-slot capture, echoed back | 0.697 | **0.816–0.908** |
 | Judge groundedness | 0.704 | **1.000** |
@@ -57,7 +57,7 @@ subset does not, and it is concentrated exactly where money changes hands.
 
 **The most decision-relevant number:** `vl-native-brain` (Voice Live serving
 gpt-realtime-2) scores like gpt-realtime-2 on groundedness (1.000) and like
-gpt-realtime-2 on latency (2369 ms p50 — the *worst* p50 of any arm). So **the
+gpt-realtime-2 on latency (2408 ms p50 — the *worst* p50 of any arm). So **the
 quality difference is the brain, and the speed difference is also the brain, not
 the serving stack.** Switching serving stack buys nothing on its own. There is
 no configuration that gets you gpt-realtime-2's judgement at gpt-4.1-mini's
@@ -248,8 +248,8 @@ question depends on is the genuine one, pinned to Monday 2026-08-03.
 
 | arm | success | pass^3 | slots heard | slots echoed | end_call | grounded (judge) | resolution | tone | TTFA p50 | TTFA p95 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `native-gpt-realtime-2` | **0.593** | **0.556** | 0.893 | 0.816 | 18/27 | **1.000** | 1.741 | 1.519 | 2022 | 3262 |
-| `vl-native-brain` | 0.407 | 0.222 | 0.920 | **0.908** | 17/27 | **1.000** | 1.778 | 1.556 | 2369 | 3474 |
+| `native-gpt-realtime-2` | **0.593** | **0.556** | 0.893 | 0.816 | 18/27 | **1.000** | 1.741 | 1.519 | 2077 | 3325 |
+| `vl-native-brain` | 0.407 | 0.222 | 0.920 | **0.908** | 17/27 | **1.000** | 1.778 | 1.556 | 2408 | 3722 |
 | `vl-gpt41mini-dns` | 0.370 | 0.222 | **0.960** | 0.681 | 17/27 | 0.815 | 1.778 | 1.667 | 1408 | 1891 |
 | `vl-gpt41mini` | 0.333 | 0.222 | **0.960** | 0.697 | 18/27 | 0.704 | 1.778 | **1.778** | **1315** | **1719** |
 | `vl-gpt41mini-semvad` | 0.259 | 0.111 | 0.920 | 0.740 | **19/27** | 0.704 | **1.852** | 1.667 | 1320 | 1852 |
@@ -383,6 +383,28 @@ optimistic number in the document for this reason.
 Both arms received the same prior, so the *comparison* is unaffected. Only the
 levels are.
 
+### Time-slot matching is approximate, in both directions
+
+Expected appointment times are matched by parsing clock mentions out of the
+text. Three rounds of review improved it and it is still loose, so rather than
+attempt a fourth regex the limits are stated:
+
+- **Numeric strings are parsed as times.** The digit pattern does not know a
+  phone number from a clock, so *"Meine Nummer ist 152 288 17386"* yields a
+  15:00 mention and can satisfy `time_after=15:00` with no time recognised at
+  all. This inflates.
+- **Spoken composite times record only the hour.** *"at two thirty"* is read as
+  hour 2 with no minute, so it satisfies an expected 14:00 — reintroducing
+  precisely the wrong-minute false positive the numeric parser was rewritten to
+  reject. This also inflates.
+
+Both push the same way, so **strict success on the booking scenarios
+(`book-en-01`, `book-de-01`, `reschedule-en-01`) is optimistic by an unmeasured
+amount.** At 27 runs per arm that metric is already noisy — a single run is
+0.037 — so a reader should treat booking-scenario success as directional and
+weight the WER table, slot capture and groundedness verdicts more heavily. Both
+failure modes affect every arm identically, so the comparison is not skewed.
+
 ### The strict-success comparison may favour engines that hang up earlier
 
 Production begins tearing the call down when `end_call` fires. The harness
@@ -439,7 +461,7 @@ it never modelled the hang-up.
    |---|---|
    | strict success | 0.259 → 0.407 (**+0.148**) |
    | judge groundedness | 0.704 → 1.000 (**+0.296**) |
-   | TTFA p50 | 1320 → 2369 ms (**+1049**) |
+   | TTFA p50 | 1320 → 2408 ms (**+1088**) |
 
    The brain effect is twice the VAD effect on success and unambiguous on
    groundedness. It also runs the *opposite* way to the confound: semantic VAD
