@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker, { sweepStaleCalls } from '../src/index';
 import { FakeD1, UPGRADED, fakeCtx, fakeEnv } from './fake-d1';
 import { hashPassword } from '../src/auth';
@@ -22,6 +22,24 @@ function setup() {
   const attach = (callId: string) => call(`/ws/call/${callId}`, { headers: { Upgrade: 'websocket' } });
   return { db, env, call, start, attach };
 }
+
+// Every rate limiter here counts into a fixed window keyed off the wall clock,
+// so a test that accumulates several requests fails whenever the run happens to
+// straddle a window boundary — the counter resets underneath it and the request
+// that should be refused is allowed. CI found exactly that: six logins spanning
+// a 15-minute boundary, and the sixth came back 401 instead of 429. Rare per run,
+// certain eventually, and invisible when it is not the thing you are looking at.
+//
+// So the clock is pinned to a window boundary, and only `Date` is faked. Timers
+// and `performance` stay real on purpose: one test measures a deliberate delay
+// and another compares PBKDF2 cost between two branches, and a faked clock
+// answers both in coarse ticks — the timing test read a 0 ms minimum and divided
+// by it. Freezing when the window started is what these tests need; freezing how
+// long things take is what breaks them.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-08-01T12:00:00Z')); // on a 900 s boundary
+});
 
 afterEach(() => {
   vi.useRealTimers();
@@ -66,8 +84,6 @@ describe('POST /api/public/call/start burst', () => {
   });
 
   it('lets the allowance recover when the window rolls over', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-08-01T12:00:00Z'));
     const { start } = setup();
     for (let i = 0; i < 10; i++) await start();
     expect((await start()).status).toBe(429);
@@ -163,8 +179,6 @@ describe('per-business call caps', () => {
   });
 
   it('keeps counting a long call until the sweep is the thing that releases it', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-08-01T12:00:00Z'));
     const { db, env, attach, start } = setup();
     db.businesses[0].max_concurrent_calls = 1;
     const { callId } = (await (await start()).json()) as { callId: string };
@@ -188,8 +202,6 @@ describe('per-business call caps', () => {
 
 describe('GET /ws/call/:callId', () => {
   it('refuses a call id that was never used inside the stale window', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-08-01T12:00:00Z'));
     const { attach, start } = setup();
     const { callId } = (await (await start()).json()) as { callId: string };
 
@@ -361,8 +373,6 @@ describe('sweepStaleCalls', () => {
   it('reconciles a row an older worker connected, before classifying it', async () => {
     // Pinned: this asserts an exact timestamp, and a live clock ticking between
     // the seed and the assertion makes it fail by a millisecond.
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-08-01T12:00:00Z'));
     const db = new FakeD1();
     // The rollout window `npm run deploy` opens: the migration has already run,
     // then the old worker — which never writes connected_at — serves this call,
@@ -384,8 +394,6 @@ describe('sweepStaleCalls', () => {
   });
 
   it('retires a reconciled row as interrupted once its connected clock runs out', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-08-01T12:00:00Z'));
     const db = new FakeD1();
     const row = db.seedCall({
       id: 'old-worker-stranded',
@@ -533,7 +541,6 @@ describe('POST /api/auth/login', () => {
   });
 
   it('refunds into the window the reservation came from, not the one it landed in', async () => {
-    vi.useFakeTimers();
     // 100 ms before a 15-minute boundary. PBKDF2 takes longer than that, so a
     // login started here finishes in the next window.
     vi.setSystemTime(new Date('2026-08-01T12:14:59.900Z'));
