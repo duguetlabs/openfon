@@ -54,6 +54,12 @@ npm run deploy
 
 Open the printed `*.workers.dev` URL, create your account, and walk through onboarding. That's it.
 
+> **Deploying with an API token** instead of `npx wrangler login` — from CI, or with
+> `CLOUDFLARE_API_TOKEN` in your environment — needs a **Custom Token** carrying both
+> `Workers Scripts: Edit` **and** `D1: Edit`. `npm run deploy` applies pending D1
+> migrations before uploading the worker, and Cloudflare's "Edit Cloudflare Workers"
+> template does not grant D1. `npx wrangler login` covers both already.
+
 ### Configuration
 
 Defaults live in `wrangler.jsonc` under `vars`; secrets via `wrangler secret put`.

@@ -65,8 +65,11 @@ const LIMITS = {
 // attach window, which stops a leaked callId from being reusable forever.
 const STALE_UNCONNECTED = '-15 minutes';
 // A connected call this old is a leftover from a worker restart (every deploy
-// strands the calls in flight). Deliberately longer than any plausible call so
-// the sweeper can never cut a live conversation off.
+// strands the calls in flight). Measured from connected_at, not started_at:
+// attachment is allowed for STALE_UNCONNECTED after the row is created, so the
+// two are up to 15 minutes apart and only one of them is when the call began.
+// Deliberately longer than any plausible call so the sweeper can never cut a
+// live conversation off.
 //
 // This is the *only* place a connected call's age is judged. The concurrency
 // count deliberately has no window of its own: it counts every connected row
@@ -165,18 +168,20 @@ app.post('/api/auth/login', async (c) => {
   const addr = clientIp(c);
   const key = (email ?? '').toLowerCase();
 
-  // Reserve both attempts up front, atomically. Reading a counter and
-  // incrementing it only on failure is the same count-then-act race as the daily
-  // cap: a parallel burst all reads a count under the limit and all of it goes
-  // on to run PBKDF2.
+  // Reserve before working, never after. Reading a counter and incrementing it
+  // only on failure is the same count-then-act race as the daily cap: a parallel
+  // burst all reads a count under the limit and all of it goes on to run PBKDF2.
+  //
+  // Per-IP is reserved and checked first, and nothing else here runs until it
+  // passes. It is what bounds how much work this worker will do for one address
+  // across all the emails they care to try — and the email bucket is keyed on
+  // attacker-supplied text, so reserving it first would let a client that is
+  // already blocked mint a fresh counter row per request forever. A refused
+  // attacker must cost less than a served one, not more.
   const ipTaken = await consume(c.env, LIMITS.loginIp, addr);
-  const emailTaken = await consume(c.env, LIMITS.loginEmail, key);
-
-  // Per-IP is a hard stop taken before any work, because it is the thing that
-  // bounds how much PBKDF2 an attacker can make this worker perform across all
-  // the emails they care to try. It can shut out an address; it can never shut
-  // out an account.
   if (ipTaken.over) return tooMany(c, TOO_MANY_LOGINS, LIMITS.loginIp.window);
+
+  const emailTaken = await consume(c.env, LIMITS.loginEmail, key);
 
   const user = await c.env.DB.prepare('SELECT id, password_hash FROM users WHERE email = ?')
     .bind(key)
@@ -694,12 +699,22 @@ app.get('/ws/call/:callId', async (c) => {
   const stub = c.env.CALL_SESSION.get(id);
   const url = new URL(c.req.raw.url);
   url.searchParams.set('call', callId);
-  const res = await stub.fetch(new Request(url.toString(), c.req.raw));
-  // The handshake can still fail inside the Durable Object. Hand the slot back
-  // rather than leaving a connected_at behind for a session that never started.
-  if (res.status >= 400) {
-    await c.env.DB.prepare('UPDATE calls SET connected_at = NULL WHERE id = ?').bind(callId).run();
+  // Hand the slot back unless a session actually started. Both failure shapes
+  // count: the Durable Object answering with an error, and stub.fetch() itself
+  // rejecting because the object could not be reached or was reset. Only the
+  // first was handled before, so a DO that failed to start held a line until the
+  // sweep — and a business with a low cap looked permanently busy after a few.
+  const releaseSlot = () =>
+    c.env.DB.prepare('UPDATE calls SET connected_at = NULL WHERE id = ?').bind(callId).run();
+  let res: Response;
+  try {
+    res = await stub.fetch(new Request(url.toString(), c.req.raw));
+  } catch (err) {
+    await releaseSlot();
+    console.error('call session unreachable', err);
+    return c.json({ error: 'could not reach the call session' }, 502);
   }
+  if (res.status >= 400) await releaseSlot();
   return res;
 });
 
@@ -710,15 +725,26 @@ app.get('/api/health', (c) => c.json({ ok: true, service: 'openfon' }));
 // CallSession can ever rescue it — only a scheduled pass over the table can.
 // The second query covers the other stranding path: a worker restart (i.e. every
 // deploy) leaves whatever was in flight 'active' with no ended_at.
+// The two branches age from different columns, so they are written out rather
+// than sharing a template — the column is the part that differs, and hiding it
+// behind a parameter is how it came to be wrong in the first place.
 export async function sweepStaleCalls(env: Env, now = Date.now()): Promise<number> {
-  const retire = (extra: string, cutoff: string) =>
+  const res = await env.DB.batch([
+    // Never dialled: measured from when the id was handed out, because that is
+    // the only timestamp such a row has.
     env.DB.prepare(
       `UPDATE calls SET status = 'abandoned', ended_at = datetime('now')
-        WHERE status = 'active' AND ${extra} AND started_at < datetime('now', ?)`
-    ).bind(cutoff);
-  const res = await env.DB.batch([
-    retire('connected_at IS NULL', STALE_UNCONNECTED),
-    retire('connected_at IS NOT NULL', STALE_CONNECTED),
+        WHERE status = 'active' AND connected_at IS NULL AND started_at < datetime('now', ?)`
+    ).bind(STALE_UNCONNECTED),
+    // Connected: measured from when the session began, not when the row was
+    // created. Attachment is allowed for 15 minutes after creation, so ageing
+    // this branch from started_at would retire a caller who connected at minute
+    // 14 only 46 minutes into their call — cut off mid-conversation, and
+    // mislabelled as interrupted on the way out.
+    env.DB.prepare(
+      `UPDATE calls SET status = 'abandoned', ended_at = datetime('now')
+        WHERE status = 'active' AND connected_at IS NOT NULL AND connected_at < datetime('now', ?)`
+    ).bind(STALE_CONNECTED),
     // Fixed-window counters are only read for the current window; a day of
     // history is plenty of slack for the longest limiter.
     env.DB.prepare('DELETE FROM rate_counters WHERE window_start < ?').bind(Math.floor(now / 1000) - 86400),

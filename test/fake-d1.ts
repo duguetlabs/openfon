@@ -184,11 +184,16 @@ class FakeStatement {
     }
     if (q.startsWith("UPDATE calls SET status = 'abandoned'")) {
       const wantConnected = q.includes('connected_at IS NOT NULL');
+      // Each branch ages from its own column; mirroring that here is the whole
+      // point, so read it off the SQL rather than assuming started_at.
+      const column = q.includes('AND connected_at < datetime') ? 'connected_at' : 'started_at';
       const before = cutoff(a[0]);
       let changes = 0;
       for (const c of this.db.calls) {
-        if (c.status !== 'active' || c.started_at >= before) continue;
+        if (c.status !== 'active') continue;
         if (wantConnected !== (c.connected_at !== null)) continue;
+        const age = column === 'connected_at' ? c.connected_at : c.started_at;
+        if (age === null || age >= before) continue;
         c.status = 'abandoned';
         c.ended_at = Date.now();
         changes++;

@@ -200,6 +200,26 @@ describe('GET /ws/call/:callId', () => {
     expect((await start()).status).toBe(200);
   });
 
+  it('hands the slot back when the Durable Object cannot be reached at all', async () => {
+    const db = new FakeD1();
+    db.seedBusiness({ id: 'biz1', slug: 'riverside-dental-1377', max_concurrent_calls: 1 });
+    const env = fakeEnv(db);
+    // Not an error response — a rejected promise, which is what a DO that fails
+    // to start or gets reset mid-handshake produces.
+    env.CALL_SESSION = {
+      idFromName: (n: string) => n,
+      get: () => ({ fetch: async () => { throw new Error('durable object reset'); } }),
+    };
+    const req = (path: string, init?: RequestInit) => worker.fetch(new Request(`https://openfon.test${path}`, init), env, fakeCtx);
+    const body = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug: 'riverside-dental-1377' }) };
+    const { callId } = (await (await req('/api/public/call/start', body)).json()) as { callId: string };
+
+    expect((await req(`/ws/call/${callId}`, { headers: { Upgrade: 'websocket' } })).status).toBe(502);
+    expect(db.calls.find((c) => c.id === callId)?.connected_at).toBeNull();
+    // And the business is not left looking busy.
+    expect((await req('/api/public/call/start', body)).status).toBe(200);
+  });
+
   it('hands the slot back when the Durable Object refuses the handshake', async () => {
     const db = new FakeD1();
     db.seedBusiness({ id: 'biz1', slug: 'riverside-dental-1377', max_concurrent_calls: 1 });
@@ -245,6 +265,20 @@ describe('sweepStaleCalls', () => {
     expect(live.status).toBe('active');
   });
 
+  it('ages a connected call from when it connected, not when the row was made', async () => {
+    const db = new FakeD1();
+    // Attachment is allowed for 15 minutes after creation, so these come apart.
+    // 50 minutes into a real conversation — must survive.
+    const late = db.seedCall({
+      id: 'connected-late',
+      business_id: 'biz1',
+      started_at: Date.now() - 64 * MINUTE,
+      connected_at: Date.now() - 50 * MINUTE,
+    });
+    expect(await sweepStaleCalls(fakeEnv(db))).toBe(0);
+    expect(late.status).toBe('active');
+  });
+
   it('retires a connected call stranded by a worker restart', async () => {
     const db = new FakeD1();
     const stranded = db.seedCall({
@@ -255,6 +289,20 @@ describe('sweepStaleCalls', () => {
     });
     expect(await sweepStaleCalls(fakeEnv(db))).toBe(1);
     expect(stranded.status).toBe('abandoned');
+  });
+
+  it('still retires an old row whose connection was released', async () => {
+    const db = new FakeD1();
+    // A refused handshake clears connected_at, so the row falls back to the
+    // never-dialled branch and is aged from started_at again.
+    const released = db.seedCall({
+      id: 'released',
+      business_id: 'biz1',
+      started_at: Date.now() - 20 * MINUTE,
+      connected_at: null,
+    });
+    expect(await sweepStaleCalls(fakeEnv(db))).toBe(1);
+    expect(released.status).toBe('abandoned');
   });
 
   it('prunes counter windows so the table cannot grow without bound', async () => {
@@ -333,6 +381,21 @@ describe('POST /api/auth/login', () => {
     expect(codes.filter((s) => s === 401)).toHaveLength(20);
     expect(codes.filter((s) => s === 429)).toHaveLength(0);
     expect((await login('victim-99@example.test', 'oops')).status).toBe(429);
+  });
+
+  it('will not let a blocked address mint counter rows with made-up emails', async () => {
+    const { db, login } = await withUser();
+    for (let i = 0; i < 20; i++) await login(`victim-${i}@example.test`, 'oops');
+    const rowsWhenBlocked = db.counters.size;
+
+    // Every one of these is refused on the IP bucket. The email bucket is keyed
+    // on whatever the client sends, so reserving it before the IP check let a
+    // blocked attacker write a new row per request — costing the operator more
+    // than a served user, which is backwards.
+    for (let i = 0; i < 50; i++) {
+      expect((await login(`throwaway-${i}-${Math.random()}@example.test`, 'x')).status).toBe(429);
+    }
+    expect(db.counters.size).toBe(rowsWhenBlocked);
   });
 
   it('refunds into the window the reservation came from, not the one it landed in', async () => {

@@ -20,8 +20,16 @@ jobs:
       - run: npm run build
 
   # Deploys on push to main when a Cloudflare API token is configured.
-  # Create one at dash.cloudflare.com -> My Profile -> API Tokens ("Edit Cloudflare
-  # Workers" template) and save it as the CLOUDFLARE_API_TOKEN repo secret.
+  # Create one at dash.cloudflare.com -> My Profile -> API Tokens, as a **Custom
+  # Token** with both of these permissions, and save it as the
+  # CLOUDFLARE_API_TOKEN repo secret:
+  #
+  #   Account | Workers Scripts | Edit
+  #   Account | D1              | Edit
+  #
+  # The "Edit Cloudflare Workers" template does NOT grant D1 Edit, and `npm run
+  # deploy` applies pending D1 migrations before uploading the worker — a
+  # template token fails authorization before anything ships.
   deploy:
     needs: check
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -46,4 +54,7 @@ jobs:
             echo "CLOUDFLARE_API_TOKEN not set — skipping deploy."
             exit 0
           fi
-          npm run deploy
+          if ! npm run deploy; then
+            echo "::error::Deploy failed. Note it now applies D1 migrations before uploading: CLOUDFLARE_API_TOKEN needs 'D1: Edit' as well as 'Workers Scripts: Edit'. Cloudflare's 'Edit Cloudflare Workers' template does not include D1 — use a Custom Token."
+            exit 1
+          fi
