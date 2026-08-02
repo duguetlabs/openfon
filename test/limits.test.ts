@@ -335,6 +335,31 @@ describe('POST /api/auth/login', () => {
     expect((await login('victim-99@example.test', 'oops')).status).toBe(429);
   });
 
+  it('refunds into the window the reservation came from, not the one it landed in', async () => {
+    vi.useFakeTimers();
+    // 100 ms before a 15-minute boundary. PBKDF2 takes longer than that, so a
+    // login started here finishes in the next window.
+    vi.setSystemTime(new Date('2026-08-01T12:14:59.900Z'));
+    const { db, login } = await withUser();
+    const oldWindow = Date.parse('2026-08-01T12:00:00Z') / 1000;
+    const newWindow = Date.parse('2026-08-01T12:15:00Z') / 1000;
+    // Someone else is already using the next window.
+    db.counters.set(`lgip:local|${newWindow}`, 3);
+
+    // Cross the boundary between the reservation and the refund.
+    db.hook = (sql) => {
+      if (sql.startsWith('SELECT id, password_hash')) vi.setSystemTime(new Date('2026-08-01T12:15:00.100Z'));
+    };
+    expect((await login('owner@example.test', 'correct-horse-battery')).status).toBe(200);
+    db.hook = null;
+
+    // The reservation was taken from the old window, so that is where it goes
+    // back. Recomputing the window would leave the old one stuck at 1 — a
+    // penalty the user earned back — and take the stranger's new window to 2.
+    expect(db.counters.get(`lgip:local|${oldWindow}`)).toBe(0);
+    expect(db.counters.get(`lgip:local|${newWindow}`)).toBe(3);
+  });
+
   it('does not spend an office’s allowance on people who signed in fine', async () => {
     const { login } = await withUser();
     // Twenty successful sign-ins in a window must not exhaust a shared IP.

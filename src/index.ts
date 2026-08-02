@@ -51,10 +51,11 @@ const LIMITS = {
   // NAT means several legitimate callers can share one IP, hence 10 and not 5.
   callStart: { name: 'start', window: 60, max: 10 },
   // Both are reserved on every attempt. Per-IP is the hard stop that bounds
-  // PBKDF2 work across every email an attacker tries, and is never refunded.
-  // Per-email only ever refuses a wrong password and is cleared by a correct
-  // one, so it cannot be aimed at an owner. See the login handler for why the
-  // ordering and the asymmetry both matter.
+  // PBKDF2 work across every email an attacker tries; a success gives back only
+  // its own reservation, never the bucket's history. Per-email only ever refuses
+  // a wrong password and is cleared outright by a correct one, so it cannot be
+  // aimed at an owner. See the login handler for why the ordering and the
+  // asymmetry both matter.
   loginIp: { name: 'lgip', window: 900, max: 20 },
   loginEmail: { name: 'lgem', window: 900, max: 5 },
 } satisfies Record<string, Limit>;
@@ -85,17 +86,28 @@ function windowStart(limit: Limit, now = Date.now()): number {
   return Math.floor(now / 1000 / limit.window) * limit.window;
 }
 
+// What a request took from a bucket. The window travels with it: a refund has to
+// land on the row the reservation was made in, and a request that starts near a
+// boundary finishes on the other side of one. Recomputing the window at refund
+// time leaves the old window over-counted and decrements a new window the
+// request never touched — wrong in both directions at once.
+interface Reservation {
+  over: boolean; // this request took the count past the limit
+  window: number;
+}
+
 // Counts this request and reports whether it busted the limit. One round trip:
 // D1 supports INSERT ... ON CONFLICT ... RETURNING.
-async function consume(env: Env, limit: Limit, subject: string): Promise<boolean> {
+async function consume(env: Env, limit: Limit, subject: string): Promise<Reservation> {
+  const window = windowStart(limit);
   const row = await env.DB.prepare(
     `INSERT INTO rate_counters (bucket, window_start, count) VALUES (?, ?, 1)
      ON CONFLICT(bucket, window_start) DO UPDATE SET count = count + 1
      RETURNING count`
   )
-    .bind(`${limit.name}:${subject}`, windowStart(limit))
+    .bind(`${limit.name}:${subject}`, window)
     .first<{ count: number }>();
-  return (row?.count ?? 1) > limit.max;
+  return { over: (row?.count ?? 1) > limit.max, window };
 }
 
 async function clearLimit(env: Env, limit: Limit, subject: string): Promise<void> {
@@ -105,9 +117,9 @@ async function clearLimit(env: Env, limit: Limit, subject: string): Promise<void
 // Give back exactly the one reservation this request made — not the bucket's
 // history. Clearing the whole bucket on success is a bypass wherever the bucket
 // spans more than the thing that succeeded.
-async function refundOne(env: Env, limit: Limit, subject: string): Promise<void> {
+async function refundOne(env: Env, limit: Limit, subject: string, taken: Reservation): Promise<void> {
   await env.DB.prepare('UPDATE rate_counters SET count = count - 1 WHERE bucket = ? AND window_start = ? AND count > 0')
-    .bind(`${limit.name}:${subject}`, windowStart(limit))
+    .bind(`${limit.name}:${subject}`, taken.window)
     .run();
 }
 
@@ -116,7 +128,7 @@ function tooMany(c: Ctx, message: string, retryAfter: number) {
 }
 
 app.use('/api/public/*', async (c, next) => {
-  if (await consume(c.env, LIMITS.publicApi, clientIp(c))) {
+  if ((await consume(c.env, LIMITS.publicApi, clientIp(c))).over) {
     return tooMany(c, 'Too many requests. Please wait a moment and try again.', LIMITS.publicApi.window);
   }
   await next();
@@ -157,14 +169,14 @@ app.post('/api/auth/login', async (c) => {
   // incrementing it only on failure is the same count-then-act race as the daily
   // cap: a parallel burst all reads a count under the limit and all of it goes
   // on to run PBKDF2.
-  const ipOver = await consume(c.env, LIMITS.loginIp, addr);
-  const emailOver = await consume(c.env, LIMITS.loginEmail, key);
+  const ipTaken = await consume(c.env, LIMITS.loginIp, addr);
+  const emailTaken = await consume(c.env, LIMITS.loginEmail, key);
 
   // Per-IP is a hard stop taken before any work, because it is the thing that
   // bounds how much PBKDF2 an attacker can make this worker perform across all
   // the emails they care to try. It can shut out an address; it can never shut
-  // out an account, so nothing below ever refunds it.
-  if (ipOver) return tooMany(c, TOO_MANY_LOGINS, LIMITS.loginIp.window);
+  // out an account.
+  if (ipTaken.over) return tooMany(c, TOO_MANY_LOGINS, LIMITS.loginIp.window);
 
   const user = await c.env.DB.prepare('SELECT id, password_hash FROM users WHERE email = ?')
     .bind(key)
@@ -175,7 +187,7 @@ app.post('/api/auth/login', async (c) => {
     // slows credential stuffing spread across many addresses without giving
     // anyone who knows an owner's email a permanent lockout. Refusing before
     // verifying would do exactly that: five wrong guesses per window, forever.
-    if (emailOver) return tooMany(c, TOO_MANY_LOGINS, LIMITS.loginEmail.window);
+    if (emailTaken.over) return tooMany(c, TOO_MANY_LOGINS, LIMITS.loginEmail.window);
     return c.json({ error: 'Invalid email or password' }, 401);
   }
   // The two buckets are refunded differently on purpose.
@@ -188,9 +200,10 @@ app.post('/api/auth/login', async (c) => {
   // signup is public, so an attacker would spend nineteen guesses on victims and
   // the twentieth on an account of their own, forever. Refunding one keeps the
   // allowance from being spent by people who signed in successfully without ever
-  // resetting the ceiling on wrong guesses.
+  // resetting the ceiling on wrong guesses. The refund goes back to the window
+  // the reservation came from, which a PBKDF2-length request can outlive.
   await clearLimit(c.env, LIMITS.loginEmail, key);
-  await refundOne(c.env, LIMITS.loginIp, addr);
+  await refundOne(c.env, LIMITS.loginIp, addr, ipTaken);
   const token = await createSession(c.env, user.id);
   setCookie(c, COOKIE, token, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 86400 });
   return c.json({ id: user.id });
@@ -580,7 +593,7 @@ app.get('/api/public/agent/:slug', async (c) => {
 app.post('/api/public/call/start', async (c) => {
   const { slug } = await c.req.json<{ slug?: string }>();
   const addr = clientIp(c);
-  if (await consume(c.env, LIMITS.callStart, addr)) {
+  if ((await consume(c.env, LIMITS.callStart, addr)).over) {
     return tooMany(c, 'Too many calls started from this connection. Please wait a minute.', LIMITS.callStart.window);
   }
   const biz = await c.env.DB.prepare('SELECT id, max_concurrent_calls, max_calls_per_day FROM businesses WHERE slug = ?')

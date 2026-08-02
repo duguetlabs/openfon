@@ -35,6 +35,11 @@ export class FakeD1 {
   calls: FakeCall[] = [];
   counters = new Map<string, number>(); // `${bucket}|${window_start}` -> count
 
+  // Called before every statement. Tests use it to move the clock mid-request,
+  // which is the only way to put a rate-limit window boundary in the middle of
+  // one handler the way a slow PBKDF2 login does in production.
+  hook: ((sql: string) => void) | null = null;
+
   prepare(sql: string): FakeStatement {
     return new FakeStatement(this, sql.replace(/\s+/g, ' ').trim());
   }
@@ -86,6 +91,7 @@ class FakeStatement {
   private exec(): { rows: Row[]; changes: number } {
     const q = this.sql;
     const a = this.args;
+    this.db.hook?.(q);
 
     // ---- rate_counters ----
     if (q.startsWith('INSERT INTO rate_counters')) {
