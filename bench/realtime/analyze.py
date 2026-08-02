@@ -47,6 +47,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from arms import ARMS_BY_ID, PAIRS, TURN_DETECTION  # noqa: E402
+from safety import redact, safe_print  # noqa: E402
 
 METRICS = [
     ("ttfa_ms", "time to first agent audio, from end of caller speech"),
@@ -190,10 +191,7 @@ def split_rate_table(turns: list[dict]) -> list[str]:
     """
     present = {t["arm"] for t in turns}
     pairs = [p for p in PAIRS if p[0] in present and p[1] in present]
-    rows = ["| comparison | cells | treatment splits | control splits "
-            "| discordant (T only / C only) | McNemar p |",
-            "|---|---:|---:|---:|---:|---:|"]
-    any_row = False
+    computed = []
     for treat, ctrl, question in pairs:
         cells = split_cells(turns, treat, ctrl)
         if not cells:
@@ -204,10 +202,23 @@ def split_rate_table(turns: list[dict]) -> list[str]:
             continue                      # nothing split either side
         b = sum(1 for t, c in cells if t and not c)
         c_ = sum(1 for t, c in cells if c and not t)
-        p = mcnemar_exact_p(b, c_)
+        computed.append((treat, ctrl, question, cells, t_split, c_split, b, c_,
+                         mcnemar_exact_p(b, c_)))
+    if not computed:
+        return []
+    # Corrected within the split-rate family, separately from the latency
+    # family: these are rates on the same matched cells, tested with a
+    # different statistic, and merging the two families would over-correct the
+    # latency metrics while under-correcting nothing.
+    adj = holm([c[-1] for c in computed])
+    rows = ["| comparison | cells | treatment splits | control splits "
+            "| discordant (T only / C only) | McNemar p | p (Holm, split family) |",
+            "|---|---:|---:|---:|---:|---:|---:|"]
+    any_row = False
+    for (treat, ctrl, question, cells, t_split, c_split, b, c_, p), pa in zip(computed, adj):
         rows.append(f"| `{treat}` vs `{ctrl}`<br><sub>{question}</sub> | {len(cells)} | "
                     f"{t_split}/{len(cells)} | {c_split}/{len(cells)} | "
-                    f"{b} / {c_} | {p:.5f} |")
+                    f"{b} / {c_} | {p:.5f} | {pa:.5f} |")
         any_row = True
     return rows if any_row else []
 
@@ -517,17 +528,19 @@ def main() -> int:
         w("Split rate per comparison — **exact McNemar**, two-sided, on complete "
           "matched cells. Matched, not independent: every pair is the same caller "
           "audio in the same round, so Fisher's exact would discard the pairing and "
-          "overstate significance. Kept out of the Holm family above, which covers "
-          "the paired latency metrics:")
+          "overstate significance. **Two correction families, corrected separately:** "
+          "these are rates tested with a different statistic from the paired latency "
+          "metrics, so merging them would over-correct the latency family without "
+          "making the rate claims any safer. Holm is applied within each:")
         w()
         w("\n".join(srt))
         w()
 
     text = "\n".join(out)
-    print(text)
+    safe_print(text)
     if args.markdown:
-        args.markdown.write_text(text + "\n")
-        print(f"\nwrote {args.markdown}", file=sys.stderr)
+        args.markdown.write_text(redact(text) + "\n")
+        safe_print(f"\nwrote {args.markdown}", file=sys.stderr)
     return 0
 
 

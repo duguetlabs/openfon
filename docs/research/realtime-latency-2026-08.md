@@ -118,8 +118,8 @@ Paired, on identical caller audio in the same round:
 
 | comparison | pairs | median Δ | 95% CI | p90 Δ | p raw | p Holm | verdict |
 |---|---:|---:|---|---:|---:|---:|---|
-| `native-gateway` − `native-direct` | 25 | **−18** | [−138, +22] | +171 | 0.424 | 1.000 | no practical difference |
-| `vl-gateway` − `vl-direct` | 25 | **−19** | [−122, +60] | +404 | 1.000 | 1.000 | no practical difference |
+| `native-gateway` − `native-direct` | 25 | **−18** | [−138, +22] | +171 | 0.424 | 1.000 | no detectable difference; CI admits up to 138 ms |
+| `vl-gateway` − `vl-direct` | 25 | **−19** | [−122, +60] | +404 | 1.000 | 1.000 | no detectable difference; CI admits up to 122 ms |
 | `vl-native-brain` − `native-direct` | 25 | **−93** | [−424, −0] | +537 | 0.043 | 0.909 | borderline, not robust to correction |
 
 p-values are Holm-corrected across all 24 paired tests in the run (see
@@ -216,10 +216,22 @@ code rather than only in this prose:
    to be controlled over. Holm is used rather than Bonferroni because it is uniformly more
    powerful and assumes nothing about independence — which matters here, since `ttfa` and
    `ttft` measure overlapping stages of the same turn.
-2. **A 50 ms practical floor.** Below that, a result reads "no practical difference"
-   whatever its p-value. Conversational turn-taking gaps only become perceptible to a
-   caller well into the 100 ms range, so 50 ms is conservative and still admits anything
-   worth acting on.
+2. **A 50 ms practical floor.** A difference smaller than this is not reported
+   directionally whatever its p-value. Conversational turn-taking gaps only become
+   perceptible to a caller well into the 100 ms range, so 50 ms is conservative and still
+   admits anything worth acting on.
+3. **Equivalence requires the whole interval, not the point estimate.** "No practical
+   difference" is a claim about what the data *rules out*, so it is only made when the
+   entire CI sits inside ±50 ms — the interval form of a TOST. A median of −19 ms with a
+   CI of [−122, +60] is compatible with a 100 ms effect, so it is reported as *"no
+   detectable difference; CI admits up to 122 ms"* instead. That is why the two proxy rows
+   above carry a bound rather than an equivalence claim.
+
+Split rates are corrected as their **own** Holm family, separately from the paired latency
+metrics: they are rates on the same matched cells tested with a different statistic
+(exact McNemar), and merging the families would over-correct the latency metrics without
+making the rate claims any safer. Both VAD split results survive their family correction
+(p = 0.00195 raw, 0.00586 adjusted).
 
 What survives both gates:
 
@@ -366,7 +378,9 @@ Neither detector can be moved onto the other brain on the Foundry surface.
 
 **Exact McNemar**, two-sided, on complete matched cells: `nat-semantic` vs
 `native-direct` and `vlnat-azsemantic` vs `vl-native-brain` are both **p = 0.00195**
-(10 discordant cells, all in the same direction). McNemar rather than Fisher because
+(10 discordant cells, all in the same direction), **0.00586 after Holm correction within
+the split-rate family** — which is a separate family from the paired latency metrics,
+since these are rates tested with a different statistic. McNemar rather than Fisher because
 these observations are matched by construction — the same caller audio in the same round —
 and Fisher would discard the pairing and report ~1e-5, overstating the evidence by two
 orders of magnitude. Holding the brain *and* the serving stack constant and changing only
@@ -414,7 +428,7 @@ Paired on `en-short`, where nothing splits on any arm:
 | comparison | median Δ ttfa | 95% CI | p raw / Holm |
 |---|---:|---|---:|
 | `vlnat-azsemantic` − `vl-native-brain`<br><sub>Azure semantic vs server VAD, brain and stack held constant</sub> | **−72 ms** | [−600, +255] | 1.000 / 1.000 |
-| `nat-semantic` − `native-direct`<br><sub>OpenAI semantic vs server VAD, brain held constant</sub> | **+662 ms** | [+248, +3425] | 0.021 / 0.559 |
+| `nat-semantic` − `native-direct`<br><sub>OpenAI semantic vs server VAD, brain held constant</sub> | **+662 ms** | [+248, +3425] | 0.021 / 0.645 |
 | `vlmini-azsemantic` − `vl-direct`<br><sub>Azure semantic vs server VAD, brain gpt-4.1-mini</sub> | +177 ms | [−69, +260] | 0.344 / 1.000 |
 
 `speech_stopped_ms` shows the mechanism directly — this is the detector's own decision time:

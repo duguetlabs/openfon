@@ -31,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from arms import ARMS, VAD_ARMS, Arm  # noqa: E402
 from bench import load_kataleptic_key  # noqa: E402
+from safety import safe_print  # noqa: E402
 
 MARKER = "MKVERIFY"
 
@@ -92,11 +93,11 @@ async def main() -> int:
         try:
             sess = await capture(arm, azure_key, kat_key)
         except Exception as e:                                # noqa: BLE001
-            print(f"  {arm.id:<18} CAPTURE FAILED: {type(e).__name__}: {str(e)[:120]}")
+            safe_print(f"  {arm.id:<18} CAPTURE FAILED: {type(e).__name__}: {str(e)[:120]}")
             failures += 1
             continue
         if sess is None:
-            print(f"  {arm.id:<18} no marker echo")
+            safe_print(f"  {arm.id:<18} no marker echo")
             failures += 1
             continue
 
@@ -111,9 +112,9 @@ async def main() -> int:
         missed = [k for k in MUTATIONS if not arm.verify_echo(mutate(sess, arm, k))[0]]
         failures += len(missed)
         status = "all caught" if not missed else f"MISSED {missed}"
-        print(f"  {arm.id:<18} real echo clean; mutations: {status}{note}")
+        safe_print(f"  {arm.id:<18} real echo clean; mutations: {status}{note}")
 
-    print("\nOK" if not failures else f"\n{failures} problem(s)")
+    safe_print("\nOK" if not failures else f"\n{failures} problem(s)")
     return 0 if not failures else 1
 
 

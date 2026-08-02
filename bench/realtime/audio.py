@@ -20,6 +20,8 @@ import wave
 from dataclasses import dataclass
 from pathlib import Path
 
+from safety import safe_print
+
 SAMPLE_RATE = 24000
 BYTES_PER_SAMPLE = 2
 FRAME_MS = 20
@@ -157,7 +159,7 @@ def load_utterances(spec_path: Path | None = None, *, region: str = "",
                     "(see README) so the harness can synthesize the caller audio once.")
             pcm = trim_silence(_synthesize(u["text"], u["voice"], region, key))
             _write_wav(wav, pcm)
-            print(f"  synthesized {u['id']}: {len(pcm)/(SAMPLE_RATE*2):.2f}s -> {wav.name}")
+            safe_print(f"  synthesized {u['id']}: {len(pcm)/(SAMPLE_RATE*2):.2f}s -> {wav.name}")
         out.append(Utterance(id=u["id"], lang=u["lang"], voice=u["voice"],
                              text=u["text"], pcm=pcm))
     return out

@@ -225,11 +225,21 @@ would corrupt every number in the report while looking entirely plausible.
 
 ### Secrets
 
-The gateway takes its key in the query string (`?token=`), which is what its
-protocol requires, and websocket libraries put the request URI into exception messages.
-Every string persisted to `results/` therefore passes through `redact()` first, on all
-error paths. `cache/` and `results/` are gitignored regardless — the caller WAVs
-regenerate from `utterances.json` on first run.
+The gateway takes its key in the query string (`?token=`), which its protocol requires,
+and websocket libraries put the request URI into exception messages — so any string
+derived from an exception is a potential disclosure.
+
+Redaction therefore lives in `safety.py`, at the points where text **leaves the process**,
+not at each call site. This was originally fixed per-call-site in `bench.py`, and a later
+script reintroduced the leak simply by printing an exception; a boundary cannot be opted
+out of by accident. Two exits are covered — `safe_print` for anything reaching a terminal
+or CI log, and `scrub_record` for anything written to `results/`, which also means a field
+added later whose author forgot to redact is still caught on the way to disk.
+
+**Use `safe_print`, never bare `print`, in anything under `bench/realtime/`.**
+
+`cache/` and `results/` are gitignored regardless — the caller WAVs regenerate from
+`utterances.json` on first run.
 
 ## Cost and caps
 
@@ -253,3 +263,4 @@ turns on the shortest utterance, scaling with utterance length). Before a bigger
 | `analyze.py` | marginal and paired statistics, markdown tables |
 | `utterances.json` | the fixed caller utterances (EN + DE, short + long) |
 | `verify_live.py` | checks `verify_echo` against the live endpoints, both directions |
+| `safety.py` | credential scrubbing at the process boundary (`safe_print`, `scrub_record`) |

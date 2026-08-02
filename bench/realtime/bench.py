@@ -42,6 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import arms as arms_mod  # noqa: E402
 from arms import ARMS, ARMS_BY_ID, Arm  # noqa: E402
 from audio import FRAME_MS, SAMPLE_RATE, Utterance, load_utterances  # noqa: E402
+from safety import redact, safe_print, scrub_record  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent.parent
@@ -53,15 +54,7 @@ SILENCE_FRAME = b"\x00" * (SAMPLE_RATE * 2 * FRAME_MS // 1000)
 # slow samples and make transcript_ms look better than it is.
 TRANSCRIPT_GRACE_S = 4.0
 
-# The gateway takes its key in the query string (`?token=`), and websocket
-# libraries routinely put the request URI into exception messages. Every string
-# that reaches a results file goes through this first.
-_SECRET_IN_URL = re.compile(r"([?&](?:token|api[-_]?key)=)[^&\s\"']+", re.I)
 
-
-def redact(s: str) -> str:
-    """Strip credentials out of anything we are about to persist."""
-    return _SECRET_IN_URL.sub(r"\1<redacted>", str(s))
 
 
 @dataclass
@@ -120,6 +113,20 @@ def load_kataleptic_key() -> str:
             if m:
                 return m.group(1).strip().strip("'\"")
     raise SystemExit("no gateway key: set KATALEPTIC_KEY or add DEFAULT_LLM_API_KEY to .dev.vars")
+
+
+def discard_fragment(t: "Turn", resp_audio_bytes: int) -> int:
+    """Record a server-VAD fragment response and drop what it produced.
+
+    Whether the fragment emitted audio is the difference between the caller
+    being talked over and a silent re-segmentation, so it is counted rather
+    than assumed. Returns the reset byte counter.
+    """
+    t.false_starts += 1
+    if resp_audio_bytes:
+        t.false_starts_audible += 1
+        t.false_start_audio_ms += resp_audio_bytes / BYTES_PER_MS
+    return 0
 
 
 async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
@@ -201,8 +208,11 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
                         await asyncio.sleep(delay)
 
             send_task = asyncio.create_task(sender())
-            audio_bytes = 0
-            frag_audio_bytes = 0          # audio emitted by a pre-speech-end fragment
+            # Audio for the response currently in flight, whichever side of
+            # speech-end it arrives on. A fragment can start before speech ends
+            # and be cancelled after, so one counter spanning both is the only
+            # way its audio is attributed to the right response.
+            resp_audio_bytes = 0
             fragment_items: set[str] = set()   # input items committed mid-utterance
             final_items: set[str] = set()      # input items committed after speech end
             deadline = time.monotonic() + utt.duration_s + reply_timeout + 5.0
@@ -247,19 +257,14 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
                     # rather than assumed.
                     if t0 is None:
                         if arms_mod.is_audio_delta(et):
-                            frag_audio_bytes += len(base64.b64decode(ev.get("delta") or ""))
+                            resp_audio_bytes += len(base64.b64decode(ev.get("delta") or ""))
                         elif et == "input_audio_buffer.committed" and ev.get("item_id"):
                             fragment_items.add(ev["item_id"])
                         elif et == "response.done":
-                            t.false_starts += 1
-                            if frag_audio_bytes:
-                                t.false_starts_audible += 1
-                                t.false_start_audio_ms += frag_audio_bytes / BYTES_PER_MS
-                            frag_audio_bytes = 0
+                            resp_audio_bytes = discard_fragment(t, resp_audio_bytes)
                             t.ttfa_ms = t.ttft_ms = t.transcript_ms = None
                             t.transcript = ""
                             t.caller_transcript = ""
-                            audio_bytes = 0
                         continue
                     if et == "input_audio_buffer.speech_stopped" and t.speech_stopped_ms is None:
                         t.speech_stopped_ms = since()
@@ -270,7 +275,7 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
                     elif arms_mod.is_audio_delta(et):
                         if t.ttfa_ms is None:
                             t.ttfa_ms = since()
-                        audio_bytes += len(base64.b64decode(ev.get("delta") or ""))
+                        resp_audio_bytes += len(base64.b64decode(ev.get("delta") or ""))
                     elif arms_mod.is_transcript_delta(et):
                         if t.ttft_ms is None:
                             t.ttft_ms = since()
@@ -291,19 +296,29 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
                         t.caller_transcript = (ev.get("transcript") or "").strip()
                     elif et == "response.done":
                         resp = ev.get("response") or {}
-                        if resp.get("status") == "cancelled":
-                            # a late cancellation of a fragment response
-                            t.false_starts += 1
-                            if audio_bytes:
-                                t.false_starts_audible += 1
-                                t.false_start_audio_ms += audio_bytes / BYTES_PER_MS
+                        status = resp.get("status")
+                        if status == "cancelled":
+                            # A fragment response whose cancellation arrived after
+                            # speech ended. Its audio may have been emitted on
+                            # either side of t0, which is why the counter spans
+                            # both — checking only post-t0 bytes would report an
+                            # audible fragment as silent.
+                            resp_audio_bytes = discard_fragment(t, resp_audio_bytes)
                             t.ttfa_ms = t.ttft_ms = None
                             t.transcript = ""
-                            audio_bytes = 0
                             continue
+                        if status != "completed":
+                            # A failed or incomplete response is not a
+                            # measurement. Letting it through would feed a
+                            # truncated reply into response_total_ms, the
+                            # reply-length figures and the paired statistics.
+                            t.error = redact(
+                                f"response status={status!r}: "
+                                f"{json.dumps(resp.get('status_details'))}")[:300]
+                            break
                         t.response_total_ms = since()
                         t.usage = resp.get("usage") or {}
-                        t.audio_out_ms = audio_bytes / BYTES_PER_MS
+                        t.audio_out_ms = resp_audio_bytes / BYTES_PER_MS
                         t.ok = t.ttfa_ms is not None
                         # Input transcription is asynchronous and often lands
                         # AFTER response.done. Closing here would drop exactly
@@ -372,9 +387,9 @@ async def main() -> int:
     csv_path = out_dir / f"turns-{suffix}.csv"
 
     total = args.rounds * len(selected)
-    print(f"{len(selected)} arms x {args.rounds} rounds = {total} turns")
-    print(f"utterances: " + ", ".join(f"{u.id} ({u.duration_s:.1f}s)" for u in utterances))
-    print(f"-> {jsonl_path}\n")
+    safe_print(f"{len(selected)} arms x {args.rounds} rounds = {total} turns")
+    safe_print(f"utterances: " + ", ".join(f"{u.id} ({u.duration_s:.1f}s)" for u in utterances))
+    safe_print(f"-> {jsonl_path}\n")
 
     turns: list[Turn] = []
     started = time.monotonic()
@@ -388,12 +403,12 @@ async def main() -> int:
                                       kataleptic_key=kataleptic_key,
                                       reply_timeout=args.reply_timeout)
                 turns.append(turn)
-                fh.write(json.dumps(asdict(turn)) + "\n")
+                fh.write(json.dumps(scrub_record(asdict(turn))) + "\n")
                 fh.flush()
                 done = len(turns)
                 eta = (time.monotonic() - started) / done * (total - done)
                 flag = "ok " if turn.ok else "ERR"
-                print(f"[{done:>4}/{total}] r{rnd:<3} {arm.id:<16} {utt.id:<9} {flag} "
+                safe_print(f"[{done:>4}/{total}] r{rnd:<3} {arm.id:<16} {utt.id:<9} {flag} "
                       f"ttfa={turn.ttfa_ms or float('nan'):7.0f}ms  eta {eta/60:4.1f}m"
                       + (f"  {turn.error[:90]}" if turn.error else ""))
                 await asyncio.sleep(args.gap)
@@ -403,14 +418,14 @@ async def main() -> int:
         w = csv.DictWriter(fh, fieldnames=fields)
         w.writeheader()
         for t in turns:
-            row = asdict(t)
+            row = scrub_record(asdict(t))
             row["usage"] = json.dumps(row["usage"])
             w.writerow(row)
 
     ok = sum(1 for t in turns if t.ok)
-    print(f"\n{ok}/{len(turns)} turns ok in {(time.monotonic()-started)/60:.1f} min")
-    print(f"wrote {jsonl_path}\n      {csv_path}")
-    print(f"\nnow run:  python analyze.py {jsonl_path}")
+    safe_print(f"\n{ok}/{len(turns)} turns ok in {(time.monotonic()-started)/60:.1f} min")
+    safe_print(f"wrote {jsonl_path}\n      {csv_path}")
+    safe_print(f"\nnow run:  python analyze.py {jsonl_path}")
     return 0 if ok else 1
 
 

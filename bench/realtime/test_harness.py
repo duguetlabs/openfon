@@ -5,6 +5,7 @@ rather than the things that summarise it.
 """
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -13,6 +14,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from arms import ARMS_BY_ID, SAMPLE_RATE  # noqa: E402
 from audio import FRAME_BYTES, Utterance, cache_name, trim_silence  # noqa: E402
+from bench import discard_fragment  # noqa: E402
+from safety import redact, scrub_record  # noqa: E402
 
 GA_ARM = ARMS_BY_ID["native-direct"]        # marin / whisper-1 / server_vad
 VL_ARM = ARMS_BY_ID["vl-direct"]            # Ava / azure-speech / server_vad
@@ -235,3 +238,81 @@ class TestTrimSilence(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _T:
+    """Minimal stand-in for Turn's fragment counters."""
+    def __init__(self):
+        self.false_starts = 0
+        self.false_starts_audible = 0
+        self.false_start_audio_ms = 0.0
+
+
+class TestDiscardFragment(unittest.TestCase):
+    """The "splits are inaudible" conclusion rests on this count, so it must
+    not be able to undercount."""
+
+    def test_silent_fragment_counts_as_a_split_but_not_audible(self):
+        t = _T()
+        self.assertEqual(discard_fragment(t, 0), 0)
+        self.assertEqual((t.false_starts, t.false_starts_audible), (1, 0))
+        self.assertEqual(t.false_start_audio_ms, 0.0)
+
+    def test_audible_fragment_is_counted_and_measured(self):
+        t = _T()
+        discard_fragment(t, 48 * 250)          # 250 ms at 24 kHz PCM16
+        self.assertEqual((t.false_starts, t.false_starts_audible), (1, 1))
+        self.assertAlmostEqual(t.false_start_audio_ms, 250.0)
+
+    def test_counter_is_reset_so_fragments_do_not_bleed_together(self):
+        t = _T()
+        left = discard_fragment(t, 48 * 100)
+        self.assertEqual(left, 0)
+        discard_fragment(t, left)              # a second, silent fragment
+        self.assertEqual((t.false_starts, t.false_starts_audible), (2, 1))
+        self.assertAlmostEqual(t.false_start_audio_ms, 100.0)
+
+    def test_audio_spanning_the_speech_end_boundary_is_attributed(self):
+        """A fragment can start before speech ends and be cancelled after; one
+        counter spans both, so its audio is not lost to the boundary."""
+        t = _T()
+        pre, post = 48 * 40, 48 * 60           # 40 ms before, 60 ms after
+        discard_fragment(t, pre + post)
+        self.assertEqual(t.false_starts_audible, 1)
+        self.assertAlmostEqual(t.false_start_audio_ms, 100.0)
+
+
+class TestSafetyBoundary(unittest.TestCase):
+    """Redaction lives where text leaves the process, because a later script
+    reintroduced the leak simply by printing an exception."""
+
+    SECRET_URL = "wss://api.kataleptic.com/v1/realtime?model=x&token=dg_abc123SECRETKEY9999"
+
+    def test_redacts_query_credentials(self):
+        out = redact(f"InvalidURI: {self.SECRET_URL} is not valid")
+        self.assertNotIn("dg_abc123SECRETKEY9999", out)
+        self.assertIn("token=<redacted>", out)
+
+    def test_redacts_a_bare_key_without_its_query_parameter(self):
+        out = redact("auth failed for dg_abc123SECRETKEY9999")
+        self.assertNotIn("abc123SECRETKEY9999", out)
+
+    def test_scrub_record_walks_nested_structures(self):
+        rec = {"error": f"connect: {self.SECRET_URL}",
+               "usage": {"note": [f"retry {self.SECRET_URL}"]},
+               "ok": False, "ms": 12.5}
+        out = scrub_record(rec)
+        blob = json.dumps(out)
+        self.assertNotIn("dg_abc123SECRETKEY9999", blob)
+        self.assertEqual(out["ok"], False)      # non-strings pass through
+        self.assertEqual(out["ms"], 12.5)
+
+    def test_scrub_record_is_a_last_line_for_new_fields(self):
+        """A field added later, whose author forgot to redact, is still caught
+        on the way to disk."""
+        out = scrub_record({"some_new_field": self.SECRET_URL})
+        self.assertNotIn("dg_abc123SECRETKEY9999", out["some_new_field"])
+
+    def test_clean_text_is_untouched(self):
+        self.assertEqual(redact("timeout waiting for response.done"),
+                         "timeout waiting for response.done")
