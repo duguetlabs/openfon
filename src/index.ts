@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import type { Env, Business, AgentSettings } from './types';
 import { createSession, deleteSession, getUserIdFromSession, hashPassword, newId, verifyPassword } from './auth';
+import { sameLlmEndpoint, validateLlmBaseUrl } from './providers';
 import { CallSession } from './call-session';
 
 export { CallSession };
@@ -156,6 +157,9 @@ app.put('/api/me/business/:id/agent', async (c) => {
   const engine = s.engine === 'realtime' ? 'realtime' : s.engine === 'pipeline' ? 'pipeline' : cur.engine;
   const realtimeModel = s.realtime_model !== undefined ? s.realtime_model : cur.realtime_model;
   const realtimeVoice = s.realtime_voice !== undefined ? s.realtime_voice : cur.realtime_voice;
+  const llmBaseUrl = s.llm_base_url ?? cur.llm_base_url;
+  const bad = llmEndpointError(c.env, llmBaseUrl, llmKey);
+  if (bad) return c.json({ error: bad }, 400);
   await c.env.DB.prepare(
     `UPDATE agent_settings SET agent_name=?, greeting=?, persona=?, language=?, voice=?, take_messages=?, custom_instructions=?, llm_base_url=?, llm_api_key=?, llm_model=?, engine=?, realtime_model=?, realtime_voice=? WHERE business_id=?`
   )
@@ -167,7 +171,7 @@ app.put('/api/me/business/:id/agent', async (c) => {
       s.voice ?? cur.voice,
       s.take_messages !== undefined ? (s.take_messages ? 1 : 0) : cur.take_messages,
       s.custom_instructions ?? cur.custom_instructions,
-      s.llm_base_url ?? cur.llm_base_url,
+      llmBaseUrl,
       llmKey,
       s.llm_model ?? cur.llm_model,
       engine,
@@ -215,6 +219,18 @@ function maskSettings(s: AgentSettings): AgentSettings {
   return { ...s, llm_api_key: s.llm_api_key ? '••••••••' : '' };
 }
 
+// A custom LLM endpoint is only ever called with the key stored next to it
+// (see resolveLlm), so an endpoint without a key is a configuration error.
+// Caught on write, where the dashboard can show it, rather than on the call.
+function llmEndpointError(env: Env, baseUrl: string, apiKey: string): string | null {
+  const url = (baseUrl ?? '').trim();
+  if (!url || sameLlmEndpoint(url, env.DEFAULT_LLM_BASE_URL)) return null;
+  const rejected = validateLlmBaseUrl(url, env.ALLOW_INSECURE_LLM_URL === 'true');
+  if (rejected) return `LLM base URL ${rejected}`;
+  if (!apiKey) return 'A custom LLM base URL needs its own API key — this instance never sends its key to another endpoint.';
+  return null;
+}
+
 // ---------- engine profiles (named voice-engine presets) ----------
 const PROFILE_FIELDS = ['engine', 'realtime_model', 'realtime_voice', 'language', 'voice', 'llm_base_url', 'llm_api_key', 'llm_model'] as const;
 type ProfileFields = Record<(typeof PROFILE_FIELDS)[number], string> & { id: string; name: string; business_id: string };
@@ -246,6 +262,8 @@ app.post('/api/me/business/:id/profiles', async (c) => {
       .first<{ llm_api_key: string }>();
     llmKey = cur?.llm_api_key ?? '';
   }
+  const bad = llmEndpointError(c.env, b.llm_base_url ?? '', llmKey);
+  if (bad) return c.json({ error: bad }, 400);
   await c.env.DB.prepare(
     `INSERT INTO engine_profiles (id, business_id, name, engine, realtime_model, realtime_voice, language, voice, llm_base_url, llm_api_key, llm_model)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -283,6 +301,9 @@ app.put('/api/me/profiles/:pid', async (c) => {
   if (!p) return c.json({ error: 'Not found' }, 404);
   const b = await c.req.json<Partial<ProfileFields>>();
   const llmKey = b.llm_api_key !== undefined && !/^•+$/.test(b.llm_api_key) ? b.llm_api_key : p.llm_api_key;
+  const llmBaseUrl = b.llm_base_url ?? p.llm_base_url;
+  const bad = llmEndpointError(c.env, llmBaseUrl, llmKey);
+  if (bad) return c.json({ error: bad }, 400);
   await c.env.DB.prepare(
     `UPDATE engine_profiles SET name=?, engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_base_url=?, llm_api_key=?, llm_model=? WHERE id=?`
   )
@@ -293,7 +314,7 @@ app.put('/api/me/profiles/:pid', async (c) => {
       b.realtime_voice ?? p.realtime_voice,
       b.language ?? p.language,
       b.voice ?? p.voice,
-      b.llm_base_url ?? p.llm_base_url,
+      llmBaseUrl,
       llmKey,
       b.llm_model ?? p.llm_model,
       p.id
@@ -313,6 +334,9 @@ app.delete('/api/me/profiles/:pid', async (c) => {
 app.post('/api/me/profiles/:pid/apply', async (c) => {
   const p = await ownedProfile(c.env, c.get('userId'), c.req.param('pid'));
   if (!p) return c.json({ error: 'Not found' }, 404);
+  // Profiles saved before the endpoint rules existed are re-checked here.
+  const bad = llmEndpointError(c.env, p.llm_base_url, p.llm_api_key);
+  if (bad) return c.json({ error: `Cannot apply "${p.name}": ${bad}` }, 400);
   await c.env.DB.prepare(
     `UPDATE agent_settings SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_base_url=?, llm_api_key=?, llm_model=? WHERE business_id=?`
   )

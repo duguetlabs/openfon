@@ -3,12 +3,158 @@
 // vLLM, or anything else that implements /chat/completions and /audio/transcriptions.
 import type { Env, AgentSettings, ChatMessage, LlmConfig } from './types';
 
-export function resolveLlm(env: Env, settings: AgentSettings | null): LlmConfig {
-  return {
-    baseUrl: settings?.llm_base_url || env.DEFAULT_LLM_BASE_URL,
-    apiKey: settings?.llm_api_key || env.DEFAULT_LLM_API_KEY || '',
-    model: settings?.llm_model || env.DEFAULT_LLM_MODEL,
+// Raised when a business's AI-provider settings cannot be turned into a usable
+// config. Callers surface the message to the user instead of failing opaquely.
+export class LlmConfigError extends Error {}
+
+// Two base URLs mean the same endpoint if only a trailing slash or host casing
+// differs — otherwise "https://api.host/v1/" would count as a custom endpoint
+// and lose the instance key for no reason. Everything else fetch actually puts
+// on the wire is part of the identity:
+//   - credentials, so "https://user:pass@<default host>/v1" can't pose as the
+//     clean instance URL and skip the checks below;
+//   - the query string, since a gateway can route on it — with
+//     DEFAULT_LLM_BASE_URL="https://gw/v1?target=trusted", a business saving
+//     "?target=attacker" would otherwise inherit the instance key and have the
+//     gateway forward it wherever they point it.
+// Query strings are compared verbatim, not canonicalized: "?b=2&a=1" then reads
+// as a different endpoint than "?a=1&b=2" and merely needs its own key, which
+// is the safe direction to be wrong in. The fragment is left out — fetch never
+// sends it, so it cannot change where the request lands.
+export function sameLlmEndpoint(a: string, b: string): boolean {
+  const norm = (u: string) => {
+    try {
+      const p = new URL(u.trim());
+      const cred = p.username || p.password ? `${p.username}:${p.password}@` : '';
+      const port = p.port ? `:${p.port}` : '';
+      // The host goes in exactly as the parser reports it — brackets on IPv6
+      // literals, DNS root dot and all. Identity asks "is this the same
+      // destination", and fetch sends "api.example.com." in the Host header,
+      // which a virtual host may route elsewhere than "api.example.com".
+      // isInternalHost normalizes both away because it asks a different
+      // question — "is this the same machine". Two questions, two
+      // normalizations: collapsing them is what let "[2001:db8::1]:8443" and
+      // "[2001:db8::1:8443]" read as one endpoint.
+      return `${p.protocol}//${cred}${p.hostname.toLowerCase()}${port}${p.pathname.replace(/\/+$/, '')}${p.search}`;
+    } catch {
+      return u.trim().replace(/\/+$/, '');
+    }
   };
+  return norm(a) === norm(b);
+}
+
+// The credential travels with the endpoint. A business may point its agent at
+// its own OpenAI-compatible server, but then only the key stored next to that
+// URL is ever sent: falling back to DEFAULT_LLM_API_KEY here would hand the
+// instance's key to whatever host the business typed into Settings.
+export function resolveLlm(env: Env, settings: AgentSettings | null): LlmConfig {
+  const custom = (settings?.llm_base_url ?? '').trim();
+  const model = settings?.llm_model || env.DEFAULT_LLM_MODEL;
+  if (!custom || sameLlmEndpoint(custom, env.DEFAULT_LLM_BASE_URL)) {
+    return {
+      // The operator's own URL, never the business's spelling of it. The two
+      // are equivalent by the check above, so this costs nothing — and it means
+      // the guarantee doesn't rest on that check being injective: any future
+      // collision costs a business its custom endpoint, and can never route
+      // the instance key somewhere the operator didn't configure.
+      baseUrl: env.DEFAULT_LLM_BASE_URL,
+      apiKey: settings?.llm_api_key || env.DEFAULT_LLM_API_KEY || '',
+      model,
+    };
+  }
+  // Rows written before this rule existed (or edited straight in D1) are
+  // re-checked here, so a stale endpoint can't outlive the policy.
+  const rejected = validateLlmBaseUrl(custom, env.ALLOW_INSECURE_LLM_URL === 'true');
+  if (rejected) throw new LlmConfigError(`LLM base URL ${rejected}`);
+  if (!settings?.llm_api_key) {
+    throw new LlmConfigError('A custom LLM base URL needs its own API key — this instance never sends its key to another endpoint.');
+  }
+  return { baseUrl: custom, apiKey: settings.llm_api_key, model };
+}
+
+// Normalization for *address inspection* — "which machine is this" — not for
+// endpoint identity, which keeps both of these (see sameLlmEndpoint). The URL
+// parser already folds case, punycodes IDNs, and canonicalizes IP literals,
+// but it keeps the DNS root dot: "localhost." resolves exactly where
+// "localhost" does, so it must not read as a different machine. Brackets come
+// off so an IPv6 literal can be matched as an address.
+function normalizeHost(hostname: string): string {
+  return hostname.replace(/^\[|\]$/g, '').replace(/\.+$/, '').toLowerCase();
+}
+
+// Literal-IP inspection only: Workers have no DNS resolver, so a hostname that
+// *resolves* into private space still gets through. This stops the direct
+// http://169.254.169.254/ style probe and keeps honest misconfiguration out;
+// it is not a complete SSRF defence.
+function isInternalHost(host: string): boolean {
+  const h = normalizeHost(host);
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) return true;
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return (
+      a === 0 || // "this network", and 0.0.0.0
+      a === 10 ||
+      a === 127 ||
+      (a === 169 && b === 254) || // link-local, incl. cloud metadata
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 100 && b >= 64 && b <= 127) || // carrier-grade NAT
+      a >= 224 // multicast, reserved, broadcast
+    );
+  }
+  if (h.includes(':')) {
+    if (h === '::1' || h === '::') return true;
+    // IPv4-mapped addresses: the URL parser rewrites ::ffff:127.0.0.1 to
+    // ::ffff:7f00:1, so unpack the two hextets and judge the v4 address.
+    const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(h);
+    if (mapped) {
+      const [hi, lo] = [parseInt(mapped[1], 16), parseInt(mapped[2], 16)];
+      return isInternalHost(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`);
+    }
+    return /^(f[cd]|fe[89ab])/.test(h); // unique-local fc00::/7, link-local fe80::/10
+  }
+  return false;
+}
+
+// Checks a base URL a business supplied for its own LLM endpoint. Returns a
+// sentence to append to "LLM base URL …" for the dashboard, or null if it's
+// acceptable. Kept here so the write path and the call path agree.
+export function validateLlmBaseUrl(raw: string, allowInsecure = false): string | null {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return 'must be an absolute URL, e.g. https://api.example.com/v1';
+  }
+  if (url.username || url.password) return 'must not embed credentials — put the key in the API key field';
+  // fetch only speaks http(s), and a typo like "htt://" parses fine.
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return 'must be an http(s) URL';
+  // ALLOW_INSECURE_LLM_URL is the operator declaring "this instance runs a
+  // model next to the Worker". That setup is plain http to loopback, so the
+  // flag lifts the transport and address rules together — one switch, no
+  // grammar to get wrong. Not for a deployment with tenants on it.
+  if (allowInsecure) return null;
+  if (url.protocol !== 'https:') return 'must use https://';
+  if (isInternalHost(normalizeHost(url.hostname))) return 'must not point at a loopback, private, or link-local address';
+  return null;
+}
+
+// Append the endpoint path structurally, not by concatenation: a base URL may
+// carry a query string — a gateway routing on "?target=…" is a configuration
+// sameLlmEndpoint deliberately supports — and "…/v1?target=x" + "/chat/completions"
+// buries the path inside the query value, leaving the request pointed at /v1.
+// The trailing slash goes for the same reason it always did: "…/v1/" would
+// otherwise build "…/v1//chat/completions", which providers used to paper over
+// with a 301 that fetch followed, and redirects are off below.
+function completionsUrl(baseUrl: string): string {
+  try {
+    const u = new URL(baseUrl.trim());
+    u.pathname = `${u.pathname.replace(/\/+$/, '')}/chat/completions`;
+    return u.toString();
+  } catch {
+    return `${baseUrl.trim().replace(/\/+$/, '')}/chat/completions`;
+  }
 }
 
 export async function chatComplete(
@@ -16,8 +162,14 @@ export async function chatComplete(
   messages: ChatMessage[],
   opts: { maxTokens?: number; temperature?: number; json?: boolean } = {}
 ): Promise<string> {
-  const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
+  const res = await fetch(completionsUrl(cfg.baseUrl), {
     method: 'POST',
+    // Every endpoint rule above is checked against the URL that was saved, so a
+    // followed redirect would walk straight around them: a host that passes
+    // validation can answer 302 http://10.0.0.1/ and have the Worker make that
+    // request instead. No OpenAI-compatible /chat/completions has a reason to
+    // redirect, so treat one as an error.
+    redirect: 'manual',
     headers: { Authorization: `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: cfg.model,
@@ -27,6 +179,12 @@ export async function chatComplete(
       ...(opts.json ? { response_format: { type: 'json_object' } } : {}),
     }),
   });
+  if (res.status >= 300 && res.status < 400) {
+    // The target can name an internal host or carry signed query parameters,
+    // and these errors surface on a public socket — log it, don't throw it.
+    console.error(`LLM endpoint redirected to ${res.headers.get('location') ?? 'an undisclosed location'}`);
+    throw new Error(`LLM error ${res.status}: endpoint redirected; redirects are not followed`);
+  }
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`LLM error ${res.status}: ${body.slice(0, 300)}`);

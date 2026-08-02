@@ -14,7 +14,7 @@
 //   server JSON  {type:"thinking"} | {type:"error", message} | {type:"ended"}
 import type { Env, Business, AgentSettings, ChatMessage } from './types';
 import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './prompt';
-import { chatComplete, detectLang, isFarewell, isVocabEcho, normalizeLang, piperVoiceFor, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
+import { chatComplete, detectLang, isFarewell, isVocabEcho, LlmConfigError, normalizeLang, piperVoiceFor, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
 
 // WebSocket binary payloads vary by runtime: ArrayBuffer, ArrayBufferView, or Blob.
 async function toArrayBuffer(data: unknown): Promise<ArrayBuffer> {
@@ -95,6 +95,7 @@ export class CallSession implements DurableObject {
   private lang = 'en'; // follows the caller; starts as the business default
   private mode: 'pipeline' | 'realtime' = 'pipeline';
   private upstream: WebSocket | null = null; // realtime engine connection
+  private failure: string | null = null; // owner-facing reason, stored as the call's summary
 
   constructor(
     private state: DurableObjectState,
@@ -112,7 +113,7 @@ export class CallSession implements DurableObject {
     server.accept();
     this.ws = server;
     server.addEventListener('message', (ev) => {
-      this.onMessage(ev).catch((err) => this.sendError(`${err}`));
+      this.onMessage(ev).catch((err) => this.failInternally(err));
     });
     server.addEventListener('close', () => {
       this.closeUpstream();
@@ -129,9 +130,23 @@ export class CallSession implements DurableObject {
     }
   }
 
+  // Only for messages written to be read by a caller. Anything derived from a
+  // thrown error goes through failInternally instead.
   private sendError(message: string): void {
     console.error('call error:', message);
     this.send({ type: 'error', message });
+  }
+
+  // The disclosure boundary for the public call socket. Thrown errors quote
+  // whatever the failure carried — an upstream response body, a redirect
+  // target, an endpoint hostname — and this widget is reachable by anyone with
+  // the business's public link. So the detail is logged and kept for the
+  // owner's call log, and the caller is told only that the call broke.
+  private failInternally(err: unknown): void {
+    const detail = `${err}`;
+    console.error(`call ${this.callId}: ${detail}`);
+    this.failure ??= `Call failed: ${detail}`;
+    this.send({ type: 'error', message: 'Sorry — this call ran into a problem. Please try again.' });
   }
 
   private async loadCall(): Promise<void> {
@@ -185,6 +200,25 @@ export class CallSession implements DurableObject {
 
   private async handleStart(): Promise<void> {
     await this.loadCall();
+    // Resolve the LLM config before saying hello: a rejected AI-provider setup
+    // must fail at pickup with a message the owner can act on, not stall the
+    // caller mid-conversation (realtime calls would only notice at summary time).
+    try {
+      resolveLlm(this.env, this.settings);
+    } catch (err) {
+      if (!(err instanceof LlmConfigError)) throw err;
+      // The diagnostic is for the owner, not the caller: it can name the
+      // instance's allowed hosts, and anyone can dial the public widget. The
+      // caller hears that the line is down; the reason is logged and lands on
+      // the call row, which is where the person who can fix it looks.
+      this.failure = `Agent misconfigured — ${err.message} Fix it in Settings → AI provider.`;
+      console.error(`call ${this.callId}: ${this.failure}`);
+      this.sendError('This agent is not available right now. Please try again later.');
+      this.send({ type: 'ended' });
+      this.ws?.close(1000, 'agent misconfigured');
+      await this.finalize();
+      return;
+    }
     this.lang = this.settings!.language in SUPPORTED_LANGUAGES ? this.settings!.language : 'en';
     const greeting = defaultGreeting(this.biz!, this.settings!);
     const systemPrompt = buildSystemPrompt(this.biz!, this.settings!, new Date());
@@ -662,6 +696,14 @@ export class CallSession implements DurableObject {
       .run();
   }
 
+  // The status is derived from the recorded failure, never passed in. It used
+  // to be an argument, and then the two could disagree — a mid-call error wrote
+  // "Call failed: …" into the summary of a row the dashboard counted as a
+  // success, because the socket-close path finalizes without knowing anything
+  // went wrong. A recorded failure *is* the call failing, so it decides both
+  // fields and no caller can reintroduce the split. ('failed' is the schema's
+  // own vocabulary, and the dashboard's stats read 'completed', so these drop
+  // out of call counts and talk time.)
   private async finalize(): Promise<void> {
     if (this.ended || !this.callId) return;
     this.ended = true;
@@ -670,7 +712,9 @@ export class CallSession implements DurableObject {
       .first<{ started_at: string }>();
     if (!call) return;
     const duration = Math.max(0, Math.round((Date.now() - new Date(call.started_at + 'Z').getTime()) / 1000));
-    let summary: string | null = null;
+    // A failure reason takes the summary slot: the call log renders it, so the
+    // owner reads why the call died where they already look for what happened.
+    let summary: string | null = this.failure;
     let intent: string | null = null;
     let messageJson: string | null = null;
     // Summarize only real conversations (greeting alone doesn't count).
@@ -711,10 +755,18 @@ export class CallSession implements DurableObject {
       const firstUser = this.history.find((m) => m.role === 'user');
       summary = firstUser ? `Caller: "${firstUser.content.slice(0, 120)}"` : null;
     }
+    // Two writers, one column, so the precedence is decided here rather than by
+    // whoever assigns last: a call that broke leads with why. The log truncates
+    // the row, and "it failed" is the fact the owner needs first; a summary, if
+    // the exchange got far enough to produce one, follows it.
+    if (this.failure && summary !== this.failure) {
+      summary = summary ? `${this.failure} — ${summary}` : this.failure;
+    }
+    const status = this.failure ? 'failed' : 'completed';
     await this.env.DB.prepare(
-      `UPDATE calls SET status = 'completed', ended_at = datetime('now'), duration_s = ?, summary = ?, intent = ?, message_json = ? WHERE id = ?`
+      `UPDATE calls SET status = ?, ended_at = datetime('now'), duration_s = ?, summary = ?, intent = ?, message_json = ? WHERE id = ?`
     )
-      .bind(duration, summary, intent, messageJson, this.callId)
+      .bind(status, duration, summary, intent, messageJson, this.callId)
       .run();
   }
 }

@@ -73,8 +73,18 @@ Defaults live in `wrangler.jsonc` under `vars`; secrets via `wrangler secret put
 | `REALTIME_BASE_URL` | OpenAI Realtime-compatible WebSocket endpoint (realtime engine) | `wss://api.kataleptic.com/v1/realtime` |
 | `REALTIME_MODEL` | Model/tier for the realtime engine | `llama-3.3-70b` |
 | `REALTIME_API_KEY` | *(secret)* key for the realtime endpoint; falls back to `DEFAULT_LLM_API_KEY` | — |
+| `ALLOW_INSECURE_LLM_URL` | `"true"` lets a business point its LLM at a plain-http or loopback URL; single-tenant instances only | — |
 
-Each business can additionally override the LLM (base URL, model, API key) from **Settings → AI provider** in the dashboard.
+Each business can additionally override the LLM (base URL, model, API key) from **Settings → AI provider** in the dashboard. A custom base URL is only ever called with the key stored beside it — `DEFAULT_LLM_API_KEY` is never sent to an endpoint a business chose. Custom endpoints must be `https` and must not be a loopback, private, or link-local address (a literal-IP check; Workers cannot resolve DNS).
+
+Running a model on the same machine as the Worker breaks both of those rules, so it needs an explicit opt-in:
+
+```sh
+# .dev.vars — e.g. Ollama on http://localhost:11434/v1
+ALLOW_INSECURE_LLM_URL="true"
+```
+
+Set this only where every account belongs to you. On an instance with tenants it lets any of them aim the agent at your local network — with their own API key, never yours, but still from your Worker's egress.
 
 ### Real phone numbers (PSTN)
 

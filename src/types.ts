@@ -6,6 +6,9 @@ export interface Env {
   DEFAULT_LLM_BASE_URL: string;
   DEFAULT_LLM_MODEL: string;
   DEFAULT_LLM_API_KEY?: string;
+  // "true" lets a business point its own LLM at a plain-http or loopback URL —
+  // for a model running alongside the Worker. Single-tenant instances only.
+  ALLOW_INSECURE_LLM_URL?: string;
   // STT (any OpenAI-compatible /audio/transcriptions)
   DEFAULT_STT_BASE_URL: string;
   DEFAULT_STT_MODEL: string;
