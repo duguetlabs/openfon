@@ -97,6 +97,9 @@ class Turn:
     # and the turn was aborted; config_warnings is recorded but not fatal.
     config_warnings: list = field(default_factory=list)
     config_fatal: list = field(default_factory=list)
+    # metrics this turn cannot contribute to, because a control they depend on
+    # was confirmed different from what was asked (see arms.invalidated_metrics)
+    invalid_metrics: list = field(default_factory=list)
     # the caller transcript never arrived within TRANSCRIPT_GRACE_S of
     # response.done, so transcript_ms is genuinely missing rather than fast
     transcript_timed_out: bool = False
@@ -190,6 +193,7 @@ async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
             t.config_warnings = advisory
             t.config_fatal = fatal
             t.config_verified = not fatal
+            t.invalid_metrics = list(arms_mod.invalidated_metrics(advisory))
             if fatal:
                 # A control we cannot confirm is not a control. Abort rather
                 # than emit a measurement that would look identical to a valid

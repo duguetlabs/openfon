@@ -1,8 +1,9 @@
 # Realtime voice latency: Kataleptic gateway vs. direct Azure
 
-*Run 2026-08-01, 125 turns across five arms. Harness and full method in
-[`bench/realtime/`](../../bench/realtime/README.md); raw data regenerable with
-`bench.py --rounds 25`.*
+*Two independent 125-turn runs of the same five-arm design, 2026-08-01 and 2026-08-02.
+Numbers below are from the second, which was collected with the fully verified harness;
+the first is reported alongside as a replication. Harness and full method in
+[`bench/realtime/`](../../bench/realtime/README.md); regenerable with `bench.py --rounds 25`.*
 
 ---
 
@@ -11,16 +12,17 @@
 **No. Routing through the Kataleptic gateway does not cost measurable latency, for
 either engine.**
 
-| comparison | median Δ time-to-first-audio | 95% CI | p (raw / Holm) |
-|---|---:|---|---:|
-| gpt-realtime-2 via gateway − direct | **−18 ms** | [−138, +22] | 0.42 / 1.00 |
-| Voice Live via gateway − direct | **−19 ms** | [−122, +60] | 1.00 / 1.00 |
+| comparison | run 2 (primary) | 95% CI | p raw / Holm | run 1 (replication) |
+|---|---:|---|---:|---:|
+| gpt-realtime-2 via gateway − direct | **+12 ms** | [−90, +141] | 1.00 / 1.00 | −18 ms |
+| Voice Live via gateway − direct | **−100 ms** | [−280, −15] | 0.043 / 0.78 | −19 ms |
 
-Both intervals straddle zero, on 25 paired turns each with byte-identical caller audio.
-**Stated precisely: no detectable difference, with the data ruling out anything larger than
-~140 ms in either direction.** That is not a claim of exact equivalence — 25 pairs against
-this much per-turn variance cannot deliver one — but at a p50 of 1.9–2.4 s it is decisive
-for the decision at hand.
+Neither survives correction in either run, and the two runs disagree on sign for the
+native pair (+12 vs −18) — which is itself the finding: the effect is smaller than the
+run-to-run variation. **Stated precisely: no detectable difference, with the data ruling
+out anything larger than ~140 ms for the native pair and ~280 ms for Voice Live.** That is
+not a claim of exact equivalence — 25 pairs against this per-turn variance cannot deliver
+one — but at a p50 of 1.9–2.2 s it is decisive for the decision at hand.
 The point estimates are *negative* — the gateway looked marginally faster — but that is a
 vantage-point artefact, not a win: from the machine that ran this, the Cloudflare edge
 fronting `api.kataleptic.com` is 30 ms of TCP RTT away while Azure swedencentral is 61 ms,
@@ -75,7 +77,8 @@ gpt-realtime-2 arms, `en-US-AvaMultilingualNeural` + `azure-speech` on both gpt-
 arms). Turns ran strictly serially, interleaved round-robin with the arm order rotated
 each round, 4 utterances (EN/DE × short/long) cycling across 25 rounds.
 
-125/125 turns produced a usable measurement.
+123/125 turns produced a usable measurement; the 2 rejections are described under
+Caveats and are not failures of the endpoint but of a control we require.
 
 ---
 
@@ -91,11 +94,11 @@ Raw (what a caller on OpenFon's current settings experiences):
 
 | arm | brain | n | min | **p50** | p90 | p99 | IQR |
 |---|---|---:|---:|---:|---:|---:|---:|
-| `native-direct` | gpt-realtime-2 | 25 | 1639 | **2413** | 3129 | 3289 | 399 |
-| `native-gateway` | gpt-realtime-2 | 25 | 1810 | **2307** | 2487 | 2599 | 228 |
-| `vl-direct` | gpt-4.1-mini | 25 | 1586 | **1864** | 2315 | 2362 | 461 |
-| `vl-gateway` | gpt-4.1-mini | 25 | 1591 | **1870** | 2428 | 2963 | 387 |
-| `vl-native-brain` | gpt-realtime-2 | 25 | 1733 | **2357** | 2579 | 3795 | 496 |
+| `native-direct` | gpt-realtime-2 | 25 | 1305 | **2205** | 2620 | 3404 | 376 |
+| `native-gateway` | gpt-realtime-2 | 23 | 1712 | **2227** | 2531 | 2616 | 374 |
+| `vl-direct` | gpt-4.1-mini | 25 | 1668 | **2002** | 2384 | 2400 | 391 |
+| `vl-gateway` | gpt-4.1-mini | 25 | 1528 | **1915** | 2191 | 2540 | 375 |
+| `vl-native-brain` | gpt-realtime-2 | 25 | 1653 | **2129** | 2479 | 2553 | 355 |
 
 Engine-only — **per turn, `ttfa_ms − speech_stopped_ms`**: inference plus synthesis, with
 that turn's *own measured* end-of-turn detection removed. Subtracting the nominal 550 ms
@@ -104,42 +107,48 @@ detector has no fixed hangover at all.
 
 | arm | brain | min | **p50** | p90 | p99 |
 |---|---|---:|---:|---:|---:|
-| `native-direct` | gpt-realtime-2 | 734 | **1615** | 2194 | 2285 |
-| `native-gateway` | gpt-realtime-2 | 879 | **1520** | 1791 | 1801 |
-| `vl-direct` | gpt-4.1-mini | 792 | **1172** | 1484 | 1581 |
-| `vl-gateway` | gpt-4.1-mini | 845 | **1132** | 1496 | 2092 |
-| `vl-native-brain` | gpt-realtime-2 | 1043 | **1606** | 1836 | 3048 |
+| `native-direct` | gpt-realtime-2 | 611 | **1512** | 1857 | 2664 |
+| `native-gateway` | gpt-realtime-2 | 1019 | **1543** | 1801 | 1880 |
+| `vl-direct` | gpt-4.1-mini | 933 | **1284** | 1650 | 1662 |
+| `vl-gateway` | gpt-4.1-mini | 826 | **1179** | 1453 | 1813 |
+| `vl-native-brain` | gpt-realtime-2 | 957 | **1384** | 1751 | 1857 |
 
-Paired on the engine-only figure, both proxy comparisons stay null
-(`native-gateway` − `native-direct` −71 ms, p = 0.23; `vl-gateway` − `vl-direct` +8 ms,
-p = 1.00).
+Paired on the engine-only figure, neither proxy comparison survives correction
+(`native-gateway` − `native-direct` +33 ms, p = 1.00; `vl-gateway` − `vl-direct` −95 ms,
+p raw 0.043 / Holm 0.78).
 
 Paired, on identical caller audio in the same round:
 
 | comparison | pairs | median Δ | 95% CI | p90 Δ | p raw | p Holm | verdict |
 |---|---:|---:|---|---:|---:|---:|---|
-| `native-gateway` − `native-direct` | 25 | **−18** | [−138, +22] | +171 | 0.424 | 1.000 | no detectable difference; CI admits up to 138 ms |
-| `vl-gateway` − `vl-direct` | 25 | **−19** | [−122, +60] | +404 | 1.000 | 1.000 | no detectable difference; CI admits up to 122 ms |
-| `vl-native-brain` − `native-direct` | 25 | **−93** | [−424, −0] | +537 | 0.043 | 0.909 | borderline, not robust to correction |
+| `native-gateway` − `native-direct` | 23 | **+12** | [−90, +141] | +502 | 1.000 | 1.000 | no detectable difference; CI admits up to 141 ms |
+| `vl-gateway` − `vl-direct` | 25 | **−100** | [−280, −15] | +171 | 0.043 | 0.779 | borderline, not robust to correction |
+| `vl-native-brain` − `native-direct` | 25 | **−64** | [−156, −12] | +506 | 0.015 | 0.293 | borderline, not robust to correction |
 
 p-values are Holm-corrected across all 24 paired tests in the run (see
 [Statistical discipline](#statistical-discipline)); a directional verdict additionally
 requires a median shift of at least 50 ms.
 
 Note the **p90 columns**: the gateway's tail is *tighter*, not looser
-(`native-gateway` p90 2487 ms vs `native-direct` 3129 ms; IQR 228 vs 399). Whatever
-jitter the extra hop adds is smaller than the jitter already present in the direct path.
+(`native-gateway` p90 2531 ms vs `native-direct` 2620 ms, and 2531 vs 3129 in run 1).
+Whatever jitter the extra hop adds is smaller than the jitter already in the direct path.
+
+`native-gateway` shows 23 turns rather than 25 because two were **rejected**, not lost —
+see the session-race caveat below.
 
 ### Engine choice dominates
 
-The interesting number is not the proxy delta, it is the ~550 ms gap between engines:
-Voice Live's gpt-4.1-mini cascade reaches first audio at a p50 of **1864 ms** raw
-(1172 ms engine-only) where gpt-realtime-2 takes **2413 ms** (1615 ms). The raw gap is
-549 ms; on the engine-only figure it is **443 ms**, the difference being that a median of
-per-turn differences is not the difference of medians. Whether that
+The interesting number is not the proxy delta, it is the gap between engines: Voice Live's
+gpt-4.1-mini cascade reaches first audio at a p50 of **2002 ms** raw (1284 ms engine-only)
+where gpt-realtime-2 takes **2205 ms** (1512 ms) — a raw gap of **203 ms** and an
+engine-only gap of **228 ms** in run 2. Run 1 put the same gap at 549 ms raw / 443 ms
+engine-only, so the magnitude is not stable across runs; the ordering is (Voice Live first
+in both), and the gap is an order of magnitude larger than anything the proxy contributes.
+Treat "a few hundred milliseconds, direction consistent" as the finding rather than either
+point estimate. Whether that
 trade is worth it depends on what OpenFon values — gpt-realtime-2 hears tone rather than
 words and its replies are noticeably more natural. But if the goal is a snappier phone
-agent, switching tiers buys 30× more than removing the gateway would.
+agent, switching tiers buys far more than removing the gateway would.
 
 ### That gap is the model, not turn detection
 
@@ -156,15 +165,15 @@ measures each server's *own* end-of-turn decision, from the end of caller speech
 
 | arm | brain | min | **p50** | p90 | IQR |
 |---|---|---:|---:|---:|---:|
-| `native-direct` | gpt-realtime-2 | 687 | **741** | 999 | 94 |
-| `native-gateway` | gpt-realtime-2 | 677 | **765** | 931 | 90 |
-| `vl-direct` | gpt-4.1-mini | 691 | **739** | 868 | 23 |
-| `vl-gateway` | gpt-4.1-mini | 687 | **764** | 871 | 42 |
-| `vl-native-brain` | gpt-realtime-2 | 690 | **737** | 781 | 24 |
+| `native-direct` | gpt-realtime-2 | 686 | **724** | 747 | 40 |
+| `native-gateway` | gpt-realtime-2 | 683 | **707** | 740 | 35 |
+| `vl-direct` | gpt-4.1-mini | 686 | **733** | 739 | 11 |
+| `vl-gateway` | gpt-4.1-mini | 687 | **731** | 736 | 33 |
+| `vl-native-brain` | gpt-realtime-2 | 692 | **727** | 751 | 31 |
 
-**Every arm decides end-of-turn within 28 ms of every other** (p50 737–765 ms; all three
-paired deltas null, p ≥ 0.23) — the 550 ms hangover plus ~190 ms of detection and
-network, the same everywhere. Turn detection is therefore *not* where the engines
+**Every arm decides end-of-turn within 26 ms of every other** (p50 707–733 ms in run 2,
+737–765 ms in run 1; all paired deltas null) — the 550 ms hangover plus ~170 ms of
+detection and network, the same everywhere. Turn detection is therefore *not* where the engines
 diverge. The ~550 ms difference in time-to-first-audio accrues entirely **downstream of
 the turn ending**, in model inference plus speech synthesis.
 
@@ -182,19 +191,15 @@ end-of-turn speed — see the VAD-splits caveat below.
 
 | metric | native-direct | native-gateway | vl-direct | vl-gateway | vl-native-brain |
 |---|---:|---:|---:|---:|---:|
-| `speech_stopped_ms` p50 (VAD end-of-turn) | 741 | 765 | 739 | 764 | 737 |
-| `ttft_ms` p50 (first text) | 2055 | 2072 | 1479 | 1509 | 2053 |
-| `transcript_ms` p50 (caller's transcript) | 1367 | 1413 | 1242 | 1288 | 1405 |
-| `response_total_ms` p50 | 5018 | 4803 | 2942 | 2796 | 5259 |
-| `connect_ms` p50 | 549 | 359 | 481 | 355 | 427 |
-| `config_ms` p50 | 84 | 154 | 75 | 107 | 142 |
-| median reply audio | 11.4 s | 11.2 s | 9.9 s | 10.1 s | 12.3 s |
+| `speech_stopped_ms` p50 (VAD end-of-turn) | 724 | 707 | 733 | 731 | 727 |
+| `transcript_ms` p50 (caller's transcript) | 1332 | *(n=3, excluded)* | 1271 | 1193 | 1292 |
+| `connect_ms` p50 | — | **−91 ms vs direct** | — | **−121 ms vs direct** | — |
 
 Every paired `ttft`, `transcript` and `response_total` comparison for the two proxy pairs
 is null (p ≥ 0.11). The reply lengths confirm the arms were doing comparable work.
 
-**`connect_ms` and `config_ms` are the vantage point made visible.** The gateway is
-150 ms faster to open a socket (p < 0.001 on both pairs) purely because the Cloudflare
+**`connect_ms` is the vantage point made visible.** The gateway is 91–121 ms faster to
+open a socket (p < 0.001 on both pairs, in both runs) purely because the Cloudflare
 edge is nearer than Sweden — and then gives ~50 ms of it back on `config_ms`, because the
 gateway dials its upstream lazily *after* accepting the client socket, so the upstream
 handshake is hidden inside session configuration rather than inside connect. Summed,
@@ -303,7 +308,23 @@ comparisons are unaffected, and `speech_stopped_ms` shows end-of-turn *timing* i
 across arms regardless. The native-vs-Voice-Live *cross* comparison on `de-short` is not
 strictly apples-to-apples.
 
-**One control did not hold, and it is a race rather than a substitution.** Every arm's
+**The gateway's session race also hits turn detection — and it was biasing the numbers.**
+The gateway dials its upstream lazily and injects its own `session.update`, which races
+with the client's. On 2 of 25 `native-gateway` turns it won on `turn_detection` too,
+leaving Azure's defaults (`threshold 0.5`, `silence_duration_ms 500`) in place of the
+`0.7 / 550` every other arm ran.
+
+Those turns are now **rejected**, because turn detection is a measurement-critical control.
+Before the check existed they were silently measured — with a hangover **50 ms shorter than
+every arm they were being compared against**, which biases the gateway toward looking
+faster. That is a systematic bias in the direction of the result, and it is a plausible
+part of why run 1's gateway point estimates were negative (−18, −19 ms) where run 2's are
++12 and −100. Neither run's comparison survives correction either way, so the conclusion is
+unchanged; but the earlier point estimates should be read as slightly flattering to the
+gateway, and this is exactly the class of error that only shows up once you check the echo
+rather than the request.
+
+**A second control diverges the same way.** Every arm's
 `session.updated` echo is now checked field by field against what was asked for, and
 anything that could corrupt a measurement — audio codec, sample rate, turn detector —
 aborts the turn instead of being recorded and ignored. That check found the
@@ -311,16 +332,21 @@ aborts the turn instead of being recorded and ignored. That check found the
 `whisper-1`: the gateway dials its upstream lazily and injects its own transcription
 deployment (`AZURE_REALTIME_TRANSCRIPTION_MODEL`), which races with the client's value.
 
-Measured over 10 consecutive sessions, **the gateway's `whisper` deployment won 8 times
-and the client's `whisper-1` won 2** — so the STT model on that arm is not merely
-different from the direct arm, it varies session to session. Measured impact on timing is
-nil (`transcript_ms` paired delta +4 ms, p = 0.69; STT runs in parallel with generation
-and cannot gate `ttfa`), and it does not touch the headline at all. But the earlier claim
-that this control was pinned on both sides was wrong, and the honest description is
-"nondeterministic", not "substituted". Every other field on every other arm echoes back
-exactly as asked — verified against live payloads by `verify_live.py`, which also mutates
-each real echo to confirm the checker catches codec, rate, detector and missing-field
-substitutions rather than passing them.
+In run 2 the gateway's `whisper` deployment won on **22 of 25 turns**; over 10 consecutive
+sessions in a separate probe it won 8 times. So the STT model on that arm is not merely
+different from the direct arm — it varies session to session.
+
+Rather than note this and carry on, those turns are now **excluded from
+`transcript_ms`**: a confirmed-different control is worse than an unconfirmable one, and an
+eliminated confound beats a disclosed one. That leaves 3 usable pairs, so the table reports
+*"no detectable difference; n=3 too small to claim equivalence"* rather than a number that
+would invite comparing two different STT deployments. The exclusion is per-metric, not
+per-turn — STT runs in parallel with generation and cannot gate first audio, so `ttfa_ms`,
+the metric the conclusion rests on, is untouched.
+
+Every other field on every other arm echoes back exactly as asked — verified against live
+payloads by `verify_live.py`, which also mutates each real echo to confirm the checker
+catches codec, rate, detector and missing-field substitutions rather than passing them.
 
 **Unremovable dialect asymmetry.** Voice Live speaks the flat/beta wire format while the
 native endpoint and the gateway speak GA nested. Each arm is sent its own native dialect.
@@ -473,10 +499,9 @@ multi-second end-of-turn tail, which is worse on a phone call.
 
 ## Cost
 
-The main run cost **$1.99** in model usage (125 turns, ~25 minutes wall clock): $0.50
-`native-direct`, $0.63 `native-gateway`, $0.13 `vl-direct`, $0.19 `vl-gateway`, $0.53
-`vl-native-brain`. The VAD follow-up added **$1.61** (120 turns), for **$3.60** total.
-Caller-audio synthesis was a one-off four requests to Azure Speech.
+Both main runs cost about **$2** each (125 turns, ~25 minutes wall clock), the VAD
+follow-up **$1.61** (120 turns), and the split re-run **$0.9** — roughly **$6.50** across
+everything. Caller-audio synthesis was a one-off four requests to Azure Speech.
 
 Worth noting for its own sake: **gpt-realtime-2 costs ~4× what the Voice Live gpt-4.1-mini
 tier costs** for the same conversation, on top of being ~550 ms slower to first audio.

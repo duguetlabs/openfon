@@ -46,7 +46,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from arms import ARMS_BY_ID, PAIRS, TURN_DETECTION  # noqa: E402
+from arms import (ARMS_BY_ID, PAIRS, TURN_DETECTION,  # noqa: E402
+                  invalidated_metrics)
 from safety import redact, safe_print  # noqa: E402
 
 METRICS = [
@@ -126,12 +127,49 @@ def fmt(v) -> str:
     return "—" if v is None or (isinstance(v, float) and math.isnan(v)) else f"{v:.0f}"
 
 
+def usable_for(t: dict, metric: str) -> bool:
+    """May this turn contribute to this metric?
+
+    A turn is excluded from a metric when a control that metric depends on was
+    confirmed *different* from what was asked — e.g. the gateway substituting
+    its own STT deployment makes `transcript_ms` incomparable against a direct
+    arm sending `whisper-1`. An eliminated confound beats a disclosed one.
+
+    `invalid_metrics` is recorded per turn by the harness; datasets written
+    before that field existed are classified from `config_warnings` through the
+    same function, so the two paths cannot disagree.
+    """
+    if not t.get("ok") or t.get(metric) is None:
+        return False
+    bad = t.get("invalid_metrics")
+    if bad is None:
+        bad = invalidated_metrics(t.get("config_warnings"))
+    return metric not in bad
+
+
+def excluded_reason(turns: list[dict], treat: str, ctrl: str, metric: str) -> str:
+    """Why a comparison has no usable pairs, when config divergence is the cause."""
+    msgs = []
+    for t in turns:
+        if t["arm"] not in (treat, ctrl) or not t.get("ok"):
+            continue
+        bad = t.get("invalid_metrics")
+        if bad is None:
+            bad = invalidated_metrics(t.get("config_warnings"))
+        if metric in bad:
+            msgs += [w for w in (t.get("config_warnings") or [])]
+    if not msgs:
+        return ""
+    common = sorted({m.split(" (asked")[0] for m in msgs})
+    return "; ".join(common[:2])
+
+
 def marginal_table(turns: list[dict], metric: str) -> list[str]:
     rows = ["| arm | brain | n | min | p50 | p90 | p99 | IQR |",
             "|---|---|---:|---:|---:|---:|---:|---:|"]
     for arm_id in ARMS_BY_ID:
         xs = [t[metric] for t in turns
-              if t["arm"] == arm_id and t["ok"] and t.get(metric) is not None]
+              if t["arm"] == arm_id and usable_for(t, metric)]
         if not xs:
             continue
         d = describe(xs)
@@ -146,7 +184,7 @@ def paired(turns: list[dict], treat: str, ctrl: str, metric: str) -> list[float]
     arms, moments apart."""
     by_cell: dict[tuple, dict[str, float]] = defaultdict(dict)
     for t in turns:
-        if t["arm"] in (treat, ctrl) and t["ok"] and t.get(metric) is not None:
+        if t["arm"] in (treat, ctrl) and usable_for(t, metric):
             by_cell[(t["round"], t["utterance"])][t["arm"]] = t[metric]
     return [c[treat] - c[ctrl] for c in by_cell.values()
             if treat in c and ctrl in c]
@@ -273,6 +311,8 @@ class PairedResult:
     hi: float
     p_raw: float
     p_adj: float = 1.0
+    # set when config divergence, not missing data, emptied the comparison
+    not_comparable: str = ""
 
     @property
     def practical(self) -> bool:
@@ -305,6 +345,8 @@ class PairedResult:
         return max(abs(self.lo), abs(self.hi))
 
     def verdict(self) -> str:
+        if self.not_comparable:
+            return f"**not comparable** — {self.not_comparable}"
         direction = "slower" if self.median > 0 else "faster"
         if self.survives:
             return f"**{direction} by {abs(self.median):.0f} ms**"
@@ -336,13 +378,23 @@ def compute_paired(turns: list[dict], metrics: list[str]) -> dict[str, list[Pair
         for treat, ctrl, question in pairs:
             diffs = paired(turns, treat, ctrl, metric)
             if not diffs:
+                why = excluded_reason(turns, treat, ctrl, metric)
+                if why:
+                    # a number with a footnote would invite comparing two things
+                    # that are not measuring the same quantity
+                    results.append(PairedResult(
+                        metric=metric, treat=treat, ctrl=ctrl, question=question,
+                        diffs=[], median=float("nan"), lo=float("nan"),
+                        hi=float("nan"), p_raw=1.0, not_comparable=why))
                 continue
             lo, hi = bootstrap_median_ci(diffs)
             results.append(PairedResult(
                 metric=metric, treat=treat, ctrl=ctrl, question=question,
                 diffs=diffs, median=statistics.median(diffs), lo=lo, hi=hi,
                 p_raw=sign_test_p(diffs)))
-    for r, p_adj in zip(results, holm([r.p_raw for r in results])):
+    # not-comparable rows are not hypothesis tests, so they stay out of the family
+    tested = [r for r in results if not r.not_comparable]
+    for r, p_adj in zip(tested, holm([r.p_raw for r in tested])):
         r.p_adj = p_adj
     by_metric: dict[str, list[PairedResult]] = defaultdict(list)
     for r in results:
@@ -354,6 +406,10 @@ def paired_table(results: list[PairedResult]) -> list[str]:
     rows = ["| comparison | pairs | median Δ | 95% CI | p90 Δ | p (raw) | p (Holm) | verdict |",
             "|---|---:|---:|---|---:|---:|---:|---|"]
     for r in results:
+        if r.not_comparable:
+            rows.append(f"| `{r.treat}` − `{r.ctrl}`<br><sub>{r.question}</sub> | 0 | "
+                        f"— | — | — | — | — | {r.verdict()} |")
+            continue
         rows.append(
             f"| `{r.treat}` − `{r.ctrl}`<br><sub>{r.question}</sub> | {len(r.diffs)} | "
             f"**{r.median:+.0f}** | [{r.lo:+.0f}, {r.hi:+.0f}] | {pct(r.diffs, 90):+.0f} | "

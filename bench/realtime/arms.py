@@ -40,6 +40,37 @@ GATEWAY_URL = "wss://api.kataleptic.com/v1/realtime"
 VOICE_LIVE_API_VERSION = "2025-10-01"
 
 
+# Which metrics a confirmed-different control makes incomparable. A control we
+# cannot confirm aborts the turn; a control we can confirm is *different* is
+# strictly worse, so it must not be treated more leniently — but it only
+# invalidates the metrics that actually depend on it, not the whole turn.
+#
+#   STT model   — the caller-transcript path only. Transcription runs in
+#                 parallel with generation and cannot gate first audio.
+#   Voice       — everything downstream of synthesis: when speech starts, when
+#                 the response completes, how long the reply audio is.
+STT_DEPENDENT = ("transcript_ms",)
+VOICE_DEPENDENT = ("ttfa_ms", "ttfa_minus_vad_ms", "response_total_ms",
+                   "audio_out_ms")
+
+
+def invalidated_metrics(warnings) -> tuple:
+    """Metrics made incomparable by these advisory divergences.
+
+    Both the harness (recording per turn) and the analyzer (reading datasets
+    recorded before the field existed) classify through this one function, so
+    the two cannot disagree about what a given divergence invalidates.
+    """
+    out: set = set()
+    for w in warnings or []:
+        msg = w if isinstance(w, str) else getattr(w, "message", str(w))
+        if msg.startswith("transcription.model"):
+            out.update(STT_DEPENDENT)
+        elif msg.startswith("voice="):
+            out.update(VOICE_DEPENDENT)
+    return tuple(sorted(out))
+
+
 @dataclass(frozen=True)
 class Arm:
     id: str

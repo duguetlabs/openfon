@@ -15,10 +15,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from analyze import (ALPHA, MIN_EQUIVALENCE_N, PRACTICAL_MS,  # noqa: E402
-                     PairedResult,
+                     PairedResult, usable_for,
                      bootstrap_median_ci, compute_paired, describe,
                      holm, mcnemar_exact_p, paired, pct, sign_test_p,
                      split_cells, split_rate_table)
+from arms import invalidated_metrics  # noqa: E402
 from bench import redact  # noqa: E402
 
 
@@ -529,3 +530,71 @@ class TestSplitFamilyIsOutcomeIndependent(unittest.TestCase):
     def test_table_omitted_entirely_when_nothing_split_anywhere(self):
         turns = self._cells(0, "vlmini-azsemantic", False, "vl-direct", False)
         self.assertEqual(split_rate_table(turns), [])
+
+
+class TestConfirmedDifferentConfigIsExcluded(unittest.TestCase):
+    """An unconfirmable control aborts the turn; a control confirmed DIFFERENT
+    is strictly worse and must not be treated more leniently. It invalidates
+    the metrics that depend on it — not the whole turn, since the headline does
+    not depend on the STT path."""
+
+    STT = ["transcription.model='whisper' (asked 'whisper-1')"]
+    VOICE = ["voice='alloy' (asked 'marin')"]
+
+    def test_stt_substitution_excludes_only_the_transcript_metric(self):
+        t = turn(0, "gw", "en", transcript_ms=100, ttfa_ms=2000,
+                 invalid_metrics=["transcript_ms"])
+        self.assertFalse(usable_for(t, "transcript_ms"))
+        self.assertTrue(usable_for(t, "ttfa_ms"))     # headline unaffected
+
+    def test_voice_substitution_excludes_synthesis_dependent_metrics(self):
+        bad = list(invalidated_metrics(self.VOICE))
+        t = turn(0, "gw", "en", ttfa_ms=2000, response_total_ms=5000,
+                 speech_stopped_ms=740, invalid_metrics=bad)
+        self.assertFalse(usable_for(t, "ttfa_ms"))
+        self.assertFalse(usable_for(t, "response_total_ms"))
+        self.assertTrue(usable_for(t, "speech_stopped_ms"))   # not synthesis
+
+    def test_old_datasets_are_classified_from_the_warning_text(self):
+        """Datasets written before invalid_metrics existed still get excluded,
+        through the same classifier the harness uses."""
+        t = turn(0, "gw", "en", transcript_ms=100, config_warnings=self.STT)
+        t.pop("invalid_metrics", None)
+        self.assertFalse(usable_for(t, "transcript_ms"))
+
+    def test_excluded_turns_do_not_enter_paired_differences(self):
+        turns = [turn(0, "gw", "en", transcript_ms=110,
+                      invalid_metrics=["transcript_ms"]),
+                 turn(0, "direct", "en", transcript_ms=100),
+                 turn(1, "gw", "en", transcript_ms=120),
+                 turn(1, "direct", "en", transcript_ms=100)]
+        self.assertEqual(paired(turns, "gw", "direct", "transcript_ms"), [20])
+
+    def test_a_fully_excluded_comparison_reports_not_comparable(self):
+        turns = []
+        for i in range(5):
+            turns.append(turn(i, "native-gateway", "en", transcript_ms=110,
+                              invalid_metrics=["transcript_ms"],
+                              config_warnings=self.STT))
+            turns.append(turn(i, "native-direct", "en", transcript_ms=100))
+        res = compute_paired(turns, ["transcript_ms"])
+        rows = res.get("transcript_ms") or []
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0].not_comparable)
+        self.assertIn("not comparable", rows[0].verdict())
+        self.assertIn("transcription.model", rows[0].verdict())
+
+    def test_not_comparable_rows_stay_out_of_the_holm_family(self):
+        """They are not hypothesis tests, so they must not inflate the family
+        and weaken the real results."""
+        turns = []
+        for i in range(12):
+            turns.append(turn(i, "native-gateway", "en", transcript_ms=110,
+                              ttfa_ms=200, invalid_metrics=["transcript_ms"],
+                              config_warnings=self.STT))
+            turns.append(turn(i, "native-direct", "en", transcript_ms=100,
+                              ttfa_ms=100))
+        res = compute_paired(turns, ["transcript_ms", "ttfa_ms"])
+        ttfa = res["ttfa_ms"][0]
+        # family is 1 real test, not 2 — so no scaling is applied
+        self.assertAlmostEqual(ttfa.p_adj, ttfa.p_raw)
