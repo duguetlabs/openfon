@@ -1,0 +1,26 @@
+[
+  {
+    "id": "en-short",
+    "lang": "en",
+    "voice": "en-US-AvaMultilingualNeural",
+    "text": "Hi, do you have an appointment free on Thursday afternoon?"
+  },
+  {
+    "id": "en-long",
+    "lang": "en",
+    "voice": "en-US-AvaMultilingualNeural",
+    "text": "Hello, this is Martin Keller speaking. I need to move my cleaning appointment from next Tuesday to some time the week after, preferably in the morning if you have anything."
+  },
+  {
+    "id": "de-short",
+    "lang": "de",
+    "voice": "de-DE-SeraphinaMultilingualNeural",
+    "text": "Guten Tag, haben Sie am Donnerstagnachmittag noch einen Termin frei?"
+  },
+  {
+    "id": "de-long",
+    "lang": "de",
+    "voice": "de-DE-SeraphinaMultilingualNeural",
+    "text": "Hallo, hier spricht Martin Keller. Ich müsste meinen Termin zur Zahnreinigung von nächstem Dienstag auf die Woche darauf verschieben, am liebsten vormittags."
+  }
+]
