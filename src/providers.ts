@@ -27,7 +27,10 @@ export function sameLlmEndpoint(a: string, b: string): boolean {
       const p = new URL(u.trim());
       const cred = p.username || p.password ? `${p.username}:${p.password}@` : '';
       const port = p.port ? `:${p.port}` : '';
-      return `${p.protocol}//${cred}${normalizeHost(p.hostname)}${port}${p.pathname.replace(/\/+$/, '')}${p.search}`;
+      // Brackets stay on IPv6 literals: strip them and "[2001:db8::1]:8443"
+      // flattens into "[2001:db8::1:8443]", two different hosts reading as one.
+      const host = p.hostname.startsWith('[') ? p.hostname.toLowerCase() : normalizeHost(p.hostname);
+      return `${p.protocol}//${cred}${host}${port}${p.pathname.replace(/\/+$/, '')}${p.search}`;
     } catch {
       return u.trim().replace(/\/+$/, '');
     }

@@ -240,6 +240,13 @@ describe('sameLlmEndpoint', () => {
     expect(sameLlmEndpoint('https://gw.example.com/v1?a=1&b=2', 'https://gw.example.com/v1?b=2&a=1')).toBe(false);
   });
 
+  it('keeps IPv6 brackets, so a port cannot pose as a hextet', () => {
+    // Without the brackets both of these flatten to "2001:db8::1:8443", and a
+    // business saving the second would have had its own key sent to the first.
+    expect(sameLlmEndpoint('https://[2001:db8::1]:8443/v1', 'https://[2001:db8::1:8443]/v1')).toBe(false);
+    expect(sameLlmEndpoint('https://[2001:db8::1]:8443/v1', 'https://[2001:DB8::1]:8443/v1/')).toBe(true);
+  });
+
   it('ignores the DNS root dot and the fragment', () => {
     expect(sameLlmEndpoint('https://api.example.com./v1', 'https://api.example.com/v1')).toBe(true);
     expect(sameLlmEndpoint('https://api.example.com:8443/v1', 'https://api.example.com.:8443/v1')).toBe(true);
