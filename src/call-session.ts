@@ -84,6 +84,10 @@ interface CallRow {
   started_at: string;
 }
 
+// WebSocket.OPEN. Fixed by the spec, and not exposed on the Workers instance
+// type — needed to tell "this connection still works" from "it is gone".
+const WS_OPEN = 1;
+
 export class CallSession implements DurableObject {
   private ws: WebSocket | null = null;
   private callId = '';
@@ -91,7 +95,14 @@ export class CallSession implements DurableObject {
   private settings: AgentSettings | null = null;
   private history: ChatMessage[] = [];
   private busy = false;
-  private ended = false;
+  private ended = false; // stop handling caller messages
+  private finalized = false; // the call row has been written; gates retries
+  private finalizing: Promise<void> | null = null;
+  // Computed once and reused across finalize retries, so a failed row write
+  // does not re-bill summarization.
+  private summarized: { summary: string | null; intent: string | null; messageJson: string | null } | null = null;
+  private starting: Promise<void> | null = null; // in-flight or completed start
+  private announced = false; // `ready` sent: the session exists, retries are off
   private lang = 'en'; // follows the caller; starts as the business default
   private mode: 'pipeline' | 'realtime' = 'pipeline';
   private upstream: WebSocket | null = null; // realtime engine connection
@@ -104,9 +115,53 @@ export class CallSession implements DurableObject {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    this.callId = url.searchParams.get('call') ?? '';
-    if (request.headers.get('Upgrade') !== 'websocket' || !this.callId) {
+    const callId = url.searchParams.get('call') ?? '';
+    if (request.headers.get('Upgrade') !== 'websocket' || !callId) {
       return new Response('expected websocket', { status: 426 });
+    }
+    // One socket per call, for its whole life. Replacing `this.ws` would send
+    // every reply — transcripts, agent audio — to the newcomer while the real
+    // caller sat in silence. Rejecting a socket that is merely CLOSING matters
+    // just as much: `starting` is already resolved by then, so the replacement's
+    // {type:"start"} would return without a `ready` and the client would never
+    // begin capturing audio — connected, and useless.
+    //
+    // Reject rather than replay the handshake: the widget never reattaches
+    // (web/src/voice.ts always POSTs /api/public/call/start for a fresh id), and
+    // re-greeting mid-conversation would be wrong for any client that did.
+    if (this.ws) {
+      return new Response('call already connected', { status: 409 });
+    }
+    this.callId = callId;
+    // Armed before the socket is accepted, so a storage failure here leaves no
+    // trace. Assigning `this.ws` first meant a failed arm returned an error
+    // with a socket in place but no listeners and no watchdog: every later
+    // attach got the 409 above, and nothing existed to finalize the row — an
+    // active call that could neither be recovered nor replaced, which is the
+    // exact state this class exists to prevent, reached through the guard that
+    // prevents it. Ordering it this way rather than unwinding in a catch: the
+    // undo path would be one more thing to get right.
+    try {
+      await this.armStartDeadline();
+    } catch (err) {
+      // The row outlives a failed arm: /api/public/call/start inserted it
+      // before this upgrade, and with no alarm armed nothing in here will ever
+      // finalize it. The widget does not retry a call id either — it asks for a
+      // fresh one — so retire the row on the way out rather than leave it
+      // 'active' with no owner. Same ordering fix as arming before accepting,
+      // one layer out: no socket was the first half, no orphaned row is this.
+      console.error(`call ${this.callId}: could not arm the watchdog; retiring the row`, err);
+      await this.env.DB.prepare(
+        `UPDATE calls SET status = 'failed', ended_at = ?, summary = ? WHERE id = ? AND status = 'active'`
+      )
+        .bind(
+          CallSession.sqlTime(Date.now()),
+          'Call failed: the call could not be started.',
+          this.callId
+        )
+        .run()
+        .catch((dbErr) => console.error(`call ${this.callId}: could not retire the row either`, dbErr));
+      throw err;
     }
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
@@ -116,7 +171,10 @@ export class CallSession implements DurableObject {
       this.onMessage(ev).catch((err) => this.failInternally(err));
     });
     server.addEventListener('close', () => {
-      this.closeUpstream();
+      // Scoped to the socket it belongs to. A socket closing after it has been
+      // replaced — e.g. one that was still CLOSING when the next caller
+      // attached — must not tear down the call that succeeded it.
+      if (this.ws !== server) return;
       this.finalize().catch((err) => console.error('finalize failed', err));
     });
     return new Response(null, { status: 101, webSocket: client });
@@ -147,6 +205,16 @@ export class CallSession implements DurableObject {
     console.error(`call ${this.callId}: ${detail}`);
     this.failure ??= `Call failed: ${detail}`;
     this.send({ type: 'error', message: 'Sorry — this call ran into a problem. Please try again.' });
+    // The call is already over for the caller: the widget turns any error frame
+    // into its terminal state, and a later `ended` deliberately does not
+    // override that phase. So the session has to agree. Leaving it open kept
+    // the row 'active' with connected_at set — what the concurrency cap counts
+    // as a live call — with nothing to release it until the sweep an hour
+    // later, so a handful of failures could answer "all lines are busy" long
+    // after the provider recovered. finalize() derives 'failed' from the
+    // failure just recorded, so the row keeps its summary too, which the sweep
+    // cannot write.
+    void this.finalize().catch((e) => console.error('finalize after failure failed', e));
   }
 
   private async loadCall(): Promise<void> {
@@ -165,6 +233,7 @@ export class CallSession implements DurableObject {
 
   private async onMessage(ev: MessageEvent): Promise<void> {
     if (this.ended) return;
+    this.lastActivity = Date.now(); // feeds the idle watchdog
     if (typeof ev.data !== 'string') {
       const audio = await toArrayBuffer(ev.data);
       if (this.mode === 'realtime') {
@@ -186,10 +255,13 @@ export class CallSession implements DurableObject {
         }
         break;
       case 'hangup':
-        this.send({ type: 'ended' });
-        this.closeUpstream();
-        this.ws?.close(1000, 'hangup');
-        await this.finalize();
+        // finalize() owns the whole teardown: engine, client socket, DB row.
+        // Its errors are caught here rather than reaching failInternally: a row
+        // that fails to write is retried by the watchdog and is not the call
+        // failing. Letting it through recorded a transient D1 blip as the
+        // caller's outcome, so a perfectly normal conversation that wrote on
+        // the second attempt was reported to the owner as a failed call.
+        await this.finalize().catch((err) => console.error('finalize failed', err));
         break;
       default:
         if (msg.contentType) this.pendingContentType = msg.contentType;
@@ -198,8 +270,47 @@ export class CallSession implements DurableObject {
 
   private pendingContentType = 'audio/webm';
 
-  private async handleStart(): Promise<void> {
+  // Answer the phone once. A repeated {type:"start"} would open a second engine
+  // connection, greet again, and write another agent turn, so concurrent starts
+  // join the attempt already in flight.
+  //
+  // Retryable only up to the point where we announce `ready`. Before then a
+  // failure — a D1 blip in loadCall(), a storage write — cost the caller
+  // nothing, and latching would strand them on a live socket that can never be
+  // answered. After `ready` the session exists: an engine may be connected and
+  // a greeting turn written, so re-running would duplicate exactly what this
+  // guard is here to prevent. Those surface as an error instead.
+  private handleStart(): Promise<void> {
+    if (!this.starting) {
+      this.starting = this.runStart().catch((err) => {
+        if (!this.announced) this.starting = null;
+        throw err;
+      });
+    }
+    return this.starting;
+  }
+
+  // Announcing `ready` is the point of no return for retries. (The start
+  // deadline is retired in armWatchdog, not here — see there.)
+  private sendReady(payload: Record<string, unknown>): void {
+    this.announced = true;
+    // An earlier attempt may have recorded a failure that this one has just
+    // disproved. The marker decides the row's status, so carrying it forward
+    // would file a call that ran perfectly well as failed — and a working call
+    // disappearing from the owner's counts gives them nothing to notice.
+    this.failure = null;
+    this.send({ type: 'ready', ...payload });
+  }
+
+  private async runStart(): Promise<void> {
+    // Recorded before anything that can block. The start deadline is for a
+    // socket that never sends a start, not for a start that is slow — and
+    // "startup has not finished" cannot tell those apart, so a legitimate
+    // caller whose loadCall or engine handshake ran long was hung up on
+    // mid-connect and told they had never started the call.
+    await this.state.storage.put('startedAt', Date.now());
     await this.loadCall();
+    if (this.ended) return; // hung up while we were loading
     // Resolve the LLM config before saying hello: a rejected AI-provider setup
     // must fail at pickup with a message the owner can act on, not stall the
     // caller mid-conversation (realtime calls would only notice at summary time).
@@ -214,11 +325,18 @@ export class CallSession implements DurableObject {
       this.failure = `Agent misconfigured — ${err.message} Fix it in Settings → AI provider.`;
       console.error(`call ${this.callId}: ${this.failure}`);
       this.sendError('This agent is not available right now. Please try again later.');
-      this.send({ type: 'ended' });
-      this.ws?.close(1000, 'agent misconfigured');
+      // finalize() owns the rest: it sends `ended`, closes the socket, and
+      // writes the row. Doing any of that here would duplicate it. Returning
+      // normally also leaves `starting` resolved, so a retry cannot restart a
+      // call we have already given up on — a misconfigured agent stays
+      // misconfigured until the owner changes something.
       await this.finalize();
       return;
     }
+    // Armed only once the call is actually going ahead — nothing to watch over
+    // a call that is being torn down at pickup.
+    await this.armWatchdog();
+    if (this.ended) return;
     this.lang = this.settings!.language in SUPPORTED_LANGUAGES ? this.settings!.language : 'en';
     const greeting = defaultGreeting(this.biz!, this.settings!);
     const systemPrompt = buildSystemPrompt(this.biz!, this.settings!, new Date());
@@ -228,6 +346,10 @@ export class CallSession implements DurableObject {
         console.error('realtime engine failed, falling back to pipeline:', err);
         return false;
       });
+      if (this.ended) {
+        this.closeUpstream(); // hung up while the engine was connecting
+        return;
+      }
       if (ok) {
         this.mode = 'realtime';
         const engineLabel = `realtime · ${this.realtimeModel}`;
@@ -236,7 +358,7 @@ export class CallSession implements DurableObject {
           // transcript turn arrive through the normal event stream.
           this.history = [{ role: 'system', content: systemPrompt }];
           const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-          this.send({ type: 'ready', mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
+          this.sendReady({ mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
           return;
         }
         this.history = [
@@ -244,7 +366,7 @@ export class CallSession implements DurableObject {
           { role: 'assistant', content: greeting },
         ];
         const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-        this.send({ type: 'ready', mode: 'realtime', ttsMode, greeting, engine: engineLabel });
+        this.sendReady({ mode: 'realtime', ttsMode, greeting, engine: engineLabel });
         await this.saveTurn('agent', greeting);
         // The greeting is ours, not the model's: synthesize it deterministically
         // and stream it as PCM so it matches the realtime audio path.
@@ -274,8 +396,7 @@ export class CallSession implements DurableObject {
       { role: 'assistant', content: greeting },
     ];
     const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-    this.send({
-      type: 'ready',
+    this.sendReady({
       mode: 'pipeline',
       ttsMode,
       greeting,
@@ -287,20 +408,31 @@ export class CallSession implements DurableObject {
 
   // ---- realtime engine bridge (OpenAI Realtime wire protocol) ----
 
-  private sendUpstream(obj: unknown): void {
+  // Two different questions, deliberately kept apart. `upstream` is the socket
+  // we write to; `readableUpstreams` is every socket whose events we still
+  // accept. They differ during a proactive rotation: the outgoing connection is
+  // still mid-response and has to stay both readable and writable until its
+  // replacement is actually open, or rotating — which exists so a call does not
+  // drop mid-sentence — would itself swallow seconds of speech.
+  private readableUpstreams = new Set<WebSocket>();
+
+  private sendUpstream(obj: unknown, target: WebSocket | null = this.upstream): void {
     try {
-      this.upstream?.send(JSON.stringify(obj));
+      target?.send(JSON.stringify(obj));
     } catch {
       /* upstream gone */
     }
   }
 
   private closeUpstream(): void {
-    try {
-      this.upstream?.close(1000, 'call ended');
-    } catch {
-      /* noop */
+    for (const ws of this.readableUpstreams) {
+      try {
+        ws.close(1000, 'call ended');
+      } catch {
+        /* noop */
+      }
     }
+    this.readableUpstreams.clear();
     this.upstream = null;
   }
 
@@ -309,6 +441,9 @@ export class CallSession implements DurableObject {
   private sessionVoice = ''; // voice sent upstream; '' = let the tier pick
   private voiceManaged = false; // true when we own language->voice switching (HD default)
   private reconnects = 0;
+  private totalReconnects = 0; // whole-call ceiling; session.expiring resets only `reconnects`
+  private recovering: Promise<void> | null = null;
+  private static readonly MAX_TOTAL_RECONNECTS = 5;
   private greetingGuardUntil = 0; // ignore barge-in flushes while our greeting plays
   private endPending = false; // caller said farewell; hang up after the agent's sign-off
 
@@ -410,18 +545,8 @@ export class CallSession implements DurableObject {
     this.endingSent = true;
     console.log(`call ${this.callId}: agent ending the call`);
     this.send({ type: 'ending' });
-    setTimeout(() => {
-      if (!this.ended) {
-        this.send({ type: 'ended' });
-        this.closeUpstream();
-        try {
-          this.ws?.close(1000, 'agent hangup');
-        } catch {
-          /* gone */
-        }
-        void this.finalize();
-      }
-    }, 15_000);
+    // Safety net: if the client never drains playback and hangs up itself.
+    setTimeout(() => void this.finalize(), 15_000);
   }
 
   private async startRealtime(systemPrompt: string, greeting: string): Promise<boolean> {
@@ -453,7 +578,23 @@ export class CallSession implements DurableObject {
     return this.openUpstream(this.realtimeInstructions, this.engineGreets() ? greeting : null);
   }
 
-  private openUpstream(instructions: string, greetWith: string | null): Promise<boolean> {
+  // Discard a connection that never became usable. Without this it stays in
+  // `this.upstream` and, if it opens after we already gave up, still sends
+  // session.update and streams PCM at a client that has fallen back to
+  // pipeline mode and will try to decode those frames as MP3.
+  private abandonUpstream(ws: WebSocket): void {
+    this.readableUpstreams.delete(ws);
+    try {
+      ws.close(1000, 'abandoned');
+    } catch {
+      /* never opened */
+    }
+    if (this.upstream === ws) this.upstream = null;
+  }
+
+  // Instructions may be a thunk so a rotation can snapshot the conversation at
+  // handover rather than at dial time — see runRecovery.
+  private openUpstream(instructions: string | (() => string), greetWith: string | null): Promise<boolean> {
     const key = this.env.REALTIME_API_KEY || this.env.DEFAULT_LLM_API_KEY || '';
     const url = `${this.env.REALTIME_BASE_URL}?model=${encodeURIComponent(this.realtimeModel)}&token=${encodeURIComponent(key)}`;
     return new Promise<boolean>((resolve) => {
@@ -464,71 +605,153 @@ export class CallSession implements DurableObject {
           resolve(ok);
         }
       };
-      const timer = setTimeout(() => settle(false), 5000);
       let ws: WebSocket;
       try {
         ws = new WebSocket(url);
       } catch {
-        clearTimeout(timer);
         settle(false);
         return;
       }
-      this.upstream = ws;
+      // Readable from the moment it is dialed, but not the write target until
+      // it opens — so a rotation keeps using the outgoing connection, in both
+      // directions, right up to the handover.
+      this.readableUpstreams.add(ws);
+      let abandoned = false;
+      let opened = false; // did this connection ever become usable?
+      const timer = setTimeout(() => {
+        abandoned = true;
+        this.abandonUpstream(ws);
+        settle(false);
+      }, 5000);
       ws.addEventListener('open', () => {
         clearTimeout(timer);
-        this.sendUpstream(this.realtimeSessionPayload(this.sessionVoice, instructions));
+        if (abandoned) return; // we already gave up on this one and closed it
+        opened = true;
+        // Snapshot now, not at dial time. The outgoing connection stayed live
+        // through the connect window, so `history` may have gained turns since
+        // — and taking it before we route means the replacement is briefed on
+        // everything that happened up to the moment it takes over.
+        const briefing = typeof instructions === 'function' ? instructions() : instructions;
+        this.upstream = ws; // handover: from here we write to the new socket
+        this.sendUpstream(this.realtimeSessionPayload(this.sessionVoice, briefing), ws);
         if (greetWith) {
-          this.sendUpstream({
-            type: 'response.create',
-            response: { instructions: `Greet the caller by saying exactly this, then wait for them to speak: "${greetWith}"` },
-          });
+          this.sendUpstream(
+            {
+              type: 'response.create',
+              response: { instructions: `Greet the caller by saying exactly this, then wait for them to speak: "${greetWith}"` },
+            },
+            ws
+          );
         }
         settle(true);
       });
       ws.addEventListener('message', (ev) => {
+        if (!this.readableUpstreams.has(ws)) return; // abandoned or rotated out
         this.onUpstreamMessage(ev).catch((err) => console.error('upstream handler error', err));
       });
       ws.addEventListener('error', () => {
         clearTimeout(timer);
+        // Only discard a connection that never became usable. WebSockets
+        // routinely emit `error` immediately before `close`, and `close` is
+        // what triggers recovery — dropping it here would make the close
+        // listener's ownership guard false and silently kill the reconnect.
+        if (!opened) this.abandonUpstream(ws);
         settle(false);
       });
       ws.addEventListener('close', () => {
         clearTimeout(timer);
+        this.readableUpstreams.delete(ws);
         settle(false);
         if (this.mode === 'realtime' && !this.ended && this.upstream === ws) {
+          this.upstream = null;
           void this.recoverUpstream();
         }
       });
     });
   }
 
-  // The engine dropped the session mid-call: reconnect once with the
-  // conversation so far folded into the instructions, instead of hanging up.
-  private async recoverUpstream(): Promise<void> {
-    if (this.reconnects >= 1) {
-      this.sendError('Voice engine connection lost');
-      this.send({ type: 'ended' });
-      this.ws?.close(1000, 'engine closed');
-      await this.finalize();
-      return;
+  // The engine dropped the session mid-call: reconnect with the conversation so
+  // far folded into the instructions, instead of hanging up.
+  //
+  // Single-flight: a failed connect notifies us twice — once by resolving false
+  // and once through the socket's close listener. Letting both run would open
+  // two replacements, and only the last would land in `this.upstream`, leaving
+  // an orphan nobody closes.
+  private recoverUpstream(): Promise<void> {
+    if (!this.recovering) {
+      this.recovering = this.runRecovery().finally(() => {
+        this.recovering = null;
+      });
     }
-    this.reconnects++;
-    console.log(`call ${this.callId}: upstream dropped, reconnecting`);
+    return this.recovering;
+  }
+
+  private resumeInstructions(): string {
     const transcript = this.history
       .filter((m) => m.role !== 'system')
       .map((m) => `${m.role === 'user' ? 'Caller' : 'You'}: ${m.content}`)
       .join('\n');
-    const resumed = `${this.realtimeInstructions}\n\nThe call audio was briefly interrupted; the caller is still on the line. Do NOT greet again. Conversation so far:\n${transcript}`;
-    const old = this.upstream;
-    const ok = await this.openUpstream(resumed, null).catch(() => false);
-    if (ok && old && old !== this.upstream) {
-      try {
-        old.close(1000, 'rotated');
-      } catch {
-        /* already closed */
+    return `${this.realtimeInstructions}\n\nThe call audio was briefly interrupted; the caller is still on the line. Do NOT greet again. Conversation so far:\n${transcript}`;
+  }
+
+  private async runRecovery(): Promise<void> {
+    while (!this.ended) {
+      // `reconnects` is the per-rotation budget, which session.expiring resets;
+      // `totalReconnects` bounds a flapping engine over the whole call.
+      if (this.reconnects >= 1 || this.totalReconnects >= CallSession.MAX_TOTAL_RECONNECTS) {
+        // Failing to open a replacement is not the same as the call being over.
+        // A proactive rotation keeps the outgoing connection live while the new
+        // one dials, so when that connection is still open the right move is to
+        // keep using it: session.expiring warns about a minute ahead, and
+        // riding the engine we have until it actually closes beats hanging up
+        // on a caller whose engine still works. A close-driven recovery is the
+        // other case — the listener nulls `upstream` before calling here, so
+        // there is genuinely nothing left and finalizing is correct.
+        if (this.upstream && this.upstream.readyState === WS_OPEN) {
+          console.log(`call ${this.callId}: rotation failed; staying on the connection we still have`);
+          // The rotation episode is over. A later drop is a new event and gets
+          // its own attempt; `totalReconnects` still bounds the whole call.
+          this.reconnects = 0;
+          return;
+        }
+        // The caller was cut off mid-conversation and we could not get the
+        // engine back. That is a failed call, not a completed one, and the
+        // owner's log should say so — otherwise it reads as a normal call that
+        // merely ends abruptly. The summary the exchange produced still follows
+        // the reason, so nothing the caller said is lost.
+        this.failure ??= 'Call failed: the voice engine connection was lost and could not be restored.';
+        this.sendError('Voice engine connection lost');
+        await this.finalize();
+        return;
+      }
+      this.reconnects++;
+      this.totalReconnects++;
+      console.log(`call ${this.callId}: upstream dropped, reconnecting`);
+      const old = this.upstream;
+      // Deferred: on a proactive rotation the old connection keeps talking
+      // while this one dials, so the briefing has to be built at handover.
+      // Freezing it here would hand the replacement a transcript missing the
+      // exchange that happened during the connect window, and the agent would
+      // ask the caller to repeat something they had just said.
+      const ok = await this.openUpstream(() => this.resumeInstructions(), null);
+      if (ok) {
+        if (old && old !== this.upstream) {
+          try {
+            old.close(1000, 'rotated');
+          } catch {
+            /* already closed */
+          }
+        }
+        // The episode succeeded, so its budget goes back. `reconnects` bounds
+        // attempts within one recovery; leaving it spent turned it into a
+        // second, stricter whole-call cap, and the next drop finalized without
+        // trying at all — a call that survived one engine drop was hung up on
+        // by the second, with MAX_TOTAL_RECONNECTS still permitting several.
+        // `totalReconnects` is what bounds the call.
+        this.reconnects = 0;
+        return;
       }
     }
-    if (!ok) await this.recoverUpstream();
   }
 
   private async onUpstreamMessage(ev: MessageEvent): Promise<void> {
@@ -694,6 +917,260 @@ export class CallSession implements DurableObject {
     await this.env.DB.prepare('INSERT INTO call_turns (call_id, role, text) VALUES (?, ?, ?)')
       .bind(this.callId, role, text)
       .run();
+    // A model that loops — or an engine echoing itself — would otherwise run up
+    // provider spend for as long as the socket stays open.
+    if (++this.turns >= CallSession.MAX_TURNS) {
+      console.log(`call ${this.callId}: turn cap reached, ending`);
+      this.beginHangup();
+    }
+  }
+
+  // ---- watchdog ----
+  // All call state lives in memory, so a worker restart or a caller whose
+  // network drops without a close frame leaves the row 'active' forever. A
+  // periodic alarm force-finalizes those. `callId` is persisted because an
+  // alarm can fire on a fresh instance that has lost every field.
+  // (Rows whose socket never opened are not covered — no DO exists to run an
+  // alarm for them; that needs a sweeper, handled separately.)
+  private static readonly WATCHDOG_TICK_MS = 60_000;
+  private static readonly IDLE_LIMIT_MS = 120_000; // clients ping every 20 s
+  private static readonly MAX_CALL_MS = 30 * 60_000;
+  private static readonly MAX_TURNS = 200;
+  // A real widget sends {type:"start"} immediately; 30 s is generous.
+  private static readonly START_DEADLINE_MS = 30_000;
+  // Deliberately a separate, larger budget: this one covers a start that has
+  // arrived and is still working, which normally takes under ten seconds but
+  // has D1, an engine handshake and TTS behind it.
+  private static readonly START_CEILING_MS = 90_000;
+  // How long finalize keeps retrying before leaving the row to a sweep.
+  private static readonly MAX_FINALIZE_RETRY_MS = 30 * 60_000;
+  // 0 = this instance has seen no activity of its own. Not the same as "the
+  // call was just active": an alarm can run on an object rebuilt after
+  // eviction, where any Date.now() initializer would look like fresh activity
+  // and keep the call alive forever — the very case the watchdog is for.
+  private lastActivity = 0;
+  private turns = 0;
+
+  // A socket that upgrades but never sends {type:"start"} does no provider work
+  // yet still occupies the call — and a concurrency slot, since the row stays
+  // 'active'. The idle timer cannot see it: `ping` is inbound traffic, so a
+  // squatter pinging every 20 s looks perfectly alive. Liveness and progress are
+  // different properties, so this gets its own deadline, armed at upgrade and
+  // retired by `ready`. Persisted rather than a timer, so it survives eviction.
+  // Durable Object writes issued without an await between them are coalesced
+  // into one transaction, so they land together or not at all. Every place this
+  // class persists state and schedules the alarm that acts on it needs that:
+  // a put that commits while its setAlarm fails leaves a row with nothing left
+  // to finalize it, which is the stranding this whole class exists to prevent.
+  // Callers must pass the started promises, never await one first.
+  private async commit(...writes: Promise<unknown>[]): Promise<void> {
+    await Promise.all(writes);
+  }
+
+  private async armStartDeadline(): Promise<void> {
+    const deadline = Date.now() + CallSession.START_DEADLINE_MS;
+    await this.commit(
+      this.state.storage.put({ callId: this.callId, startDeadline: deadline }),
+      this.state.storage.setAlarm(deadline)
+    );
+  }
+
+  private async armWatchdog(): Promise<void> {
+    const now = Date.now();
+    this.lastActivity = now;
+    // Retiring the start deadline is part of this same write rather than a
+    // separate delete once `ready` goes out. A standalone delete can fail on
+    // its own, and then the call is live with a stale deadline that the
+    // watchdog will honour — it would hang up on a caller mid-conversation.
+    // Folded in here it either lands with the rest of the watchdog state or
+    // not at all, and by this point the call is going ahead.
+    await this.commit(
+      this.state.storage.put({
+        callId: this.callId,
+        startDeadline: 0,
+        hardDeadline: now + CallSession.MAX_CALL_MS,
+        lastActivity: now,
+      }),
+      this.state.storage.setAlarm(now + CallSession.WATCHDOG_TICK_MS)
+    );
+  }
+
+  async alarm(): Promise<void> {
+    const callId = this.callId || (await this.state.storage.get<string>('callId')) || '';
+    if (!callId) return; // nothing to reconcile
+    this.callId = callId;
+    const now = Date.now();
+
+    // Checked before the idle logic and never refreshed by inbound traffic:
+    // pings keep an established call alive, but must not extend the grace
+    // period for one that never began.
+    // Both of these are skipped once armWatchdog zeroes the deadline, so
+    // neither can touch a call that is under way.
+    const startDeadline = await this.state.storage.get<number>('startDeadline');
+    if (startDeadline) {
+      const startedAt = await this.state.storage.get<number>('startedAt');
+      if (!startedAt && now >= startDeadline) {
+        console.log(`call ${this.callId}: no start within the deadline, releasing the call`);
+        // Never became a call: no start, no turns, no conversation. 'failed' is
+        // what keeps it out of the owner's call count and talk time, which is
+        // where a connection that produced nothing belongs — and the recorded
+        // reason means the row explains itself instead of sitting there blank.
+        this.failure ??= 'Call failed: the caller connected but never started the call.';
+        return this.finalizeFromAlarm(now);
+      }
+      // A start that arrived but never finished gets its own, longer budget:
+      // it has real work behind it — D1 reads, an engine handshake, the
+      // greeting — and deserves a different verdict from a caller who never
+      // said anything. Without it a client that keeps pinging could hold a
+      // half-started call open forever, since nothing else bounds this window.
+      if (startedAt && now - startedAt >= CallSession.START_CEILING_MS) {
+        console.log(`call ${this.callId}: start never completed, releasing the call`);
+        this.failure ??= 'Call failed: the call did not finish starting.';
+        return this.finalizeFromAlarm(now);
+      }
+    }
+
+    // Absent between the upgrade and a successful start. Treat that as "not
+    // reached" — defaulting to `now` would read as already expired and end a
+    // call that is still connecting. The idle check below is the backstop.
+    const hardDeadline = (await this.state.storage.get<number>('hardDeadline')) ?? Number.POSITIVE_INFINITY;
+    // Trust this instance's own observation, and only that. Falling back to the
+    // persisted value when we have none is what lets an evicted-and-rebuilt
+    // object see how stale the call really is.
+    const stored = (await this.state.storage.get<number>('lastActivity')) ?? 0;
+    const activity = this.lastActivity || stored;
+
+    if (now >= hardDeadline || now - activity >= CallSession.IDLE_LIMIT_MS) {
+      console.log(`call ${this.callId}: watchdog finalizing (idle ${Math.round((now - activity) / 1000)}s)`);
+      // Deliberately records no failure, so these land as 'completed'. The
+      // conversation happened and the agent did its job; the line went quiet on
+      // the caller's side, which is nothing the owner can act on. Marking them
+      // failed would drop real calls — and any message left in them — out of the
+      // dashboard's counts and talk time, which is the opposite of what someone
+      // reading their call log needs. Only a call that never began (the start
+      // deadline above) or one we cut off ourselves records a failure.
+      return this.finalizeFromAlarm(now);
+    }
+    await this.commit(
+      this.state.storage.put('lastActivity', activity),
+      this.state.storage.setAlarm(now + CallSession.WATCHDOG_TICK_MS)
+    );
+  }
+
+  // The single exit for every watchdog-initiated finalize, so no branch can
+  // reach one without the retry handling — an earlier version had two, and the
+  // one that skipped it recreated the stranding this watchdog exists to stop.
+  //
+  // Retry at the ordinary tick rather than propagating: a throwing alarm gets
+  // roughly six platform retries and then nothing, leaving the row 'active'.
+  // No backoff ladder. One Durable Object retrying one row by primary key once
+  // a minute is not a herd worth protecting D1 from, and spacing the attempts
+  // out only delays recovering the caller's summary — which is the entire
+  // reason to retry rather than let the sweep take it. The sweep is also the
+  // termination condition: once it retires the row, the next attempt finds no
+  // active call, marks itself finalized and clears the watchdog, so this needs
+  // no attempt counter or ceiling of its own.
+  private async finalizeFromAlarm(now: number): Promise<void> {
+    try {
+      await this.finalize();
+    } catch (err) {
+      // Its own ceiling, not one borrowed from the sweep. This has to be
+      // correct standing alone: on main there is no scheduled handler and no
+      // cron, so an unbounded loop here would keep a Durable Object alive and
+      // hit D1 once a minute forever. Measured from the frozen end of the call,
+      // which is already persisted for the retry, so it costs no extra state
+      // and survives eviction.
+      // Bounded by a durable clock or not run at all. `ending` is written
+      // before the first fallible statement in runFinalize, so if it is
+      // missing or unreadable there is no record of when the failures began.
+      // An in-memory fallback looks like the answer and is not: it resets on
+      // every eviction, so each rebuilt instance measures zero elapsed and
+      // reschedules, turning this ceiling into the unbounded loop it exists to
+      // prevent. Defer those to the platform's alarm retries instead — finite
+      // by construction, and the behaviour that predates any of this.
+      //
+      // Narrow in practice: setAlarm is part of the same Storage API and, per
+      // Cloudflare's docs, "alarm operations follow the same rules as other
+      // storage operations" — so storage being wholly unavailable stops the
+      // reschedule too. This covers the partial case where writes fail and
+      // scheduling still works.
+      let startedTrying: number | undefined;
+      try {
+        startedTrying = (await this.state.storage.get<{ endedAt: number }>('ending'))?.endedAt;
+      } catch {
+        /* unreadable is the same as absent: no clock either way */
+      }
+      if (startedTrying === undefined) {
+        console.error(`call ${this.callId}: finalize failed with no durable retry clock; deferring to platform retries`, err);
+        throw err;
+      }
+      const trying = now - startedTrying;
+      if (trying >= CallSession.MAX_FINALIZE_RETRY_MS) {
+        console.error(
+          `call ${this.callId}: giving up on finalize after ${Math.round(trying / 60_000)}m — leaving the row to be swept`,
+          err
+        );
+        return; // stop rescheduling; the row stays 'active' for a later sweep
+      }
+      console.error(`call ${this.callId}: finalize failed, retrying at the next tick`, err);
+      await this.state.storage.setAlarm(now + CallSession.WATCHDOG_TICK_MS);
+    }
+  }
+
+  // Retryable: `finalized` flips only once the row is written, so a failed
+  // attempt can be repeated by the watchdog. `ended` is a separate concern —
+  // it stops the conversation immediately and must not gate the retry.
+  private finalize(): Promise<void> {
+    if (this.finalized || !this.callId) return Promise.resolve();
+    this.ended = true; // stop handling caller messages from this instant
+    if (!this.finalizing) {
+      // Claim the slot before any of the work runs. runFinalize() closes the
+      // client socket synchronously, and that close listener calls back into
+      // finalize() — with the assignment happening after the call, the slot was
+      // still empty at that moment and a second finalize started, writing the
+      // call row and re-running summarization twice.
+      this.finalizing = Promise.resolve()
+        .then(() => this.runFinalize())
+        .finally(() => {
+          this.finalizing = null;
+        });
+    }
+    return this.finalizing;
+  }
+
+  // An alarm can finalize a call on a Durable Object rebuilt after eviction,
+  // which has lost `history` and `settings` while call_turns still holds the
+  // whole conversation. Without this the watchdog would rescue the row and
+  // write it `completed` with a null summary and null message_json — turning
+  // "call stuck in progress" into "call completed, caller's message gone",
+  // which looks fine on the dashboard and is therefore worse. Read the same
+  // data back out of D1 and summarize normally.
+  private async rehydrateHistory(businessId: string): Promise<void> {
+    if (this.history.length > 0) return; // live session: memory is authoritative
+    this.settings ??= await this.env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?')
+      .bind(businessId)
+      .first<AgentSettings>();
+    const { results } = await this.env.DB.prepare('SELECT role, text FROM call_turns WHERE call_id = ? ORDER BY id')
+      .bind(this.callId)
+      .all<{ role: string; text: string }>();
+    if (!results.length) return;
+    console.log(`call ${this.callId}: rehydrated ${results.length} turns for summarization`);
+    // Index 0 stands in for the system prompt, which the summary path skips.
+    this.history = [
+      { role: 'system', content: '' },
+      ...results.map((t) => ({
+        role: t.role === 'caller' ? ('user' as const) : ('assistant' as const),
+        content: t.text,
+      })),
+    ];
+  }
+
+  private async clearWatchdog(): Promise<void> {
+    try {
+      await this.commit(this.state.storage.deleteAlarm(), this.state.storage.deleteAll());
+    } catch (err) {
+      console.error('watchdog cleanup failed', err);
+    }
   }
 
   // The status is derived from the recorded failure, never passed in. It used
@@ -704,21 +1181,103 @@ export class CallSession implements DurableObject {
   // fields and no caller can reintroduce the split. ('failed' is the schema's
   // own vocabulary, and the dashboard's stats read 'completed', so these drop
   // out of call counts and talk time.)
-  private async finalize(): Promise<void> {
-    if (this.ended || !this.callId) return;
+  // When the call actually ended, decided once and persisted. Every retry
+  // recomputed Date.now(), so an outage plus the wait before the next attempt
+  // was reported as call duration — a 40 second call retried ten minutes later
+  // became an eleven minute call in the owner's talk-time total, with nothing
+  // to indicate anything had gone wrong. Persisted because an eviction between
+  // attempts is expected: by then every socket is closed.
+  // Everything a retry must not recompute, decided once and kept together.
+  // `endedAt` because recomputing it billed the outage to the owner's talk
+  // time; `failure` because losing it across an eviction flipped a failed call
+  // to 'completed' on the retry that finally landed. Frozen before the first
+  // fallible statement, so an attempt that dies on the SELECT leaves the same
+  // record behind as one that dies on the UPDATE.
+  private async rememberEnding(): Promise<number> {
+    const stored = await this.state.storage.get<{ endedAt: number; failure: string | null }>('ending');
+    if (stored) {
+      this.failure ??= stored.failure;
+      return stored.endedAt;
+    }
+    const ending = { endedAt: Date.now(), failure: this.failure };
+    await this.state.storage.put('ending', ending);
+    return ending.endedAt;
+  }
+
+  // SQLite's datetime('now') format, in UTC, so a frozen timestamp is stored
+  // exactly as the column's other writers would have written it.
+  private static sqlTime(ms: number): string {
+    return new Date(ms).toISOString().replace('T', ' ').slice(0, 19);
+  }
+
+  // A summary this session already paid for, written to a row that something
+  // else has since retired. For a small business the structured callback
+  // message is the most valuable thing a call produces, and the sweep writes
+  // none of the content fields — so losing it because our write lost a race is
+  // worth one more statement to avoid.
+  //
+  // COALESCE so we only fill blanks, never overwrite another writer. Status and
+  // duration are left exactly as they were found: this recovers what the caller
+  // said, it does not reopen the call. Nothing is generated here, so a call
+  // that never reached summarization costs nothing but a log line.
+  private async salvageSummary(): Promise<void> {
+    this.summarized ??= (await this.state.storage.get<typeof this.summarized>('summarized')) ?? null;
+    const { summary = null, intent = null, messageJson = null } = this.summarized ?? {};
+    if (!summary && !messageJson) {
+      console.warn(`call ${this.callId}: row already retired, and nothing summarized to salvage`);
+      return;
+    }
+    console.warn(`call ${this.callId}: row retired before finalize could write — salvaging its summary`);
+    await this.env.DB.prepare(
+      `UPDATE calls SET summary = COALESCE(summary, ?), intent = COALESCE(intent, ?), message_json = COALESCE(message_json, ?) WHERE id = ?`
+    )
+      .bind(summary, intent, messageJson, this.callId)
+      .run();
+  }
+
+  private async runFinalize(): Promise<void> {
     this.ended = true;
-    const call = await this.env.DB.prepare('SELECT started_at FROM calls WHERE id = ? AND status = ?')
+    this.closeUpstream();
+    // Anything still attached has to be told, and then actually closed. Leaving
+    // it open means `ended` silently drops every later message and the caller
+    // just hears the agent stop, with no error and no hangup.
+    this.send({ type: 'ended' });
+    try {
+      this.ws?.close(1000, 'call ended');
+    } catch {
+      /* already gone */
+    }
+    const endedAt = await this.rememberEnding();
+    const call = await this.env.DB.prepare('SELECT started_at, business_id FROM calls WHERE id = ? AND status = ?')
       .bind(this.callId, 'active')
-      .first<{ started_at: string }>();
-    if (!call) return;
-    const duration = Math.max(0, Math.round((Date.now() - new Date(call.started_at + 'Z').getTime()) / 1000));
+      .first<{ started_at: string; business_id: string }>();
+    if (!call) {
+      // The row is no longer active: either something else completed it, or the
+      // sweep retired it as 'abandoned' before we got here. The sweep is
+      // terminal — this select is what forecloses recovery — so if a previous
+      // attempt already produced a summary, write its content now instead of
+      // letting the caller's callback request die with the row.
+      await this.salvageSummary();
+      this.finalized = true;
+      await this.clearWatchdog();
+      return;
+    }
+    const duration = Math.max(0, Math.round((endedAt - new Date(call.started_at + 'Z').getTime()) / 1000));
+    await this.rehydrateHistory(call.business_id);
+    // Survives eviction between attempts, so a retry never pays the
+    // summarization model a second time for the same conversation.
+    this.summarized ??= (await this.state.storage.get<typeof this.summarized>('summarized')) ?? null;
     // A failure reason takes the summary slot: the call log renders it, so the
     // owner reads why the call died where they already look for what happened.
     let summary: string | null = this.failure;
     let intent: string | null = null;
     let messageJson: string | null = null;
-    // Summarize only real conversations (greeting alone doesn't count).
-    if (this.history.length > 2) {
+    // Summarize only real conversations (greeting alone doesn't count), and
+    // only once: this runs again on every finalize retry, and re-billing the
+    // summarization for a call whose row simply failed to write is waste.
+    if (this.summarized) {
+      ({ summary, intent, messageJson } = this.summarized);
+    } else if (this.history.length > 2) {
       try {
         const transcript = this.history
           .slice(1)
@@ -755,6 +1314,10 @@ export class CallSession implements DurableObject {
       const firstUser = this.history.find((m) => m.role === 'user');
       summary = firstUser ? `Caller: "${firstUser.content.slice(0, 120)}"` : null;
     }
+    // Memoize the *unprefixed* summary: the failure prefix below is applied on
+    // every attempt, so caching the combined string would stack it on a retry.
+    this.summarized = { summary, intent, messageJson };
+    await this.state.storage.put('summarized', this.summarized);
     // Two writers, one column, so the precedence is decided here rather than by
     // whoever assigns last: a call that broke leads with why. The log truncates
     // the row, and "it failed" is the fact the owner needs first; a summary, if
@@ -763,10 +1326,25 @@ export class CallSession implements DurableObject {
       summary = summary ? `${this.failure} — ${summary}` : this.failure;
     }
     const status = this.failure ? 'failed' : 'completed';
-    await this.env.DB.prepare(
-      `UPDATE calls SET status = ?, ended_at = datetime('now'), duration_s = ?, summary = ?, intent = ?, message_json = ? WHERE id = ?`
+    // If this throws, `finalized` stays false and the watchdog is still armed,
+    // so the alarm retries. Clearing the watchdog first would strand the row
+    // as 'active' with nothing left to ever reclaim it.
+    //
+    // Still predicated on 'active': the sweep can retire the row between the
+    // select above and here, and summarization is long enough to make that a
+    // real window. Without the predicate this would overwrite the sweep's
+    // status and duration — the salvage path exists to cooperate with the
+    // sweep, and unconditionally overriding it is the opposite.
+    const res = await this.env.DB.prepare(
+      `UPDATE calls SET status = ?, ended_at = ?, duration_s = ?, summary = ?, intent = ?, message_json = ?
+        WHERE id = ? AND status = 'active'`
     )
-      .bind(status, duration, summary, intent, messageJson, this.callId)
+      .bind(status, CallSession.sqlTime(endedAt), duration, summary, intent, messageJson, this.callId)
       .run();
+    // `changes` missing means the driver did not report one, not that nothing
+    // matched — only an explicit zero means the sweep got there first.
+    if ((res?.meta?.changes ?? 1) === 0) await this.salvageSummary();
+    this.finalized = true;
+    await this.clearWatchdog();
   }
 }
