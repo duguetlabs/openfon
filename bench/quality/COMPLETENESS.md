@@ -1,0 +1,52 @@
+# Completeness inventory
+
+Every place this harness decides **"this run is complete / this arm is verified /
+this result counts"** — what each check compares, and how it can be fooled.
+
+This file exists because twelve instances of one bug were found across five
+review rounds, and three separate sweeps each missed instances of the class they
+were sweeping for. The shapes are not memorable. The inventory is.
+
+**The rule.** *Every check must compare what it got against what it expected, by
+identity rather than by count.* Counting rows is not verifying trials. Writing an
+error row is not reporting failure. A non-empty collection is not a complete one.
+
+Corollary: **absence is never a pass.** If a benchmark's failure modes all
+inflate its own results, the numbers it produces are indistinguishable from
+correct ones, which is worse than no numbers.
+
+---
+
+## The checks
+
+| # | Where | Decides | Compares | Fooled by |
+|---|---|---|---|---|
+| 1 | `run_scenarios.py` `main()` | did this arm/trial complete | every scenario ran without raising; **exits non-zero** if any errored | a scenario that fails *silently* — produces a transcript but no agent turns. Caught downstream by #6, not here. |
+| 2 | `run_asr.py` `transcribe_batch()` | is this session still coherent | each clip gets `input_audio_buffer.committed`; a timeout **raises** `CommitDesync` rather than continuing | nothing known. Continuing was the bug: a late commit was consumed as the next clip's, cascading wrong hypotheses. |
+| 3 | `run_all.sh` | did the matrix complete | every runner invocation's exit code; collects failures and **exits non-zero** | a runner that exits 0 having swallowed its errors — which is why #1 exists. Also `OUT` must point somewhere disposable in tests: the `: >` truncation writes to `$HERE` by default and once destroyed a finished run. |
+| 4 | `summarize.py` trial check | did every arm run everything | **set of trial ids** per `(arm, scenario)` equals `{1..k}`, no duplicates, no extras | nothing known. Counting rows was the bug: three copies of trial 1 satisfied `--trials 3`. Runners append to JSONL, so re-runs duplicate rather than replace. |
+| 5 | `summarize.py` judge check | was every run judged | a verdict row exists for every `(arm, trial, scenario)`; empty `--judge` file is an **error**, not "no judge" | a judge that returns verdicts for the wrong candidates — blocked in `parse_verdicts` by id membership. |
+| 6 | `summarize.py` conjunction | did this run succeed | `error` empty **and** `agent_turns > 0` **and** slots/tools/grounded/forbidden **and** a judge verdict | an unparseable numeric — blocked by `strict_num`, which aborts rather than defaulting. |
+| 7 | `summarize.py` rates | `success_mean`, `tool_ok`, `grounded_ok` | numerator over **expected** runs (`scenarios × trials`), not rows present | nothing known. Averaging present rows was the bug: 2 of an expected 3 reported 1.0. |
+| 8 | `summarize.py` `pass_k` | did it pass every trial | trial ids `{1..k}` each present exactly once **and** all succeeded; denominator is every scenario | nothing known. |
+| 9 | `summarize.py` descriptives | `slot_heard`, `judge_*` | carries its own n, flagged `(of n/expected)` when short | these cannot be imputed, only reported. A short n is visible, not corrected. |
+| 10 | `summarize.py` TTFA | latency percentiles | **nothing** — deliberately | a turn only yields a latency if the agent replied, and the closing turn usually gets none by design, so there is no a-priori denominator. Run-level completeness (#4, #7) carries it. This is the one check that cannot be tightened. |
+| 11 | `score_asr.py` cell check | is every ASR cell whole | clip count per `(arm, lang, condition)` equals `--expect-clips`; emits `complete` | clips present but with empty references — surfaced separately as `unscorable_refs`. |
+| 12 | `judge.py` `parse_verdicts` | is this verdict usable | one verdict per expected candidate id, scores literally `int` in range | nothing known. `bool` passing as `int` was the bug: `true` became `0.0` downstream. |
+
+## Not verified, and knowingly so
+
+- **TTFA has no expected denominator** (#10). A missing reply is invisible to the
+  latency statistic; it shows up as a task failure instead.
+- **Silent scenario failure** — an arm that connects, says nothing useful, and
+  exits cleanly is not caught by #1. It fails the conjunction at #6 on
+  `agent_turns` or on slots, which is the right outcome but a later one.
+- **`n_turns_expected` is recorded but unused.** It is the caller-turn count, not
+  the expected-reply count; using it as a denominator produced false shortfalls.
+- **Judge non-determinism** is measured (two seeds, reported in the report) but
+  not gated — a single seed's verdict is accepted.
+
+## Adding a check
+
+State it in the table above *before* writing it, in the form "compares X against
+Y". If you cannot name Y, there is no check — there is a value being read.

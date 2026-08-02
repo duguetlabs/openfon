@@ -288,25 +288,50 @@ recognition, and is fixable in the prompt; a recognition gap is not.
 **Code-switching:** every Voice Live arm followed the German→English switch on
 3/3 trials. Native gpt-realtime-2 failed it once (2/3).
 
-### Barge-in: the finding is that you cannot test it server-side
+### Barge-in
 
-Of 30 barge-in attempts across all arms, the agent's response was **still in
-flight in exactly one**. These engines push a whole response's audio down the
-wire far faster than real time — a ~4 s reply is fully delivered with
-`response.done` about 600 ms after it starts. By the time a real caller is 500 ms
-into *hearing* the reply, the server has finished sending it.
+**The stop-latency number is withdrawn.** Earlier drafts reported
+`bargein_stop_p50_ms` (8–373 ms). It measured when agent audio stopped arriving
+*on the wire*, which is not when the agent stopped speaking: these services push
+a whole response's audio far faster than real time — a ~4 s reply is fully
+delivered with `response.done` about 600 ms after it starts. The statistic had
+three separate defects across review and is not recoverable from this design, so
+it is gone rather than caveated. **Barge-in timing is not measurable
+server-side on this stack.**
 
-So the reported `bargein_stop_p50_ms` (8–373 ms) is not an engine property and
-should not be used to rank engines. **Barge-in is entirely the client's
-responsibility**: OpenFon's `CallSession` must discard its own playback buffer.
-The existing `greetingGuardUntil` logic is the right shape; nothing in either
-engine will do this for you.
+Two things about interruption *are* directly observable, and both survive:
 
-What the engines *did* get right: all five adopted the corrected value after
-being interrupted, 3/3 trials each. Interruption handling as *content* is solid
-everywhere; interruption as *audio* is not the engine's job.
+**Was there anything to interrupt?** An interrupted generation arrives as
+`response.done` carrying `response.status == "cancelled"` — there is no
+top-level `response.cancelled` event on either service, which is why an earlier
+version of this measurement read false for every real cancellation.
 
----
+| arm | responses cancelled by the caller's interruption |
+|---|---|
+| `native-gpt-realtime-2` | **6 / 6** |
+| `vl-native-brain` | 1 / 6 |
+| `vl-gpt41mini`, `-dns`, `-semvad` | **0 / 6** |
+
+The Voice Live gpt-4.1-mini arms were never cancelled because they had already
+finished: their replies complete before a caller 500–700 ms in could interrupt.
+gpt-realtime-2 generates slowly enough that there is still a response in flight,
+and it does stop. This is the same speed difference the latency table shows,
+seen from the other side.
+
+**Did the agent adopt the correction?** Measured on the agent's
+post-interruption reply: **24 of 30** across all arms. An earlier draft claimed
+3/3 everywhere; that came from inspecting the *caller* transcript, which scored
+a perfectly transcribed correction as adopted even when the agent ignored it.
+
+**Barge-in is the weakest part of this study.** Three of its measurements were
+wrong at some point, two are now direct observations rather than inferences, and
+the third is withdrawn. Treat the cancellation counts as sound and the rest of
+the section as directional.
+
+For the product: **interruption is the client's responsibility.** OpenFon's
+`CallSession` must discard its own playback buffer; nothing in either engine
+will do it for you, and on Voice Live there is frequently no server-side
+generation left to cancel by the time a caller interrupts.
 
 ## Confounds and limits
 
@@ -367,8 +392,8 @@ Stated rather than smoothed over.
    real subscriber. A test fails the build if a fixture number leaves those
    ranges.
 
-12. **The harness had a systemic bias: absent data read as a pass.** Twelve
-   separate places, found across four review rounds, turned missing or
+12. **The harness had a systemic bias: absent data read as a pass.** Fourteen
+   separate places, found across five review rounds, turned missing or
    unparseable data into a passing result — a missing judge row, a judge file
    that was empty rather than absent, a missing trial, a scenario an arm never
    ran, an unparseable numeric in the conjunction, a run that errored on the
@@ -383,10 +408,22 @@ Stated rather than smoothed over.
    of it; each case is a separate process invocation, because the point is that
    the run refuses, not that a helper returns False.
 
-   The first sweep found six and **missed two**, because it matched the shapes
-   that had been pointed out rather than deriving the rule. The rule is: *any
-   place where the number of observations can differ from the number expected,
-   and nothing compares the two.* Re-run against that statement, it also caught
+   Three successive sweeps each missed instances of the class they were
+   sweeping for — six found and two missed, then two more missed after that. The
+   rule, in its final form, is: *every check must compare what it got against
+   what it expected, by identity rather than by count.* Counting rows is not
+   verifying trials; writing an error row is not reporting failure. The last two
+   were exactly those: `summarize.py` accepted three copies of trial 1 as
+   "3 trials" (the runners append to JSONL, so re-runs duplicate rather than
+   replace), and `run_scenarios.py` turned any exception into an error row and
+   then exited 0, so the shell that had just been taught to propagate child
+   failures faithfully reported success.
+
+   Because the shapes evidently are not memorable, the checks are now enumerated
+   in [`bench/quality/COMPLETENESS.md`](../../bench/quality/COMPLETENESS.md):
+   every place the harness decides "this is complete", what it compares, and how
+   it can be fooled — including the three places that still cannot be verified.
+   The earlier formulation, kept because it is the useful half: Re-run against that statement, it also caught
    `success_mean` averaging only the rows present under `--allow-incomplete`
    (reporting 1.0 for two successes out of three, precisely what that flag
    promises not to do), and `run_all.sh` exiting 0 after a runner failed, so a
@@ -446,6 +483,15 @@ Stated rather than smoothed over.
      every subsequent clip inherited its predecessor's hypothesis — silent WER
      corruption with no error on any affected row. The batch now aborts and
      reconnects.
+   * *Cancellation was never detected.* An interrupted generation is
+     `response.done` with `response.status == "cancelled"`; the runner watched
+     for a top-level `response.cancelled` that neither service emits, so
+     `agent_cancelled` was false for all 7 real cancellations. Re-derived from
+     the committed logs.
+   * *A closing turn burned 25 s of billed silence.* A response consisting only
+     of an `end_call` tool call sets `done` without ever producing audio, and the
+     wait loop required audio, so it sat out the full timeout while the mic kept
+     streaming — on every call that ended properly.
    * *A JSON `true` passed as a judge score.* `bool` is a subclass of `int` in
      Python, so `true` satisfied a `value in (0, 1)` membership test, landed
      `True` in the CSV, and was then coerced to `0.0` — turning a *positive*

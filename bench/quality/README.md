@@ -87,6 +87,9 @@ python score_slots.py --runs results/scenarios.jsonl --out results/slots.csv
 KATALEPTIC_KEY=... python judge.py --runs results/scenarios.jsonl --out results/judge.csv --seed 1
 KATALEPTIC_KEY=... python judge.py --runs results/scenarios.jsonl --out results/judge_seed2.csv --seed 2
 python summarize.py --slots results/slots.csv --judge results/judge.csv --trials 3 --out results/summary.csv
+
+# What every completeness check compares, and how it can be fooled:
+#   bench/quality/COMPLETENESS.md
 ```
 
 Azure keys come from `az cognitiveservices account keys list` (or `AZURE_AI_KEY`).

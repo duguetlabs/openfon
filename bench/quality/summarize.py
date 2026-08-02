@@ -99,22 +99,40 @@ def main() -> None:
     arms = sorted({s["arm"] for s in slots})
     scenarios = sorted({s["scenario"] for s in slots})
 
-    # Every arm must have run every scenario k times. Without this, `all()` over
-    # "the rows present" makes two successful trials a pass^3, and a scenario an
-    # arm never ran vanishes from its denominator entirely.
-    have: dict[tuple, list[dict]] = defaultdict(list)
+    # Every arm must have run every scenario once per trial id 1..k.
+    #
+    # By IDENTITY, not by count. Counting rows lets three copies of trial 1
+    # satisfy `--trials 3` while trials 2 and 3 are missing entirely, and
+    # `pass_k` then reports a pass over duplicates. That is not hypothetical
+    # here: the runners append to JSONL, so a re-run of one trial adds rows
+    # rather than replacing them.
+    expected_trials = {str(t) for t in range(1, a.trials + 1)}
+    have: dict[tuple, list[str]] = defaultdict(list)
     for s in slots:
-        have[(s["arm"], s["scenario"])].append(s)
-    incomplete = [(arm, sc, len(have.get((arm, sc), [])))
-                  for arm in arms for sc in scenarios
-                  if len(have.get((arm, sc), [])) != a.trials]
+        have[(s["arm"], s["scenario"])].append(str(s["trial"]))
+
+    incomplete = []
+    for arm in arms:
+        for sc in scenarios:
+            got = have.get((arm, sc), [])
+            dupes = sorted({t for t in got if got.count(t) > 1})
+            missing = sorted(expected_trials - set(got))
+            unexpected = sorted(set(got) - expected_trials)
+            if dupes or missing or unexpected:
+                why = []
+                if missing:
+                    why.append(f"missing trial {','.join(missing)}")
+                if dupes:
+                    why.append(f"duplicate trial {','.join(dupes)}")
+                if unexpected:
+                    why.append(f"unexpected trial {','.join(unexpected)}")
+                incomplete.append((arm, sc, "; ".join(why)))
     if incomplete and not a.allow_incomplete:
-        preview = ", ".join(f"{arm}/{sc}: {n} of {a.trials}"
-                            for arm, sc, n in incomplete[:6])
-        sys.exit(f"{len(incomplete)} (arm, scenario) pair(s) do not have exactly "
-                 f"{a.trials} trials ({preview}{'…' if len(incomplete) > 6 else ''}). "
-                 f"Re-run the missing trials, pass --trials, or use "
-                 f"--allow-incomplete to score the gaps as failures.")
+        preview = "; ".join(f"{arm}/{sc}: {why}" for arm, sc, why in incomplete[:6])
+        sys.exit(f"{len(incomplete)} (arm, scenario) pair(s) do not have exactly one "
+                 f"row per trial 1..{a.trials} ({preview}"
+                 f"{'…' if len(incomplete) > 6 else ''}). Re-run the gaps, pass "
+                 f"--trials, or use --allow-incomplete to score them as failures.")
 
     if judge_requested:
         missing = [(s["arm"], s["trial"], s["scenario"]) for s in slots
@@ -174,9 +192,18 @@ def main() -> None:
 
         # Denominator is every scenario, not just the ones this arm has rows for,
         # and a scenario only passes if it has the full k trials and all passed.
-        passed_k = sum(1 for sc in scenarios
-                       if len(by_arm_sc.get((arm, sc), [])) == a.trials
-                       and all(by_arm_sc[(arm, sc)]))
+        # Keyed on trial identity: a scenario passes only if trials 1..k each
+        # have exactly one row and all of them succeeded.
+        passed_k = 0
+        for sc in scenarios:
+            got = {r["trial"]: r["success"] for r in per_run
+                   if r["arm"] == arm and r["scenario"] == sc}
+            n_rows = sum(1 for r in per_run
+                         if r["arm"] == arm and r["scenario"] == sc)
+            if (len(got) == a.trials == n_rows
+                    and {str(t) for t in got} == {str(t) for t in range(1, a.trials + 1)}
+                    and all(got.values())):
+                passed_k += 1
 
         # Turn-level, not per-call medians: a p95 over per-call medians discards
         # the one slow reply inside an otherwise normal call, which is exactly

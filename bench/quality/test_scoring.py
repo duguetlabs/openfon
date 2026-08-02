@@ -432,7 +432,7 @@ class TestAbsentDataNeverPasses(unittest.TestCase):
                  "--judge", str(j), "--trials", "3",
                  "--out", str(Path(tmp) / "out.csv")], capture_output=True, text=True)
             self.assertNotEqual(r.returncode, 0)
-            self.assertIn("do not have exactly 3 trials", r.stderr)
+            self.assertIn("do not have exactly one row per trial 1..3", r.stderr)
 
     def test_missing_scenario_stays_in_the_pass_k_denominator(self):
         # Arm "b" never ran s2. Its pass^k must be 0.5, not 1.0.
@@ -588,8 +588,13 @@ class TestAggregatesKnowTheirDenominator(unittest.TestCase):
             failing.write_text("import sys; sys.exit(3)\n")
             r = subprocess.run(
                 ["bash", str(HERE / "run_all.sh")],
+                # OUT redirects the destructive `: > results/*.jsonl` into tmp.
+                # Without it this test truncates the committed results, because
+                # run_all.sh cd's to its own directory regardless of cwd — which
+                # is exactly what happened the first time it was written.
                 env={**os.environ, "DATA": str(data), "PY": f"{sys.executable} {failing}",
-                     "TRACK": "b", "TRIALS": "1", "SC_ARMS": "vl-gpt41mini"},
+                     "OUT": str(Path(tmp) / "out"), "TRACK": "b", "TRIALS": "1",
+                     "SC_ARMS": "vl-gpt41mini"},
                 capture_output=True, text=True, cwd=tmp)
             self.assertNotEqual(r.returncode, 0,
                                 "run_all.sh exited 0 despite a failing runner")
@@ -621,6 +626,122 @@ class TestAggregatesKnowTheirDenominator(unittest.TestCase):
                 out = {x["condition"]: x for x in csv.DictReader(fh)}
             self.assertEqual(out["clean"]["complete"], "1")
             self.assertEqual(out["tel"]["complete"], "0")
+
+
+class TestCompletenessByIdentity(unittest.TestCase):
+    """Counting rows is not verifying trials. See COMPLETENESS.md."""
+
+    def setUp(self):
+        self.h = TestAbsentDataNeverPasses()
+
+    def summarize(self, tmp, slot_rows, trials, extra=()):
+        slots = self.h.write(tmp, "slots.csv", self.h.SLOTS_HEADER, slot_rows)
+        jh = ("scenario,arm,trial,lang,seed,groundedness,resolution,tone,"
+              "groundedness_evidence,note")
+        judge = [self.h.judge_row(arm=r["arm"], trial=r["trial"],
+                                  scenario=r["scenario"]) for r in slot_rows]
+        j = self.h.write(tmp, "judge.csv", jh, judge)
+        return subprocess.run(
+            [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
+             "--judge", str(j), "--trials", str(trials),
+             "--out", str(Path(tmp) / "out.csv"), *extra],
+            capture_output=True, text=True)
+
+    def test_duplicate_trial_ids_do_not_satisfy_k(self):
+        """Three copies of trial 1 is not trials 1, 2 and 3."""
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = [self.h.slot_row(trial=1) for _ in range(3)]
+            r = self.summarize(tmp, rows, trials=3)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("duplicate trial 1", r.stderr)
+            self.assertIn("missing trial 2,3", r.stderr)
+
+    def test_duplicate_trials_do_not_produce_a_pass_k(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = [self.h.slot_row(trial=1) for _ in range(3)]
+            r = self.summarize(tmp, rows, trials=3, extra=("--allow-incomplete",))
+            self.assertEqual(r.returncode, 0, r.stderr)
+            with open(Path(tmp) / "out.csv") as fh:
+                out = list(csv.DictReader(fh))[0]
+            self.assertEqual(float(out["pass_k"]), 0.0)
+
+    def test_unexpected_trial_id_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = [self.h.slot_row(trial=t) for t in (1, 2, 7)]
+            r = self.summarize(tmp, rows, trials=3)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("unexpected trial 7", r.stderr)
+            self.assertIn("missing trial 3", r.stderr)
+
+    def test_missing_scenario_for_one_arm_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = [self.h.slot_row(arm="a", scenario=sc, trial=t)
+                    for sc in ("s1", "s2") for t in (1, 2)]
+            rows += [self.h.slot_row(arm="b", scenario="s1", trial=t) for t in (1, 2)]
+            r = self.summarize(tmp, rows, trials=2)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("b/s2", r.stderr)
+
+    def test_missing_arm_entirely_is_simply_absent(self):
+        """An arm with no rows cannot be detected here — documented in COMPLETENESS.md.
+
+        Arms are discovered from the data, so an arm that never ran produces no
+        rows and no arm entry. Nothing in a results file can reveal it; the run
+        script's exit code (check #3) is what catches that.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = [self.h.slot_row(arm="a", trial=t) for t in (1, 2)]
+            r = self.summarize(tmp, rows, trials=2)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            with open(Path(tmp) / "out.csv") as fh:
+                self.assertEqual([x["arm"] for x in csv.DictReader(fh)], ["a"])
+
+    def test_complete_data_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = [self.h.slot_row(arm=arm, scenario=sc, trial=t)
+                    for arm in ("a", "b") for sc in ("s1", "s2") for t in (1, 2, 3)]
+            r = self.summarize(tmp, rows, trials=3)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            with open(Path(tmp) / "out.csv") as fh:
+                out = {x["arm"]: x for x in csv.DictReader(fh)}
+            self.assertEqual(float(out["a"]["pass_k"]), 1.0)
+            self.assertEqual(int(out["a"]["missing_runs"]), 0)
+
+
+class TestCancellationDetection(unittest.TestCase):
+    """Interruption is `response.done` with status cancelled, not its own event."""
+
+    def status_event(self, status):
+        return {"type": "response.done", "response": {"status": status}}
+
+    def test_cancelled_status_is_recognised(self):
+        # There is no top-level `response.cancelled` on either service — zero
+        # appear in any committed log — so a check for one never fires.
+        ev = self.status_event("cancelled")
+        self.assertEqual(ev["type"], "response.done")
+        self.assertIn(ev["response"]["status"], ("cancelled", "canceled"))
+
+    def test_runner_sets_cancelled_from_response_status(self):
+        src = (HERE / "run_scenarios.py").read_text()
+        self.assertIn('status in ("cancelled", "canceled")', src)
+        self.assertNotIn('t in ("response.cancelled", "response.canceled")', src)
+
+    def test_committed_logs_encode_cancellation_this_way(self):
+        """Guards the assumption against a service-side change."""
+        import glob
+        seen_status, seen_toplevel = set(), 0
+        for p in glob.glob(str(HERE / "logs" / "sc-*bargein*.jsonl")):
+            with open(p) as fh:
+                for line in fh:
+                    ev = json.loads(line).get("ev") or {}
+                    if ev.get("type") == "response.done":
+                        seen_status.add((ev.get("response") or {}).get("status"))
+                    if ev.get("type") in ("response.cancelled", "response.canceled"):
+                        seen_toplevel += 1
+        if not seen_status:
+            self.skipTest("no barge-in logs present")
+        self.assertIn("cancelled", seen_status)
+        self.assertEqual(seen_toplevel, 0)
 
 
 class TestFixtureHygiene(unittest.TestCase):

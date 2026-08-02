@@ -28,8 +28,11 @@ ASR_ARMS="${ASR_ARMS:-vl-gpt41mini vl-gpt41mini-dns native-gpt-realtime-2}"
 # 132 calls where the report describes 165.
 SC_ARMS="${SC_ARMS:-vl-gpt41mini vl-gpt41mini-dns vl-gpt41mini-semvad vl-native-brain native-gpt-realtime-2}"
 
+# Where results and logs go. Overridable so a test — or a second run — cannot
+# truncate a finished run's output: the destructive `: >` below writes here.
+OUT="${OUT:-$HERE}"
 cd "$HERE"
-mkdir -p results logs
+mkdir -p "$OUT/results" "$OUT/logs"
 
 FAILURES=()
 run() {  # run <label> <cmd...>
@@ -41,25 +44,25 @@ run() {  # run <label> <cmd...>
 }
 
 if [ "${TRACK:-both}" = "a" ] || [ "${TRACK:-both}" = "both" ]; then
-  : > results/asr.jsonl
+  : > $OUT/results/asr.jsonl
   for arm in $ASR_ARMS; do
     for lang in en_us de_de; do
       echo "=== ASR $arm $lang"
       run "asr/$arm/$lang" "$PY" run_asr.py --arm "$arm" --lang "$lang" \
         --conditions "$CONDITIONS" --data "$DATA/conditions" --n "$N" \
-        --out results/asr.jsonl --logdir logs
+        --out $OUT/results/asr.jsonl --logdir "$OUT/logs"
     done
   done
 fi
 
 if [ "${TRACK:-both}" = "b" ] || [ "${TRACK:-both}" = "both" ]; then
-  : > results/scenarios.jsonl
+  : > $OUT/results/scenarios.jsonl
   for trial in $(seq 1 "$TRIALS"); do
     for arm in $SC_ARMS; do
       echo "=== SCENARIOS $arm trial $trial"
       run "scenarios/$arm/t$trial" "$PY" run_scenarios.py --arm "$arm" \
         --trial "$trial" --audio "$DATA/scenarios" \
-        --out results/scenarios.jsonl --logdir logs
+        --out $OUT/results/scenarios.jsonl --logdir "$OUT/logs"
     done
   done
 fi

@@ -181,10 +181,15 @@ async def run_scenario(arm_name: str, sc: dict, audio_dir: Path, trial: int,
                         cur.tools.append(name)
                         result["tool_calls"].append(name)
                 elif t == "response.done":
+                    # An interrupted generation is `response.done` carrying
+                    # `response.status == "cancelled"`. There is no top-level
+                    # `response.cancelled` event on either service — zero were
+                    # seen in any committed log — so the old check never fired
+                    # and `agent_cancelled` was false even for real cancellations.
                     cur.done = True
-                elif t in ("response.cancelled", "response.canceled"):
-                    cur.cancelled = True
-                    cur.done = True
+                    status = (ev.get("response") or {}).get("status")
+                    if status in ("cancelled", "canceled"):
+                        cur.cancelled = True
 
         pump_task = asyncio.create_task(pump())
 
@@ -305,9 +310,18 @@ async def run_scenario(arm_name: str, sc: dict, audio_dir: Path, trial: int,
                 # None for exactly this reason.)
                 next_is_barge = (ti + 1 < len(turns_meta)
                                  and turns_meta[ti + 1].get("barge_in_after_ms") is not None)
+                # `cur.done` alone is enough to stop waiting. A closing turn
+                # often produces a response that is *only* an `end_call` tool
+                # call, with no audio at all; requiring `first_audio_t` made the
+                # loop sit out the full 25 s while the mic kept sending billed
+                # silence, inflating session_s, cost and runtime on every call
+                # that ended properly. Only a pending barge-in still needs audio.
                 w0 = time.time()
                 while time.time() - w0 < MAX_TURN_WAIT_S:
-                    if cur.first_audio_t and (next_is_barge or cur.done):
+                    if next_is_barge:
+                        if cur.first_audio_t:
+                            break
+                    elif cur.done:
                         break
                     await asyncio.sleep(0.03)
 
@@ -348,6 +362,7 @@ async def main() -> None:
     ap.add_argument("--logdir", default="logs")
     a = ap.parse_args()
 
+    failed: list[str] = []
     spec = json.loads(Path(a.scenarios).read_text())
     want = {s.strip() for s in a.only.split(",")} if a.only else None
     Path(a.logdir).mkdir(parents=True, exist_ok=True)
@@ -371,7 +386,15 @@ async def main() -> None:
         print(f"  {sc['id']:16s} turns={len(r['turns'])} "
               f"ttfa_p50={sorted(ttfa)[len(ttfa)//2] if ttfa else '-'} "
               f"tools={r['tool_calls']} err={r.get('error')}", file=sys.stderr)
+        if r.get("error"):
+            failed.append(sc["id"])
         await asyncio.sleep(1.5)   # stagger session opens
+
+    if failed:
+        # Writing an error row is not reporting failure. run_all.sh was taught to
+        # propagate child exit codes, but the child always exited 0, so the shell
+        # faithfully reported success for a runner that had swallowed its errors.
+        sys.exit(f"{len(failed)} scenario(s) errored: {', '.join(failed)}")
 
 
 if __name__ == "__main__":
