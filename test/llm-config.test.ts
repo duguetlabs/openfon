@@ -204,13 +204,24 @@ describe('chatComplete', () => {
     expect((fetchStub.mock.calls[0] as unknown as [string, RequestInit])[1].redirect).toBe('manual');
   });
 
-  it('builds the request path without a doubled slash', async () => {
-    // "…/v1/" used to work only because providers 301 the doubled slash and
-    // fetch followed; with redirects off that would be a hard failure.
-    const fetchStub = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 }));
-    vi.stubGlobal('fetch', fetchStub);
-    await chatComplete({ ...cfg, baseUrl: 'https://api.example.com/v1/' }, [{ role: 'user', content: 'hi' }]);
-    expect(fetchStub.mock.calls[0][0]).toBe('https://api.example.com/v1/chat/completions');
+  it('appends the endpoint path to every shape of base URL', async () => {
+    // Concatenation gets two of these wrong: "…/v1/" doubles the slash (which
+    // providers used to 301 away, and redirects are off), and a query string
+    // swallows the suffix into its value, leaving the request pointed at /v1 —
+    // the gateway routing on ?target= is a setup this code explicitly supports.
+    const cases: [string, string][] = [
+      ['https://api.example.com/v1', 'https://api.example.com/v1/chat/completions'],
+      ['https://api.example.com/v1/', 'https://api.example.com/v1/chat/completions'],
+      ['https://gw.example.com/v1?target=trusted', 'https://gw.example.com/v1/chat/completions?target=trusted'],
+      ['https://gw.example.com/v1/?target=trusted', 'https://gw.example.com/v1/chat/completions?target=trusted'],
+      ['https://api.example.com', 'https://api.example.com/chat/completions'],
+    ];
+    for (const [baseUrl, expected] of cases) {
+      const fetchStub = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 }));
+      vi.stubGlobal('fetch', fetchStub);
+      await chatComplete({ ...cfg, baseUrl }, [{ role: 'user', content: 'hi' }]);
+      expect(fetchStub.mock.calls[0][0]).toBe(expected);
+    }
   });
 
   it('still reads an ordinary completion', async () => {

@@ -134,15 +134,29 @@ export function validateLlmBaseUrl(raw: string, allowInsecure = false): string |
   return null;
 }
 
+// Append the endpoint path structurally, not by concatenation: a base URL may
+// carry a query string — a gateway routing on "?target=…" is a configuration
+// sameLlmEndpoint deliberately supports — and "…/v1?target=x" + "/chat/completions"
+// buries the path inside the query value, leaving the request pointed at /v1.
+// The trailing slash goes for the same reason it always did: "…/v1/" would
+// otherwise build "…/v1//chat/completions", which providers used to paper over
+// with a 301 that fetch followed, and redirects are off below.
+function completionsUrl(baseUrl: string): string {
+  try {
+    const u = new URL(baseUrl.trim());
+    u.pathname = `${u.pathname.replace(/\/+$/, '')}/chat/completions`;
+    return u.toString();
+  } catch {
+    return `${baseUrl.trim().replace(/\/+$/, '')}/chat/completions`;
+  }
+}
+
 export async function chatComplete(
   cfg: LlmConfig,
   messages: ChatMessage[],
   opts: { maxTokens?: number; temperature?: number; json?: boolean } = {}
 ): Promise<string> {
-  // Trim the trailing slash: "…/v1/" would build "…/v1//chat/completions",
-  // which providers used to paper over with a 301 that fetch followed — and
-  // redirects are off below.
-  const res = await fetch(`${cfg.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+  const res = await fetch(completionsUrl(cfg.baseUrl), {
     method: 'POST',
     // Every endpoint rule above is checked against the URL that was saved, so a
     // followed redirect would walk straight around them: a host that passes
