@@ -61,6 +61,7 @@ METRICS = [
     ("response_total_ms", "time to response.done"),
     ("connect_ms", "dial to WebSocket open"),
     ("config_ms", "session.update to our own session.updated echo"),
+    ("session_ready_ms", "dial to a configured session — connect + config, per turn"),
 ]
 HANGOVER_MS = TURN_DETECTION["silence_duration_ms"]
 BOOTSTRAP = 20000
@@ -432,6 +433,13 @@ def main() -> int:
         # Derived per turn, never from the nominal silence_duration_ms: what a
         # detector actually spends deciding differs from what we asked for, and
         # a semantic detector has no fixed hangover to subtract at all.
+        # Time to a configured session, derived PER TURN. Summing the separate
+        # connect and config medians would be an aggregate of aggregates: the
+        # median of a sum is not the sum of the medians.
+        t["session_ready_ms"] = (
+            t["connect_ms"] + t["config_ms"]
+            if t.get("connect_ms") is not None and t.get("config_ms") is not None
+            else None)
         t["ttfa_minus_vad_ms"] = (
             t["ttfa_ms"] - t["speech_stopped_ms"]
             if t.get("ttfa_ms") is not None and t.get("speech_stopped_ms") is not None

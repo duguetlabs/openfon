@@ -83,6 +83,22 @@ def invalidated_metrics(warnings, *, cascade: bool = False) -> tuple:
     return tuple(sorted(out))
 
 
+def _check_rate(label: str, rate, field: str) -> list:
+    """Verify an echoed sample rate without trusting it to be a number.
+
+    A malformed-but-present value ("24khz") must be reported as a control
+    mismatch, not raise — the exception would surface as a generic turn failure
+    and lose the very diagnostic this check exists to produce.
+    """
+    if rate is None:
+        return [f"{field} absent — unverifiable"]
+    try:
+        got = int(rate)
+    except (TypeError, ValueError):
+        return [f"{field}={rate!r} unparseable — unverifiable"]
+    return [] if got == SAMPLE_RATE else [f"{label} rate={got} (asked {SAMPLE_RATE})"]
+
+
 @dataclass(frozen=True)
 class Arm:
     id: str
@@ -198,11 +214,8 @@ class Arm:
                     fatal.append(f"{key}={got!r} (asked 'pcm16')"
                                  if got is not None else
                                  f"{key} absent — audio contract unverifiable")
-            rate = s.get("input_audio_sampling_rate")
-            if rate is None:
-                fatal.append("input_audio_sampling_rate absent — unverifiable")
-            elif int(rate) != SAMPLE_RATE:
-                fatal.append(f"input rate={rate} (asked {SAMPLE_RATE})")
+            fatal += _check_rate("input", s.get("input_audio_sampling_rate"),
+                                 "input_audio_sampling_rate")
         else:
             audio = s.get("audio")
             if not isinstance(audio, dict):
@@ -221,11 +234,7 @@ class Arm:
                 if fmt.get("type") != "audio/pcm":
                     fatal.append(f"{label} format.type={fmt.get('type')!r} "
                                  f"(asked 'audio/pcm')")
-                rate = fmt.get("rate")
-                if rate is None:
-                    fatal.append(f"{label} format.rate absent — unverifiable")
-                elif int(rate) != SAMPLE_RATE:
-                    fatal.append(f"{label} rate={rate} (asked {SAMPLE_RATE})")
+                fatal += _check_rate(label, fmt.get("rate"), f"{label} format.rate")
 
         # Every field we sent is verified, derived from the request rather than
         # a hardcoded list. A hardcoded list is how `eagerness` — added later,

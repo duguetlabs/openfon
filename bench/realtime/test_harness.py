@@ -6,6 +6,7 @@ rather than the things that summarise it.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -14,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from arms import ARMS_BY_ID, SAMPLE_RATE  # noqa: E402
 from audio import FRAME_BYTES, Utterance, cache_name, trim_silence  # noqa: E402
+import bench  # noqa: E402
 from bench import discard_fragment, transcript_belongs_to_turn  # noqa: E402
 from safety import redact, scrub_record  # noqa: E402
 
@@ -367,3 +369,65 @@ class TestTranscriptCorrelation(unittest.TestCase):
         # no item_id on the event, or no commits observed
         self.assertTrue(transcript_belongs_to_turn("", {"item_a"}, {"item_b"}))
         self.assertTrue(transcript_belongs_to_turn("item_x", set(), set()))
+
+
+class TestKeyPrecedence(unittest.TestCase):
+    """src/call-session.ts uses REALTIME_API_KEY || DEFAULT_LLM_API_KEY. Reading
+    whichever name appeared first in the file would authenticate the gateway
+    arms with a different key than production uses, and fail the whole run
+    despite a valid realtime key being present."""
+
+    def _load(self, text, env=None):
+        import tempfile
+        d = Path(tempfile.mkdtemp())
+        (d / ".dev.vars").write_text(text)
+        old_root = bench.REPO_ROOT
+        old_env = os.environ.pop("KATALEPTIC_KEY", None)
+        if env:
+            os.environ["KATALEPTIC_KEY"] = env
+        bench.REPO_ROOT = d
+        try:
+            return bench.load_kataleptic_key()
+        finally:
+            bench.REPO_ROOT = old_root
+            os.environ.pop("KATALEPTIC_KEY", None)
+            if old_env is not None:
+                os.environ["KATALEPTIC_KEY"] = old_env
+
+    def test_realtime_key_wins_even_when_listed_second(self):
+        self.assertEqual(
+            self._load("DEFAULT_LLM_API_KEY=dg_default\nREALTIME_API_KEY=dg_realtime\n"),
+            "dg_realtime")
+
+    def test_realtime_key_wins_when_listed_first(self):
+        self.assertEqual(
+            self._load("REALTIME_API_KEY=dg_realtime\nDEFAULT_LLM_API_KEY=dg_default\n"),
+            "dg_realtime")
+
+    def test_falls_back_to_the_default_when_realtime_absent(self):
+        self.assertEqual(self._load("DEFAULT_LLM_API_KEY=dg_default\n"), "dg_default")
+
+    def test_environment_overrides_the_file(self):
+        self.assertEqual(
+            self._load("REALTIME_API_KEY=dg_realtime\n", env="dg_env"), "dg_env")
+
+    def test_quotes_are_stripped(self):
+        self.assertEqual(self._load("REALTIME_API_KEY='dg_quoted'\n"), "dg_quoted")
+
+
+class TestMalformedRateIsRecordedNotRaised(unittest.TestCase):
+    """A malformed-but-present value must surface as a control mismatch. An
+    exception would become a generic turn failure and lose the diagnostic."""
+
+    def test_unparseable_vl_rate(self):
+        fatal, _ = VL_ARM.verify_echo(vl_echo(rate="24khz"))
+        self.assertTrue(any("unparseable" in x for x in fatal), fatal)
+
+    def test_unparseable_ga_rate(self):
+        echo = ga_echo()
+        echo["audio"]["input"]["format"] = {"type": "audio/pcm", "rate": "24k"}
+        fatal, _ = GA_ARM.verify_echo(echo)
+        self.assertTrue(any("unparseable" in x for x in fatal), fatal)
+
+    def test_numeric_string_rate_is_accepted(self):
+        self.assertEqual(VL_ARM.verify_echo(vl_echo(rate="24000"))[0], [])

@@ -147,7 +147,7 @@ Paired, on identical caller audio in the same round:
 | `vl-gateway` − `vl-direct` | 25 | **−100** | [−280, −15] | +171 | 0.043 | 0.779 | borderline, not robust to correction |
 | `vl-native-brain` − `native-direct` | 25 | **−46** | [−152, −1] | +508 | 0.043 | 0.779 | no detectable difference; CI admits up to 152 ms |
 
-p-values are Holm-corrected across all 24 paired tests in the run (see
+p-values are Holm-corrected across all 27 paired tests in the run (see
 [Statistical discipline](#statistical-discipline)); a directional verdict additionally
 requires a median shift of at least 50 ms.
 
@@ -226,10 +226,14 @@ open a socket (p < 0.001 on both pairs, in both runs) purely because the Cloudfl
 is nearer than Sweden — p50 317 ms vs 414 ms on the native pair, 310 ms vs 433 ms on Voice
 Live. It gives some of that back on `config_ms` (133 ms vs 79 ms, +37 ms paired) because
 the gateway dials its upstream lazily *after* accepting the client socket, so the upstream
-handshake is hidden inside session configuration rather than inside connect. Summed,
-first-configured-session is still faster through the gateway from here — 450 ms vs 493 ms
-native, 392 ms vs 509 ms Voice Live. None of this transfers to a Cloudflare Worker, which
-has a different geometry again.
+handshake is hidden inside session configuration rather than inside connect.
+
+Time to a *configured* session is therefore its own metric, `session_ready_ms`, computed
+per turn rather than by adding the two medians — the median of a sum is not the sum of the
+medians. On that measure the gateway is still ahead from here: **465 ms vs 491 ms** native
+(paired −52 ms, not significant) and **402 ms vs 540 ms** Voice Live (paired −101 ms,
+p_adj < 0.001). None of this transfers to a Cloudflare Worker, which has a different
+geometry again.
 
 The one non-connection result that survives correction lives here too:
 **`vl-native-brain` − `native-direct` on `config_ms` is +65 ms** (CI [+40, +78],
@@ -242,13 +246,13 @@ benchmark establishes.
 
 ## Statistical discipline
 
-This run performs **24 paired hypothesis tests** (3 comparisons × 8 metrics). At
-α = 0.05 that is ~1.2 spurious rejections expected under the null — so an uncorrected
+This run performs **27 paired hypothesis tests** (3 comparisons × 9 metrics). At
+α = 0.05 that is ~1.4 spurious rejections expected under the null — so an uncorrected
 table would reliably manufacture a finding. Two guards are applied, and both are in the
 code rather than only in this prose:
 
 1. **Holm–Bonferroni across the whole family**, not per-table. A reader scanning the
-   report is implicitly looking at all 24 tests, so that is the family the error rate has
+   report is implicitly looking at all 27 tests, so that is the family the error rate has
    to be controlled over. Holm is used rather than Bonferroni because it is uniformly more
    powerful and assumes nothing about independence — which matters here, since `ttfa` and
    `ttft` measure overlapping stages of the same turn.
@@ -271,20 +275,21 @@ making the rate claims any safer. Both VAD split results survive their family co
 
 What survives both gates:
 
-Everything in the primary run with an uncorrected p below 0.05:
+Everything in the primary run with an uncorrected p below 0.05 (27 tests in the family):
 
 | result | median | p raw | p Holm | status |
 |---|---:|---:|---:|---|
-| `connect_ms`, `native-gateway` − `native-direct` | −91 ms | 0.000 | 0.001 | **survives both gates** |
 | `connect_ms`, `vl-gateway` − `vl-direct` | −121 ms | 0.000 | 0.000 | **survives both gates** |
+| `session_ready_ms`, `vl-gateway` − `vl-direct` | −101 ms | 0.000 | 0.000 | **survives both gates** |
 | `config_ms`, `vl-native-brain` − `native-direct` | +65 ms | 0.000 | 0.000 | **survives both gates** |
-| `config_ms`, `native-gateway` − `native-direct` | +37 ms | 0.003 | 0.055 | demoted — correction, and below the floor |
-| `ttfa_ms`, `vl-gateway` − `vl-direct` | −100 ms | 0.043 | 0.779 | demoted — not robust to correction |
-| `ttfa_ms`, `vl-native-brain` − `native-direct` | −46 ms | 0.043 | 0.779 | demoted — not robust |
-| `ttfa_minus_vad_ms`, `vl-gateway` − `vl-direct` | −95 ms | 0.043 | 0.779 | demoted — not robust |
-| `ttfa_minus_vad_ms`, `vl-native-brain` − `native-direct` | −64 ms | 0.015 | 0.293 | demoted — not robust |
-| `response_total_ms`, `native-gateway` − `native-direct` | −588 ms | 0.035 | 0.659 | demoted — not robust |
-| `response_total_ms`, `vl-gateway` − `vl-direct` | −1272 ms | 0.043 | 0.779 | demoted — not robust |
+| `connect_ms`, `native-gateway` − `native-direct` | −91 ms | 0.000 | 0.002 | **survives both gates** |
+| `config_ms`, `native-gateway` − `native-direct` | +37 ms | 0.003 | 0.060 | demoted — not robust to correction |
+| `ttfa_minus_vad_ms`, `vl-native-brain` − `native-direct` | −64 ms | 0.015 | 0.322 | demoted — not robust |
+| `response_total_ms`, `native-gateway` − `native-direct` | −588 ms | 0.035 | 0.728 | demoted — not robust |
+| `ttfa_ms`, `vl-gateway` − `vl-direct` | −100 ms | 0.043 | 0.866 | demoted — not robust |
+| `ttfa_ms`, `vl-native-brain` − `native-direct` | −46 ms | 0.043 | 0.866 | demoted — not robust |
+| `ttfa_minus_vad_ms`, `vl-gateway` − `vl-direct` | −95 ms | 0.043 | 0.866 | demoted — not robust |
+| `response_total_ms`, `vl-gateway` − `vl-direct` | −1272 ms | 0.043 | 0.866 | demoted — not robust |
 
 Split rates are a *rate*, not a paired latency, so they are tested separately with
 **exact McNemar** and are not part of this family. McNemar rather than Fisher's exact
@@ -294,16 +299,16 @@ Only complete cells where both turns produced a usable measurement are counted; 
 that failed has no split recorded by default, and counting it as a clean non-split would
 manufacture significance out of failures.
 
-**Three results survive both gates**, and one of them is not a connection metric:
-the two `connect_ms` rows (explained mechanically by the vantage point — the Cloudflare
-edge is nearer than Sweden) and **`config_ms`, `vl-native-brain` − `native-direct`,
-+65 ms**. That last one says Voice Live takes ~65 ms longer than the Foundry endpoint to
-apply a session configuration. It is real and reproducible, it is a one-off cost paid
-before the call starts rather than per turn, and it does not touch time-to-first-audio —
-but it is a finding, and an earlier draft of this document wrongly said only connection
-results survived.
+**Four results survive both gates, and every one of them is about session setup, not
+speech.** Three are the vantage point (the two `connect_ms` rows and the combined
+`session_ready_ms`, all explained by the Cloudflare edge being nearer than Sweden). The
+fourth is not: **`config_ms`, `vl-native-brain` − `native-direct`, +65 ms** says Voice Live
+takes ~65 ms longer than the Foundry endpoint to apply a session configuration. It is real,
+reproducible, paid once before the call starts rather than per turn, and it never reaches
+time-to-first-audio — but it is a genuine difference between the two stacks, and it is the
+only one this benchmark establishes.
 
-Nothing on the headline metric survives. In particular:
+**Nothing on any speech metric survives.** In particular:
 
 > **"Voice Live's serving stack is faster with the brain held constant" is not an
 > established result.** In the primary run it is −46 ms with a CI upper bound touching zero
@@ -338,17 +343,17 @@ here, so a change of vantage point is unlikely to change the verdict — but it 
 the confidence, and it is the one adjustment that pairing cannot make for us.
 
 **Multiple comparisons** are handled in [Statistical discipline](#statistical-discipline)
-above rather than as an afterthought here: 24 tests, Holm-corrected as one family, with a
-50 ms practical floor on top. The short version is that only the `connect_ms` results
-survive, and "Voice Live serves gpt-realtime-2 faster than the Foundry deployment" is
-**not** among the findings.
+above rather than as an afterthought here: 27 tests, Holm-corrected as one family, with a
+50 ms practical floor on top. The short version is that **the four surviving results are
+all about session setup, none about speech** — and "Voice Live serves gpt-realtime-2 faster
+than the Foundry deployment" is **not** among the findings.
 
 **Correction is not a substitute for power.** Holm makes the reported claims trustworthy;
-it does not make the borderline ones false. A −93 ms effect on `ttfa` may well be real —
-25 pairs simply cannot resolve it against this much per-turn variance (IQR ~400–500 ms).
-Resolving it would need a run with several hundred pairs, or a lower-variance measurement,
-and it should be pre-registered as a single hypothesis rather than harvested from a table
-of 21.
+it does not make the borderline ones false. The −46 ms `ttfa` effect for
+`vl-native-brain` − `native-direct` may well be real — 25 pairs simply cannot resolve it
+against this per-turn variance (IQR ~360–400 ms). Resolving it would need several hundred
+pairs, or a lower-variance measurement, and it should be pre-registered as a single
+hypothesis rather than harvested from a table of 27.
 
 **VAD splits are the detector, not the brain** — see the dedicated follow-up experiment
 below, which settles this. The main run left it confounded; the follow-up removes the

@@ -107,15 +107,27 @@ class Turn:
 
 
 def load_kataleptic_key() -> str:
+    """The gateway key, resolved the way the application resolves it.
+
+    src/call-session.ts uses `REALTIME_API_KEY || DEFAULT_LLM_API_KEY`. Reading
+    whichever name appeared first in the file would authenticate against a
+    different key than production does whenever both are set and the default is
+    listed first — so both are parsed and the precedence is applied explicitly.
+    """
     if os.environ.get("KATALEPTIC_KEY"):
         return os.environ["KATALEPTIC_KEY"]
+    found: dict = {}
     dev_vars = REPO_ROOT / ".dev.vars"
     if dev_vars.exists():
         for line in dev_vars.read_text().splitlines():
-            m = re.match(r"\s*(?:REALTIME_API_KEY|DEFAULT_LLM_API_KEY)\s*=\s*(.+)", line)
+            m = re.match(r"\s*(REALTIME_API_KEY|DEFAULT_LLM_API_KEY)\s*=\s*(.+)", line)
             if m:
-                return m.group(1).strip().strip("'\"")
-    raise SystemExit("no gateway key: set KATALEPTIC_KEY or add DEFAULT_LLM_API_KEY to .dev.vars")
+                found.setdefault(m.group(1), m.group(2).strip().strip("'\""))
+    for name in ("REALTIME_API_KEY", "DEFAULT_LLM_API_KEY"):   # app precedence
+        if found.get(name):
+            return found[name]
+    raise SystemExit("no gateway key: set KATALEPTIC_KEY, or REALTIME_API_KEY / "
+                     "DEFAULT_LLM_API_KEY in .dev.vars")
 
 
 def transcript_belongs_to_turn(item_id: str, fragment_items: set,
