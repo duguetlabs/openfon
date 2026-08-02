@@ -352,7 +352,7 @@ class TestAbsentDataNeverPasses(unittest.TestCase):
         "missed_heard,slot_echoed,slots_all_echoed,missed_echoed,tools_called,"
         "tool_ok,grounded_n,grounded_hit,grounded_ok,forbidden_hit,forbidden_terms,"
         "ttfa_ms_all,ttfa_p50_ms,bargein_attempts,bargein_inflight,bargein_stop_ms,"
-        "bargein_correct,agent_turns,n_turns_expected,session_s,error")
+        "bargein_correct,agent_turns,n_turns_expected,session_s,error,scored")
 
     def slot_row(self, arm="a", trial=1, scenario="s1", **over):
         row = {"arm": arm, "trial": trial, "scenario": scenario, "lang": "en_US",
@@ -363,7 +363,7 @@ class TestAbsentDataNeverPasses(unittest.TestCase):
                "forbidden_hit": 0, "forbidden_terms": "", "ttfa_ms_all": "900",
                "ttfa_p50_ms": 900, "bargein_attempts": 0, "bargein_inflight": 0,
                "bargein_stop_ms": "", "bargein_correct": "", "agent_turns": 2,
-               "n_turns_expected": 2, "session_s": 20, "error": ""}
+               "n_turns_expected": 2, "session_s": 20, "error": "", "scored": 1}
         row.update(over)
         return row
 
@@ -900,6 +900,45 @@ class TestScoringImportsAreTransportFree(unittest.TestCase):
                 src = (HERE / mod).read_text()
                 self.assertNotIn(ws, src)
                 self.assertNotIn(runner, src)
+
+
+class TestUnscoredScenariosAreExcluded(unittest.TestCase):
+    """A withdrawn metric's scenarios must not feed the aggregates."""
+
+    def test_scored_false_rows_are_dropped_from_every_aggregate(self):
+        h = TestAbsentDataNeverPasses()
+        with tempfile.TemporaryDirectory() as tmp:
+            # s1 passes and is scored; s2 fails but is marked unscored.
+            rows = [h.slot_row(scenario="s1", trial=1),
+                    h.slot_row(scenario="s2", trial=1, scored=0, tool_ok=0)]
+            jh = ("scenario,arm,trial,lang,seed,groundedness,resolution,tone,"
+                  "groundedness_evidence,note")
+            judge = [h.judge_row(scenario="s1", trial=1),
+                     h.judge_row(scenario="s2", trial=1)]
+            slots = h.write(tmp, "slots.csv", h.SLOTS_HEADER, rows)
+            j = h.write(tmp, "judge.csv", jh, judge)
+            r = subprocess.run(
+                [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
+                 "--judge", str(j), "--trials", "1",
+                 "--out", str(Path(tmp) / "out.csv")], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("excluded 1 unscored scenario", r.stderr)
+            with open(Path(tmp) / "out.csv") as fh:
+                out = list(csv.DictReader(fh))[0]
+            # The failing unscored row must not drag the rate down, and must not
+            # appear in the denominator either.
+            self.assertEqual(float(out["success_mean"]), 1.0)
+            self.assertEqual(int(out["scenarios"]), 1)
+            self.assertEqual(int(out["runs"]), 1)
+
+    def test_the_barge_in_scenarios_are_marked_unscored(self):
+        spec = json.loads((HERE / "fixtures" / "scenarios.json").read_text())
+        for sc in spec["scenarios"]:
+            with self.subTest(scenario=sc["id"]):
+                if sc["id"].startswith("bargein-"):
+                    self.assertIs(sc.get("scored"), False)
+                else:
+                    self.assertNotEqual(sc.get("scored"), False)
 
 
 class TestFixtureHygiene(unittest.TestCase):

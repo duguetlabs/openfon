@@ -230,6 +230,9 @@ def score_run(run: dict, spec: dict) -> dict:
     return {
         "arm": run["arm"], "trial": run["trial"], "scenario": run["scenario"],
         "lang": sc["lang"], "intent": sc["intent"],
+        # Scenarios opted out of scoring still get a row — the transcript is the
+        # point — but summarize.py drops them before any aggregate.
+        "scored": int(sc.get("scored", True)),
         "n_slots": len(slots),
         "slot_heard": round(sum(heard.values()) / len(slots), 3) if slots else "",
         "slots_all_heard": int(all(heard.values())) if slots else "",

@@ -39,6 +39,26 @@ correct ones, which is worse than no numbers.
 | 13 | `score_asr.py` robustness rows | can dWER/SNR50 be computed | a `clean` baseline exists per `(arm, lang)`; **emits nothing and says so** if not | nothing known. `summary[0]` used to raise `IndexError` after the detailed CSV had been written. |
 | 12 | `judge.py` `parse_verdicts` | is this verdict usable | one verdict per expected candidate id, scores literally `int` in range | nothing known. `bool` passing as `int` was the bug: `true` became `0.0` downstream. |
 
+## Known limitations, documented rather than fixed
+
+The line: **anything that can silently contaminate a reported number gets fixed;
+anything that fails visibly, or only under a debug flag, gets written down.**
+
+- **`--allow-incomplete` counts rows, not identities.** The default path
+  validates by trial identity (check #4), but the escape hatch does not: four
+  rows against three expected trials give a rate of 1.333 and `missing_runs` of
+  −1. Nothing reported rests on it — the published numbers come from the default
+  path, which refuses that data outright. If you use the flag, read
+  `missing_runs`; a negative value means duplicates, not completeness.
+- **`--allow-incomplete` omits entirely-missing ASR cells.** A cell with zero
+  rows is absent from the output rather than present with `complete=0`, because
+  arms and conditions are discovered from the data. Same reasoning: the default
+  path aborts instead.
+- **A mid-stream `ws.send()` failure can hang the run.** The mic task can die
+  without setting the `last` event the turn is awaiting, so the run stops rather
+  than erroring. This is operational, not a correctness defect: it halts a run
+  instead of corrupting one, and a halted run is visible. It has never fired.
+
 ## Not verified, and knowingly so
 
 - **TTFA has no expected denominator** (#10). A missing reply is invisible to the

@@ -1,5 +1,5 @@
 {
-  "_comment": "Riverside Dental caller scripts. Every date, time and fact here is checked against fixtures/riverside-prompt.json — the calendar the agent actually receives, pinned to now = 2026-08-03 (Monday). Changing the fixture's `now` invalidates these expectations; regenerate the prompt and re-check the dates. German turns use real umlauts: Azure TTS reads the ASCII transliteration 'fuenfzehn' as 'fuer-enf-zehn', which corrupted the audio and made a fixture defect look like an engine failure. All names and phone numbers are fictional; the numbers come from ranges reserved for dramatic use (German BNetzA 0152 288173xx / 030 23125xxx, and the 555-01xx convention for English) so they cannot reach a real subscriber.",
+  "_comment": "Riverside Dental caller scripts. Every date, time and fact here is checked against fixtures/riverside-prompt.json — the calendar the agent actually receives, pinned to now = 2026-08-03 (Monday). Changing the fixture's `now` invalidates these expectations; regenerate the prompt and re-check the dates. German turns use real umlauts: Azure TTS reads the ASCII transliteration 'fuenfzehn' as 'fuer-enf-zehn', which corrupted the audio and made a fixture defect look like an engine failure. All names and phone numbers are fictional; the numbers come from ranges reserved for dramatic use (German BNetzA 0152 288173xx / 030 23125xxx, and the 555-01xx convention for English) so they cannot reach a real subscriber. Scenarios carrying \"scored\": false are run and logged but excluded from success, pass^k and the slot aggregates.",
   "scenarios": [
     {
       "id": "book-en-01",
@@ -303,7 +303,7 @@
       "id": "bargein-en-01",
       "lang": "en_US",
       "intent": "book_appointment",
-      "description": "Caller interrupts 700 ms into the agent's reply and corrects the date. Mon 2026-08-10 and Mon 2026-08-17 are both open, so only the correction distinguishes a pass.",
+      "description": "Caller interrupts 700 ms into the agent's reply and corrects the date. Mon 2026-08-10 and Mon 2026-08-17 are both open, so only the correction distinguishes a pass. NOT SCORED: the barge-in metric was withdrawn after four defects, and when the preceding response emits no audio the runner skips this scenario's interrupting turn entirely, so a row may exist for a call in which the scripted correction was never spoken. Kept for its transcripts only.",
       "turns": [
         {
           "text": "I'd like an appointment on Monday the tenth."
@@ -335,13 +335,14 @@
         "forbidden": [
           "the tenth"
         ]
-      }
+      },
+      "scored": false
     },
     {
       "id": "bargein-de-01",
       "lang": "de_DE",
       "intent": "grounded_qa",
-      "description": "German barge-in 500 ms in; measures stop latency and whether the agent answers the new question.",
+      "description": "German barge-in 500 ms in; measures stop latency and whether the agent answers the new question. NOT SCORED: the barge-in metric was withdrawn after four defects, and when the preceding response emits no audio the runner skips this scenario's interrupting turn entirely, so a row may exist for a call in which the scripted correction was never spoken. Kept for its transcripts only.",
       "turns": [
         {
           "text": "Nehmen Sie eigentlich noch neue Patienten an?"
@@ -360,7 +361,8 @@
         "forbidden": [
           "eigene Parkplätze vorhanden"
         ]
-      }
+      },
+      "scored": false
     },
     {
       "id": "codeswitch-01",

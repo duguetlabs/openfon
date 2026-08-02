@@ -98,6 +98,21 @@ def main() -> None:
     if not slots:
         sys.exit(f"{a.slots} has no rows")
 
+    # Scenarios marked `"scored": false` in the fixture are run and logged but
+    # contribute to nothing. The barge-in pair is excluded because the runner
+    # skips their interrupting turn when the preceding response produced no
+    # audio — so a row can exist for a call in which the scripted correction was
+    # never spoken, and an earlier agent message is enough to satisfy the
+    # any-agent-turn check. A scenario whose scripted turn may silently not have
+    # been delivered cannot contribute to a success rate.
+    excluded = sorted({s["scenario"] for s in slots if s.get("scored") == "0"})
+    if excluded:
+        slots = [s for s in slots if s.get("scored") != "0"]
+        print(f"excluded {len(excluded)} unscored scenario(s) from all aggregates: "
+              f"{', '.join(excluded)}", file=sys.stderr)
+    if not slots:
+        sys.exit(f"{a.slots} has no scored rows")
+
     # `--judge path` pointing at an empty file must not read as "no judge
     # requested". A header-only CSV made `read()` return [] and the guard below
     # behaved as though judging had been skipped, so runs passed with no verdicts.

@@ -21,24 +21,24 @@ settings default, not a rebuild.
 
 | | Voice Live + gpt-4.1-mini | gpt-realtime-2 (either stack) |
 |---|---|---|
-| Time to first audio, p50 | **1331 ms** | 2017–2367 ms |
-| Time to first audio, p95 | **1748 ms** | 3048–3468 ms |
-| Caller-slot capture, heard | **0.967** | 0.911–0.933 |
-| Caller-slot capture, echoed back | 0.719 | **0.819–0.868** |
-| Judge groundedness | 0.697 | **1.000** |
-| Strict task success | 0.394 | **0.424–0.636** |
-| pass^3 | 0.182 | **0.273–0.545** |
+| Time to first audio, p50 | **1315 ms** | 2022–2369 ms |
+| Time to first audio, p95 | **1719 ms** | 3262–3474 ms |
+| Caller-slot capture, heard | **0.960** | 0.893–0.920 |
+| Caller-slot capture, echoed back | 0.697 | **0.816–0.908** |
+| Judge groundedness | 0.704 | **1.000** |
+| Strict task success | 0.333 | **0.407–0.593** |
+| pass^3 | 0.222 | **0.222–0.556** |
 | Cost | **$0.03/min** | $0.07/min |
 
 Voice Live answers **~690 ms sooner at p50 and ~1.3 s sooner at p95**, at 43 %
-of the cost, and it *hears* the caller better — 0.967 vs 0.856 slot
+of the cost, and it *hears* the caller better — 0.960 vs 0.893 slot
 capture, and it never lost a phone number. On a phone call the latency gap is
 the difference between a receptionist and a bad connection.
 
 What you give up is sharper than the latency gap. gpt-realtime-2 got a **perfect
-groundedness score — 0 unsupported claims in 66 runs** — against 24 for the Voice
-Live arms, and it completes the whole call correctly **three times out of three
-in 54.5 % of scenarios against 18.2 %**. The two engines fail differently: one
+groundedness score — 0 unsupported claims** — against 24 for the Voice Live arms,
+and it completes the whole call correctly **three times out of three in 55.6 % of
+scenarios against 22.2 %**. The two engines fail differently: one
 mishears a name, the other says something that is not true.
 
 **What gpt-4.1-mini actually gets wrong matters for a booking business.** Six of
@@ -240,33 +240,37 @@ the recommendation is "leave the knob alone" rather than "enable it for German".
 ## Track B — task success and responsiveness
 
 11 Riverside Dental scenarios (7 DE, 4 EN) × 5 arms × 3 trials = **165 live
-calls**, 0 errors. Run against the real system prompt: `gen_prompt.ts` calls
+calls**, 0 errors — of which **135 are scored**: the two barge-in scenarios are
+run and logged but excluded from every aggregate (see below). Run against the real system prompt: `gen_prompt.ts` calls
 `buildSystemPrompt` from `src/prompt.ts`, so the 21-day calendar block every date
 question depends on is the genuine one, pinned to Monday 2026-08-03.
 
 | arm | success | pass^3 | slots heard | slots echoed | end_call | grounded (judge) | resolution | tone | TTFA p50 | TTFA p95 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `native-gpt-realtime-2` | **0.636** | **0.545** | 0.911 | **0.819** | 24/33 | **1.000** | 1.697 | 1.576 | 2017 | 3048 |
-| `vl-gpt41mini-dns` | 0.455 | 0.273 | **0.967** | 0.706 | 23/33 | 0.818 | 1.727 | 1.697 | 1431 | 1994 |
-| `vl-native-brain` | 0.424 | 0.273 | 0.933 | **0.868** | 23/33 | **1.000** | 1.727 | 1.576 | 2367 | 3468 |
-| `vl-gpt41mini` | 0.394 | 0.182 | **0.967** | 0.719 | 24/33 | 0.697 | 1.727 | **1.788** | 1331 | 1748 |
-| `vl-gpt41mini-semvad` | 0.364 | 0.182 | 0.933 | 0.767 | **25/33** | 0.758 | **1.788** | 1.697 | **1321** | **1852** |
+| `native-gpt-realtime-2` | **0.593** | **0.556** | 0.893 | 0.816 | 18/27 | **1.000** | 1.741 | 1.519 | 2022 | 3262 |
+| `vl-native-brain` | 0.407 | 0.222 | 0.920 | **0.908** | 17/27 | **1.000** | 1.778 | 1.556 | 2369 | 3474 |
+| `vl-gpt41mini-dns` | 0.370 | 0.222 | **0.960** | 0.681 | 17/27 | 0.815 | 1.778 | 1.667 | 1408 | 1891 |
+| `vl-gpt41mini` | 0.333 | 0.222 | **0.960** | 0.697 | 18/27 | 0.704 | 1.778 | **1.778** | **1315** | **1719** |
+| `vl-gpt41mini-semvad` | 0.259 | 0.111 | 0.920 | 0.753 | **19/27** | 0.704 | **1.852** | 1.667 | 1320 | 1852 |
+
+**Nine scenarios, not eleven.** The two barge-in scenarios are run and logged but
+excluded from every aggregate — see below. 27 scored runs per arm.
 
 `success` is a strict conjunction: every expected slot heard correctly, `end_call`
-invoked where expected, every grounded fact stated, no forbidden claim, and the
-judge's groundedness verdict positive. `pass^3` requires that on **all three**
-trials.
+invoked where expected, every grounded fact stated, no forbidden claim, the
+judge's groundedness verdict positive, and the run free of transport errors.
+`pass^3` requires that on **all three** trials.
 
-**The two capabilities separate cleanly.** Voice Live *hears* better — 0.967 vs
-0.911 slot capture, and it never lost a phone number. gpt-realtime-2 *reasons*
-better — a perfect 1.000 groundedness against 0.697, and it completes the whole
-call correctly on all three trials in 54.5 % of scenarios against 18.2 %.
+**The two capabilities separate cleanly.** Voice Live *hears* better — 0.960 vs
+0.893 slot capture, and it never lost a phone number. gpt-realtime-2 *reasons*
+better — a perfect 1.000 groundedness against 0.704, and it completes the whole
+call correctly on all three trials in 55.6 % of scenarios against 22.2 %.
 
 **`end_call` is the biggest single drag on strict success and is equally bad
-everywhere** (23–25 of 33; `tool_ok` 0.697–0.758). Because no arm is meaningfully
-better, it does not separate the engines — but it is a real product bug, and on
-`reschedule-en-01` it fired **1 time in 15**: the agent captured every detail
-correctly and then would not close the call.
+everywhere** (17–19 of 27). Because no arm is meaningfully better, it does not
+separate the engines — but it is a real product bug, and on `reschedule-en-01`
+it fired **1 time in 15**: the agent captured every detail correctly and then
+would not close the call.
 
 Where the remaining failures come from, now that the fixture and scoring defects
 are out of the way (Confounds 9 and 11):
@@ -275,10 +279,10 @@ are out of the way (Confounds 9 and 11):
 |---|---|---|
 | `book-de-01` | 0/15 | the ASR hears **"Katrin"** for "Kathrin" on 15/15 — one letter, but the wrong name in the booking |
 | `reschedule-en-01` | 1/15 | every slot captured; `end_call` fires 1/15 |
-| `codeswitch-01` | 1/15 | language switch followed **15/15**; `end_call` 0/15 |
 | `message-de-01` | 2/15 | `end_call`, plus the judge objecting to "Dr. Weber is not available right now" |
+| `codeswitch-01` | 2/15 | language switch followed **15/15**; `end_call` 0/15 |
+| `hours-en-01` | 12/15 | mostly passes once time-valued facts are matchable |
 | `holiday-de-01` | 15/15 | the special-closure calendar lookup works on every arm and trial |
-| `bargein-en-01` | 13/15 | correction adopted 24/30 across arms |
 
 **Heard vs echoed.** `slots heard` is whether the engine's own caller transcript
 contains the value — did it *hear* the phone number. `slots echoed` is whether
@@ -505,6 +509,18 @@ Stated rather than smoothed over.
      every subsequent clip inherited its predecessor's hypothesis — silent WER
      corruption with no error on any affected row. The batch now aborts and
      reconnects.
+   * *A withdrawn metric's scenarios were still being scored.* The barge-in
+     metric was dropped, but its two scenarios kept feeding `success`, `pass^k`
+     and the slot aggregates — and when the preceding response produces no audio
+     the runner never speaks the interrupting turn, so a row can exist for a call
+     in which the scripted correction was never delivered, with an earlier agent
+     message satisfying the completeness check. They are now marked
+     `"scored": false` in the fixture and excluded from every aggregate: 9
+     scored scenarios, 135 of the 165 runs. This moved every Track B figure and
+     swapped `vl-gpt41mini-dns` and `vl-native-brain` in the success ordering —
+     a within-family pair that was never a decision point. **The recommendation
+     is unchanged**: both gpt-realtime-2 arms still lead both gpt-4.1-mini arms
+     on strict success (0.593 / 0.407 against 0.370 / 0.333 / 0.259).
    * *An exhausted ASR batch became a data point.* After both attempts failed,
      the runner wrote a full cell of error rows and exited zero, so the shell
      reported completion and the scorer saw a complete set of clip ids — a
@@ -517,7 +533,7 @@ Stated rather than smoothed over.
      switched languages; the companion echoed score joined all agent turns, where
      earlier German drowns out a correct English reply. Both wrong, in opposite
      directions. Scored from the agent's final turn, every arm followed the
-     switch 15/15, and native gpt-realtime-2's strict success rose 0.606 → 0.636.
+     switch 15/15, and native gpt-realtime-2's strict success rose.
    * *Cancellation was never detected.* An interrupted generation is
      `response.done` with `response.status == "cancelled"`; the runner watched
      for a top-level `response.cancelled` that neither service emits, so
