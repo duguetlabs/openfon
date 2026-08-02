@@ -94,6 +94,9 @@ export class CallSession implements DurableObject {
   private ended = false; // stop handling caller messages
   private finalized = false; // the call row has been written; gates retries
   private finalizing: Promise<void> | null = null;
+  // Computed once and reused across finalize retries, so a failed row write
+  // does not re-bill summarization.
+  private summarized: { summary: string | null; intent: string | null; messageJson: string | null } | null = null;
   private starting: Promise<void> | null = null; // in-flight or completed start
   private announced = false; // `ready` sent: the session exists, retries are off
   private lang = 'en'; // follows the caller; starts as the business default
@@ -532,7 +535,9 @@ export class CallSession implements DurableObject {
     if (this.upstream === ws) this.upstream = null;
   }
 
-  private openUpstream(instructions: string, greetWith: string | null): Promise<boolean> {
+  // Instructions may be a thunk so a rotation can snapshot the conversation at
+  // handover rather than at dial time — see runRecovery.
+  private openUpstream(instructions: string | (() => string), greetWith: string | null): Promise<boolean> {
     const key = this.env.REALTIME_API_KEY || this.env.DEFAULT_LLM_API_KEY || '';
     const url = `${this.env.REALTIME_BASE_URL}?model=${encodeURIComponent(this.realtimeModel)}&token=${encodeURIComponent(key)}`;
     return new Promise<boolean>((resolve) => {
@@ -565,8 +570,13 @@ export class CallSession implements DurableObject {
         clearTimeout(timer);
         if (abandoned) return; // we already gave up on this one and closed it
         opened = true;
+        // Snapshot now, not at dial time. The outgoing connection stayed live
+        // through the connect window, so `history` may have gained turns since
+        // — and taking it before we route means the replacement is briefed on
+        // everything that happened up to the moment it takes over.
+        const briefing = typeof instructions === 'function' ? instructions() : instructions;
         this.upstream = ws; // handover: from here we write to the new socket
-        this.sendUpstream(this.realtimeSessionPayload(this.sessionVoice, instructions), ws);
+        this.sendUpstream(this.realtimeSessionPayload(this.sessionVoice, briefing), ws);
         if (greetWith) {
           this.sendUpstream(
             {
@@ -619,6 +629,14 @@ export class CallSession implements DurableObject {
     return this.recovering;
   }
 
+  private resumeInstructions(): string {
+    const transcript = this.history
+      .filter((m) => m.role !== 'system')
+      .map((m) => `${m.role === 'user' ? 'Caller' : 'You'}: ${m.content}`)
+      .join('\n');
+    return `${this.realtimeInstructions}\n\nThe call audio was briefly interrupted; the caller is still on the line. Do NOT greet again. Conversation so far:\n${transcript}`;
+  }
+
   private async runRecovery(): Promise<void> {
     while (!this.ended) {
       // `reconnects` is the per-rotation budget, which session.expiring resets;
@@ -631,13 +649,13 @@ export class CallSession implements DurableObject {
       this.reconnects++;
       this.totalReconnects++;
       console.log(`call ${this.callId}: upstream dropped, reconnecting`);
-      const transcript = this.history
-        .filter((m) => m.role !== 'system')
-        .map((m) => `${m.role === 'user' ? 'Caller' : 'You'}: ${m.content}`)
-        .join('\n');
-      const resumed = `${this.realtimeInstructions}\n\nThe call audio was briefly interrupted; the caller is still on the line. Do NOT greet again. Conversation so far:\n${transcript}`;
       const old = this.upstream;
-      const ok = await this.openUpstream(resumed, null);
+      // Deferred: on a proactive rotation the old connection keeps talking
+      // while this one dials, so the briefing has to be built at handover.
+      // Freezing it here would hand the replacement a transcript missing the
+      // exchange that happened during the connect window, and the agent would
+      // ask the caller to repeat something they had just said.
+      const ok = await this.openUpstream(() => this.resumeInstructions(), null);
       if (ok) {
         if (old && old !== this.upstream) {
           try {
@@ -835,6 +853,7 @@ export class CallSession implements DurableObject {
   private static readonly MAX_TURNS = 200;
   // A real widget sends {type:"start"} immediately; 30 s is generous.
   private static readonly START_DEADLINE_MS = 30_000;
+  private static readonly MAX_RETRY_MS = 15 * 60_000; // backoff ceiling
   // 0 = this instance has seen no activity of its own. Not the same as "the
   // call was just active": an alarm can run on an object rebuilt after
   // eviction, where any Date.now() initializer would look like fresh activity
@@ -893,9 +912,21 @@ export class CallSession implements DurableObject {
 
     if (now >= hardDeadline || now - activity >= CallSession.IDLE_LIMIT_MS) {
       console.log(`call ${this.callId}: watchdog finalizing (idle ${Math.round((now - activity) / 1000)}s)`);
-      // Let a failure propagate: alarms are at-least-once, and finalize() only
-      // sets `finalized` once the row is written, so the retry does real work.
-      await this.finalize();
+      try {
+        await this.finalize();
+      } catch (err) {
+        // Own the retry rather than propagating. Cloudflare retries a throwing
+        // alarm about six times and then stops, so a D1 outage lasting longer
+        // than that would strand the row as 'active' forever — the exact state
+        // this watchdog exists to prevent, reached through its own failure
+        // path. Catching and rescheduling is the documented way to retry
+        // indefinitely. Back off: an outage is when hammering helps least.
+        const attempts = ((await this.state.storage.get<number>('finalizeAttempts')) ?? 0) + 1;
+        const delay = Math.min(CallSession.MAX_RETRY_MS, CallSession.WATCHDOG_TICK_MS * 2 ** (attempts - 1));
+        console.error(`call ${this.callId}: finalize failed (attempt ${attempts}), retrying in ${delay / 1000}s`, err);
+        await this.state.storage.put('finalizeAttempts', attempts);
+        await this.state.storage.setAlarm(now + delay);
+      }
       return;
     }
     await this.state.storage.put('lastActivity', activity);
@@ -995,8 +1026,12 @@ export class CallSession implements DurableObject {
     let summary: string | null = this.failure;
     let intent: string | null = null;
     let messageJson: string | null = null;
-    // Summarize only real conversations (greeting alone doesn't count).
-    if (this.history.length > 2) {
+    // Summarize only real conversations (greeting alone doesn't count), and
+    // only once: this runs again on every finalize retry, and re-billing the
+    // summarization for a call whose row simply failed to write is waste.
+    if (this.summarized) {
+      ({ summary, intent, messageJson } = this.summarized);
+    } else if (this.history.length > 2) {
       try {
         const transcript = this.history
           .slice(1)
@@ -1033,6 +1068,9 @@ export class CallSession implements DurableObject {
       const firstUser = this.history.find((m) => m.role === 'user');
       summary = firstUser ? `Caller: "${firstUser.content.slice(0, 120)}"` : null;
     }
+    // Memoize the *unprefixed* summary: the failure prefix below is applied on
+    // every attempt, so caching the combined string would stack it on a retry.
+    this.summarized = { summary, intent, messageJson };
     // Two writers, one column, so the precedence is decided here rather than by
     // whoever assigns last: a call that broke leads with why. The log truncates
     // the row, and "it failed" is the fact the owner needs first; a summary, if

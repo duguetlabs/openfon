@@ -554,6 +554,47 @@ describe('upstream recovery', () => {
     expect(client.binaryCount()).toBe(after);
   });
 
+  it('briefs the replacement with turns that arrived during the handover', async () => {
+    // The old connection stays live while the replacement dials, so history can
+    // grow inside that window. Building the resume instructions at dial time
+    // handed the new engine a transcript missing that exchange, and the agent
+    // asked the caller to repeat what they had just said — on a rotation whose
+    // whole purpose is to be seamless.
+    vi.useFakeTimers();
+    const { session } = newSession('realtime');
+    await session.fetch(upgradeRequest());
+    const client = serverSockets[0];
+    client.receive({ type: 'start' });
+    await flush();
+    const oldUp = upstreamSockets[0];
+    oldUp.emit('open', {});
+    await flush();
+
+    oldUp.emit('message', { data: JSON.stringify({ type: 'session.expiring' }) });
+    await flush();
+    const newUp = upstreamSockets[1];
+
+    // Mid-handover exchange, on the connection that is still working.
+    oldUp.emit('message', {
+      data: JSON.stringify({
+        type: 'conversation.item.input_audio_transcription.completed',
+        transcript: 'my booking reference is four seven two',
+      }),
+    });
+    oldUp.emit('message', {
+      data: JSON.stringify({ type: 'response.output_audio_transcript.done', transcript: 'Got it, four seven two.' }),
+    });
+    await flush();
+
+    newUp.emit('open', {});
+    await flush();
+
+    const update = newUp.messages().find((m) => m.type === 'session.update');
+    const instructions = String((update?.session as { instructions?: string })?.instructions ?? '');
+    expect(instructions).toContain('four seven two');
+    expect(instructions).toContain('Got it, four seven two.');
+  });
+
   it('is bounded and finalizes rather than spawning orphan connections', async () => {
     vi.useFakeTimers();
     const { session } = newSession('realtime');
@@ -716,12 +757,15 @@ describe('watchdog alarm', () => {
 
     ctl.failUpdates = true; // transient D1 outage
     vi.setSystemTime(Date.now() + 200_000);
-    await expect(session.alarm()).rejects.toThrow('D1 unavailable');
+    // Does not rethrow: propagating would hand the retry to Cloudflare's finite
+    // budget, and an outage outlasting it would strand the row for good.
+    await expect(session.alarm()).resolves.toBeUndefined();
 
     // Clearing the watchdog before the write landed would strand the row as
     // 'active' with nothing left to reclaim it.
     expect(storage.map.get('callId')).toBe('call-1');
     expect(callUpdates()).toHaveLength(0);
+    expect(storage.alarmAt).toBeGreaterThan(Date.now()); // retry is scheduled
 
     // At-least-once delivery: the retry has to actually complete the call.
     ctl.failUpdates = false;
@@ -777,6 +821,72 @@ describe('watchdog alarm', () => {
     expect(sentTranscript).toContain('crown');
   });
 
+  it('backs off across repeated finalize failures instead of giving up', async () => {
+    // Cloudflare stops retrying a throwing alarm after about six attempts. An
+    // outage lasting longer than that would leave the row 'active' forever, so
+    // the watchdog schedules its own retries — and spaces them out, because an
+    // outage is exactly when hammering helps least.
+    vi.useFakeTimers();
+    const { session, storage, ctl, callUpdates } = newSession();
+    await session.fetch(upgradeRequest());
+    serverSockets[0].receive({ type: 'start' });
+    await flush();
+
+    ctl.failUpdates = true;
+    const delays: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      vi.setSystemTime(Date.now() + 200_000);
+      await session.alarm();
+      delays.push((storage.alarmAt as number) - Date.now());
+    }
+
+    expect(callUpdates()).toHaveLength(0);
+    expect(storage.map.get('callId')).toBe('call-1'); // still reclaimable
+    expect(delays[1]).toBeGreaterThan(delays[0]); // backing off
+    expect(delays[2]).toBeGreaterThan(delays[1]);
+
+    // And it still completes once D1 comes back.
+    ctl.failUpdates = false;
+    vi.setSystemTime(Date.now() + 20 * 60_000);
+    await session.alarm();
+    expect(callUpdates()).toHaveLength(1);
+    expect(storage.alarmAt).toBeNull();
+  });
+
+  it('does not re-bill summarization on a finalize retry', async () => {
+    vi.useFakeTimers();
+    const { session, storage, ctl, callUpdates } = newSession();
+    storage.map.set('callId', 'call-1');
+    storage.map.set('hardDeadline', Date.now() - 1000);
+    ctl.turns = [
+      { role: 'agent', text: 'Riverside Dental, how can I help?' },
+      { role: 'caller', text: 'Please call me back on 0664 1234567.' },
+      { role: 'agent', text: 'Will do.' },
+    ];
+    let summaryCalls = 0;
+    (globalThis as never).fetch = async () => {
+      summaryCalls++;
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: '{"summary":"Callback requested.","intent":"message"}' } }],
+        }),
+      };
+    };
+
+    ctl.failUpdates = true;
+    await session.alarm();
+    expect(summaryCalls).toBe(1);
+
+    ctl.failUpdates = false;
+    vi.setSystemTime(Date.now() + 200_000);
+    await session.alarm();
+
+    expect(callUpdates()).toHaveLength(1);
+    expect(callUpdates()[0].args[1]).toBe('Callback requested.'); // kept the result
+    expect(summaryCalls).toBe(1); // and did not pay for it twice
+  });
+
   it('completes the call when the retry lands on a rebuilt instance', async () => {
     // The alarm retry is not guaranteed to hit the same object. A rebuilt one
     // reads everything it needs from storage — which is only true because the
@@ -789,10 +899,11 @@ describe('watchdog alarm', () => {
 
     ctl.failUpdates = true;
     vi.setSystemTime(Date.now() + 200_000);
-    await expect(session.alarm()).rejects.toThrow('D1 unavailable');
+    await session.alarm();
     expect(storage.map.get('callId')).toBe('call-1');
 
     ctl.failUpdates = false;
+    vi.setSystemTime(Date.now() + 200_000); // the rescheduled retry comes due
     await evictAndRebuild().alarm();
 
     expect(callUpdates()).toHaveLength(1);
