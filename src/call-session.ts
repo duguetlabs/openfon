@@ -172,6 +172,16 @@ export class CallSession implements DurableObject {
     console.error(`call ${this.callId}: ${detail}`);
     this.failure ??= `Call failed: ${detail}`;
     this.send({ type: 'error', message: 'Sorry — this call ran into a problem. Please try again.' });
+    // The call is already over for the caller: the widget turns any error frame
+    // into its terminal state, and a later `ended` deliberately does not
+    // override that phase. So the session has to agree. Leaving it open kept
+    // the row 'active' with connected_at set — what the concurrency cap counts
+    // as a live call — with nothing to release it until the sweep an hour
+    // later, so a handful of failures could answer "all lines are busy" long
+    // after the provider recovered. finalize() derives 'failed' from the
+    // failure just recorded, so the row keeps its summary too, which the sweep
+    // cannot write.
+    void this.finalize().catch((e) => console.error('finalize after failure failed', e));
   }
 
   private async loadCall(): Promise<void> {

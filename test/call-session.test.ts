@@ -109,9 +109,10 @@ function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline') {
           return {
             async first() {
               if (sql.includes('FROM calls')) {
-                // loadCall's read is the one tests gate; finalize's must not block
+                // loadCall's read is the one tests gate and fail; finalize's
+                // own read must stay working so teardown can still be observed.
                 if (ctl.gate && sql.includes('status, started_at')) await ctl.gate.promise;
-                if (ctl.failCallReads) throw new Error('D1 unavailable');
+                if (ctl.failCallReads && sql.includes('SELECT id, business_id')) throw new Error('D1 unavailable');
                 // finalize selects `... AND status = 'active'`; a swept row misses.
                 if (!ctl.callRowActive && sql.includes("status = ?")) return null;
                 return CALL_ROW;
@@ -320,24 +321,42 @@ describe('handleStart idempotency', () => {
     expect(turnWrites()).toHaveLength(1);
   });
 
-  it('lets the caller retry after a start fails transiently', async () => {
-    // A latching boolean consumed the caller's only chance: the error surfaced,
-    // `started` stayed true, and every later start returned immediately — a
-    // permanently dead call on a socket that is still open.
-    const { session, ctl } = newSession();
+  it('ends the call when startup fails, instead of leaving it half-alive', async () => {
+    // The widget turns any error frame into its terminal state, so the session
+    // has to agree. Leaving the socket open kept the row 'active' with
+    // connected_at set — a live call as far as the concurrency cap is
+    // concerned — with nothing to release it until the sweep an hour later.
+    const { session, ctl, callUpdates } = newSession();
     await session.fetch(upgradeRequest());
     const sock = serverSockets[0];
 
     ctl.failCallReads = true; // D1 blip inside loadCall()
     sock.receive({ type: 'start' });
     await flush();
+
     expect(sock.typesSent()).toContain('error');
     expect(sock.countOf('ready')).toBe(0);
+    expect(sock.readyState).toBe(3); // closed, not left hanging
+    expect(callUpdates()).toHaveLength(1); // and the slot is released
+    expect(callUpdates()[0].args[0]).toBe('failed');
+    expect(String(callUpdates()[0].args[3])).toContain('Call failed');
+  });
 
-    ctl.failCallReads = false;
+  it('tells the caller nothing about why it broke', async () => {
+    // The public widget is reachable by anyone with the business link, and a
+    // thrown error quotes whatever it carried — an upstream body, a hostname.
+    const { session, ctl, callUpdates } = newSession();
+    await session.fetch(upgradeRequest());
+    const sock = serverSockets[0];
+
+    ctl.failCallReads = true;
     sock.receive({ type: 'start' });
     await flush();
-    expect(sock.countOf('ready')).toBe(1); // the caller is finally answered
+
+    const shown = sock.messages().find((m) => m.type === 'error')?.message;
+    expect(shown).toBe('Sorry — this call ran into a problem. Please try again.');
+    // ...while the owner's row keeps the detail.
+    expect(String(callUpdates()[0].args[3])).toContain('D1 unavailable');
   });
 
   it('does not re-run startup when a failure happens after ready is sent', async () => {
@@ -420,6 +439,27 @@ describe('finalize closes attached sockets', () => {
     await flush();
 
     expect(callUpdates()).toHaveLength(1);
+  });
+
+  it('releases the call when it breaks mid-conversation, keeping the summary', async () => {
+    // The case the concurrency cap cares about: the caller leaves the errored
+    // tab open instead of clicking retry. Nothing else can release the row, and
+    // the sweep that eventually would writes no summary at all.
+    const { session, ctl, callUpdates } = newSession();
+    await session.fetch(upgradeRequest());
+    const sock = serverSockets[0];
+    sock.receive({ type: 'start' });
+    await flush();
+
+    ctl.failTurnWrites = true; // the provider or D1 gives out mid-call
+    sock.receive({ type: 'text', text: 'do you have anything on Friday?' });
+    await flush();
+
+    expect(sock.typesSent()).toContain('error');
+    expect(sock.readyState).toBe(3);
+    const update = callUpdates().at(-1)!;
+    expect(update.args[0]).toBe('failed');
+    expect(update.args[3]).toBeTruthy(); // a reason, not a null row
   });
 
   it('clears the watchdog alarm when the call ends', async () => {
