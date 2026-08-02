@@ -1206,12 +1206,12 @@ describe('watchdog alarm', () => {
     expect(storage.map.get('callId')).toBe('call-1'); // left for a later sweep
   });
 
-  it('still reschedules when the ending marker cannot be read either', async () => {
-    // The decision to keep retrying must not itself require storage to be
-    // readable: an outage that makes the write fail is exactly when the read
-    // fails too. Letting it throw skipped the reschedule and handed the row
-    // back to the platform's finite retries — losing the retry precisely in
-    // the case it exists for.
+  it('defers to platform retries when it has no durable clock to bound itself', async () => {
+    // Without the persisted marker there is no record of when the failures
+    // began, and an in-memory fallback resets on every eviction — each rebuilt
+    // instance would measure zero elapsed and reschedule forever, which is the
+    // unbounded loop the ceiling exists to prevent. Rethrowing hands it to the
+    // platform's finite alarm retries: bounded by construction.
     vi.useFakeTimers();
     const { session, storage, ctl, callUpdates } = newSession();
     await session.fetch(upgradeRequest());
@@ -1222,18 +1222,17 @@ describe('watchdog alarm', () => {
     storage.failGetsFor = 'ending';
     vi.setSystemTime(Date.now() + 200_000);
     storage.alarmAt = null;
-    await session.alarm();
 
+    // The same outage takes out rememberEnding's read, so finalize never even
+    // reaches the write — which is precisely when there is no clock to use.
+    await expect(session.alarm()).rejects.toThrow('storage unavailable');
     expect(callUpdates()).toHaveLength(0);
-    expect(storage.alarmAt).toBe(Date.now() + 60_000); // retry still scheduled
+    expect(storage.alarmAt).toBeNull(); // no self-scheduled retry to run away
 
-    // And it recovers normally once storage comes back.
+    // With the marker readable it owns the retry again.
     storage.failGetsFor = null;
-    ctl.failUpdates = false;
-    vi.setSystemTime(storage.alarmAt);
-    storage.alarmAt = null;
     await session.alarm();
-    expect(callUpdates()).toHaveLength(1);
+    expect(storage.alarmAt).toBe(Date.now() + 60_000);
   });
 
   it('retries at a flat cadence rather than backing off', async () => {

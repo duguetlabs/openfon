@@ -897,7 +897,6 @@ export class CallSession implements DurableObject {
   private static readonly START_CEILING_MS = 90_000;
   // How long finalize keeps retrying before leaving the row to a sweep.
   private static readonly MAX_FINALIZE_RETRY_MS = 30 * 60_000;
-  private firstFinalizeFailure = 0; // fallback clock when storage is unreadable
   // 0 = this instance has seen no activity of its own. Not the same as "the
   // call was just active": an alarm can run on an object rebuilt after
   // eviction, where any Date.now() initializer would look like fresh activity
@@ -1034,18 +1033,29 @@ export class CallSession implements DurableObject {
       // hit D1 once a minute forever. Measured from the frozen end of the call,
       // which is already persisted for the retry, so it costs no extra state
       // and survives eviction.
-      this.firstFinalizeFailure ||= now;
-      // Read defensively. Deciding whether to keep retrying must not itself
-      // depend on storage being readable — storage being unreadable is one of
-      // the things this is retrying for, and letting the read throw here
-      // skipped the reschedule entirely and handed the row back to the
-      // platform's finite retries. That is what the in-memory clock is for.
-      let startedTrying = this.firstFinalizeFailure;
+      // Bounded by a durable clock or not run at all. `ending` is written
+      // before the first fallible statement in runFinalize, so if it is
+      // missing or unreadable there is no record of when the failures began.
+      // An in-memory fallback looks like the answer and is not: it resets on
+      // every eviction, so each rebuilt instance measures zero elapsed and
+      // reschedules, turning this ceiling into the unbounded loop it exists to
+      // prevent. Defer those to the platform's alarm retries instead — finite
+      // by construction, and the behaviour that predates any of this.
+      //
+      // Narrow in practice: setAlarm is part of the same Storage API and, per
+      // Cloudflare's docs, "alarm operations follow the same rules as other
+      // storage operations" — so storage being wholly unavailable stops the
+      // reschedule too. This covers the partial case where writes fail and
+      // scheduling still works.
+      let startedTrying: number | undefined;
       try {
-        const ending = await this.state.storage.get<{ endedAt: number }>('ending');
-        if (ending) startedTrying = ending.endedAt;
-      } catch (readErr) {
-        console.error(`call ${this.callId}: ending marker unreadable, using the in-memory clock`, readErr);
+        startedTrying = (await this.state.storage.get<{ endedAt: number }>('ending'))?.endedAt;
+      } catch {
+        /* unreadable is the same as absent: no clock either way */
+      }
+      if (startedTrying === undefined) {
+        console.error(`call ${this.callId}: finalize failed with no durable retry clock; deferring to platform retries`, err);
+        throw err;
       }
       const trying = now - startedTrying;
       if (trying >= CallSession.MAX_FINALIZE_RETRY_MS) {
