@@ -273,12 +273,20 @@ describe('second attach to a live call', () => {
     // attach hit the 409, and nothing existed to finalize the row. An active
     // call that could neither be recovered nor replaced — reached through the
     // guard that exists to prevent exactly that.
-    const { session, storage } = newSession();
+    const { session, storage, callUpdates } = newSession();
     storage.failPuts = true;
 
     await expect(session.fetch(upgradeRequest())).rejects.toThrow('storage unavailable');
 
-    // Nothing was retained, so the next attempt is a clean one.
+    // The row outlives the failed arm — it was inserted before the upgrade —
+    // and with no alarm armed nothing in the session would ever finalize it.
+    const retired = callUpdates()[0];
+    expect(retired).toBeDefined();
+    expect(retired.sql).toContain("status = 'failed'");
+    expect(String(retired.args[1])).toContain('could not be started');
+    expect(retired.sql).toContain("status = 'active'"); // never contests another writer
+
+    // Nothing else was retained, so the next attempt is a clean one.
     storage.failPuts = false;
     const retry = await session.fetch(upgradeRequest());
     expect(retry.status).toBe(101);

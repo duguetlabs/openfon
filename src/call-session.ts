@@ -141,7 +141,28 @@ export class CallSession implements DurableObject {
     // exact state this class exists to prevent, reached through the guard that
     // prevents it. Ordering it this way rather than unwinding in a catch: the
     // undo path would be one more thing to get right.
-    await this.armStartDeadline();
+    try {
+      await this.armStartDeadline();
+    } catch (err) {
+      // The row outlives a failed arm: /api/public/call/start inserted it
+      // before this upgrade, and with no alarm armed nothing in here will ever
+      // finalize it. The widget does not retry a call id either — it asks for a
+      // fresh one — so retire the row on the way out rather than leave it
+      // 'active' with no owner. Same ordering fix as arming before accepting,
+      // one layer out: no socket was the first half, no orphaned row is this.
+      console.error(`call ${this.callId}: could not arm the watchdog; retiring the row`, err);
+      await this.env.DB.prepare(
+        `UPDATE calls SET status = 'failed', ended_at = ?, summary = ? WHERE id = ? AND status = 'active'`
+      )
+        .bind(
+          CallSession.sqlTime(Date.now()),
+          'Call failed: the call could not be started.',
+          this.callId
+        )
+        .run()
+        .catch((dbErr) => console.error(`call ${this.callId}: could not retire the row either`, dbErr));
+      throw err;
+    }
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     server.accept();
