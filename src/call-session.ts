@@ -751,6 +751,13 @@ export class CallSession implements DurableObject {
       const firstUser = this.history.find((m) => m.role === 'user');
       summary = firstUser ? `Caller: "${firstUser.content.slice(0, 120)}"` : null;
     }
+    // Two writers, one column, so the precedence is decided here rather than by
+    // whoever assigns last: a call that broke leads with why. The log truncates
+    // the row, and "it failed" is the fact the owner needs first; a summary, if
+    // the exchange got far enough to produce one, follows it.
+    if (this.failure && summary !== this.failure) {
+      summary = summary ? `${this.failure} — ${summary}` : this.failure;
+    }
     await this.env.DB.prepare(
       `UPDATE calls SET status = ?, ended_at = datetime('now'), duration_s = ?, summary = ?, intent = ?, message_json = ? WHERE id = ?`
     )
