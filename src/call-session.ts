@@ -671,7 +671,18 @@ export class CallSession implements DurableObject {
     const divergences = CallSession.diffSession(sent, echoed, 'session');
     if (!divergences.length) return;
     const enforcedPaths = this.enforcedSessionPaths().map((p) => `session.${p}`);
-    const isEnforced = (d: string): boolean => enforcedPaths.some((p) => d === p || d.startsWith(`${p}.`) || d.startsWith(`${p} `));
+    // A divergence counts as enforced when it is at, below, **or above** an
+    // enforced path. The ancestor direction is the one the widened comparison
+    // lost: an echo that drops `audio.input` wholesale reports a single
+    // `session.audio.input absent — unverifiable`, which is at or below
+    // nothing, so it read as advisory and no re-send went out — while the
+    // detector, the formats and the transcription were all unverifiable at
+    // once. The per-path version enforced that case by construction, because
+    // it looked up each enforced path and found the parent missing.
+    const isEnforced = (d: string): boolean => {
+      const path = d.split(/[ =]/)[0];
+      return enforcedPaths.some((p) => path === p || path.startsWith(`${p}.`) || p.startsWith(`${path}.`));
+    };
     const enforced = divergences.filter(isEnforced);
     const advisory = divergences.filter((d) => !isEnforced(d));
     if (advisory.length) console.log(`call ${this.callId}: session echo differs (advisory): ${advisory.join('; ')}`);

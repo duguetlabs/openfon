@@ -831,6 +831,21 @@ describe('session echo read-back', () => {
     expect(sent.audio?.input?.transcription?.prompt).toBeUndefined();
   });
 
+  it('re-sends when the echo drops the whole audio block, not just a leaf', async () => {
+    // The widened comparison reports one ancestor divergence — `session.audio
+    // absent — unverifiable` — where the per-path version reported one per
+    // enforced path. Matching only at-or-below an enforced path made the worst
+    // case (detector, formats and transcription all unverifiable at once) the
+    // quietest: advisory, no re-send. Absence must not read as the weaker
+    // signal.
+    const { up, sent } = await started('gpt-realtime-2');
+    const s = structuredClone(sent) as Sess & { audio?: unknown };
+    delete s.audio;
+    echo(up, s);
+    await flush();
+    expect(updatesSent(up)).toBe(2);
+  });
+
   it('reports a divergence outside the enforced subtrees without re-sending', async () => {
     // The read-back covers the whole payload now, not a list of subtrees
     // somebody remembered to add. Measured first: on all five tiers nothing
