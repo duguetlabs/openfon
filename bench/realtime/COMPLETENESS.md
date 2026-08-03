@@ -111,6 +111,11 @@ one earned a table, the other was removed.
   quoting a millisecond value in the body text can still go stale. Stated rather
   than papered over: the same gap is documented in the quality harness, and it is
   how "all seven arms" reached a report one commit after its checker landed.
+- **A column-oriented paired Δ that does not name its control is checked against
+  any comparison where that column's arm is the treatment.** The report's
+  convention is that each arm is compared with its own baseline, and the row
+  gives no way to know which; naming the control in the row label — as the
+  `config_ms` row does — narrows it to the one pair.
 - **A row is checked against its table's declared run, not its own.** A row that
   legitimately quotes two runs — the merged report's headline table carries a
   run-1 column — is bound to both, and a figure from either satisfies it. Binding
