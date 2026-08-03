@@ -1697,12 +1697,20 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
         want = {p.name for p in (HERE / "results" / "main-report").iterdir()
                 if p.is_file()}
         self.assertTrue(want, "the merged report's snapshot is empty")
-        snapshot = [l for l in self._workflow_commands()
-                    if "main-report" in l or l.strip().startswith("cp ")
-                    or l.rstrip().endswith("\\")]
-        # The mkdir + cp pair, taken as written including its continuations.
-        start = next(i for i, l in enumerate(snapshot) if "mkdir" in l)
-        script = "\n".join(snapshot[start:])
+        # The mkdir and the cp that follows it, taken as one contiguous block
+        # including the cp's line continuations. Filtering by keyword instead
+        # spliced in unrelated continuation lines from elsewhere in the
+        # workflow and produced a script that did not parse.
+        cmds = self._workflow_commands()
+        start = next(i for i, l in enumerate(cmds)
+                     if "mkdir" in l and "main-report" in l)
+        block, i = [cmds[start]], start + 1
+        while i < len(cmds):
+            block.append(cmds[i])
+            if not cmds[i].rstrip().endswith("\\"):
+                break
+            i += 1
+        script = "\n".join(block)
         self.assertIn("cp ", script, "the workflow never snapshots the pass")
 
         with tempfile.TemporaryDirectory() as tmp:
