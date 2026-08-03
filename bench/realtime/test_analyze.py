@@ -663,7 +663,7 @@ class TestTailIsDescribedNotDiagnosed(unittest.TestCase):
         sym = [-800, -600, -400, -200, -50, 50, 200, 400, 600, 800]
         r = result(0, 1.0, 1.0, lo=-500, hi=500, diffs=sym)
         self.assertTrue(r.tail_unrepresented)          # median is unrepresentative
-        self.assertFalse(r.one_sided)                  # and it is symmetric
+        self.assertFalse(r.upper_tail_dominates)       # and it is symmetric
         self.assertNotIn("bimodal", r.verdict().lower())   # says nothing of modes
         self.assertIn("wide both ways", r.verdict())
 
@@ -719,7 +719,7 @@ class TestPairedTableAlwaysCarriesTheTail(unittest.TestCase):
             self.assertEqual(row.count("|"), n, f"column count differs: {row}")
 
 
-class TestOneSidedTailVersusTwoSidedSpread(unittest.TestCase):
+class TestMagnitudeAsymmetryNotFrequency(unittest.TestCase):
     """A large p90 alone cannot tell a cost from variance. The proxy
     comparisons and OpenAI's semantic VAD look alike on p90 (+502 vs +3490,
     both large) and are opposite in meaning: the proxy is as often ~500 ms
@@ -735,23 +735,40 @@ class TestOneSidedTailVersusTwoSidedSpread(unittest.TestCase):
 
     def test_symmetric_spread_is_not_called_a_cost(self):
         r = result(12, 1.0, 1.0, lo=-90, hi=141, diffs=self.SYMMETRIC)
-        self.assertTrue(r.tail_unrepresented)     # median really is unrepresentative
-        self.assertFalse(r.one_sided)             # but it is not a one-sided cost
+        self.assertTrue(r.tail_unrepresented)         # median is unrepresentative
+        self.assertFalse(r.upper_tail_dominates)      # but losses do not dwarf gains
         self.assertIn("wide both ways", r.verdict())
-        self.assertIn("not a one-sided cost", r.verdict())
+        self.assertIn("not a cost", r.verdict())
 
-    def test_one_sided_tail_is_called_a_tail(self):
+    def test_magnitude_asymmetry_is_called_a_tail(self):
         r = result(106, 0.263, 1.0, lo=-106, hi=536, diffs=self.ONE_SIDED)
-        self.assertTrue(r.one_sided)
-        self.assertIn("one-sided tail", r.verdict())
+        self.assertTrue(r.upper_tail_dominates)
+        self.assertIn("losses dwarf gains", r.verdict())
+
+    def test_it_is_magnitude_not_frequency(self):
+        """The correction that forced the rename: the cost case was slower on
+        13 of 20 turns and FASTER on 7 — 35%, nowhere near "almost never".
+        What makes it a cost is that losses are an order of magnitude bigger."""
+        r = result(106, 0.263, 1.0, diffs=self.ONE_SIDED)
+        slower, faster = r.sign_counts
+        self.assertEqual((slower, faster), (18, 2))   # frequency: mostly slower…
+        self.assertGreater(faster, 0, "but not 'never' faster")
+        # …and the magnitudes are what differ by an order of magnitude
+        self.assertGreater(max(r.diffs), 10 * abs(min(r.diffs)))
+
+    def test_verdict_states_the_sign_counts_so_frequency_is_never_inferred(self):
+        for diffs in (self.SYMMETRIC, self.ONE_SIDED):
+            r = result(12, 1.0, 1.0, diffs=diffs)
+            slower, faster = r.sign_counts
+            self.assertIn(f"{slower} slower / {faster} faster", r.verdict())
 
     def test_the_two_are_indistinguishable_on_p90_alone(self):
         """The property that made the p90-only verdict wrong."""
         a = result(12, 1.0, 1.0, diffs=self.SYMMETRIC)
         b = result(106, 0.263, 1.0, diffs=self.ONE_SIDED)
         self.assertGreater(a.tail_ms, 400)
-        self.assertGreater(b.tail_ms, 400)        # both large at p90
-        self.assertNotEqual(a.one_sided, b.one_sided)   # opposite in meaning
+        self.assertGreater(b.tail_ms, 400)            # both large at p90
+        self.assertNotEqual(a.upper_tail_dominates, b.upper_tail_dominates)
 
     def test_low_tail_is_the_p10(self):
         r = result(12, 1.0, 1.0, diffs=self.SYMMETRIC)
@@ -759,5 +776,6 @@ class TestOneSidedTailVersusTwoSidedSpread(unittest.TestCase):
 
     def test_empty_diffs_are_neither(self):
         r = result(0, 1.0, 1.0, diffs=[])
-        self.assertFalse(r.one_sided)
+        self.assertFalse(r.upper_tail_dominates)
         self.assertFalse(r.tail_unrepresented)
+        self.assertEqual(r.sign_counts, (0, 0))

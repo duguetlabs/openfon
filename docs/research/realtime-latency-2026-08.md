@@ -17,24 +17,26 @@ the first is reported alongside as a replication. Harness and full method in
 **No. Routing through the Kataleptic gateway costs no detectable latency in either
 direction, for either engine.**
 
-| comparison | run 2 (primary) | 95% CI | **p10 / p90 Δ** | p raw / Holm | run 1 |
-|---|---:|---|---:|---:|---:|
-| gpt-realtime-2 via gateway − direct | **+12 ms** | [−90, +141] | **−494 / +502** | 1.00 / 1.00 | −18 ms |
-| Voice Live via gateway − direct | **−100 ms** | [−280, −15] | **−374 / +171** | 0.043 / 0.87 | −19 ms |
+| comparison | run 2 (primary) | 95% CI | **p10 / p90 Δ** | slower / faster | p raw / Holm | run 1 |
+|---|---:|---|---:|---:|---:|---:|
+| gpt-realtime-2 via gateway − direct | **+12 ms** | [−90, +141] | **−494 / +502** | **12 / 11** | 1.00 / 1.00 | −18 ms |
+| Voice Live via gateway − direct | **−100 ms** | [−280, −15] | **−374 / +171** | **7 / 18** | 0.043 / 0.87 | −19 ms |
 
 **Read the p10/p90 pair, not just the median.** Individual turns scatter by roughly
-±500 ms — but *in both directions*. On the gpt-realtime-2 pair, 6 of 23 turns were more
-than 250 ms slower through the gateway and **4 were more than 250 ms faster** (one by
-1.1 s); on the Voice Live pair, 2 were slower and **9 faster**. That is per-turn variance
+±500 ms — but *in both directions*. By sign, the gpt-realtime-2 pair splits **12 slower / 11 faster** — a coin
+flip — and the Voice Live pair **7 slower / 18 faster**. By magnitude, the worst slow turn
+was +688 ms against a best fast turn of −1123 ms. That is per-turn variance
 — network jitter and model non-determinism — not a cost, because a cost cannot be negative
 as often as it is positive. The confidence intervals are the right summary of it, and they
 are what bounds the claim.
 
-This distinction matters because a *one-sided* tail would be a different finding entirely.
-Compare OpenAI's semantic VAD, measured in the
-[2.1 report](realtime-21-2026-08.md): median +106 ms but p10/p90 of **−336 / +3490** —
-almost nothing on the low side, four turns near +3.5 s on the high side. That is a real
-cost that a median hides. The proxy comparisons are not that shape.
+The distinction that matters is **magnitude, not frequency**. Compare OpenAI's semantic
+VAD, measured in the [2.1 report](realtime-21-2026-08.md): it was slower on 13 of 20 turns
+and *faster on 7*, so it is not "almost never faster" — but its slow turns cost up to
+**+3864 ms** where its fast ones saved at most **457 ms**. That asymmetry in size is what
+makes it a cost a caller feels. The proxy comparisons are symmetric in both size and
+count — **12 slower / 11 faster** on the native pair, worst slow +688 against best fast
+−1123.
 
 Neither survives correction in either run, and the two runs disagree on sign for the
 native pair (+12 vs −18) — which is itself the finding: the effect is smaller than the
@@ -160,11 +162,11 @@ p raw 0.043 / Holm 0.87).
 
 Paired, on identical caller audio in the same round:
 
-| comparison | pairs | median Δ | 95% CI | **p10 / p90 Δ** | p raw | p Holm | verdict |
-|---|---:|---:|---|---:|---:|---:|---|
-| `native-gateway` − `native-direct` | 23 | **+12** | [−90, +141] | **−494 / +502** | 1.000 | 1.000 | wide both ways, not a one-sided cost |
-| `vl-gateway` − `vl-direct` | 25 | **−100** | [−280, −15] | **−374 / +171** | 0.043 | 0.866 | borderline — faster by 100 ms, not robust to Holm |
-| `vl-native-brain` − `native-direct` | 25 | **−46** | [−152, −1] | **−536 / +508** | 0.043 | 0.866 | wide both ways, not a one-sided cost |
+| comparison | pairs | median Δ | 95% CI | **p10 / p90 Δ** | slower / faster | p raw | p Holm | verdict |
+|---|---:|---:|---|---:|---:|---:|---:|---|
+| `native-gateway` − `native-direct` | 23 | **+12** | [−90, +141] | **−494 / +502** | **12 / 11** | 1.000 | 1.000 | wide both ways, not a cost |
+| `vl-gateway` − `vl-direct` | 25 | **−100** | [−280, −15] | **−374 / +171** | **7 / 18** | 0.043 | 0.866 | borderline — faster by 100 ms, not robust to Holm |
+| `vl-native-brain` − `native-direct` | 25 | **−46** | [−152, −1] | **−536 / +508** | **7 / 18** | 0.043 | 0.866 | wide both ways, not a cost |
 
 > Regenerated with the current analyzer. Three changes since first publication: the Holm
 > values are 0.866, not the 0.779 published earlier — that figure predated

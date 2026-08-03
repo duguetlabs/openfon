@@ -227,14 +227,23 @@ alone (`PairedResult.tail_unrepresented`). The case that forced this: OpenAI's s
 VAD costs ~100 ms on four turns in five and ~3.5 s on the fifth, and a paired median of
 +106 ms was published as "no detectable difference".
 
-It also reports the **p10** beside the p90, because a large p90 alone cannot tell a cost
-from variance — and getting that wrong was the next mistake after the first one. The two
-proxy comparisons and OpenAI's semantic VAD both show a big p90 (+502 and +3490) and mean
-opposite things: the proxy's p10 is −494, so the gateway is ~500 ms *faster* about as often
-as it is slower, while semantic VAD's p10 is −336 against a +3490 p90, almost never faster.
-A cost cannot be negative as often as it is positive. The verdict says *"wide both ways,
-not a one-sided cost"* or *"one-sided tail, judge on the tail"* accordingly —
-`PairedResult.one_sided`.
+It also reports the **p10** and the **sign counts** beside the p90, because a large p90
+alone cannot tell a cost from variance — and getting that wrong was the next mistake after
+the first one.
+
+The distinction is **magnitude, not frequency**, and conflating the two was a third
+mistake worth stating plainly. OpenAI's semantic VAD was slower on 13 of 20 turns and
+*faster on 7* — 35% of the time, nowhere near "almost never". What makes it a cost is that
+its slow turns cost up to **+3864 ms** while its fast ones saved at most **457 ms**: an
+order of magnitude apart, and a caller notices four seconds of silence but never notices
+300 ms. The proxy comparisons are symmetric in both respects — 12 slower / 11 faster on the
+native pair, worst slow +688 against best fast −1123 — so there is nothing for a caller to
+notice in either direction.
+
+The verdict says *"losses dwarf gains (13 slower / 7 faster), judge on the tail"* or
+*"wide both ways (12 slower / 11 faster), not a cost"* accordingly, and every paired row
+carries the counts so the frequency question can never be inferred from the magnitude one
+again — `PairedResult.upper_tail_dominates` and `.sign_counts`.
 
 The verdict **describes the numbers and diagnoses no modes**. An earlier version said
 "bimodal", which two quantiles cannot establish — a broad symmetric spread with median 0
