@@ -1311,6 +1311,57 @@ class TestFixtureHygiene(unittest.TestCase):
                         f"for fiction — it could be someone's real number")
 
 
+class TestTrackAGapsAreVisible(unittest.TestCase):
+    """`complete` must be able to be 0, and the runner must not eat the data."""
+
+    def test_absent_cells_are_emitted_with_complete_zero(self):
+        """The scorer iterated only the groups that existed.
+
+        So an absent (arm, condition) cell produced no row, every row carried
+        complete=1, and `complete` could never be 0 — a consumer trusting the
+        documented signal saw a complete matrix because the gaps were invisible,
+        not because they were filled. Absent data reading as complete, in the
+        field named `complete`.
+        """
+        with (HERE / "results" / "asr_scores.csv").open() as f:
+            rows = list(csv.DictReader(f))
+        arms = {r["arm"] for r in rows}
+        langs = {r["lang"] for r in rows}
+        conds = {r["condition"] for r in rows}
+        self.assertEqual(len(rows), len(arms) * len(langs) * len(conds),
+                         "the CSV is not the full cross-product, so an absent "
+                         "cell is still invisible rather than complete=0")
+        incomplete = [r for r in rows if r["complete"] == "0"]
+        self.assertTrue(incomplete, "no cell reports complete=0, but the "
+                                    "committed matrix is asymmetric by design")
+        for r in incomplete:
+            self.assertEqual(r["n"], "0")
+            self.assertEqual(r["wer"], "", "an absent cell must have no WER")
+
+    def test_the_readme_documents_the_signal_the_scorer_emits(self):
+        readme = (HERE / "README.md").read_text()
+        self.assertIn("complete=0", readme)
+        self.assertIn("--allow-incomplete", readme)
+
+    def test_run_all_refuses_to_truncate_committed_results(self):
+        """Following the README must not destroy the data the reports quote.
+
+        `run_all.sh` truncates $OUT/results/*.jsonl and OUT defaults to this
+        directory, so the documented invocation in a clean checkout replaced the
+        committed study with a smaller one — the same in-place overwrite that
+        made the merged report unreproducible, reached by following the
+        instructions.
+        """
+        before = (HERE / "results" / "asr.jsonl").read_bytes()
+        r = subprocess.run(["/bin/bash", str(HERE / "run_all.sh")],
+                           capture_output=True, text=True, cwd=str(HERE),
+                           env={"PATH": "/usr/bin:/bin", "DATA": "/nonexistent"})
+        self.assertEqual(r.returncode, 2, f"expected a refusal: {r.stdout}{r.stderr}")
+        self.assertIn("refusing to truncate", r.stderr)
+        self.assertEqual((HERE / "results" / "asr.jsonl").read_bytes(), before,
+                         "the committed results were modified")
+
+
 class TestReportsMatchTheirData(unittest.TestCase):
     """The reports are checked against the CSVs, and the checker can fail.
 
@@ -1678,6 +1729,29 @@ class TestReportsMatchTheirData(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertTrue(any("summary_per_run.csv" in x and "missing" in x
                                 for x in out["problems"]), out["problems"])
+
+    def test_the_headline_spend_is_checked_against_the_cost_table(self):
+        """The guard must catch the defect it was written for.
+
+        It validated only the table's internal arithmetic, while the figure a
+        reader quotes lives in the opening paragraph. Both reports' headlines had
+        been unreconciled estimates ($23.19 vs $22.82; $9.03 vs $8.85) — reverting
+        either left the table untouched and the run green.
+        """
+        for report, stale, current in (
+                ("voice-engine-quality-2026-08.md",
+                 "Actual spend **$23.19**", "Actual spend **$22.82**"),
+                ("voice-engine-quality-2026-08-gpt-realtime-2-1.md",
+                 "Spend **$9.03** (cap $12)", "Spend **$8.85** (cap $12)")):
+            with self.subTest(report=report), tempfile.TemporaryDirectory() as tmp:
+                docs = self._sandbox(tmp)
+                p = docs / report
+                self.assertIn(current, p.read_text())
+                p.write_text(p.read_text().replace(current, stale))
+                out, code = self._run(docs=docs)
+                self.assertEqual(code, 1, "a stale headline spend must fail")
+                self.assertTrue(any("headline spend" in x for x in out["problems"]),
+                                out["problems"])
 
     def test_the_merged_report_keeps_its_own_results_snapshot(self):
         """The 2.1 run re-judged every arm and overwrote results/ in place.

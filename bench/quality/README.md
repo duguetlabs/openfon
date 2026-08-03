@@ -78,14 +78,32 @@ DATA=/path/to/data
 # 3. Validate every arm's session payload before spending anything.
 .venv/bin/python bench/quality/probe_session.py --wav $DATA/conditions/clean/en_us/en_us-000.wav
 
-# 4. Run. Arms and conditions are strictly serialised.
-cd bench/quality && DATA=$DATA PY=../../.venv/bin/python ./run_all.sh
+# 4. Run — ALWAYS to a new directory. run_all.sh truncates $OUT/results/*.jsonl,
+#    and OUT defaults to bench/quality, so omitting it would destroy the
+#    committed data both reports quote. The script now refuses rather than
+#    letting that happen; set OUT and it proceeds.
+cd bench/quality
+OUT=/tmp/mybench DATA=$DATA PY=../../.venv/bin/python ./run_all.sh
+
+#    Its defaults reproduce the MERGED report only: three ASR arms, five
+#    scenario arms, all eight conditions. The addendum's three arms are an
+#    extension, with a deliberately smaller condition set:
+OUT=/tmp/mybench DATA=$DATA PY=../../.venv/bin/python TRACK=a \
+  ASR_ARMS="native-gpt-realtime-21 native-gpt-realtime-21-mini" \
+  CONDITIONS="clean,cafe_snr10,cafe_snr5,cafe_snr0,tel,tel_cafe_snr10" ./run_all.sh
+OUT=/tmp/mybench DATA=$DATA PY=../../.venv/bin/python TRACK=b \
+  SC_ARMS="native-gpt-realtime-21 native-gpt-realtime-21-mini vl-native-brain-21" ./run_all.sh
+
+#    Those two blocks append, so the full committed matrix is the merged-report
+#    run followed by both. Together they give 1800 ASR rows and 246 scenario
+#    runs — the numbers in results/ today.
 
 # 5. Score.
-# The committed matrix is asymmetric: the two 2.1 arms were run on six of the
-# eight conditions (see the addendum), so eight (arm, condition) cells are
-# absent by design. --allow-incomplete accepts that and marks the affected rows
-# complete=0; without it the run aborts and writes nothing.
+# The matrix is asymmetric by design: the two 2.1 ASR arms skip cafe_snr20 and
+# tel_loss3, so eight (arm, condition) cells are absent. --allow-incomplete
+# accepts that; without it the run aborts and writes nothing. Absent cells are
+# emitted with n=0 and complete=0 rather than omitted, so the gaps are visible
+# in the CSV instead of showing up as a complete matrix with fewer rows.
 python score_asr.py   --hyp results/asr.jsonl --expect-clips 25 --allow-incomplete \
                       --out results/asr_scores.csv
 python score_slots.py --runs results/scenarios.jsonl --out results/slots.csv

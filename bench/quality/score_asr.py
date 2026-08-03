@@ -146,18 +146,34 @@ def main() -> None:
                  f"{'…' if len(problems) > 6 else ''}). Re-run the gaps, pass "
                  f"--expect-clips, or use --allow-incomplete.")
 
+    # Iterate the expected cross-product, not the groups that happen to exist.
+    # Iterating `groups` meant an absent cell produced no row at all, so every
+    # row carried complete=1 and `complete` could never be 0 — a consumer
+    # trusting the documented signal saw a complete matrix because the gaps were
+    # invisible rather than because they were filled. Absent data reading as
+    # complete, in the field named `complete`.
     out = []
-    for (arm, lang, cond), rs in sorted(groups.items()):
-        w, c, n, submitted = wer_cer(rs, lang)
-        misses = sum(1 for r in rs if not r["hypothesis"].strip())
-        out.append({"arm": arm, "lang": lang, "condition": cond,
-                    "n": n, "n_expected": expect,
-                    "complete": int(n == expect),
-                    "wer": round(w, 2), "cer": round(c, 2),
-                    "empty_hyp": misses,
-                    "unscorable_refs": submitted - n,
-                    "errors": sum(1 for r in rs if r.get("error")),
-                    "audio_min": round(sum(r["audio_seconds"] for r in rs) / 60, 2)})
+    for arm in arms:
+        for lang in langs:
+            for cond in conds:
+                rs = groups.get((arm, lang, cond), [])
+                if not rs:
+                    out.append({"arm": arm, "lang": lang, "condition": cond,
+                                "n": 0, "n_expected": expect, "complete": 0,
+                                "wer": "", "cer": "", "empty_hyp": "",
+                                "unscorable_refs": "", "errors": "",
+                                "audio_min": 0.0})
+                    continue
+                w, c, n, submitted = wer_cer(rs, lang)
+                misses = sum(1 for r in rs if not r["hypothesis"].strip())
+                out.append({"arm": arm, "lang": lang, "condition": cond,
+                            "n": n, "n_expected": expect,
+                            "complete": int(n == expect),
+                            "wer": round(w, 2), "cer": round(c, 2),
+                            "empty_hyp": misses,
+                            "unscorable_refs": submitted - n,
+                            "errors": sum(1 for r in rs if r.get("error")),
+                            "audio_min": round(sum(r["audio_seconds"] for r in rs) / 60, 2)})
 
     with open(a.out, "w", newline="") as f:
         wcsv = csv.DictWriter(f, fieldnames=list(out[0].keys()))
@@ -165,8 +181,12 @@ def main() -> None:
         wcsv.writerows(out)
     print(f"wrote {len(out)} rows -> {a.out}")
 
-    # Robustness summary per (arm, lang).
-    idx = {(r["arm"], r["lang"], r["condition"]): r["wer"] for r in out}
+    # Robustness summary per (arm, lang). Absent cells now appear in `out` with
+    # an empty WER; they must not enter this index, or a missing `clean` reads
+    # as the string "" — which is not None, passes the guard below, and then
+    # fails on the subtraction. An absent cell is absent here too.
+    idx = {(r["arm"], r["lang"], r["condition"]): r["wer"] for r in out
+           if isinstance(r["wer"], (int, float))}
     summary = []
     for arm, lang in sorted({(r["arm"], r["lang"]) for r in out}):
         clean = idx.get((arm, lang, "clean"))

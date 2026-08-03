@@ -549,12 +549,28 @@ def check_conditions(md: str, doc: str, results: Path, root: Path) -> list[str]:
     return problems
 
 
-def check_cost_table(md: str, doc: str) -> list[str]:
-    """A cost table whose line items do not sum to its own total is a real error.
+# "Actual spend **$22.82**" / "Spend **$8.85** (cap $12)" — the figure a reader
+# quotes, which lives nowhere near the table that justifies it.
+SPEND_HEADLINE = re.compile(r"spend \*\*\$(\d+(?:\.\d+)?)\*\*", re.I)
 
-    Found once already: the header quoted an estimate written before the table.
+
+def check_cost_table(md: str, doc: str) -> list[str]:
+    """The cost table's arithmetic **and** the headline that summarises it.
+
+    Checking only the table's internal consistency missed the very defect this
+    guard was written for: both reports' headline `Actual spend` had been an
+    estimate written before the table was itemised and never reconciled against
+    it ($23.19 vs $22.82; $9.03 vs $8.85). Reverting either headline left the
+    table untouched and the run green.
+
+    The general shape, worth watching for elsewhere: **a guard that validates an
+    artifact's internal consistency while the claim people actually quote lives
+    somewhere else in the document.** This was the only instance in this file —
+    every other check compares a document claim against generated data — but it
+    is the easiest kind to write by accident.
     """
     problems = []
+    totals: list[float] = []
     for tbl in tables(md):
         items, total, total_unparsed = [], None, False
         for row in tbl:
@@ -579,10 +595,28 @@ def check_cost_table(md: str, doc: str) -> list[str]:
             problems.append(f"{doc}: a table states a total ({total:.2f}) with "
                             "no parseable line items to check it against")
         if total is not None and items:
+            totals.append(total)
             s = round(sum(items), 2)
             if abs(s - total) > 0.011:
                 problems.append(f"{doc}: cost table line items sum to {s:.2f}, "
                                 f"stated total {total:.2f}")
+
+    # The headline against the table it summarises.
+    heads = [float(m.group(1)) for m in SPEND_HEADLINE.finditer(md)]
+    if totals and not heads:
+        problems.append(
+            f"{doc}: has a cost table totalling {totals[0]:.2f} but states no "
+            "headline spend, so the figure a reader quotes is unchecked")
+    elif heads and not totals:
+        problems.append(
+            f"{doc}: states a headline spend of ${heads[0]:.2f} with no cost "
+            "table to check it against")
+    else:
+        for head in heads:
+            if not any(abs(head - t) <= 0.011 for t in totals):
+                problems.append(
+                    f"{doc}: headline spend ${head:.2f} does not match the cost "
+                    f"table total ({', '.join(f'{t:.2f}' for t in totals)})")
     return problems
 
 

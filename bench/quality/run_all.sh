@@ -34,6 +34,27 @@ OUT="${OUT:-$HERE}"
 cd "$HERE"
 mkdir -p "$OUT/results" "$OUT/logs"
 
+# Refuse to truncate committed results. The `: >` below empties asr.jsonl and
+# scenarios.jsonl, and OUT defaults to the repository's own results directory —
+# so running this in a clean checkout destroys the data both published reports
+# are derived from, and replaces it with a smaller study under a different arm
+# set. That is the same in-place overwrite that made the merged report's figures
+# unreproducible, except reached by following the documented procedure.
+#
+# A re-run is fine; it just has to say where it is going. Set OUT to a new
+# directory, or FORCE=1 if you really mean to replace what is there.
+if [ "${FORCE:-0}" != "1" ]; then
+  for f in "$OUT/results/asr.jsonl" "$OUT/results/scenarios.jsonl"; do
+    if [ -s "$f" ]; then
+      echo "refusing to truncate $f ($(wc -l < "$f" | tr -d ' ') rows)." >&2
+      echo "  These are the committed results the reports quote. To run a new" >&2
+      echo "  study:   OUT=/tmp/mybench DATA=\$DATA ./run_all.sh" >&2
+      echo "  To deliberately replace them:   FORCE=1 ..." >&2
+      exit 2
+    fi
+  done
+fi
+
 FAILURES=()
 run() {  # run <label> <cmd...>
   local label="$1"; shift
