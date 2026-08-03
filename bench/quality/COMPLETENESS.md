@@ -134,6 +134,19 @@ safe, and is that guaranteed or merely likely?** The fix is ordering plus an
 explicit option: `FORCE_LOGS=1` propagates `--force-logs`, and the whole matrix
 is walked once with `--preflight-logs` before anything is truncated.
 
+**And the fix reproduced the bug inside itself, which is why it is written up
+rather than quietly patched.** The first version of the preflight returned
+before the arm was resolved or the data root read, so it answered "are these
+logs free?" while `run_all.sh` was asking "is this run safe to start?".
+`FORCE=1` with an unknown arm therefore cleared the results and failed on the
+first invocation — the identical destroy-then-recreate failure, through a
+different input, inside its own remedy. **A preflight is only as strong as the
+question it answers; state that question and check every input that can
+falsify it.** Both runners now validate arm, data root, manifests and caller
+audio before the preflight returns, and hoisting the manifests out of the loop
+closed the same shape a third time (a missing manifest for condition 5 used to
+abort after four had been billed).
+
 Two riders, both instances of rules already in this file. A guard that fires at
 the moment one file is opened is a guard that fires **after** earlier units of
 the same run have been billed — `run_asr.py` held every condition's transcripts
@@ -233,6 +246,16 @@ a non-numeric count all fell through silently. Each now reports.
 diagnostic that finds that shape is at the top of this file. `check_cost_table`
 now reads the headline `Actual spend` as well as the table, in both directions:
 a table with no headline, and a headline with no table, are each reported.
+
+It also had a fall-through of the quietest kind: a line whose rate or minutes
+were *stated but unreadable* took the same `continue` as a line that states no
+inputs at all, so rewriting a rate as `bogus` switched that line's arithmetic
+off and the run stayed green while the column total still summed the unchanged
+dollar figure. **Blank is an absence; non-blank and unparseable is a finding**,
+and collapsing the two is how a checker certifies what it never read. The em
+dash these tables write for an unused leg is a *stated* absence, so `is_absent`
+names the placeholders explicitly rather than treating everything it cannot
+parse as missing.
 
 **A coverage number counted from current behaviour certifies current behaviour,
 including its blind spots.** The per-report counts were first read off whatever

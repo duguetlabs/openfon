@@ -1807,6 +1807,58 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
             self.assertIn("vl-gpt41mini", r.stderr)
             self.assertEqual((res / "asr.jsonl").read_bytes(), before)
 
+    def test_a_bad_input_does_not_clear_the_results_it_cannot_replace(self):
+        """The preflight has to mean "safe to start", not "the logs are free".
+
+        Codex, on 1200a40, against the fix for the original finding: the
+        preflight returned before the arm was resolved or the data root read,
+        so an unknown arm cleared the safety pass, `FORCE=1` truncated the
+        result file, and the run failed on the first invocation. That is the
+        same destroy-then-recreate defect the preflight was added to stop,
+        surviving inside its own fix and reached through a different input.
+
+        Driven through run_all.sh with the real runners, because the composition
+        is what broke — each part was individually correct.
+        """
+        # The composition — "nothing is truncated until a preflight has
+        # succeeded" — is asserted on every interpreter, including CI's, where
+        # the runners cannot even import. Skipping there would leave the
+        # property untested exactly where nobody watches it. The specific
+        # refusal message is asserted only where the runner can run.
+        venv = Path(HERE).parent.parent / "venv" / "bin" / "python"
+        py, real = (str(venv), True) if venv.exists() else (sys.executable, False)
+        for track, fname, env in (
+                ("a", "asr.jsonl", {"ASR_ARMS": "NO-SUCH-ARM"}),
+                ("a", "asr.jsonl", {"ASR_ARMS": "vl-gpt41mini",
+                                    "CONDITIONS": "clean"}),
+                ("b", "scenarios.jsonl", {"SC_ARMS": "vl-gpt41mini",
+                                          "TRIALS": "1"})):
+            with self.subTest(track=track, **env), tempfile.TemporaryDirectory() as tmp:
+                res = Path(tmp) / "results"
+                res.mkdir()
+                (res / fname).write_text('{"row": 1}\n')
+                before = (res / fname).read_bytes()
+                r = subprocess.run(
+                    ["/bin/bash", str(HERE / "run_all.sh")],
+                    capture_output=True, text=True, cwd=str(HERE),
+                    env={"PATH": "/usr/bin:/bin", "PY": py, "OUT": tmp,
+                         "FORCE": "1", "TRACK": track,
+                         # A data root that does not exist: every arm's inputs
+                         # are unreadable, which the preflight must see.
+                         "DATA": str(Path(tmp) / "nowhere"), **env})
+                self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+                self.assertEqual(
+                    (res / fname).read_bytes(), before,
+                    "FORCE=1 erased results before discovering the run could "
+                    "not produce their replacement")
+                if real:
+                    self.assertRegex(
+                        r.stderr,
+                        r"not a known arm|no clip manifest|audio file\(s\) are "
+                        r"missing",
+                        "the preflight stopped the run without saying which "
+                        "input was wrong")
+
     def test_a_broken_preflight_is_not_reported_as_a_log_collision(self):
         """"Bounded" naming the wrong bound, in a new place.
 
@@ -1826,7 +1878,7 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
                 env={"PATH": "/usr/bin:/bin", "DATA": "/x", "OUT": tmp,
                      "PY": str(py), "TRACK": "a", "ASR_ARMS": "vl-gpt41mini"})
             self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
-            self.assertIn("not a", r.stderr)
+            self.assertIn("NOT a log collision", r.stderr)
             self.assertNotIn("would replace raw logs", r.stderr,
                              "a broken preflight was blamed on the logs")
 
@@ -1984,6 +2036,28 @@ class TestReportsMatchTheirData(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertTrue(any("cost table" in x for x in out["problems"]),
                             out["problems"])
+
+    def test_an_unreadable_cost_input_is_not_a_missing_one(self):
+        """Codex, on 1200a40: rewriting a rate switched its line's check off.
+
+        A stated-but-unparseable rate or minute count took the same `continue`
+        as a line that states no inputs at all, so the arithmetic was never
+        verified while the column total still summed the unchanged dollar
+        figure — the checker certifying a line it had not read. The em dash
+        these tables use for an unused leg must stay a legitimate absence.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08-gpt-realtime-2-1.md"
+            self.assertIn("0.070", p.read_text())
+            p.write_text(p.read_text().replace("0.070", "bogus", 1))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1, "an unreadable rate must not pass")
+            self.assertTrue(any("cannot read" in x for x in out["problems"]),
+                            out["problems"])
+        # ...and the committed reports, which are full of em dashes, stay clean.
+        out, code = self._run()
+        self.assertEqual(code, 0, out["problems"])
 
     def test_an_unmapped_report_fails_rather_than_being_skipped(self):
         """A document nothing checks must not read as a document that passed."""

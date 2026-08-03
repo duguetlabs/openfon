@@ -368,6 +368,27 @@ async def main() -> None:
         sys.exit(str(e).replace("the fixture", a.scenarios))
     Path(a.logdir).mkdir(parents=True, exist_ok=True)
 
+    if a.arm not in ARMS:
+        sys.exit(f"--arm {a.arm!r} is not a known arm. Known: "
+                 f"{', '.join(sorted(ARMS))}")
+
+    # Checked here so `--preflight-logs` means "this invocation is safe to
+    # start", not merely "its logs are free". Clearing an unknown arm or a
+    # missing audio tree lets run_all.sh truncate the results and only then
+    # discover the problem — the destroy-then-recreate failure the log
+    # preflight exists to stop, arriving through a different input.
+    # Same indexing as the runner's `enumerate(turns_meta)` below — zero-based.
+    missing = [str(p) for sc in spec["scenarios"]
+               if not want or sc["id"] in want
+               for ti in range(len(sc["turns"]))
+               if not (p := Path(a.audio) / sc["id"] / f"t{ti:02d}.wav").exists()]
+    if missing:
+        sys.exit(f"{len(missing)} caller audio file(s) are missing under "
+                 f"--audio {a.audio}:\n  " + "\n  ".join(missing[:10]) +
+                 ("\n  ..." if len(missing) > 10 else "") +
+                 "\nA scenario whose audio is absent cannot be run; it would "
+                 "be recorded as an engine failure.")
+
     # Every log this invocation will write, checked before the first call is
     # placed rather than one at a time as each scenario starts. See
     # engines.preflight_logs: a collision on scenario 7 aborts after six have

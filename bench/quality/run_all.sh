@@ -140,8 +140,8 @@ pre() {  # pre <label> <cmd...> — same invocation, --preflight-logs appended
       echo "  ^ $label would replace raw logs it must not" >&2
       COLLISIONS=$((COLLISIONS + 1)) ;;
     *)
-      echo "  ^ $label: the log preflight itself exited $rc — this is not a" >&2
-      echo "    log collision. Nothing has been run or truncated." >&2
+      echo "  ^ $label: preflight exited $rc — see its message above. This is" >&2
+      echo "    NOT a log collision; the logs may be fine." >&2
       BROKEN=$((BROKEN + 1)) ;;
   esac
 }
@@ -198,8 +198,9 @@ if [ "$COLLISIONS" -gt 0 ]; then
 fi
 if [ "$BROKEN" -gt 0 ]; then
   echo >&2
-  echo "$BROKEN log preflight(s) could not run (above), so this run cannot be" >&2
-  echo "  certified safe to start. Nothing has been truncated." >&2
+  echo "$BROKEN preflight(s) refused for a reason other than a log collision" >&2
+  echo "  (above) — an unknown arm, a missing data root, a broken interpreter." >&2
+  echo "  This run is not certified safe to start. Nothing has been truncated." >&2
   exit 2
 fi
 

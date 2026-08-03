@@ -234,6 +234,43 @@ async def main() -> None:
                  "each condition writes one raw log, so a repeat would "
                  "overwrite the log the first pass just paid for")
 
+    if a.arm not in ARMS:
+        sys.exit(f"--arm {a.arm!r} is not a known arm. Known: "
+                 f"{', '.join(sorted(ARMS))}")
+
+    # Everything that can be checked without the network is checked here, so
+    # `--preflight-logs` means "this invocation is safe to start" rather than
+    # "its logs are free". A preflight that clears an unknown arm or a missing
+    # data root lets run_all.sh truncate the results and discover the problem
+    # during the real run — the same destroy-then-recreate failure the log
+    # preflight was added to stop, reached through a different input.
+    #
+    # Hoisting the manifests out of the loop fixes the same shape a second
+    # time: a missing manifest for condition 5 used to abort after four
+    # conditions had been paid for.
+    clips_by_cond: dict[str, list[dict]] = {}
+    for cond in conditions:
+        d = root / cond / a.lang
+        mpath = d / "manifest.jsonl"
+        if not mpath.exists():
+            sys.exit(f"no clip manifest at {mpath}. --data must point at the "
+                     "conditions root, which holds <condition>/<lang>/manifest.jsonl")
+        try:
+            manifest = [json.loads(l) for l in mpath.read_text().splitlines()
+                        if l.strip()]
+        except json.JSONDecodeError as e:
+            sys.exit(f"{mpath} is not readable as JSONL: {e}")
+        clips = [{"id": m["id"], "path": str(d / m["wav"]),
+                  "reference": m["reference"], "condition": cond}
+                 for m in manifest[: a.n]]
+        if not clips:
+            # An empty cell is indistinguishable from an engine that
+            # transcribed nothing once it reaches the scorer, so it is refused
+            # here rather than measured.
+            sys.exit(f"{mpath} lists no clips, so {a.lang}/{cond} would "
+                     "produce an empty cell rather than a measurement")
+        clips_by_cond[cond] = clips
+
     # Validate every log this invocation will write before the first batch is
     # billed. `open_log` alone checks condition N's log only once conditions
     # 1..N-1 have been paid for, and the rows for those lived in `results` until
@@ -246,11 +283,7 @@ async def main() -> None:
         return
 
     for cond in conditions:
-        d = root / cond / a.lang
-        manifest = [json.loads(l) for l in (d / "manifest.jsonl").read_text().splitlines()]
-        clips = [{"id": m["id"], "path": str(d / m["wav"]),
-                  "reference": m["reference"], "condition": cond}
-                 for m in manifest[: a.n]]
+        clips = clips_by_cond[cond]
         print(f"[{a.arm}] {a.lang}/{cond}: {len(clips)} clips", file=sys.stderr)
         logp = logs[cond]
         rows: list[dict] = []

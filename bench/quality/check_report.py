@@ -249,6 +249,16 @@ def is_estimate(cell: str) -> bool:
     return "~" in cell
 
 
+# A cell that states no value. Blank, or the dash these tables use for a leg a
+# cost line did not use. Distinguished from a cell that states something
+# unreadable, which is a finding rather than an absence.
+ABSENT_CELL = re.compile(r"|[—–-]+|n/?a")
+
+
+def is_absent(cell: str) -> bool:
+    return ABSENT_CELL.fullmatch(norm_label(cell)) is not None
+
+
 def parse_cell(cell: str, n_fields: int) -> tuple[list[float], bool] | None:
     """The value(s) a cell states and whether they are exact, or None.
 
@@ -989,12 +999,32 @@ def check_cost_table(md: str, doc: str) -> list[str]:
         for row in tbl[1:]:
             if len(row) <= dollar_i or "total" in norm_label(row[0]):
                 continue
+            cells = {"$/min": row[rate_i] if rate_i < len(row) else "",
+                     "$": row[dollar_i],
+                     **{norm_label(head[i]): row[i] for i in mins if i < len(row)}}
             rate = parse_number(row[rate_i]) if rate_i < len(row) else None
             paid = parse_number(row[dollar_i])
             parts = [v for i in mins if i < len(row)
                      and (v := parse_number(row[i])) is not None]
+            # A line that states no inputs claims no arithmetic — but a line
+            # that states an input this parser cannot read is a different
+            # thing, and skipping it silently switched the check off: changing
+            # a rate to `bogus` left the run green while the column total still
+            # summed the unchanged dollar figure.
+            #
+            # "Absent" has to include the em-dash these tables write for a leg
+            # a line did not use ("| vl-native-brain | — | 16.5 |"). A
+            # placeholder is a stated absence; anything else non-blank is a
+            # figure that failed to parse.
+            if unreadable := sorted(k for k, c in cells.items()
+                                    if not is_absent(c) and parse_number(c) is None):
+                problems.append(
+                    f"{doc}: cost line {norm_label(row[0])!r} states "
+                    f"{unreadable} in a form this checker cannot read, so its "
+                    "arithmetic was not verified")
+                continue
             if rate is None or paid is None or not parts:
-                continue  # a line that states no inputs claims no arithmetic
+                continue
             want = round(sum(parts) * rate, 2)
             # Line items are rounded to the cent, and "~" marks an estimate.
             tol = 0.02 if "~" in "".join(row) else 0.011
