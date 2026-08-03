@@ -122,6 +122,29 @@ for a different problem. Both now raise, and `run_all.sh` validates **before** i
 truncates, because checking afterwards reports the failure and has still
 destroyed the file.
 
+**Destroy-then-recreate is only safe when the recreate cannot fail, and here it
+failed by construction.** `FORCE=1` — the option whose whole purpose is
+"replace what is there" — truncated `$OUT/results/*.jsonl` and then never
+forwarded any log-replacement option to the runners. Every raw log already on
+disk therefore made `open_log` refuse, on the *first* invocation: the results
+were erased and the forced replacement could not start. The two guards were each
+correct and their composition was not, which is the thing to look for — ask of
+any destructive step **what has to succeed afterwards for this to have been
+safe, and is that guaranteed or merely likely?** The fix is ordering plus an
+explicit option: `FORCE_LOGS=1` propagates `--force-logs`, and the whole matrix
+is walked once with `--preflight-logs` before anything is truncated.
+
+Two riders, both instances of rules already in this file. A guard that fires at
+the moment one file is opened is a guard that fires **after** earlier units of
+the same run have been billed — `run_asr.py` held every condition's transcripts
+in memory until after the loop, so a collision on the last condition discarded
+all of them. Rows are now written as each condition completes, and both runners
+validate every target log up front. And the preflight exits a *distinct* status
+(`LOG_COLLISION_EXIT`), because reporting a missing interpreter or a bad
+argument as "these logs are populated" is the timeout-naming-the-wrong-bound
+defect in a new place: it sends the next person to delete files that were never
+the problem.
+
 **The other half, and the one you can answer by inspection: what sentence was
 this check written for, and is that sentence inside what it reads?** The rule
 above is about where the *expectation* comes from; this is about whether the
@@ -130,6 +153,20 @@ report's headline `Actual spend` had never equalled its line items — and it re
 only the table. The headline lives in the opening paragraph, so restoring the
 original bug in either report left the run green. The guard covered everything
 except its own motivating case.
+
+**And a variant of it on the arm axis: the grouping *is* the claim, so a grouped
+row has to be able to fail.** The `gpt-realtime-2 / 2.1` row of the (recogniser,
+VAD, brain) table states one slot-capture figure for two arms, and that row is
+what backs the addendum's structural finding — capture is a function of
+(recogniser, VAD) and not of the brain. It was compared against
+`native-gpt-realtime-2` alone, so if 2.1's capture moved, the stale shared value
+still passed on the incumbent: an assertion that two things agree, validated in a
+way that cannot notice them disagreeing. `RECOGNISER_ROWS` now maps every row to
+a **tuple** of arms and compares each; a single-arm value is what made the gap
+invisible, so there are no bare strings left to hide in. The sweep for the same
+shape elsewhere found one other multi-arm construct, `ARM_GROUPS`, which already
+compares the group's min and max — and one adjacent fall-through, a compound
+metric under a group column, which is now reported rather than skipped.
 
 That check was the only instance in the file, and the reason is worth stating,
 because it is the test for the next one: **every other check compares a document
@@ -154,8 +191,8 @@ the intent rather than the behaviour.
 | 1 | `run_scenarios.py` `main()` | did this arm/trial complete | every scenario ran without raising **and** produced at least one agent turn; **exits non-zero** if any failed | nothing known. A silently-empty scenario used to reach the scorer as a valid row. |
 | 2a | `run_asr.py` `main()` | did every condition produce results | retries not exhausted for any condition; **exits non-zero** if any were | nothing known. Exiting zero was the bug: a full cell of error rows has every expected clip id, so the scorer scored an outage as 100% WER. Paired with #11's all-error guard. |
 | 2 | `run_asr.py` `transcribe_batch()` | is this session still coherent | each clip gets `input_audio_buffer.committed`; a timeout **raises** `CommitDesync` rather than continuing | nothing known. Continuing was the bug: a late commit was consumed as the next clip's, cascading wrong hypotheses. |
-| 16 | `engines.open_log` | may this raw log be replaced | the target is absent or empty, unless `--force-logs` | nothing known. Nothing guarded `logs/` at all: the runners open with mode `"w"` before doing any work and `--logdir` defaults to the committed directory, so a stray invocation from `bench/quality` empties a log and a subsequent failure leaves it empty. That happened — `sc-vl-gpt41mini-book-de-01-t1.jsonl` was zeroed while *verifying a test*, and the run became unre-scorable while its result still claimed an `end_call`. |
-| 3 | `run_all.sh` | did the matrix complete | every runner invocation's exit code; collects failures and **exits non-zero**. Also **refuses to start** if `$OUT/results/*.jsonl` are non-empty, unless `APPEND=1` (adds arms, destroys nothing) or `FORCE=1` (replaces) | a runner that exits 0 having swallowed its errors — which is why #1 exists. The refusal was added after the README's own step 4 was found to destroy the committed study: `OUT` defaults to `$HERE`, so the documented invocation truncated the data both reports quote and replaced it with a smaller run under the old arm set. |
+| 16 | `engines.open_log`, `engines.preflight_logs` | may this raw log be replaced | the target is absent or empty, unless `--force-logs`. `preflight_logs` asks the same question of **every** log an invocation will write, before the first one is opened, and exits `LOG_COLLISION_EXIT` (97) so a caller can tell a collision from a preflight that could not run | nothing known. Nothing guarded `logs/` at all: the runners open with mode `"w"` before doing any work and `--logdir` defaults to the committed directory, so a stray invocation from `bench/quality` empties a log and a subsequent failure leaves it empty. That happened — `sc-vl-gpt41mini-book-de-01-t1.jsonl` was zeroed while *verifying a test*, and the run became unre-scorable while its result still claimed an `end_call`. Guarding one file at the moment it is opened was the next bug: see "destroy-then-recreate" below. |
+| 3 | `run_all.sh` | did the matrix complete | every runner invocation's exit code; collects failures and **exits non-zero**. Also **refuses to start** if `$OUT/results/*.jsonl` are non-empty, unless `APPEND=1` (adds arms, destroys nothing) or `FORCE=1` (replaces); and walks the whole matrix once with `--preflight-logs` **before** any truncation, so a raw-log collision stops the run while the results it would replace still exist | a runner that exits 0 having swallowed its errors — which is why #1 exists. The refusal was added after the README's own step 4 was found to destroy the committed study: `OUT` defaults to `$HERE`, so the documented invocation truncated the data both reports quote and replaced it with a smaller run under the old arm set. `FORCE=1` then reintroduced it from the other side — see below. |
 | 4 | `summarize.py` trial check | did every arm run everything | **set of trial ids** per `(arm, scenario)` equals `{1..k}`, no duplicates, no extras | nothing known. Counting rows was the bug: three copies of trial 1 satisfied `--trials 3`. Runners append to JSONL, so re-runs duplicate rather than replace. |
 | 5 | `summarize.py` judge check | was every run judged | a verdict row exists for every `(arm, trial, scenario)`; empty `--judge` file is an **error**, not "no judge" | a judge that returns verdicts for the wrong candidates — blocked in `parse_verdicts` by id membership. |
 | 5b | `summarize.py` scenario universe | which scenarios should exist | the **fixture's** scored scenario ids, against the ids present; rejects both gaps and rogues | nothing known. Inferring the set from the results was the bug, and the only one the per-scenario trial checks could not see: they verify trials *within* a scenario, this loses the scenario. |
@@ -168,7 +205,7 @@ the intent rather than the behaviour.
 | 13 | `score_asr.py` robustness rows | can dWER/SNR50 be computed | a `clean` baseline exists per `(arm, lang)`; **emits nothing and says so** if not | nothing known. `summary[0]` used to raise `IndexError` after the detailed CSV had been written. Absent cells are excluded from the index by type, so an empty WER cannot pass the `clean is None` guard and then fail on the subtraction. |
 | 15 | `score_asr.py` output rows | which cells exist | rows are emitted for the **expected cross-product** of (arm, lang, condition), absent ones with `n=0`, `complete=0`, empty WER | nothing known. Iterating only the groups that existed was the bug: an absent cell produced no row, so all 72 rows read `complete=1` and the field could never be 0 — a consumer trusting the documented signal saw a complete matrix because the gaps were invisible, not because they were filled. |
 | 12 | `judge.py` `parse_verdicts` | is this verdict usable | one verdict per expected candidate id, scores literally `int` in range | nothing known. `bool` passing as `int` was the bug: `true` became `0.0` downstream. |
-| 14 | `check_report.py` | do the reports still quote their own data | every resolvable table cell, judge-agreement figure, cost total, run count, Track A condition list, and any count written beside a named CSV or results directory, against the tree that report was written from (`RESULTS_FOR`) | **free prose**, deliberately: a count not tied to a named artifact is not matched. Each report must resolve its **declared** cell count, enforced per report; an unmapped report is an error, not a skip; an empty judge intersection is reported, not raised. |
+| 14 | `check_report.py` | do the reports still quote their own data | every resolvable table cell, judge-agreement figure, cost total, run count, Track A condition list, and any count written beside a named CSV or results directory, against the tree that report was written from (`RESULTS_FOR`). A row or column standing for several arms is compared against **every** arm it covers — `ARM_GROUPS` against the group's min and max, `RECOGNISER_ROWS` against each arm's `slot_heard` — and each arm counts as a cell | **free prose**, deliberately: a count not tied to a named artifact is not matched. Each report must resolve its **declared** cell count, enforced per report; an unmapped report is an error, not a skip; an empty judge intersection is reported, not raised. |
 
 **The runner was written for the original matrix; the documented invocations
 describe a study it could not produce.** Five reproducibility findings landed on

@@ -25,7 +25,7 @@ from pathlib import Path
 
 import websockets
 
-from engines import ARMS, connect_kwargs, open_log
+from engines import ARMS, connect_kwargs, open_log, preflight_logs
 
 class CommitDesync(RuntimeError):
     """The commit stream fell out of sync; the session must not be reused."""
@@ -207,6 +207,8 @@ async def main() -> None:
     ap.add_argument("--logdir", default="logs")
     ap.add_argument("--force-logs", action="store_true",
                     help="replace existing raw logs (they are the only\n                          artifact a result can be re-scored from)")
+    ap.add_argument("--preflight-logs", action="store_true",
+                    help="check this invocation's raw logs for collisions and\n                          exit, without connecting or writing anything")
     a = ap.parse_args()
 
     root = Path(a.data)
@@ -222,6 +224,17 @@ async def main() -> None:
         # successful. A malformed selection is not an empty one.
         sys.exit(f"--conditions {a.conditions!r} names no conditions")
 
+    # Validate every log this invocation will write before the first batch is
+    # billed. `open_log` alone checks condition N's log only once conditions
+    # 1..N-1 have been paid for, and the rows for those lived in `results` until
+    # after the loop — so the SystemExit it raises took working transcripts with
+    # it. Checking up front costs nothing and cannot.
+    logs = {cond: Path(a.logdir) / f"asr-{a.arm}-{a.lang}-{cond}.jsonl"
+            for cond in conditions}
+    preflight_logs(logs.values(), a.force_logs)
+    if a.preflight_logs:
+        return
+
     for cond in conditions:
         d = root / cond / a.lang
         manifest = [json.loads(l) for l in (d / "manifest.jsonl").read_text().splitlines()]
@@ -229,12 +242,13 @@ async def main() -> None:
                   "reference": m["reference"], "condition": cond}
                  for m in manifest[: a.n]]
         print(f"[{a.arm}] {a.lang}/{cond}: {len(clips)} clips", file=sys.stderr)
-        logp = Path(a.logdir) / f"asr-{a.arm}-{a.lang}-{cond}.jsonl"
+        logp = logs[cond]
+        rows: list[dict] = []
         with open_log(logp, a.force_logs) as log:
             for attempt in (1, 2):
                 t_start = time.time()
                 try:
-                    results += await asyncio.wait_for(
+                    rows = await asyncio.wait_for(
                         transcribe_batch(a.arm, a.lang, clips, log),
                         timeout=BATCH_HARD_TIMEOUT_S)
                     break
@@ -276,18 +290,29 @@ async def main() -> None:
                         # nothing: without the exit code below and the all-error
                         # guard in score_asr.py, a transport or configuration
                         # outage is published as 100% WER.
-                        results += [{"arm": a.arm, "lang": a.lang, "condition": cond,
-                                     "id": c["id"], "reference": c["reference"],
-                                     "hypothesis": "", "error": reason,
-                                     "audio_seconds": 0.0, "latency_s": 0.0}
-                                    for c in clips]
+                        rows = [{"arm": a.arm, "lang": a.lang, "condition": cond,
+                                 "id": c["id"], "reference": c["reference"],
+                                 "hypothesis": "", "error": reason,
+                                 "audio_seconds": 0.0, "latency_s": 0.0}
+                                for c in clips]
                         exhausted.append(f"{a.lang}/{cond}")
                     await asyncio.sleep(5)
+        # Persist this condition before starting the next one. These rows are
+        # already paid for; they used to accumulate in `results` and be written
+        # only after every condition finished, so anything that ended the
+        # process mid-run — the `open_log` SystemExit above all, which fires on
+        # a *later* condition's log — discarded transcripts that had been
+        # billed. An abort now costs the condition that failed, not the run.
+        #
+        # A half-written file is not a silent one: score_asr.py checks each
+        # cell's clip ids against `--expect-clips`, so a short cell is refused
+        # rather than scored, and run_all.sh exits non-zero either way.
+        with open(a.out, "a") as f:
+            for r in rows:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        results.extend(rows)
         await asyncio.sleep(1)  # stagger session opens
 
-    with open(a.out, "a") as f:
-        for r in results:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
     secs = sum(r["audio_seconds"] for r in results)
     print(f"[{a.arm}] wrote {len(results)} rows, {secs/60:.1f} audio-min "
           f"(~${secs/60*ARMS[a.arm].usd_per_min:.2f})", file=sys.stderr)

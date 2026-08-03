@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -343,6 +344,47 @@ def load_prompt() -> dict[str, Any]:
         return json.load(f)
 
 
+def log_is_populated(path) -> bool:
+    return os.path.exists(path) and os.path.getsize(path) > 0
+
+
+# A raw-log collision exits with this rather than the usual 1, so `run_all.sh`
+# can tell "these logs are populated" apart from "the preflight could not run at
+# all" — a missing interpreter, a bad argument, an import error. Reporting the
+# second as the first sends the next person to the wrong problem, which is the
+# same defect as a timeout naming the wrong bound. Deliberately not 1, 2 (what
+# argparse exits with) or 3.
+LOG_COLLISION_EXIT = 97
+
+
+def preflight_logs(paths, force: bool = False) -> None:
+    """Refuse a run whose raw logs already hold events, *before* it starts.
+
+    `open_log` guards each file at the moment the runner opens it, which is one
+    step short of the property it was reaching for. Two consequences, both paid
+    for in data:
+
+    * A runner asked for several units opens the second log after the first has
+      been billed, so a collision there discards transcripts already paid for.
+    * `run_all.sh`'s `FORCE=1` path truncates the result file first and never
+      forwarded a log-replacement option, so this guard fired *after* the
+      results it was meant to replace were gone, and the replacement could not
+      be produced. Destroy-then-recreate is only safe when the recreate cannot
+      fail; there it failed by construction.
+
+    Every colliding target is listed, not just the first: discovering them one
+    aborted run at a time is the same wasted-work loop in slow motion.
+    """
+    bad = [str(p) for p in paths if not force and log_is_populated(p)]
+    if bad:
+        print(f"refusing to start: {len(bad)} raw log(s) this run would replace "
+              "already hold events:\n  " + "\n  ".join(bad) +
+              "\nRaw logs are the only artifact a result can be re-scored from "
+              "without paying for the call again. Point --logdir somewhere new, "
+              "or pass --force-logs to replace them.", file=sys.stderr)
+        raise SystemExit(LOG_COLLISION_EXIT)
+
+
 def open_log(path, force: bool = False):
     """Open a raw event log for writing, refusing to destroy a populated one.
 
@@ -361,8 +403,7 @@ def open_log(path, force: bool = False):
     `run_all.sh` guards `results/`; nothing guarded `logs/`, and the logs are the
     only artifact from which results can be rebuilt without paying again.
     """
-    import os
-    if not force and os.path.exists(path) and os.path.getsize(path) > 0:
+    if not force and log_is_populated(path):
         raise SystemExit(
             f"refusing to truncate {path}, which already holds "
             f"{os.path.getsize(path)} bytes. Raw logs are the only artifact a "

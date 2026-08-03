@@ -656,20 +656,28 @@ class TestAggregatesKnowTheirDenominator(unittest.TestCase):
                     self.assertEqual(float(out[col]), 0.5)
 
     def test_run_all_propagates_runner_failure(self):
-        """A failed runner must make the matrix script exit non-zero."""
+        """A failed runner must make the matrix script exit non-zero.
+
+        The stub clears the log preflight and fails only when asked to do work,
+        so this exercises the run phase rather than stopping at the gate in
+        front of it. A stub that failed both would pass this test while proving
+        nothing about the runner loop.
+        """
         with tempfile.TemporaryDirectory() as tmp:
             data = Path(tmp) / "data"
             (data / "conditions").mkdir(parents=True)
             (data / "scenarios").mkdir(parents=True)
-            failing = Path(tmp) / "fail.py"
-            failing.write_text("import sys; sys.exit(3)\n")
+            failing = Path(tmp) / "fail.sh"
+            failing.write_text('#!/bin/bash\ncase "$*" in *--preflight-logs*)'
+                               ' exit 0;; esac\nexit 3\n')
+            failing.chmod(0o755)
             r = subprocess.run(
                 ["bash", str(HERE / "run_all.sh")],
                 # OUT redirects the destructive `: > results/*.jsonl` into tmp.
                 # Without it this test truncates the committed results, because
                 # run_all.sh cd's to its own directory regardless of cwd — which
                 # is exactly what happened the first time it was written.
-                env={**os.environ, "DATA": str(data), "PY": f"{sys.executable} {failing}",
+                env={**os.environ, "DATA": str(data), "PY": str(failing),
                      "OUT": str(Path(tmp) / "out"), "TRACK": "b", "TRIALS": "1",
                      "SC_ARMS": "vl-gpt41mini"},
                 capture_output=True, text=True, cwd=tmp)
@@ -1687,6 +1695,172 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
         self.assertEqual((HERE / "results" / "asr.jsonl").read_bytes(), before,
                          "the committed results were modified")
 
+    def test_preflight_names_every_colliding_log(self):
+        """The up-front form of the guard above, and it must list all of them.
+
+        `open_log` fires at the moment a runner opens one file, which is too
+        late twice over: earlier units of the same invocation have already been
+        billed, and `run_all.sh` has already truncated the results the run was
+        meant to replace. Discovering the collisions one aborted run at a time
+        is the same wasted work in slow motion.
+        """
+        import contextlib
+        import io
+        from engines import LOG_COLLISION_EXIT, preflight_logs
+        with tempfile.TemporaryDirectory() as tmp:
+            fresh, one, two = (Path(tmp) / n for n in ("a", "b", "c"))
+            one.write_text("{}\n")
+            two.write_text("{}\n")
+            preflight_logs([fresh])                      # nothing there: fine
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                with self.assertRaises(SystemExit) as cm:
+                    preflight_logs([fresh, one, two])
+            # A distinct status, so a caller can tell a collision apart from a
+            # preflight that could not run at all.
+            self.assertEqual(cm.exception.code, LOG_COLLISION_EXIT)
+            for p in (one, two):
+                self.assertIn(str(p), err.getvalue(), "a collision went unnamed")
+            self.assertIn("--force-logs", err.getvalue())
+            self.assertEqual(one.read_text(), "{}\n", "the log was modified")
+            preflight_logs([fresh, one, two], force=True)   # explicit override
+
+    def test_force_does_not_erase_results_it_cannot_regenerate(self):
+        """FORCE=1 truncated the results, then aborted on the first raw log.
+
+        `run_all.sh` never forwarded a log-replacement option, so every existing
+        log made `open_log` refuse — leaving the results erased and the forced
+        replacement unable to run. Destroy-then-recreate is safe only when the
+        recreate cannot fail, and this one failed by construction. The log
+        collisions are now preflighted through the runners' own invocations,
+        before anything is truncated.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            res = Path(tmp) / "results"
+            res.mkdir()
+            (res / "asr.jsonl").write_text('{"row": 1}\n')
+            (res / "scenarios.jsonl").write_text('{"row": 1}\n')
+            before = (res / "asr.jsonl").read_bytes()
+            # A stub interpreter that reports a collision from the preflight
+            # pass — standing in for the runners' own check, which CI cannot run
+            # because they import the websocket client it does not install.
+            from engines import LOG_COLLISION_EXIT
+            py = Path(tmp) / "fakepy"
+            py.write_text('#!/bin/bash\ncase "$*" in *--preflight-logs*)'
+                          ' echo "refusing to start" >&2; exit %d;; esac\n'
+                          % LOG_COLLISION_EXIT)
+            py.chmod(0o755)
+            r = subprocess.run(
+                ["/bin/bash", str(HERE / "run_all.sh")],
+                capture_output=True, text=True, cwd=str(HERE),
+                env={"PATH": "/usr/bin:/bin", "DATA": "/x", "OUT": tmp,
+                     "PY": str(py), "FORCE": "1"})
+            self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+            self.assertIn("FORCE_LOGS=1", r.stderr,
+                          "the refusal does not say how to proceed")
+            self.assertEqual((res / "asr.jsonl").read_bytes(), before,
+                             "the results were erased by a run that then "
+                             "could not regenerate them")
+
+    def test_a_broken_preflight_is_not_reported_as_a_log_collision(self):
+        """"Bounded" naming the wrong bound, in a new place.
+
+        A preflight that cannot run — no interpreter, a bad argument, an import
+        error — says nothing about the logs. Reporting it as "these logs are
+        populated" sends the next person to delete files that are not the
+        problem. It still stops the run, and it still truncates nothing.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            py = Path(tmp) / "fakepy"
+            py.write_text('#!/bin/bash\ncase "$*" in *--preflight-logs*)'
+                          ' echo "boom" >&2; exit 1;; esac\n')
+            py.chmod(0o755)
+            r = subprocess.run(
+                ["/bin/bash", str(HERE / "run_all.sh")],
+                capture_output=True, text=True, cwd=str(HERE),
+                env={"PATH": "/usr/bin:/bin", "DATA": "/x", "OUT": tmp,
+                     "PY": str(py), "TRACK": "a", "ASR_ARMS": "vl-gpt41mini"})
+            self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+            self.assertIn("not a", r.stderr)
+            self.assertNotIn("would replace raw logs", r.stderr,
+                             "a broken preflight was blamed on the logs")
+
+    def test_run_all_propagates_the_log_replacement_option(self):
+        """The option has to reach the runners, or FORCE_LOGS=1 does nothing.
+
+        Preflighting is only half the fix: a user who says "yes, replace the
+        logs" must have that decision forwarded, otherwise the run still aborts
+        in open_log — the original defect with an extra step.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            out = self._fake_run_all(tmp, FORCE_LOGS="1", TRACK="a",
+                                     ASR_ARMS="vl-gpt41mini")
+            self.assertIn("--force-logs", out)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = self._fake_run_all(tmp, TRACK="a", ASR_ARMS="vl-gpt41mini")
+            self.assertNotIn("--force-logs", out,
+                             "logs are replaced without anyone asking for it")
+        with tempfile.TemporaryDirectory() as tmp:
+            # FORCE covers results/ only. A log is the one artifact a result can
+            # be rebuilt from without paying again, so replacing it stays a
+            # separate, explicit decision.
+            out = self._fake_run_all(tmp, TRACK="a", ASR_ARMS="vl-gpt41mini",
+                                     APPEND="0", FORCE="1")
+            self.assertNotIn("--force-logs", out,
+                             "FORCE=1 silently replaced the raw logs too")
+
+    def test_the_preflight_covers_the_matrix_the_run_writes(self):
+        """A preflight over a different set of files is not a preflight."""
+        with tempfile.TemporaryDirectory() as tmp:
+            out = self._fake_run_all(tmp, TRACK="both", TRIALS="2",
+                                     ASR_ARMS="vl-gpt41mini",
+                                     SC_ARMS="vl-gpt41mini vl-native-brain")
+            pre = sorted(l.replace(" --preflight-logs", "")
+                         for l in out.splitlines() if "--preflight-logs" in l)
+            run = sorted(l for l in out.splitlines()
+                         if "--preflight-logs" not in l)
+            self.assertTrue(pre, "nothing was preflighted")
+            self.assertEqual(pre, run,
+                             "the preflight and the run cover different "
+                             "invocations, so a collision can still land "
+                             "mid-run")
+
+    def test_both_runners_persist_each_unit_as_it_completes(self):
+        """Rows that have been paid for must not wait on the rest of the run.
+
+        `run_asr.py` accumulated every condition's transcripts in memory and
+        wrote them after the loop, so a failure in a later condition — an
+        `open_log` refusal above all — exited without persisting cells that had
+        already been billed. `run_scenarios.py` already wrote per scenario; this
+        pins both.
+
+        Checked structurally, on the source, because these modules import the
+        websocket client CI does not install (TestScoringImportsAreTransport-
+        Free): every write to the output file must sit inside the loop over
+        units, and none may sit after it.
+        """
+        import ast
+        for mod in ("run_scenarios.py", "run_asr.py"):
+            with self.subTest(module=mod):
+                tree = ast.parse((HERE / mod).read_text())
+                main = next(n for n in ast.walk(tree)
+                            if isinstance(n, ast.AsyncFunctionDef)
+                            and n.name == "main")
+                writes = [n for n in ast.walk(main)
+                          if isinstance(n, ast.Call)
+                          and isinstance(n.func, ast.Name) and n.func.id == "open"
+                          and n.args and isinstance(n.args[0], ast.Attribute)
+                          and n.args[0].attr == "out"]
+                self.assertTrue(writes, f"{mod} never writes its results")
+                inside = set()
+                for loop in (n for n in main.body if isinstance(n, ast.For)):
+                    inside |= {id(n) for n in ast.walk(loop)}
+                stranded = [w.lineno for w in writes if id(w) not in inside]
+                self.assertEqual(
+                    stranded, [],
+                    f"{mod} writes results outside its per-unit loop (line(s) "
+                    f"{stranded}), so an abort discards everything before it")
+
 
 class TestReportsMatchTheirData(unittest.TestCase):
     """The reports are checked against the CSVs, and the checker can fail.
@@ -2409,6 +2583,61 @@ class TestReportsMatchTheirData(unittest.TestCase):
                             rows["native-gpt-realtime-2"]["success_mean"],
                             "if these ever agree, drop the snapshot and the "
                             "RESULTS_FOR indirection rather than keeping both")
+
+    def test_a_grouped_row_is_checked_against_every_arm_it_covers(self):
+        """The grouping IS the claim, so it has to be able to fail.
+
+        The `gpt-realtime-2 / 2.1` recogniser row states one slot-capture figure
+        for two arms, and that row is what backs the addendum's structural
+        finding — slot capture is a function of (recogniser, VAD) and not of the
+        brain. It was compared against `native-gpt-realtime-2` only, so if 2.1's
+        capture moved the stale shared value still passed on the incumbent: an
+        assertion that two arms agree, validated in a way that cannot notice
+        them disagreeing.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            res = self._results_copy(tmp)
+            with (res / "summary.csv").open() as f:
+                rows = list(csv.DictReader(f))
+            moved = False
+            for r in rows:
+                if r["arm"] == "native-gpt-realtime-21":
+                    self.assertEqual(r["slot_heard"], "0.893")
+                    r["slot_heard"], moved = "0.777", True
+            self.assertTrue(moved, "the 2.1 arm is missing from summary.csv")
+            with (res / "summary.csv").open("w", newline="") as f:
+                w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+                w.writeheader()
+                w.writerows(rows)
+            out, code = self._run(docs=docs, results=res)
+            self.assertEqual(code, 1)
+            self.assertTrue(
+                any("gpt-realtime-2 / 2.1" in x
+                    and "native-gpt-realtime-21" in x for x in out["problems"]),
+                f"the grouped row passed on its other arm: {out['problems']}")
+
+    def test_every_multi_arm_row_declares_all_its_arms(self):
+        """The declaration is a tuple so a group cannot silently shrink to one.
+
+        A single-arm value made the one-arm-only comparison invisible: nothing
+        about `"native-gpt-realtime-2"` said the row covered two. Requiring a
+        tuple everywhere makes adding an arm to a row an edit to the arm list
+        rather than a decision nobody records.
+        """
+        import check_report
+        for key, arms in check_report.RECOGNISER_ROWS.items():
+            with self.subTest(row=key):
+                self.assertIsInstance(arms, tuple, f"{key} names a bare arm")
+                self.assertTrue(arms, f"{key} names no arm at all")
+        # And the row whose label states two versions must declare two arms.
+        grouped = [k for k in check_report.RECOGNISER_ROWS if "/" in k[2]]
+        self.assertTrue(grouped, "the grouped recogniser row has disappeared")
+        for k in grouped:
+            self.assertEqual(
+                len(check_report.RECOGNISER_ROWS[k]), len(k[2].split("/")),
+                f"{k[2]!r} names {len(k[2].split('/'))} brains but "
+                f"{len(check_report.RECOGNISER_ROWS[k])} arm(s) check it")
 
 
 if __name__ == "__main__":

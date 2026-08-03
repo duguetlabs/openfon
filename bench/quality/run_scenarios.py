@@ -30,7 +30,7 @@ from pathlib import Path
 
 import websockets
 
-from engines import ARMS, connect_kwargs, load_prompt, open_log
+from engines import ARMS, connect_kwargs, load_prompt, open_log, preflight_logs
 from events import function_call, redact, response_cancelled, scenario_filter
 
 FRAME_MS = 40                       # 40 ms frames ~= a realistic RTP cadence
@@ -354,6 +354,8 @@ async def main() -> None:
     ap.add_argument("--logdir", default="logs")
     ap.add_argument("--force-logs", action="store_true",
                     help="replace existing raw logs (they are the only\n                          artifact a result can be re-scored from)")
+    ap.add_argument("--preflight-logs", action="store_true",
+                    help="check this invocation's raw logs for collisions and\n                          exit, without connecting or writing anything")
     a = ap.parse_args()
 
     failed: list[str] = []
@@ -366,10 +368,21 @@ async def main() -> None:
         sys.exit(str(e).replace("the fixture", a.scenarios))
     Path(a.logdir).mkdir(parents=True, exist_ok=True)
 
+    # Every log this invocation will write, checked before the first call is
+    # placed rather than one at a time as each scenario starts. See
+    # engines.preflight_logs: a collision on scenario 7 aborts after six have
+    # been billed, and run_all.sh truncates the result file before any runner
+    # starts.
+    logs = {sc["id"]: Path(a.logdir) / f"sc-{a.arm}-{sc['id']}-t{a.trial}.jsonl"
+            for sc in spec["scenarios"] if not want or sc["id"] in want}
+    preflight_logs(logs.values(), a.force_logs)
+    if a.preflight_logs:
+        return
+
     for sc in spec["scenarios"]:
         if want and sc["id"] not in want:
             continue
-        logp = Path(a.logdir) / f"sc-{a.arm}-{sc['id']}-t{a.trial}.jsonl"
+        logp = logs[sc["id"]]
         with open_log(logp, a.force_logs) as log:
             t_start = time.time()
             try:

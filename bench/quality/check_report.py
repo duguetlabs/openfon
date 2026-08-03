@@ -166,7 +166,10 @@ def is_cost_table(head: list[str]) -> bool:
 RESULTS_FOR = {
     # report: (results subdirectory, table cells it must resolve)
     "voice-engine-quality-2026-08.md": ("main-report", 192),
-    "voice-engine-quality-2026-08-gpt-realtime-2-1.md": (".", 61),
+    # 61 -> 62: the `gpt-realtime-2 / 2.1` recogniser row states one figure for
+    # two arms and was compared against one of them. Both arms are a claim, so
+    # both are counted.
+    "voice-engine-quality-2026-08-gpt-realtime-2-1.md": (".", 62),
 }
 
 
@@ -390,7 +393,19 @@ def check_tables(md: str, doc: str, summary: dict[str, dict[str, str]],
             """A range cell against the min and max across the group's arms."""
             nonlocal checked
             fields = METRIC_FIELDS.get(norm_label(label))
-            if fields is None or len(fields) != 1:
+            if fields is None:
+                return          # `compare` reports unrecognised labels
+            if len(fields) != 1:
+                # A compound row ("TTFA p50 / p95") under a group column states
+                # two ranges, which this path cannot compare — and falling
+                # through means the cell is neither compared nor reported, the
+                # shape that hid six latency figures on the single-arm path.
+                # No document does this today; the point is that one cannot
+                # start to in silence.
+                problems.append(
+                    f"{doc}: grouped column states {label!r}, a compound metric "
+                    f"({'/'.join(fields)}) this checker cannot compare as a "
+                    "range. Split the row, or give the group its own check.")
                 return
             got = parse_range(cell)
             if got is None:
@@ -1185,13 +1200,23 @@ def main() -> int:
 # twice been the wrong reason to skip.
 
 # The (recogniser, VAD, brain) -> slots-heard table. Its rows are keyed by
-# configuration rather than arm name, so the arm is declared.
+# configuration rather than arm name, so the arms are declared.
+#
+# Every row maps to a **tuple** of arms, because one of them stands for two: the
+# `gpt-realtime-2 / 2.1` row states a single figure for both Foundry arms, and
+# that grouping *is* the claim the table exists to make — "slot capture is a
+# function of (recogniser, VAD) and not of the brain". Checking it against
+# `native-gpt-realtime-2` alone meant the row could not fail when the two arms
+# diverged: move 2.1's slot capture and the stale shared figure still passes on
+# the incumbent, which is the assertion inverted. A row asserting two arms are
+# identical must break when they stop being identical.
 RECOGNISER_ROWS = {
-    ("azure-speech", "server_vad", "gpt-4.1-mini"): "vl-gpt41mini",
-    ("azure-speech", "semantic", "gpt-4.1-mini"): "vl-gpt41mini-semvad",
-    ("azure-speech", "semantic", "gpt-realtime-2"): "vl-native-brain",
-    ("azure-speech", "semantic", "gpt-realtime-2.1"): "vl-native-brain-21",
-    ("whisper-1", "server_vad", "gpt-realtime-2 / 2.1"): "native-gpt-realtime-2",
+    ("azure-speech", "server_vad", "gpt-4.1-mini"): ("vl-gpt41mini",),
+    ("azure-speech", "semantic", "gpt-4.1-mini"): ("vl-gpt41mini-semvad",),
+    ("azure-speech", "semantic", "gpt-realtime-2"): ("vl-native-brain",),
+    ("azure-speech", "semantic", "gpt-realtime-2.1"): ("vl-native-brain-21",),
+    ("whisper-1", "server_vad", "gpt-realtime-2 / 2.1"): (
+        "native-gpt-realtime-2", "native-gpt-realtime-21"),
 }
 
 # probe_dns.py legs, by the display name the reports use.
@@ -1217,6 +1242,12 @@ def check_recogniser_table(md: str, doc: str, results: Path,
     "Slot capture is a function of (recogniser, VAD) and nothing else" rests
     entirely on these five numbers, and none of them was compared: the rows are
     keyed by configuration, so no cell resolved to an arm.
+
+    A row covering several arms is compared against **every** one of them. The
+    `gpt-realtime-2 / 2.1` row claims one figure for two arms; validating it
+    against the first alone made the row's own claim — that they agree —
+    unfalsifiable, and each arm it covers is a separate claim for the coverage
+    count.
     """
     problems: list[str] = []
     checked = 0
@@ -1228,23 +1259,25 @@ def check_recogniser_table(md: str, doc: str, results: Path,
             if len(row) < 4:
                 continue
             key = tuple(norm_label(c) for c in row[:3])
-            arm = RECOGNISER_ROWS.get(key)
+            group = RECOGNISER_ROWS.get(key)
             got = parse_number(row[3])
             if got is None:
                 continue
-            if arm is None:
+            if group is None:
                 problems.append(f"{doc}: recogniser table row {key} names no "
                                 "arm; add it to RECOGNISER_ROWS")
                 continue
-            if arm not in summary:
-                problems.append(missing_arm(doc, arm, summary))
-                continue
-            checked += 1
-            want = parse_number(summary[arm].get("slot_heard", ""))
-            if want is None or abs(got - want) > 1e-9:
-                problems.append(
-                    f"{doc}: {key} -> {arm} slots heard — document says {got:g}, "
-                    f"summary.csv says {summary[arm].get('slot_heard')!r}")
+            for arm in group:
+                if arm not in summary:
+                    problems.append(missing_arm(doc, arm, summary))
+                    continue
+                checked += 1
+                want = parse_number(summary[arm].get("slot_heard", ""))
+                if want is None or abs(got - want) > 1e-9:
+                    problems.append(
+                        f"{doc}: {key} -> {arm} slots heard — document says "
+                        f"{got:g}, summary.csv says "
+                        f"{summary[arm].get('slot_heard')!r}")
     return problems, checked
 
 

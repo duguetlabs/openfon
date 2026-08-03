@@ -52,7 +52,9 @@ mkdir -p "$OUT/results" "$OUT/logs"
 #
 # A re-run is fine; it just has to say where it is going. Set OUT to a new
 # directory, APPEND=1 to add arms to a run already there, or FORCE=1 if you
-# really mean to replace what is there.
+# really mean to replace what is there. FORCE=1 covers `results/` only —
+# replacing raw logs is FORCE_LOGS=1, and the two are separate on purpose: a
+# result can be rebuilt from its log, a log can be rebuilt only by paying again.
 #
 # APPEND exists because the committed matrix is a base pass plus an extension:
 # without it, reproducing it means running each block to its own directory and
@@ -90,6 +92,13 @@ if [ "${FORCE:-0}" != "1" ] && [ "$APPEND" != "1" ]; then
   done
 fi
 
+# Raw logs are guarded separately from results, and replacing them is a separate
+# decision: they are the only artifact a result can be re-scored from without
+# paying for the call again, so FORCE=1 deliberately does NOT imply this.
+LOG_REPLACE=""
+[ "${FORCE_LOGS:-0}" = "1" ] && LOG_REPLACE="--force-logs"
+PREFLIGHT=""   # set to --preflight-logs for the collision pass below
+
 FAILURES=()
 run() {  # run <label> <cmd...>
   local label="$1"; shift
@@ -99,29 +108,93 @@ run() {  # run <label> <cmd...>
   fi
 }
 
-if [ "${TRACK:-both}" = "a" ] || [ "${TRACK:-both}" = "both" ]; then
-  [ "$APPEND" = "1" ] || : > $OUT/results/asr.jsonl
+# engines.LOG_COLLISION_EXIT. A preflight that fails for any *other* reason —
+# no interpreter, a bad argument, an import error — is not a log collision, and
+# saying it is sends the next person to the wrong problem. Both stop the run
+# before anything is truncated; they are reported as what they are.
+LOG_COLLISION_EXIT=97
+COLLISIONS=0
+BROKEN=0
+pre() {  # pre <label> <cmd...> — same invocation, --preflight-logs appended
+  local label="$1" rc; shift
+  "$@"; rc=$?
+  case "$rc" in
+    0) ;;
+    "$LOG_COLLISION_EXIT")
+      echo "  ^ $label would replace raw logs it must not" >&2
+      COLLISIONS=$((COLLISIONS + 1)) ;;
+    *)
+      echo "  ^ $label: the log preflight itself exited $rc — this is not a" >&2
+      echo "    log collision. Nothing has been run or truncated." >&2
+      BROKEN=$((BROKEN + 1)) ;;
+  esac
+}
+
+# The matrix, defined once and walked twice: once to check the raw logs, once to
+# run. Duplicating the loops would let the two drift, and a preflight that
+# checks a different set of files from the one the run writes is no preflight.
+track_a() {  # track_a <run|pre>
   for arm in $ASR_ARMS; do
     for lang in en_us de_de; do
-      echo "=== ASR $arm $lang"
-      run "asr/$arm/$lang" "$PY" run_asr.py --arm "$arm" --lang "$lang" \
+      [ -n "$PREFLIGHT" ] || echo "=== ASR $arm $lang"
+      "$1" "asr/$arm/$lang" "$PY" run_asr.py --arm "$arm" --lang "$lang" \
         --conditions "$CONDITIONS" --data "$DATA/conditions" --n "$N" \
-        --out $OUT/results/asr.jsonl --logdir "$OUT/logs"
+        --out $OUT/results/asr.jsonl --logdir "$OUT/logs" \
+        $LOG_REPLACE $PREFLIGHT
     done
   done
-fi
+}
 
-if [ "${TRACK:-both}" = "b" ] || [ "${TRACK:-both}" = "both" ]; then
-  [ "$APPEND" = "1" ] || : > $OUT/results/scenarios.jsonl
+track_b() {  # track_b <run|pre>
   for trial in $(seq 1 "$TRIALS"); do
     for arm in $SC_ARMS; do
-      echo "=== SCENARIOS $arm trial $trial"
-      run "scenarios/$arm/t$trial" "$PY" run_scenarios.py --arm "$arm" \
+      [ -n "$PREFLIGHT" ] || echo "=== SCENARIOS $arm trial $trial"
+      "$1" "scenarios/$arm/t$trial" "$PY" run_scenarios.py --arm "$arm" \
         --trial "$trial" --audio "$DATA/scenarios" \
         ${ONLY:+--only "$ONLY"} \
-        --out $OUT/results/scenarios.jsonl --logdir "$OUT/logs"
+        --out $OUT/results/scenarios.jsonl --logdir "$OUT/logs" \
+        $LOG_REPLACE $PREFLIGHT
     done
   done
+}
+
+want_a() { [ "${TRACK:-both}" = "a" ] || [ "${TRACK:-both}" = "both" ]; }
+want_b() { [ "${TRACK:-both}" = "b" ] || [ "${TRACK:-both}" = "both" ]; }
+
+# Preflight the raw logs BEFORE the truncation below. FORCE=1 emptied
+# $OUT/results/*.jsonl and then never forwarded a log-replacement option, so
+# every existing log made the first runner abort in engines.open_log: the
+# results were erased and the forced replacement could not be produced.
+# Destroy-then-recreate is safe only when the recreate cannot fail, and that one
+# failed by construction. Each runner reports its own collisions and exits
+# non-zero, doing no work and touching nothing.
+PREFLIGHT="--preflight-logs"
+want_a && track_a pre
+want_b && track_b pre
+PREFLIGHT=""
+if [ "$COLLISIONS" -gt 0 ]; then
+  echo >&2
+  echo "$COLLISIONS runner invocation(s) refused their raw logs (above)." >&2
+  echo "  Nothing has been truncated. Send this run somewhere new:" >&2
+  echo "      OUT=/tmp/mybench DATA=\$DATA ./run_all.sh" >&2
+  echo "  or, if you really mean to overwrite those logs:  FORCE_LOGS=1 ..." >&2
+  exit 2
+fi
+if [ "$BROKEN" -gt 0 ]; then
+  echo >&2
+  echo "$BROKEN log preflight(s) could not run (above), so this run cannot be" >&2
+  echo "  certified safe to start. Nothing has been truncated." >&2
+  exit 2
+fi
+
+if want_a; then
+  [ "$APPEND" = "1" ] || : > $OUT/results/asr.jsonl
+  track_a run
+fi
+
+if want_b; then
+  [ "$APPEND" = "1" ] || : > $OUT/results/scenarios.jsonl
+  track_b run
 fi
 
 if [ ${#FAILURES[@]} -gt 0 ]; then
