@@ -1420,6 +1420,78 @@ class TestReportsMatchTheirData(unittest.TestCase):
             self.assertTrue(any("stopped matching" in x for x in out["problems"]),
                             out["problems"])
 
+    def test_a_stale_arm_count_beside_a_named_tree_is_caught(self):
+        """"…covering all seven arms" when the CSV holds eight.
+
+        Prose counts were outside the first version's coverage, which is how
+        this one reached the merged report a commit after the checker landed.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08.md"
+            p.write_text(p.read_text().replace("covering **eight** arms",
+                                               "covering **seven** arms"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1)
+            self.assertTrue(any("arms" in x for x in out["problems"]),
+                            out["problems"])
+
+    def test_a_stale_count_beside_a_named_csv_is_caught(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08-gpt-realtime-2-1.md"
+            p.write_text(p.read_text().replace("(seed 1, 246 rows, eight arms)",
+                                               "(seed 1, 240 rows, nine arms)"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1)
+            self.assertTrue(any("240 rows" in x for x in out["problems"]),
+                            out["problems"])
+            self.assertTrue(any("nine arms" in x for x in out["problems"]),
+                            out["problems"])
+
+    def test_a_condition_stated_but_not_named_is_caught(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08-gpt-realtime-2-1.md"
+            p.write_text(p.read_text().replace(
+                "`cafe_snr0`, `tel` and\n`tel_cafe_snr10`",
+                "`cafe_snr0` and\n`tel_cafe_snr10`"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1)
+            self.assertTrue(any("conditions but names 5" in x
+                                for x in out["problems"]), out["problems"])
+            # ...and against the data, not only against its own count.
+            self.assertTrue(any("match no arm's condition set" in x
+                                for x in out["problems"]), out["problems"])
+
+    def test_no_shared_judge_rows_is_reported_not_raised(self):
+        """An empty intersection is a legitimate state that needs a message.
+
+        Dividing by `len(shared)` made the verifier crash instead of saying it
+        could not verify — the failure mode this checker exists to prevent,
+        reappearing inside the checker.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            res = Path(tmp) / "results"
+            res.mkdir()
+            src = HERE / "results"
+            for f in ("summary.csv", "summary_per_run.csv", "slots.csv",
+                      "asr.jsonl", "asr_fixed.jsonl", "asr_control.jsonl"):
+                if (src / f).exists():
+                    (res / f).write_text((src / f).read_text())
+            (res / "main-report").mkdir()
+            for f in (HERE / "results" / "main-report").glob("*.csv"):
+                (res / "main-report" / f.name).write_text(f.read_text())
+            # Two judge files with no (scenario, arm, trial) key in common.
+            head = "scenario,arm,trial,lang,seed,groundedness,resolution,tone\n"
+            (res / "judge.csv").write_text(head + "a,x,1,en,1,1,2,2\n")
+            (res / "judge_seed2.csv").write_text(head + "b,y,2,en,2,1,2,2\n")
+            out, code = self._run(docs=docs, results=res)
+            self.assertEqual(code, 1, "should report, not pass")
+            self.assertTrue(any("share no" in x for x in out["problems"]),
+                            out["problems"])
+
     def test_the_merged_report_keeps_its_own_results_snapshot(self):
         """The 2.1 run re-judged every arm and overwrote results/ in place.
 

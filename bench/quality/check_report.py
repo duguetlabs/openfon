@@ -198,6 +198,14 @@ def check_judge_agreement(md: str, doc: str, results: Path) -> list[str]:
                 "are quoted without the reliability evidence that licenses them"]
     region = md[m.start():m.start() + 700]
 
+    if not shared:
+        # An empty intersection is a legitimate state — two passes over disjoint
+        # runs — and it must be *reported*, not raised. A verifier that crashes
+        # says nothing about the document; "cannot verify" is the finding.
+        return [f"{doc}: {a_path.name} and {b_path.name} share no "
+                "(scenario, arm, trial) rows, so the judge-agreement claim "
+                "cannot be verified against them"]
+
     problems = []
     for field in ("groundedness", "resolution", "tone"):
         n = sum(1 for k in shared if da[k][field].strip() == db[k][field].strip())
@@ -218,12 +226,126 @@ def check_judge_agreement(md: str, doc: str, results: Path) -> list[str]:
             problems.append(
                 f"{doc}: judge agreement on {field} — document says "
                 f"{pctm.group(1)} %, recomputed {n / len(shared) * 100:.1f} %")
-    # Row counts, where the document states them.
-    for label, rows in (("judge.csv", a), ("judge_seed2.csv", b)):
-        rm = re.search(rf"`?{re.escape(label)}`?\s*\([^)]*?(\d+)\s+rows", md)
+    # Row counts and arm coverage for these files are checked by
+    # check_arm_counts' "`<file>.csv` (…)" form, which covers any named CSV.
+    return problems
+
+
+WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+         "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
+
+
+def as_int(token: str) -> int | None:
+    return int(token) if token.isdigit() else WORDS.get(token.lower())
+
+
+def arms_in(results: Path) -> int | None:
+    p = results / "summary.csv"
+    if not p.exists():
+        return None
+    with p.open() as f:
+        return len({r["arm"] for r in csv.DictReader(f)})
+
+
+def check_arm_counts(md: str, doc: str, own: Path, root: Path) -> list[str]:
+    """"…all seven arms" when the CSV holds eight.
+
+    A count in prose is the same defect as a stale table cell, and it survived
+    the first version of this checker because only table cells were resolved.
+
+    **Only counts tied to a named artifact are checked**, in two forms: a
+    parenthetical after a CSV filename (`judge.csv` (seed 1, 246 rows, eight
+    arms)), and a sentence that names a results *directory*. Free prose like
+    "all eight arms were re-judged" is deliberately not matched — scanning every
+    "N arms" in the text produced five false positives on these two documents,
+    and a checker that cries wolf gets switched off. This trades recall for
+    precision; write counts next to the file they describe and they get checked.
+    """
+    problems = []
+
+    # Form 1: `<file>.csv` (…, N rows, M arms)
+    for m in re.finditer(r"`(?:[\w/.-]*/)?([\w.-]+\.csv)`\s*\(([^)]*)\)", md):
+        fname, paren = m.group(1), m.group(2)
+        path = own / fname
+        if not path.exists():
+            continue
+        with path.open() as f:
+            rows = list(csv.DictReader(f))
+        rm = re.search(r"(\d+)\s+rows", paren)
         if rm and int(rm.group(1)) != len(rows):
-            problems.append(f"{doc}: says {label} has {rm.group(1)} rows; "
-                            f"{(results / label).name} has {len(rows)}")
+            problems.append(f"{doc}: says {fname} has {rm.group(1)} rows; "
+                            f"it has {len(rows)}")
+        am = re.search(r"(\w+)\s+arms", paren)
+        n = as_int(am.group(1)) if am else None
+        if n is not None and "arm" in (rows[0] if rows else {}):
+            got = len({r["arm"] for r in rows})
+            if got != n:
+                problems.append(f"{doc}: says {fname} covers {am.group(1)} arms; "
+                                f"it covers {got}")
+
+    # Form 2: a sentence naming a results directory and an arm count. Prefer the
+    # current tree when the sentence names both, since a sentence mentioning the
+    # snapshot usually does so as an aside about where the old pass went.
+    for m in re.finditer(r"\b(?:all|covering|holds?)\s+\**(\w+)\**\s+arms\b", md):
+        n = as_int(m.group(1))
+        if n is None:
+            continue
+        start = md.rfind(".", 0, m.start()) + 1
+        end = md.find(".", m.end())
+        sentence = md[start: end if end != -1 else len(md)]
+        if not re.search(r"results/|results`", sentence):
+            continue  # not tied to a named tree; out of scope by design
+        bare = re.search(r"results/(?!main-report)|results`", sentence)
+        results, named = ((root, "results/ (the current pass)") if bare
+                          else (root / "main-report", "results/main-report/"))
+        got = arms_in(results)
+        if got is None:
+            problems.append(f"{doc}: claims {n} arms in {named}, which has no "
+                            "summary.csv to check against")
+        elif got != n:
+            problems.append(f"{doc}: says {m.group(1)} arms in {named}; that "
+                            f"summary.csv has {got}")
+    return problems
+
+
+def check_conditions(md: str, doc: str, results: Path) -> list[str]:
+    """"Track A was run on six conditions" followed by five names.
+
+    Checked two ways: the stated count against the names listed, and the names
+    against the conditions actually present in the committed ASR rows. Anchored
+    on the phrase that introduces the matrix, not on any "run on N conditions" —
+    the merged report has an unrelated control re-run "on two conditions".
+    """
+    m = re.search(r"Track A was run on (\w+) conditions", md)
+    if not m:
+        return []
+    stated = as_int(m.group(1))
+    if stated is None:
+        return []
+    tail = md[m.end(): m.end() + 400]
+    kept = re.search(r"Kept:(.*?)(?:Cut:|\n\n)", tail, re.S)
+    if not kept:
+        return [f"{doc}: states {stated} Track A conditions but does not list "
+                "them, so the matrix cannot be reproduced"]
+    named = re.findall(r"`([a-z0-9_]+)`", kept.group(1))
+    problems = []
+    if len(set(named)) != stated:
+        problems.append(f"{doc}: states {m.group(1)} Track A conditions but "
+                        f"names {len(set(named))}: {sorted(set(named))}")
+    # And against the data, not only against itself.
+    present = {}
+    for name in ("asr.jsonl", "asr_fixed.jsonl", "asr_control.jsonl"):
+        p = results / name
+        if not p.exists():
+            continue
+        for line in p.read_text().splitlines():
+            r = json.loads(line)
+            present.setdefault(r["arm"], set()).add(r["condition"])
+    if present and not any(s == set(named) for s in present.values()):
+        problems.append(
+            f"{doc}: the conditions named ({sorted(set(named))}) match no arm's "
+            f"condition set in the committed ASR rows "
+            f"({ {a: sorted(s) for a, s in sorted(present.items())} })")
     return problems
 
 
@@ -266,10 +388,7 @@ def check_run_counts(md: str, doc: str, results: Path) -> list[str]:
     problems = []
     m = re.search(r"\*\*(\w+) of the (\d+) new runs\*\*", md)
     if m:
-        words = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
-                 "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
-        got = words.get(m.group(1).lower(), None)
-        got = got if got is not None else int(m.group(1)) if m.group(1).isdigit() else None
+        got = as_int(m.group(1))
         if got != dropped or int(m.group(2)) != n_new:
             problems.append(
                 f"{doc}: says {m.group(1)} of {m.group(2)} new runs were dropped from "
@@ -313,6 +432,8 @@ def main() -> int:
         problems += check_judge_agreement(md, doc, results)
         problems += check_cost_table(md, doc)
         problems += check_run_counts(md, doc, results)
+        problems += check_arm_counts(md, doc, results, root)
+        problems += check_conditions(md, doc, results)
 
     if not seen_docs:
         print(f"no reports found under {docs}", file=sys.stderr)

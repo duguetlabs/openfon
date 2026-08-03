@@ -39,7 +39,17 @@ correct ones, which is worse than no numbers.
 | 11 | `score_asr.py` cell check | is every ASR cell whole | **set of clip ids** per `(arm, lang, condition)`: no duplicates, size equals `--expect-clips`, and identical across arms for the same `(lang, condition)` | clips present but with empty references — surfaced separately as `unscorable_refs`. Counting rows was the bug: a duplicated id beside a missing one totals correctly and double-weights the duplicate in the WER. |
 | 13 | `score_asr.py` robustness rows | can dWER/SNR50 be computed | a `clean` baseline exists per `(arm, lang)`; **emits nothing and says so** if not | nothing known. `summary[0]` used to raise `IndexError` after the detailed CSV had been written. |
 | 12 | `judge.py` `parse_verdicts` | is this verdict usable | one verdict per expected candidate id, scores literally `int` in range | nothing known. `bool` passing as `int` was the bug: `true` became `0.0` downstream. |
-| 14 | `check_report.py` | do the reports still quote their own data | every resolvable table cell, judge-agreement figure, cost total and run count in `docs/research/voice-engine-quality-*.md`, against the `results/` tree that report was written from (`RESULTS_FOR`) | prose that states no number, and any claim outside a table. Resolving *nothing* is an error (`MIN_CELLS`), because a parser that stopped matching would otherwise report a clean document. An unmapped report is an error, not a skip. |
+| 14 | `check_report.py` | do the reports still quote their own data | every resolvable table cell, judge-agreement figure, cost total, run count, Track A condition list, and any count written beside a named CSV or results directory, against the tree that report was written from (`RESULTS_FOR`) | **free prose**, deliberately: a count not tied to a named artifact is not matched. Resolving *nothing* is an error (`MIN_CELLS`); an unmapped report is an error, not a skip; an empty judge intersection is reported, not raised. |
+
+**What #14 does not cover, and why.** Scanning every "N arms" in the text found
+five false positives on two documents — sentences about judge files, about
+scenario matrices, about arms in a table. A checker that cries wolf gets switched
+off, so counts are only checked where they sit beside the artifact they describe:
+``` `judge.csv` (seed 1, 246 rows, eight arms) ``` or a sentence naming
+`results/`. **Write a count next to the file it describes and it gets checked;
+write it in free prose and nothing will catch it going stale.** That is a real
+gap, stated rather than papered over — it is how "all seven arms" reached the
+merged report one commit after this checker landed.
 
 ### Why #14 exists: the prose variant of the same class
 

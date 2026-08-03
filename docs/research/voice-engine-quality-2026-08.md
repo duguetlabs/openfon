@@ -4,9 +4,12 @@
 > against these arms — see
 > [the addendum](./voice-engine-quality-2026-08-gpt-realtime-2-1.md). The split
 > recommendation below stands, with one substitution: booking businesses should
-> use **2.1** rather than 2 (same groundedness, p95 down 23 %). The results
-> files in `bench/quality/results/` now cover all seven arms, so figures there
-> supersede the tables below where they differ.
+> use **2.1** rather than 2 (same groundedness, p95 down 23 %). That run
+> re-judged every arm, so `bench/quality/results/` now holds a different pass
+> covering **eight** arms; **this report's own pass is preserved in
+> `bench/quality/results/main-report/`**, and the tables below are checked
+> against it. Where the two differ, prefer the addendum's — but compare arms
+> within one pass, never across the two.
 
 Run 2026-08-02. Harness, raw logs and CSVs: [`bench/quality/`](../../bench/quality/).
 Datasets: [`voice-eval-datasets.md`](./voice-eval-datasets.md).

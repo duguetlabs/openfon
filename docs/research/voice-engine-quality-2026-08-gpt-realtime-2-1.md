@@ -12,8 +12,21 @@ Deployments `gpt-realtime-2.1` and `gpt-realtime-2.1-mini`, both dated
 ## Does a Voice-Live-served gpt-realtime collapse the split? No — it gets 0.920, not 0.960
 
 The hypothesis was that Voice Live's `azure-speech` plus a gpt-realtime brain
-would give best-in-class slot capture *and* groundedness at once. **The first
-half is confirmed and the second is not, for a reason that is structural.**
+would give best-in-class slot capture *and* groundedness at once. It separates
+into three claims, and they do not go the same way:
+
+| claim | verdict | evidence |
+|---|---|---|
+| Voice Live transcribes a gpt-realtime brain with `azure-speech` | **confirmed** | the session echo, plus 10/27 transcript matches to the other Voice Live arms against 1/27 to Foundry 2.1 |
+| that buys **best-in-class** slot capture (0.960) | **refuted, structurally** | 0.920. The 0.960 needs `server_vad`, which this combination is not allowed to use |
+| it keeps gpt-realtime groundedness | **confirmed** | 0.926, inside the gpt-realtime band (0.926–0.963) and far above every gpt-4.1-mini arm (0.778–0.815) |
+
+So the recogniser mechanism is exactly as hypothesised, and the payoff is not:
+the tier gets `azure-speech` and still lands 0.040 short of the best slot capture
+on offer, for a reason no future model version can remove. **What it does buy is
+better slot capture than Foundry (0.920 vs 0.893) with gpt-realtime groundedness
+intact** — a real gain, and a smaller one than "best-in-class and grounded at
+once."
 
 **Voice Live serves gpt-realtime-2.1 with `azure-speech`.** Read off the echo,
 not assumed:
@@ -220,7 +233,7 @@ Those figures described a smaller pass than the numbers they were vouching for;
 the table above is computed from the two files named in it.
 
 **Track A was run on six conditions, not eight.** Kept: `clean` (needed as the
-dWER/SNR₅₀ baseline), `cafe_snr10`, `cafe_snr5`, `cafe_snr0` and
+dWER/SNR₅₀ baseline), `cafe_snr10`, `cafe_snr5`, `cafe_snr0`, `tel` and
 `tel_cafe_snr10`. Cut: `cafe_snr20` and `tel_loss3`, the two conditions where
 the incumbent arms differed least (max between-arm spread 1.17 and 0.54 WER
 points respectively, against 14.03 for `cafe_snr0`). `cafe_snr5` was kept beyond
