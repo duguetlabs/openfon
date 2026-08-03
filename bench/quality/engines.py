@@ -260,6 +260,19 @@ ARMS: dict[str, Arm] = {
     ),
     # gpt-realtime-2.1 and its mini, both deployed 2026-07-07 on duguet-labs-eu.
     # Same Foundry GA surface as gpt-realtime-2, so the only variable is the model.
+    "vl-native-brain-21": Arm(
+        name="vl-native-brain-21", dialect="flat", model="gpt-realtime-2.1",
+        brain="gpt-realtime-2.1", stack="voice-live", voice=VOICE_AZURE,
+        noise_reduction=None, echo_cancellation=False,
+        vad_type="azure_semantic_vad_multilingual",
+        usd_per_min=0.07,
+        notes="Voice Live serving gpt-realtime-2.1 (reported as "
+              "gpt-realtime-2.1-global-standard). The candidate single tier: "
+              "azure-speech recognition with a gpt-realtime brain. Semantic VAD "
+              "is forced — Voice Live rejects server_vad for gpt-realtime brains "
+              "— so compare slot capture against vl-gpt41mini-semvad, not "
+              "vl-gpt41mini.",
+    ),
     "native-gpt-realtime-21": Arm(
         name="native-gpt-realtime-21", dialect="ga", model="gpt-realtime-2.1",
         brain="gpt-realtime-2.1", stack="foundry-native", voice=VOICE_OPENAI,
@@ -290,8 +303,22 @@ ARMS: dict[str, Arm] = {
 }
 
 
+# A stalled handshake must not hang the run. `websockets.connect` waits forever
+# by default: a Voice Live session that accepted the TCP connection and then
+# never sent `session.created` stopped a run dead for 13 minutes with a
+# zero-byte log and no error. `open_timeout` bounds the handshake; `ping_*`
+# make a silently dead connection surface as an exception rather than a stall.
+CONNECT_TIMEOUT_S = 30
+PING_INTERVAL_S = 20
+PING_TIMEOUT_S = 20
+
+
 def connect_kwargs(arm: Arm) -> dict[str, Any]:
-    return {"additional_headers": {"api-key": azure_key()}, "max_size": 32 * 1024 * 1024}
+    return {"additional_headers": {"api-key": azure_key()},
+            "max_size": 32 * 1024 * 1024,
+            "open_timeout": CONNECT_TIMEOUT_S,
+            "ping_interval": PING_INTERVAL_S,
+            "ping_timeout": PING_TIMEOUT_S}
 
 
 def load_prompt() -> dict[str, Any]:

@@ -1,10 +1,74 @@
 # Addendum: gpt-realtime-2.1 and 2.1-mini
 
-Run 2026-08-03, against the same fixtures, scenarios and scorers as
-[the main report](./voice-engine-quality-2026-08.md). Spend **$7.41** (cap $12).
+Run 2026-08-03, extended the same day with a Voice-Live-served 2.1 arm.
+Against the same fixtures, scenarios and scorers as
+[the main report](./voice-engine-quality-2026-08.md). Spend **$9.03** (cap $12).
 
 Deployments `gpt-realtime-2.1` and `gpt-realtime-2.1-mini`, both dated
 2026-07-07 on `duguet-labs-eu`, same Foundry GA surface as `gpt-realtime-2`.
+
+---
+
+## Does a Voice-Live-served gpt-realtime collapse the split? No — it gets 0.920, not 0.960
+
+The hypothesis was that Voice Live's `azure-speech` plus a gpt-realtime brain
+would give best-in-class slot capture *and* groundedness at once. **The first
+half is confirmed and the second is not, for a reason that is structural.**
+
+**Voice Live serves gpt-realtime-2.1 with `azure-speech`.** Read off the echo,
+not assumed:
+
+```
+model=gpt-realtime-2.1  ->  session.model = "gpt-realtime-2.1-global-standard"
+                            input_audio_transcription = {"model": "azure-speech", …}
+```
+
+And the caller transcripts confirm it empirically: `vl-native-brain-21` matches
+the other Voice Live arms 10/27 and the Foundry 2.1 arm **1/27**. The recogniser
+follows the **surface**, not the brain — the mirror image of the whisper-1
+finding.
+
+**But slot capture lands at 0.920, not 0.960, and the missing 0.040 is the VAD.**
+Voice Live *rejects* `server_vad` for a gpt-realtime brain — "turn_detection
+must be of type AzureSemanticVAD" — so semantic VAD is forced. Holding the
+recogniser fixed and varying only the VAD isolates the cost:
+
+| recogniser | VAD | brain | slots heard |
+|---|---|---|---|
+| azure-speech | server_vad | gpt-4.1-mini | **0.960** |
+| azure-speech | semantic | gpt-4.1-mini | 0.920 |
+| azure-speech | semantic | gpt-realtime-2 | 0.920 |
+| azure-speech | semantic | gpt-realtime-2.1 | 0.920 |
+| whisper-1 | server_vad | gpt-realtime-2 / 2.1 | 0.893 |
+
+**Slot capture is a function of (recogniser, VAD) and nothing else.** Three
+different brains on azure-speech + semantic VAD give 0.920 to three decimals;
+two gpt-realtime versions on whisper-1 give 0.893. The brain does not enter.
+
+So 0.960 is unreachable with a gpt-realtime brain: it requires `server_vad`,
+which that combination is not allowed to use.
+
+### What the tier is actually worth
+
+| | VL + gpt-4.1-mini | **VL + 2.1** | Foundry 2.1 |
+|---|---|---|---|
+| slots heard | **0.960** | 0.920 | 0.893 |
+| judge groundedness | 0.778 | **0.926** | **0.963** |
+| strict success | 0.407 | **0.481** | 0.407 |
+| pass^3 | 0.333 | **0.444** | 0.222 |
+| TTFA p50 / p95 | **1315 / 1719** | 2087 / 2975 | 1876 / **2560** |
+| cost | **$0.03/min** | $0.07/min | $0.07/min |
+
+**A Voice-Live-served 2.1 tier is worth adding, and it is the best booking tier
+tested** — better slot capture than Foundry 2.1 (0.920 vs 0.893, structural) and
+the joint-best pass^3 at 0.444. Against Foundry 2.1 it trades ~210 ms of p50 and
+415 ms of p95 for those gains; the success and pass^3 differences are two runs
+and two scenarios at n=27, so treat the slot-capture gain as the solid part.
+
+**It does not replace the information-only tier.** Voice Live + gpt-4.1-mini
+remains 770 ms faster at p50 and less than half the price, and still holds the
+only 0.960 slot capture on offer. **The split stands** — it just gets a better
+booking tier.
 
 ---
 
@@ -113,6 +177,35 @@ is not measured; and time-slot matching is approximate in the inflating
 direction. Seven of the 54 new runs contained a cancelled response and are
 excluded from the latency percentiles by `ttfa_trustworthy`.
 
+## The STT vocabulary prompt: rejected outright, and not the cause of `book-de-01`
+
+PR #7 found `transcription.prompt` echoed back `null` on the 2.1 tiers and on
+HD. Probing directly gives the reason, and it is stronger than a silent discard:
+
+```
+input_audio_transcription = {"model": "azure-speech", "prompt": "Telefonat bezüglich: …"}
+  -> error: "prompt is not yet supported for azure-speech.
+             This feature will be supported in a future update."
+```
+
+The same error comes back on `gpt-4.1-mini` (the HD tier) and on
+`gpt-realtime-2.1`. So **`sttVocab` cannot be applied on any azure-speech tier
+at all** — every Voice Live tier, including HD. It works only on the Foundry
+surface, where transcription is whisper-1, which is exactly why gpt-realtime-2
+echoed it verbatim. That is a real gap worth fixing in the gateway (strip it, or
+translate it to `phrase_list`, which the same echo shows the API does expose).
+
+**But it is not the cause of `book-de-01` failing 15/15.** `sttVocab` is built
+from the business name, agent name, service names and address — it contains no
+caller names by construction. Checked against the frozen fixture: none of
+`Kathrin`, `Schröder`, `Ferenc`, `Nagy`, `Jonathan`, `Reeves`, `Amelia`, `Hart`,
+`Priya` or `Raman` appears in it. A working vocab prompt could not have biased
+the recogniser toward "Kathrin", because "Kathrin" was never going to be in it.
+
+My own logs cannot corroborate PR #7 either way: this harness never sends a
+prompt on any arm, so `prompt: null` in every committed log is my omission, not
+the service's. The probe above is the evidence, not the logs.
+
 ## Cost
 
 | | Track A min | Track B min | $/min | $ |
@@ -120,4 +213,16 @@ excluded from the latency percentiles by `ttfa_trustworthy`.
 | `gpt-realtime-2.1` | 52.5 | 13.5 | 0.070 | 4.62 |
 | `gpt-realtime-2.1-mini` | 52.5 | 11.6 | 0.035 | 2.24 |
 | judge, 2 passes × 219 runs | | | | 0.55 |
-| **total** | | | | **7.41** |
+| `vl-native-brain-21` Track B | — | 11.8 | 0.070 | 0.82 |
+| run lost to a hung handshake (see below) | — | ~4.5 | 0.070 | 0.32 |
+| judge re-run over 246 runs | | | | 0.30 |
+| **total** | | | | **9.03** |
+
+### One harness fix this run forced
+
+A Voice Live session accepted the TCP connection and then never sent
+`session.created`. `websockets.connect` has no default timeout, so the run
+stopped dead for 13 minutes on a zero-byte log with no error raised — the
+"operational hang" `COMPLETENESS.md` listed as documented-not-fixed, reached by
+a route it did not anticipate. `connect_kwargs` now sets `open_timeout=30` and
+keepalive pings, so a stalled handshake fails instead of hanging.
