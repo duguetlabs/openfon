@@ -13,6 +13,7 @@ arm had in fact got it right. `test_time_twelve_hour_forms` is that bug.
 """
 from __future__ import annotations
 
+import asyncio
 import csv
 import json
 import math
@@ -1217,6 +1218,29 @@ class TestHangsAreBounded(unittest.TestCase):
         asr = (HERE / "run_asr.py").read_text()
         self.assertIn("BATCH_HARD_TIMEOUT_S", asr)
         self.assertIn("transcribe_batch(a.arm, a.lang, clips, log),", asr)
+
+
+class TestFailuresAreNeverFalsy(unittest.TestCase):
+    """`score_asr.py` tells an outage from an empty transcript by truthiness."""
+
+    def test_timeout_error_stringifies_empty(self):
+        # The premise of the bug, pinned so nobody "simplifies" the fix away.
+        self.assertEqual(str(asyncio.TimeoutError()), "")
+
+    def test_run_asr_never_records_a_falsy_error(self):
+        src = (HERE / "run_asr.py").read_text()
+        self.assertIn('reason = str(e) or f"{type(e).__name__} (no message)"', src)
+        self.assertIn('"error": reason,', src)
+        self.assertNotIn('"error": str(e),', src)
+
+    def test_documented_scoring_command_matches_the_committed_matrix(self):
+        """A report whose scoring step can't be re-run from its own README is
+        the reproducibility problem this harness already fixed once."""
+        readme = (HERE / "README.md").read_text()
+        line = next(l for l in readme.splitlines() if "score_asr.py" in l and "--hyp" in l)
+        self.assertIn("--allow-incomplete", line,
+                      "the committed matrix is asymmetric; without this the "
+                      "documented command aborts and writes nothing")
 
 
 class TestFixtureHygiene(unittest.TestCase):

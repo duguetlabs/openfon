@@ -81,21 +81,61 @@ reduction, for no loss of groundedness.
 
 **2.1 does not collapse the split, and 2.1-mini is not the single default.**
 
-| | Voice Live + gpt-4.1-mini | gpt-realtime-2 | **gpt-realtime-2.1** | gpt-realtime-2.1-mini |
+| | VL + gpt-4.1-mini | gpt-realtime-2 | **gpt-realtime-2.1** | 2.1-mini |
 |---|---|---|---|---|
 | TTFA p50 | **1315 ms** | 2077 ms | 1876 ms | **1194 ms** |
 | TTFA p95 | **1719 ms** | 3325 ms | 2560 ms | 1839 ms |
-| Judge groundedness | 0.741 | **0.926** | **0.926** | 0.741 |
+| Judge groundedness | 0.778 | 0.926 | **0.963** | 0.667 |
 | Slots heard | **0.960** | 0.893 | 0.893 | 0.893 |
 | Slots echoed back | 0.697 | 0.816 | **0.924** | 0.898 |
-| Strict success | 0.370 | **0.519** | 0.370 | 0.148 |
+| Strict success | 0.407 | **0.556** | 0.407 | 0.185 |
+| pass^3 | 0.333 | **0.444** | 0.222 | 0.111 |
 | Cost | **$0.03/min** | $0.07/min | $0.07/min | $0.035/min |
+
+*All figures from `bench/quality/results/summary.csv`, the single judge pass
+covering all seven arms. An earlier draft of this table carried the pre-extension
+pass and is superseded; the CSV is authoritative.*
+
+### The tension in that table, stated rather than smoothed
+
+**2.1 does not beat 2 on strict success — 2 leads 0.556 to 0.407, and on pass^3
+0.444 to 0.222.** A recommendation to substitute 2.1 for 2 has to answer that
+rather than quote only the columns where 2.1 wins.
+
+The judge-free view says the two are not distinguishable on task success. Every
+deterministic component is *identical*:
+
+| | slots all heard | `end_call` | grounded strings | deterministic success |
+|---|---|---|---|---|
+| `native-gpt-realtime-2` | 0.778 | 0.667 | 1.000 | 0.593 |
+| `native-gpt-realtime-21` | 0.778 | 0.667 | 1.000 | 0.444 |
+
+Only the *conjunction* differs, because the two fail on different runs. The gap
+is **4 runs of 27**, spread across three scenarios at one or two runs each
+(`hours-en-01` 3/3 vs 1/3, `emergency-de-01` 3/3 vs 2/3, `codeswitch-01` 1/3 vs
+0/3) — no concentration, no mechanism. And pass^3 at k=3 over nine scenarios
+moves in steps of 0.111, so a two-scenario difference is the second-coarsest
+value the metric can take.
+
+Strict success is also the metric this study flags as least trustworthy: noisiest
+at this n, and inflated in an unmeasured direction by the approximate time
+matcher.
+
+**So the supported claim is narrower than "2.1 substitutes cleanly for 2":**
+
+> gpt-realtime-2.1 is **better grounded** (0.963 vs 0.926) and **materially
+> faster** (p95 2560 vs 3325 ms, −23 %). On strict task success the data **does
+> not separate them** at 27 runs per arm — the deterministic components are
+> identical and the point estimate favours 2 by four runs. Prefer 2.1 for the
+> groundedness and the latency, not on a claim that it completes more calls.
+
+That is a weaker claim than the earlier draft and it is the one the numbers
+carry.
 
 Taking the four questions in turn.
 
-**Does 2.1 keep gpt-realtime-2's groundedness? Yes.** 0.926 against 2's 0.926 in
-the same judge pass, and stable across two seeds (2.1: 0.926 / 0.926; 2: 0.939 /
-0.909). The groundedness families are unambiguous and hold under reseeding:
+**Does 2.1 keep gpt-realtime-2's groundedness? Yes — and slightly exceeds it.**
+0.963 against 2's 0.926 in the same judge pass. The groundedness families are unambiguous and hold under reseeding:
 gpt-realtime-2, 2.1 and Voice-Live-served gpt-realtime-2 sit at 0.91–0.97; every
 gpt-4.1-mini arm **and 2.1-mini** sit at 0.73–0.82.
 
@@ -115,31 +155,19 @@ single improvement in this addendum. But Voice Live remains ~560 ms ahead at p50
 and ~840 ms at p95. (These are Track B by-products; task #13 measured latency
 directly and its numbers should be preferred where they differ.)
 
-**Is 2.1-mini the single-default answer? No.** It is genuinely fast — 1194 ms
-p50, *faster than Voice Live* — and half the cost of 2.1. But its groundedness
-is 0.741, squarely in the gpt-4.1-mini band, not the gpt-realtime band. It buys
-the latency of the cheap tier by giving up exactly the property that justified
-the expensive one. Its strict success, 0.148, is the lowest of any arm tested.
+**Is 2.1-mini the single-default answer? No, and less so than first written.**
+It is genuinely fast — 1194 ms p50, *faster than Voice Live* — and half the cost
+of 2.1. But its groundedness is **0.667**, below every gpt-4.1-mini arm (0.778)
+and far below the gpt-realtime band. It buys the cheap tier's latency by giving
+up more of the property that justified the expensive one than the cheap tier
+itself does. Its strict success, 0.185, is the lowest of any arm tested.
 
 ---
 
 ## What did not move, and why that is the honest reading
 
-**2.1's strict success is *lower* than 2's — 0.370 against 0.519 — and I do not
-believe the difference.** Stripping the judge clause entirely gives a fully
-deterministic score, and there the three headline components are *identical*:
-
-| | slots all heard | `end_call` | grounded strings | deterministic success |
-|---|---|---|---|---|
-| `native-gpt-realtime-2` | 0.778 | 0.667 | 1.000 | 0.593 |
-| `native-gpt-realtime-21` | 0.778 | 0.667 | 1.000 | 0.444 |
-
-Every component is equal; only the *conjunction* differs, because the two arms
-fail on different runs. At 27 runs per arm that is a four-run gap on a metric
-where one run is 0.037, and the main report already flags strict success as the
-figure most exposed to noise and to the approximate time matcher. **Read 2 and
-2.1 as equivalent on task success**, and take the latency improvement as the
-real difference.
+The 2-versus-2.1 strict-success gap is reconciled above under the headline
+table; it is four runs of 27 with identical deterministic components.
 
 `native-gpt-realtime-21` did score best of any arm on slots *echoed back*
 (0.924) — it confirms details to the caller more often — but that is one metric
@@ -154,8 +182,8 @@ re-judged together in a single pass, so the comparison here is internally
 consistent, but the LLM judge is not perfectly reproducible: two seeds agreed on
 groundedness 214/219 (**97.7 %**), resolution 95.0 %, tone 76.3 %. That moves an
 incumbent arm's strict success by a run or two versus the merged report — for
-example `native-gpt-realtime-2` reads 0.519 here against 0.593 there, on
-identical call data. **Compare arms within this table, not across documents.**
+example `native-gpt-realtime-2` reads 0.556 here against 0.593 in the merged
+report, on identical call data. **Compare arms within this table, not across documents.**
 
 **Track A was run on six conditions, not eight.** Kept: `clean` (needed as the
 dWER/SNR₅₀ baseline), `cafe_snr10`, `cafe_snr5`, `cafe_snr0` and

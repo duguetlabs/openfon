@@ -82,7 +82,12 @@ DATA=/path/to/data
 cd bench/quality && DATA=$DATA PY=../../.venv/bin/python ./run_all.sh
 
 # 5. Score.
-python score_asr.py   --hyp results/asr.jsonl --expect-clips 25 --out results/asr_scores.csv
+# The committed matrix is asymmetric: the two 2.1 arms were run on six of the
+# eight conditions (see the addendum), so eight (arm, condition) cells are
+# absent by design. --allow-incomplete accepts that and marks the affected rows
+# complete=0; without it the run aborts and writes nothing.
+python score_asr.py   --hyp results/asr.jsonl --expect-clips 25 --allow-incomplete \
+                      --out results/asr_scores.csv
 python score_slots.py --runs results/scenarios.jsonl --out results/slots.csv
 KATALEPTIC_KEY=... python judge.py --runs results/scenarios.jsonl --out results/judge.csv --seed 1
 KATALEPTIC_KEY=... python judge.py --runs results/scenarios.jsonl --out results/judge_seed2.csv --seed 2

@@ -228,7 +228,17 @@ async def main() -> None:
                         timeout=BATCH_HARD_TIMEOUT_S)
                     break
                 except Exception as e:  # noqa: BLE001
-                    print(f"  batch failed ({type(e).__name__}: {e}); "
+                    # `str(TimeoutError())` is the empty string, and score_asr.py
+                    # distinguishes an outage from a genuinely empty transcript by
+                    # truthiness of `error`. An empty message therefore reads as
+                    # "no error" and a timed-out cell scores as 100% WER — the
+                    # "refuse outages as measurements" guard defeated by a falsy
+                    # sentinel. Every failure reason must be non-empty.
+                    reason = str(e) or f"{type(e).__name__} (no message)"
+                    if isinstance(e, asyncio.TimeoutError):
+                        reason = (f"batch exceeded BATCH_HARD_TIMEOUT_S "
+                                  f"({BATCH_HARD_TIMEOUT_S}s)")
+                    print(f"  batch failed ({type(e).__name__}: {reason}); "
                           f"{'retrying' if attempt == 1 else 'giving up'}", file=sys.stderr)
                     if attempt == 2:
                         # These rows exist so the failure is visible in the data,
@@ -239,7 +249,7 @@ async def main() -> None:
                         # outage is published as 100% WER.
                         results += [{"arm": a.arm, "lang": a.lang, "condition": cond,
                                      "id": c["id"], "reference": c["reference"],
-                                     "hypothesis": "", "error": str(e),
+                                     "hypothesis": "", "error": reason,
                                      "audio_seconds": 0.0, "latency_s": 0.0}
                                     for c in clips]
                         exhausted.append(f"{a.lang}/{cond}")
