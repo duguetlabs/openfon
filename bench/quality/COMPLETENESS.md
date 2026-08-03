@@ -70,6 +70,28 @@ matrix; a cited CSV that does not exist, an empty CSV, a missing
 `summary_per_run.csv`, an unparseable total cell, a total with no line items, and
 a non-numeric count all fell through silently. Each now reports.
 
+**A coverage number counted from current behaviour certifies current behaviour,
+including its blind spots.** The per-report counts were first read off whatever
+the parser resolved at the time — 25 and 40 — so they encoded the parser's own
+gap. The addendum's compound `TTFA p50 / p95` row matched no label, six latency
+figures were skipped, and the declared count called the document fully compared
+anyway. Altering all six left the run green.
+
+The declared expectation has to come from the document's *structure* — how many
+numeric cells it contains beside an arm — not from how many the parser managed to
+resolve. Two changes make those the same number: an unrecognised label carrying
+figures is now a problem (`UNCHECKED_METRICS` is the declared list of rows that
+genuinely are not summary figures, each with its reason), and the test requires
+the resolved count to **equal** the declared one rather than merely clear it. So
+a newly-mapped metric forces the number up in the same commit. Closing the gap
+took the counts from 25/40 to 50/51 — **36 figures that were never being
+compared**, including every latency value in the tier recommendation.
+
+*Declared gap, not yet closed:* Track A word-error rates and SNR₅₀ live in
+`asr_scores_summary.csv`, not `summary.csv`, and are listed in
+`UNCHECKED_METRICS`. They are visible as unchecked rather than silently skipped,
+which is the difference that matters, but they are still unchecked.
+
 **Why the floor is per report.** It was first written as one global minimum, and
 that is the same bug in the check that exists to catch the bug: with 25 cells
 from one document and 40 from the other, a floor of 30 is cleared by either

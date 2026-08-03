@@ -1604,6 +1604,59 @@ class TestReportsMatchTheirData(unittest.TestCase):
                     for x in out["problems"]),
                 f"the arm that lost a condition went unreported: {out['problems']}")
 
+    def test_the_compound_latency_row_is_checked(self):
+        """`TTFA p50 / p95` matched no label, so six figures were skipped.
+
+        And the declared coverage count was read off what the parser resolved,
+        so it certified the document as fully compared with the gap inside it.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08-gpt-realtime-2-1.md"
+            p.write_text(p.read_text().replace(
+                "| TTFA p50 / p95 | **1315 / 1719** | 2087 / 2975 | 1876 / **2560** |",
+                "| TTFA p50 / p95 | **9999 / 8888** | 7777 / 6666 | 5555 / **4444** |"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1, "altered latency figures must not pass")
+            for field in ("ttfa_p50_ms", "ttfa_p95_ms"):
+                self.assertTrue(any(field in x for x in out["problems"]),
+                                f"{field} unchecked: {out['problems']}")
+
+    def test_an_unrecognised_numeric_row_is_reported(self):
+        """A metric label nobody mapped must be loud, not skipped.
+
+        This is the property that would have caught the compound row without
+        anyone noticing it: an unknown label beside figures is a gap in the
+        checker, and gaps in the checker have to be visible.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08-gpt-realtime-2-1.md"
+            p.write_text(p.read_text().replace(
+                "| Slots heard | **0.960** | 0.893 | 0.893 | 0.893 |",
+                "| Widget rate | **0.960** | 0.893 | 0.893 | 0.893 |"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1)
+            self.assertTrue(any("resolves to no summary.csv field" in x
+                                for x in out["problems"]), out["problems"])
+
+    def test_declared_coverage_matches_what_the_documents_contain(self):
+        """The count must equal the resolvable cells, not merely be below them.
+
+        A count derived from current behaviour certifies current behaviour,
+        blind spots included — which is exactly how the latency row survived.
+        Requiring equality means a newly-resolved metric forces the number up in
+        the same commit, rather than hiding under a floor set too low.
+        """
+        out, code = self._run()
+        self.assertEqual(code, 0, out["problems"])
+        import check_report
+        for doc, (_sub, want) in check_report.RESULTS_FOR.items():
+            self.assertEqual(
+                out["cells_per_report"][doc], want,
+                f"{doc}: resolves {out['cells_per_report'][doc]} cells but "
+                f"RESULTS_FOR declares {want}; re-derive the count")
+
     def test_a_cited_csv_that_does_not_exist_is_reported(self):
         with tempfile.TemporaryDirectory() as tmp:
             docs = self._sandbox(tmp)

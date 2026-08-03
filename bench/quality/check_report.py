@@ -45,17 +45,61 @@ ARM_LABELS = {
     "gpt-realtime-2.1-mini": "native-gpt-realtime-21-mini",
 }
 
-METRIC_FIELDS = {
-    "slots heard": "slot_heard",
-    "slot heard": "slot_heard",
-    "slots echoed back": "slot_echoed",
-    "judge groundedness": "judge_grounded",
-    "groundedness": "judge_grounded",
-    "strict success": "success_mean",
-    "success": "success_mean",
-    "pass^3": "pass_k",
-    "ttfa p50": "ttfa_p50_ms",
-    "ttfa p95": "ttfa_p95_ms",
+# label -> the summary.csv field(s) it states. A two-field entry is a compound
+# cell ("2087 / 2975"), split on the slash in order.
+METRIC_FIELDS: dict[str, tuple[str, ...]] = {
+    "slots heard": ("slot_heard",),
+    "slot heard": ("slot_heard",),
+    "slots echoed back": ("slot_echoed",),
+    "slots echoed": ("slot_echoed",),
+    "judge groundedness": ("judge_grounded",),
+    "groundedness": ("judge_grounded",),
+    "groundedness (seed 1)": ("judge_grounded",),
+    "grounded (judge)": ("judge_grounded",),
+    "grounded strings": ("grounded_ok",),
+    "resolution": ("judge_resolution",),
+    "tone": ("judge_tone",),
+    "end_call": ("tool_ok",),
+    "strict success": ("success_mean",),
+    "success": ("success_mean",),
+    "pass^3": ("pass_k",),
+    "ttfa p50": ("ttfa_p50_ms",),
+    "ttfa p95": ("ttfa_p95_ms",),
+    "ttfa p50 / p95": ("ttfa_p50_ms", "ttfa_p95_ms"),
+}
+
+# Rows that carry numbers beside an arm but are NOT summary.csv figures. Every
+# one is declared with the reason, because the alternative — skipping anything
+# unrecognised — is how six latency figures went unchecked while the coverage
+# count certified the document as fully compared. An unlisted numeric row is now
+# a problem, so adding a metric to a report forces a decision here.
+UNCHECKED_METRICS = {
+    # Track A word-error rates: these live in asr_scores_summary.csv, not
+    # summary.csv. NOT currently verified by this checker — a real gap, named.
+    "clean": "Track A WER (asr_scores_summary.csv) — not yet checked",
+    "cafe 20 db": "Track A WER — not yet checked",
+    "cafe 10 db": "Track A WER — not yet checked",
+    "cafe 5 db": "Track A WER — not yet checked",
+    "cafe 0 db": "Track A WER — not yet checked",
+    "g.711 telephony": "Track A WER — not yet checked",
+    "telephony + cafe 10 db": "Track A WER — not yet checked",
+    "telephony + 3 % loss": "Track A WER — not yet checked",
+    "en_us": "SNR50, derived in score_asr.py — not yet checked",
+    "de_de": "SNR50, derived in score_asr.py — not yet checked",
+    # Judge-free recomputations: deliberately different quantities from the
+    # summary fields they resemble. `slots all heard` is the per-run conjunction
+    # (0.778), not `slot_heard` (0.893); `deterministic success` excludes the
+    # judge (0.593), unlike `success_mean` (0.556). Mapping either would compare
+    # two different measurements and manufacture a failure.
+    "slots all heard": "per-run conjunction, not summary.slot_heard",
+    "deterministic success": "judge-free success, not summary.success_mean",
+    "(seed 2)": "second judge pass (judge_seed2.csv), not in summary.csv",
+    # Costs and configuration.
+    "cost": "catalog price, not a measurement",
+    "$": "cost table", "$/min": "cost table",
+    "track a min": "cost table", "track b min": "cost table",
+    "stack": "configuration", "brain": "configuration", "stt": "configuration",
+    "arms": "lists arm names, not a measurement",
 }
 
 # Each report is checked against the pass it was written from, and carries the
@@ -73,12 +117,23 @@ METRIC_FIELDS = {
 # rule as everywhere else in this harness: compare what you got against what you
 # expected, for each thing you expected it of.
 #
+# **Where these numbers come from.** They are the count of numeric cells the
+# documents *contain* beside an arm, which is now the same as the count resolved
+# because an unresolved numeric row is a problem (see UNCHECKED_METRICS). That
+# equality is the point. The first version of this count was 25/40, read off
+# whatever the parser happened to resolve at the time — and it therefore encoded
+# the parser's blind spot: the compound `TTFA p50 / p95` row matched no label, so
+# six latency figures were skipped and the count certified the document as fully
+# compared anyway. **A coverage number counted from current behaviour certifies
+# current behaviour, including its blind spots.** Closing that gap took the
+# counts to 50/51.
+#
 # Removing a table on purpose means lowering the number here in the same commit.
 # That is the point: coverage changes should be visible in the diff.
 RESULTS_FOR = {
     # report: (results subdirectory, table cells it must resolve)
-    "voice-engine-quality-2026-08.md": ("main-report", 25),
-    "voice-engine-quality-2026-08-gpt-realtime-2-1.md": (".", 40),
+    "voice-engine-quality-2026-08.md": ("main-report", 50),
+    "voice-engine-quality-2026-08-gpt-realtime-2-1.md": (".", 51),
 }
 
 
@@ -118,6 +173,41 @@ def parse_number(cell: str) -> float | None:
     return float(c)
 
 
+def parse_cell(cell: str, n_fields: int) -> tuple[list[float], bool] | None:
+    """The value(s) a cell states and whether they are exact, or None.
+
+    `n_fields` comes from the label, which removes the ambiguity of the slash:
+    with two fields "1315 / 1719" is a compound (p50, p95); with one, "18/27" is
+    a fraction to divide. Guessing from the cell alone cannot tell them apart.
+
+    The second element is False only for a divided fraction, whose quotient
+    cannot equal summary.csv's 3-decimal rounding. Everything else compares
+    exactly — a decimal cell written 0.668 against a stored 0.667 is a stale
+    figure, not a rounding artefact, and must not be absorbed by a tolerance
+    that exists for a different reason.
+    """
+    if n_fields == 2:
+        parts = [p for p in norm_label(cell).split("/") if p.strip()]
+        if len(parts) != 2:
+            return None
+        vals = [parse_number(p) for p in parts]
+        if any(v is None for v in vals):
+            return None
+        return [v for v in vals if v is not None], True
+    if (v := parse_number(cell)) is not None:
+        return [v], True
+    if m := re.fullmatch(r"(\d+)\s*/\s*(\d+)", norm_label(cell)):
+        den = int(m.group(2))
+        return ([int(m.group(1)) / den], False) if den else None
+    return None
+
+
+def looks_numeric(cell: str) -> bool:
+    """Does this cell state a figure at all? Used to decide whether an
+    unrecognised row is a silent gap or just prose."""
+    return parse_cell(cell, 1) is not None or parse_cell(cell, 2) is not None
+
+
 def tables(md: str) -> list[list[list[str]]]:
     """Every pipe table in the document, as a list of rows of cells."""
     out, cur = [], []
@@ -153,55 +243,58 @@ def check_tables(md: str, doc: str, summary: dict[str, dict[str, str]]) -> tuple
         row_arms = {r: a for r, row in enumerate(tbl[1:], 1)
                     if row and (a := resolve_arm(row[0], arms))}
 
+        def compare(label: str, arm: str, cells: list[str]) -> None:
+            """One metric label against one arm's summary row."""
+            nonlocal checked
+            lab = norm_label(label)
+            fields = METRIC_FIELDS.get(lab)
+            if fields is None:
+                # Unrecognised label. If it carries figures beside an arm, it is
+                # a silent gap — the shape that left six TTFA values unchecked
+                # while the coverage count called the document complete.
+                if any(looks_numeric(c) for c in cells) and lab not in UNCHECKED_METRICS:
+                    msg = (f"{doc}: table row/column {label!r} states figures "
+                           "beside an arm but resolves to no summary.csv field. "
+                           "Add it to METRIC_FIELDS, or to UNCHECKED_METRICS with "
+                           "the reason it cannot be checked.")
+                    if msg not in problems:
+                        problems.append(msg)
+                return
+            for cell in cells:
+                parsed = parse_cell(cell, len(fields))
+                if parsed is None:
+                    continue
+                got, exact = parsed
+                if arm not in summary:
+                    if (msg := missing_arm(doc, arm, summary)) not in problems:
+                        problems.append(msg)
+                    continue
+                for field, g in zip(fields, got):
+                    want = parse_number(summary[arm].get(field, ""))
+                    checked += 1
+                    if want is None:
+                        problems.append(
+                            f"{doc}: {arm}/{field} — summary.csv holds "
+                            f"{summary[arm].get(field)!r}, not a number")
+                    # Exact, except for a fraction the document wrote as 18/27
+                    # against a value summary.csv rounded to 0.667.
+                    elif abs(g - want) > (1e-9 if exact else 0.0006):
+                        problems.append(
+                            f"{doc}: {arm}/{field} — document says {g:g}, "
+                            f"summary.csv says {want:g}")
+
         if col_arms:  # metrics down the first column
             for row in tbl[1:]:
-                field = METRIC_FIELDS.get(norm_label(row[0]) if row else "")
-                if not field:
+                if not row:
                     continue
                 for i, arm in col_arms.items():
-                    if i >= len(row):
-                        continue
-                    got = parse_number(row[i])
-                    if got is None:
-                        continue
-                    if arm not in summary:
-                        if (msg := missing_arm(doc, arm, summary)) not in problems:
-                            problems.append(msg)
-                        continue
-                    want = parse_number(summary[arm].get(field, ""))
-                    checked += 1
-                    if want is None:
-                        problems.append(
-                            f"{doc}: {arm}/{field} — summary.csv holds "
-                            f"{summary[arm].get(field)!r}, not a number")
-                    elif abs(got - want) > 1e-9:
-                        problems.append(
-                            f"{doc}: {arm}/{field} — document says {got:g}, "
-                            f"summary.csv says {want:g}")
+                    if i < len(row):
+                        compare(row[0], arm, [row[i]])
         elif row_arms:  # metrics across the header
-            fields = {i: METRIC_FIELDS[norm_label(c)] for i, c in enumerate(head)
-                      if norm_label(c) in METRIC_FIELDS}
             for r, arm in row_arms.items():
-                for i, field in fields.items():
-                    if i >= len(tbl[r]):
-                        continue
-                    got = parse_number(tbl[r][i])
-                    if got is None:
-                        continue
-                    if arm not in summary:
-                        if (msg := missing_arm(doc, arm, summary)) not in problems:
-                            problems.append(msg)
-                        continue
-                    want = parse_number(summary[arm].get(field, ""))
-                    checked += 1
-                    if want is None:
-                        problems.append(
-                            f"{doc}: {arm}/{field} — summary.csv holds "
-                            f"{summary[arm].get(field)!r}, not a number")
-                    elif abs(got - want) > 1e-9:
-                        problems.append(
-                            f"{doc}: {arm}/{field} — document says {got:g}, "
-                            f"summary.csv says {want:g}")
+                for i, c in enumerate(head):
+                    if i and i < len(tbl[r]):
+                        compare(c, arm, [tbl[r][i]])
     return problems, checked
 
 
