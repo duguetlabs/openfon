@@ -258,6 +258,27 @@ ARMS: dict[str, Arm] = {
               "that vl-native-brain is forced onto — and that the Kataleptic HD "
               "tier actually ships. Makes the brain comparison VAD-neutral.",
     ),
+    # gpt-realtime-2.1 and its mini, both deployed 2026-07-07 on duguet-labs-eu.
+    # Same Foundry GA surface as gpt-realtime-2, so the only variable is the model.
+    "native-gpt-realtime-21": Arm(
+        name="native-gpt-realtime-21", dialect="ga", model="gpt-realtime-2.1",
+        brain="gpt-realtime-2.1", stack="foundry-native", voice=VOICE_OPENAI,
+        noise_reduction=None, echo_cancellation=False,
+        usd_per_min=0.07,
+        notes="Successor to gpt-realtime-2 on the same surface. The question is "
+              "whether it keeps 2's groundedness while closing the slot-capture "
+              "and latency gaps to Voice Live.",
+    ),
+    "native-gpt-realtime-21-mini": Arm(
+        name="native-gpt-realtime-21-mini", dialect="ga",
+        model="gpt-realtime-2.1-mini",
+        brain="gpt-realtime-2.1-mini", stack="foundry-native", voice=VOICE_OPENAI,
+        noise_reduction=None, echo_cancellation=False,
+        usd_per_min=0.035,
+        notes="The interesting one: if it reaches gpt-4.1-mini's latency and cost "
+              "with gpt-realtime-class groundedness, the split recommendation "
+              "collapses into a single default.",
+    ),
     "native-gpt-realtime-2": Arm(
         name="native-gpt-realtime-2", dialect="ga", model="gpt-realtime-2",
         brain="gpt-realtime-2", stack="foundry-native", voice=VOICE_OPENAI,

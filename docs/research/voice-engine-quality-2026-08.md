@@ -1,5 +1,13 @@
 # Voice engine quality: Azure Voice Live vs gpt-realtime-2
 
+> **Update 2026-08-03:** `gpt-realtime-2.1` and `2.1-mini` were benchmarked
+> against these arms — see
+> [the addendum](./voice-engine-quality-2026-08-gpt-realtime-2-1.md). The split
+> recommendation below stands, with one substitution: booking businesses should
+> use **2.1** rather than 2 (same groundedness, p95 down 23 %). The results
+> files in `bench/quality/results/` now cover all seven arms, so figures there
+> supersede the tables below where they differ.
+
 Run 2026-08-02. Harness, raw logs and CSVs: [`bench/quality/`](../../bench/quality/).
 Datasets: [`voice-eval-datasets.md`](./voice-eval-datasets.md).
 Actual spend **$23.19** at catalog sell rates (direct Azure retail is lower).

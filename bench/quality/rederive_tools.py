@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import collections
 import json
+import sys
 from pathlib import Path
 
 from events import function_call
@@ -56,12 +57,16 @@ def main() -> None:
             stats["log missing"] += 1
             continue
         before, after = list(r.get("tool_calls") or []), rebuilt
+        # Deduplication may only REMOVE repeats of a name already present. If the
+        # rebuilt set is missing a call the run recorded, the log is partial —
+        # truncated, redacted, or overwritten by a later run — and applying it
+        # would delete a real tool call rather than a duplicate. Refuse, and say so.
+        if not set(before) <= set(after):
+            stats["REFUSED: log is missing calls the run recorded"] += 1
+            print(f"  {r['arm']}/{r['scenario']}/t{r['trial']}: log has {after}, "
+                  f"run has {before} — left unchanged", file=sys.stderr)
+            continue
         stats["unchanged" if before == after else "rewritten"] += 1
-        # A set-level change would mean the dedupe lost a distinct call, which
-        # would be a bug in this script rather than a correction.
-        if set(before) != set(after):
-            stats["SET CHANGED (investigate)"] += 1
-            print(f"  {r['arm']}/{r['scenario']}/t{r['trial']}: {before} -> {after}")
         r["tool_calls"] = rebuilt
 
     for k, v in sorted(stats.items()):
