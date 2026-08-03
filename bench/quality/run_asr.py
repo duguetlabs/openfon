@@ -31,6 +31,10 @@ class CommitDesync(RuntimeError):
     """The commit stream fell out of sync; the session must not be reused."""
 
 
+# Outer wall-clock bound on a whole batch — see run_scenarios.py for why this
+# exists in addition to the per-receive timeouts.
+BATCH_HARD_TIMEOUT_S = 900
+
 MARKER = "openfon-bench-asr"
 FRAME_MS = 200
 LANG_CODE = {"en_us": "en", "de_de": "de", "fr_fr": "fr", "es_419": "es",
@@ -214,7 +218,9 @@ async def main() -> None:
         with open(logp, "w") as log:
             for attempt in (1, 2):
                 try:
-                    results += await transcribe_batch(a.arm, a.lang, clips, log)
+                    results += await asyncio.wait_for(
+                        transcribe_batch(a.arm, a.lang, clips, log),
+                        timeout=BATCH_HARD_TIMEOUT_S)
                     break
                 except Exception as e:  # noqa: BLE001
                     print(f"  batch failed ({type(e).__name__}: {e}); "

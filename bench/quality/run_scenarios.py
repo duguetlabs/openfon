@@ -37,6 +37,13 @@ FRAME_MS = 40                       # 40 ms frames ~= a realistic RTP cadence
 LANG_CODE = {"en_US": "en", "de_DE": "de"}
 MAX_TURN_WAIT_S = 25
 MAX_SESSION_S = 180                 # hard cap so a runaway session cannot bill forever
+# Outer wall-clock bound on a whole scenario. MAX_SESSION_S is only consulted
+# between turns, so it cannot end a call that is stuck *inside* one. This is the
+# belt-and-braces bound: it does not care which step hung, only that the whole
+# thing takes finite time. Two hangs have already been found in this harness by
+# two different routes — an unbounded connect, and a service that accepted a
+# connection and went silent — so the next one is assumed rather than predicted.
+SCENARIO_HARD_TIMEOUT_S = 300
 
 
 def pcm24k(path: Path) -> bytes:
@@ -353,7 +360,15 @@ async def main() -> None:
         logp = Path(a.logdir) / f"sc-{a.arm}-{sc['id']}-t{a.trial}.jsonl"
         with open(logp, "w") as log:
             try:
-                r = await run_scenario(a.arm, sc, Path(a.audio), a.trial, log)
+                r = await asyncio.wait_for(
+                    run_scenario(a.arm, sc, Path(a.audio), a.trial, log),
+                    timeout=SCENARIO_HARD_TIMEOUT_S)
+            except asyncio.TimeoutError:
+                r = {"arm": a.arm, "trial": a.trial, "scenario": sc["id"],
+                     "lang": sc["lang"], "intent": sc["intent"],
+                     "error": f"hard timeout after {SCENARIO_HARD_TIMEOUT_S}s",
+                     "turns": [], "transcript": [], "tool_calls": [],
+                     "audio_in_s": 0.0, "audio_out_bytes": 0}
             except Exception as e:  # noqa: BLE001
                 r = {"arm": a.arm, "trial": a.trial, "scenario": sc["id"],
                      "lang": sc["lang"], "intent": sc["intent"],

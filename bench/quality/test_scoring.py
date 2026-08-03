@@ -1147,6 +1147,38 @@ class TestRederiveIsDedupeOnly(unittest.TestCase):
             self.assertIn("extra=['invented']", r.stderr)
 
 
+class TestHangsAreBounded(unittest.TestCase):
+    """Every wait in the runners has a bound. Two hangs found by two routes."""
+
+    def test_connect_kwargs_bounds_the_handshake_and_keepalive(self):
+        import engines
+        kw = engines.connect_kwargs(engines.ARMS["vl-gpt41mini"])
+        for k in ("open_timeout", "ping_interval", "ping_timeout"):
+            with self.subTest(kw=k):
+                self.assertIsNotNone(kw.get(k))
+
+    def test_first_receive_is_bounded_not_open_ended(self):
+        """`open_timeout` covers the handshake only, not the first message."""
+        for mod in ("run_scenarios.py", "run_asr.py"):
+            with self.subTest(module=mod):
+                src = (HERE / mod).read_text()
+                at = src.index("async with websockets.connect")
+                head = src[at:at + 1400]
+                self.assertIn("asyncio.wait_for(ws.recv()", head)
+                self.assertIn("timeout=", head)
+
+    def test_each_runner_has_an_outer_wall_clock_bound(self):
+        """Belt-and-braces: no step-specific timeout can cover a step nobody
+        thought of, so the whole unit is bounded too."""
+        sc = (HERE / "run_scenarios.py").read_text()
+        self.assertIn("SCENARIO_HARD_TIMEOUT_S", sc)
+        self.assertIn("asyncio.wait_for(\n                    run_scenario(", sc)
+        self.assertIn("hard timeout after", sc)
+        asr = (HERE / "run_asr.py").read_text()
+        self.assertIn("BATCH_HARD_TIMEOUT_S", asr)
+        self.assertIn("transcribe_batch(a.arm, a.lang, clips, log),", asr)
+
+
 class TestFixtureHygiene(unittest.TestCase):
     """The scenarios are public and synthetic; keep them that way."""
 

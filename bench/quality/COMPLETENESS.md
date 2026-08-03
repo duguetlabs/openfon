@@ -80,6 +80,14 @@ anything that fails visibly, or only under a debug flag, gets written down.**
 - **Time-slot matching is approximate.** Numeric strings (phone numbers, dates)
   parse as clock mentions, and spoken composite times record only the hour, so
   both inflate. Stated in the report's limitations rather than chased further.
+- **Hangs are bounded in three layers, after two incidents.** `open_timeout`
+  and keepalive pings bound the handshake; `asyncio.wait_for` bounds every
+  individual receive, including the first (`open_timeout` does *not* cover the
+  wait for `session.created` — that is a separate, and separately bounded,
+  wait); and `SCENARIO_HARD_TIMEOUT_S` / `BATCH_HARD_TIMEOUT_S` bound the whole
+  unit regardless of which step stalled. The third layer exists because the
+  first two hangs arrived by routes nobody had predicted, so the next one is
+  assumed rather than enumerated.
 - **A mid-stream `ws.send()` failure can hang the run.** The mic task can die
   without setting the `last` event the turn is awaiting, so the run stops rather
   than erroring. This is operational, not a correctness defect: it halts a run
