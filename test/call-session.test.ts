@@ -774,16 +774,74 @@ describe('session echo read-back', () => {
     }
   });
 
-  it('does not fight the gateway over the transcription model', async () => {
-    // The gateway substitutes its own STT deployment persistently — it won 22
-    // of 25 turns in the benchmark — and it cannot corrupt what the caller
-    // hears. Logged, not re-sent, or every session would burn its budget.
-    const { up, sent } = await started();
+  it('re-asserts the vocabulary prompt a native tier dropped', async () => {
+    // The reason transcription moved from advisory to enforced. The gateway's
+    // injected default lands after ours and replaces the whole transcription
+    // object, taking `sttVocab` with it. It is a race, not an override — an
+    // update sent after theirs keeps our config, 18/18 across the three native
+    // tiers — so the read-back re-sends instead of writing it down.
+    const { up, sent } = await started('gpt-realtime-2');
+    expect(sent.audio?.input?.transcription?.prompt, 'native tiers send the vocab prompt').toBeTruthy();
     const s = structuredClone(sent);
-    s.audio!.input!.transcription = { ...s.audio!.input!.transcription, model: 'whisper' };
+    s.audio!.input!.transcription = { model: 'whisper', language: null, prompt: null };
+    echo(up, s);
+    await flush();
+    expect(updatesSent(up)).toBe(2);
+    const [first, second] = up.messages().filter((m) => m.type === 'session.update');
+    expect(second.session).toEqual(first.session);
+  });
+
+  it('does not fight the HD tier over a transcription it cannot set', async () => {
+    // HD is the one tier where re-sending provably loses: Azure Voice Live
+    // latches `input_audio_transcription` on the first `session.update` of the
+    // session and ignores every later one, and the gateway spends that first
+    // update on its own voice default. 0/18 across three strategies. Enforcing
+    // it here would burn both re-sends on every HD call and report a failure
+    // nobody can act on.
+    const { up, sent } = await started('kataleptic-realtime-hd');
+    const s = structuredClone(sent);
+    s.audio!.input!.transcription = { ...s.audio!.input!.transcription, model: 'azure-speech' };
     echo(up, s);
     await flush();
     expect(updatesSent(up)).toBe(1);
+  });
+
+  it('never re-sends on the cascade tier, which does not diverge', async () => {
+    // "Should never fire" is what transcription's advisory status rested on,
+    // and that premise turned out to be the losing half of a race — so pin it.
+    // The cascade echoes the transcription config verbatim, 6/6 measured, and
+    // sends no injected session.update of its own, so the enforced path must
+    // stay dormant there for the whole life of the call.
+    const { up, sent } = await started('llama-3.3-70b');
+    expect(sent.audio?.input?.transcription?.prompt, 'the cascade gets the vocab prompt').toBeTruthy();
+    echo(up, structuredClone(sent));
+    await flush();
+    // and a later echo of the same session must not start a re-send either
+    echo(up, structuredClone(sent));
+    await flush();
+    expect(updatesSent(up)).toBe(1);
+  });
+
+  it('reports a divergence outside the enforced subtrees without re-sending', async () => {
+    // The read-back covers the whole payload now, not a list of subtrees
+    // somebody remembered to add. Measured first: on all five tiers nothing
+    // outside `transcription` diverges on a healthy call, so the wider net
+    // costs no noise.
+    const logged: string[] = [];
+    const spy = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
+      logged.push(args.join(' '));
+    });
+    try {
+      const { up, sent } = await started('gpt-realtime-2');
+      const s = structuredClone(sent) as Sess & { tool_choice?: string };
+      s.tool_choice = 'none';
+      echo(up, s);
+      await flush();
+      expect(updatesSent(up), 'tool_choice is not worth a re-send').toBe(1);
+      expect(logged.some((l) => l.includes('session.tool_choice')), `expected an advisory line, got ${JSON.stringify(logged)}`).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('keeps a superseded socket off the replacement connection', async () => {
