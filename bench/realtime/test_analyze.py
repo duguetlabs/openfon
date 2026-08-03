@@ -649,10 +649,13 @@ class TestTailIsDescribedNotDiagnosed(unittest.TestCase):
 
     def test_the_verdict_claims_no_distribution_shape(self):
         """Two quantiles cannot tell a second mode from broad variance, so the
-        automated verdict must describe both numbers and diagnose nothing."""
+        verdict never says "bimodal". It may say which SIDE the spread is on —
+        that is a description of the p10 and p90, not a claim about modes."""
         r = result(106, 0.263, 1.000, lo=-106, hi=536, diffs=self.BIMODAL)
-        self.assertNotIn("bimodal", r.verdict().lower())
-        self.assertIn("median unrepresentative", r.verdict())
+        v = r.verdict()
+        self.assertNotIn("bimodal", v.lower())
+        self.assertIn("judge on the tail", v)
+        self.assertIn("p90", v)
 
     def test_a_broad_symmetric_spread_is_described_not_called_bimodal(self):
         """The case that showed the old wording over-claimed: median ~0 with a
@@ -660,7 +663,9 @@ class TestTailIsDescribedNotDiagnosed(unittest.TestCase):
         sym = [-800, -600, -400, -200, -50, 50, 200, 400, 600, 800]
         r = result(0, 1.0, 1.0, lo=-500, hi=500, diffs=sym)
         self.assertTrue(r.tail_unrepresented)          # median is unrepresentative
-        self.assertNotIn("bimodal", r.verdict().lower())   # but says nothing of shape
+        self.assertFalse(r.one_sided)                  # and it is symmetric
+        self.assertNotIn("bimodal", r.verdict().lower())   # says nothing of modes
+        self.assertIn("wide both ways", r.verdict())
 
     def test_tail_is_the_p90_of_paired_differences(self):
         r = result(106, 0.263, 1.0, diffs=self.BIMODAL)
@@ -712,3 +717,47 @@ class TestPairedTableAlwaysCarriesTheTail(unittest.TestCase):
         n = header.count("|")
         for row in body:
             self.assertEqual(row.count("|"), n, f"column count differs: {row}")
+
+
+class TestOneSidedTailVersusTwoSidedSpread(unittest.TestCase):
+    """A large p90 alone cannot tell a cost from variance. The proxy
+    comparisons and OpenAI's semantic VAD look alike on p90 (+502 vs +3490,
+    both large) and are opposite in meaning: the proxy is as often ~500 ms
+    faster as slower, semantic VAD is almost never faster. Only the low tail
+    distinguishes them, and the verdict must say which it is."""
+
+    # measured: native-gateway - native-direct, p10 -494 / p90 +502
+    SYMMETRIC = [-1123, -620, -494, -357, -180, -90, -40, -10, 12, 40,
+                 90, 150, 220, 306, 378, 469, 502, 560, 623, 688]
+    # measured: gw-21-semantic - gw-21-server, p10 -336 / p90 +3490
+    ONE_SIDED = [-336, -50, 20, 60, 80, 95, 100, 105, 110, 120,
+                 130, 150, 200, 300, 420, 558, 3400, 3500, 3600, 3864]
+
+    def test_symmetric_spread_is_not_called_a_cost(self):
+        r = result(12, 1.0, 1.0, lo=-90, hi=141, diffs=self.SYMMETRIC)
+        self.assertTrue(r.tail_unrepresented)     # median really is unrepresentative
+        self.assertFalse(r.one_sided)             # but it is not a one-sided cost
+        self.assertIn("wide both ways", r.verdict())
+        self.assertIn("not a one-sided cost", r.verdict())
+
+    def test_one_sided_tail_is_called_a_tail(self):
+        r = result(106, 0.263, 1.0, lo=-106, hi=536, diffs=self.ONE_SIDED)
+        self.assertTrue(r.one_sided)
+        self.assertIn("one-sided tail", r.verdict())
+
+    def test_the_two_are_indistinguishable_on_p90_alone(self):
+        """The property that made the p90-only verdict wrong."""
+        a = result(12, 1.0, 1.0, diffs=self.SYMMETRIC)
+        b = result(106, 0.263, 1.0, diffs=self.ONE_SIDED)
+        self.assertGreater(a.tail_ms, 400)
+        self.assertGreater(b.tail_ms, 400)        # both large at p90
+        self.assertNotEqual(a.one_sided, b.one_sided)   # opposite in meaning
+
+    def test_low_tail_is_the_p10(self):
+        r = result(12, 1.0, 1.0, diffs=self.SYMMETRIC)
+        self.assertLess(r.low_tail_ms, -400)
+
+    def test_empty_diffs_are_neither(self):
+        r = result(0, 1.0, 1.0, diffs=[])
+        self.assertFalse(r.one_sided)
+        self.assertFalse(r.tail_unrepresented)

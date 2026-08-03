@@ -227,7 +227,16 @@ alone (`PairedResult.tail_unrepresented`). The case that forced this: OpenAI's s
 VAD costs ~100 ms on four turns in five and ~3.5 s on the fifth, and a paired median of
 +106 ms was published as "no detectable difference".
 
-The verdict **describes both numbers and diagnoses nothing**. An earlier version said
+It also reports the **p10** beside the p90, because a large p90 alone cannot tell a cost
+from variance — and getting that wrong was the next mistake after the first one. The two
+proxy comparisons and OpenAI's semantic VAD both show a big p90 (+502 and +3490) and mean
+opposite things: the proxy's p10 is −494, so the gateway is ~500 ms *faster* about as often
+as it is slower, while semantic VAD's p10 is −336 against a +3490 p90, almost never faster.
+A cost cannot be negative as often as it is positive. The verdict says *"wide both ways,
+not a one-sided cost"* or *"one-sided tail, judge on the tail"* accordingly —
+`PairedResult.one_sided`.
+
+The verdict **describes the numbers and diagnoses no modes**. An earlier version said
 "bimodal", which two quantiles cannot establish — a broad symmetric spread with median 0
 and p90 800 trips the same rule as a genuine second mode. That wording was itself added to
 fix an over-claim and became one. Whether a case really is bimodal is a question for the

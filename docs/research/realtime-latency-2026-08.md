@@ -14,13 +14,27 @@ the first is reported alongside as a replication. Harness and full method in
 
 ## Answer
 
-**No. Routing through the Kataleptic gateway does not cost measurable latency, for
-either engine.**
+**No. Routing through the Kataleptic gateway costs no detectable latency in either
+direction, for either engine.**
 
-| comparison | run 2 (primary) | 95% CI | p raw / Holm | run 1 (replication) |
-|---|---:|---|---:|---:|
-| gpt-realtime-2 via gateway − direct | **+12 ms** | [−90, +141] | 1.00 / 1.00 | −18 ms |
-| Voice Live via gateway − direct | **−100 ms** | [−280, −15] | 0.043 / 0.78 | −19 ms |
+| comparison | run 2 (primary) | 95% CI | **p10 / p90 Δ** | p raw / Holm | run 1 |
+|---|---:|---|---:|---:|---:|
+| gpt-realtime-2 via gateway − direct | **+12 ms** | [−90, +141] | **−494 / +502** | 1.00 / 1.00 | −18 ms |
+| Voice Live via gateway − direct | **−100 ms** | [−280, −15] | **−374 / +171** | 0.043 / 0.87 | −19 ms |
+
+**Read the p10/p90 pair, not just the median.** Individual turns scatter by roughly
+±500 ms — but *in both directions*. On the gpt-realtime-2 pair, 6 of 23 turns were more
+than 250 ms slower through the gateway and **4 were more than 250 ms faster** (one by
+1.1 s); on the Voice Live pair, 2 were slower and **9 faster**. That is per-turn variance
+— network jitter and model non-determinism — not a cost, because a cost cannot be negative
+as often as it is positive. The confidence intervals are the right summary of it, and they
+are what bounds the claim.
+
+This distinction matters because a *one-sided* tail would be a different finding entirely.
+Compare OpenAI's semantic VAD, measured in the
+[2.1 report](realtime-21-2026-08.md): median +106 ms but p10/p90 of **−336 / +3490** —
+almost nothing on the low side, four turns near +3.5 s on the high side. That is a real
+cost that a median hides. The proxy comparisons are not that shape.
 
 Neither survives correction in either run, and the two runs disagree on sign for the
 native pair (+12 vs −18) — which is itself the finding: the effect is smaller than the
@@ -142,21 +156,22 @@ detector has no fixed hangover at all.
 
 Paired on the engine-only figure, neither proxy comparison survives correction
 (`native-gateway` − `native-direct` +33 ms, p = 1.00; `vl-gateway` − `vl-direct` −95 ms,
-p raw 0.043 / Holm 0.78).
+p raw 0.043 / Holm 0.87).
 
 Paired, on identical caller audio in the same round:
 
-| comparison | pairs | median Δ | 95% CI | p90 Δ | p raw | p Holm | verdict |
+| comparison | pairs | median Δ | 95% CI | **p10 / p90 Δ** | p raw | p Holm | verdict |
 |---|---:|---:|---|---:|---:|---:|---|
-| `native-gateway` − `native-direct` | 23 | **+12** | [−90, +141] | **+502** | 1.000 | 1.000 | median +12, p90 +502 — median unrepresentative |
-| `vl-gateway` − `vl-direct` | 25 | **−100** | [−280, −15] | +171 | 0.043 | 0.866 | borderline — faster by 100 ms, not robust to Holm |
-| `vl-native-brain` − `native-direct` | 25 | **−46** | [−152, −1] | **+508** | 0.043 | 0.866 | median −46, p90 +508 — median unrepresentative |
+| `native-gateway` − `native-direct` | 23 | **+12** | [−90, +141] | **−494 / +502** | 1.000 | 1.000 | wide both ways, not a one-sided cost |
+| `vl-gateway` − `vl-direct` | 25 | **−100** | [−280, −15] | **−374 / +171** | 0.043 | 0.866 | borderline — faster by 100 ms, not robust to Holm |
+| `vl-native-brain` − `native-direct` | 25 | **−46** | [−152, −1] | **−536 / +508** | 0.043 | 0.866 | wide both ways, not a one-sided cost |
 
-> Regenerated 2026-08-03 with the current analyzer. Two changes: the Holm values are
-> 0.866, not the 0.779 published earlier — that figure predated `session_ready_ms` joining
-> the metric family and was never regenerated — and two rows are now flagged as having an
-> unrepresentative median, because the p90 of their paired differences is an order of
-> magnitude above it. The flag describes both numbers; it does not claim a shape.
+> Regenerated with the current analyzer. Three changes since first publication: the Holm
+> values are 0.866, not the 0.779 published earlier — that figure predated
+> `session_ready_ms` joining the metric family; the paired **p10** is now shown beside the
+> p90, because a large p90 alone cannot distinguish a cost from variance; and with both
+> visible, two rows that a p90-only view flagged as tails turn out to be **symmetric
+> spread** — the gateway is ~500 ms faster about as often as it is ~500 ms slower.
 > Neither changes a conclusion; both were published as cleaner than the data supports.
 
 p-values are Holm-corrected across all 27 paired tests in the run (see
@@ -324,8 +339,10 @@ only one this benchmark establishes.
 
 > **"Voice Live's serving stack is faster with the brain held constant" is not an
 > established result.** In the primary run it is −46 ms with a CI upper bound touching zero
-> (−152, −1) and a corrected p of 0.78; run 1 put it at −93 ms, also demoted. The honest
-> statement is: *no robust difference; if anything Voice Live's stack is slightly faster.*
+> (−152, −1) and a corrected p of 0.87; run 1 put it at −93 ms, also demoted. Its
+> paired differences are wide in *both* directions (p10/p90 −536 / +508), so "if anything
+> faster" describes the median of a scatter, not a reliable advantage. The honest
+> statement is: *no robust difference either way.*
 > Confirming it would need a dedicated, better-powered run.
 
 Note also how many rows sit at exactly p = 0.043 — that is the smallest two-sided p an

@@ -372,6 +372,30 @@ class PairedResult:
         return pct(self.diffs, 90) if self.diffs else float("nan")
 
     @property
+    def low_tail_ms(self) -> float:
+        """The p10 of the paired differences — the other side of the spread."""
+        return pct(self.diffs, 10) if self.diffs else float("nan")
+
+    @property
+    def one_sided(self) -> bool:
+        """Is the spread concentrated on one side, or symmetric?
+
+        This is the distinction that decides whether a large p90 is a COST or
+        just variance. A one-sided tail means the treatment sometimes pays and
+        never gains; a symmetric spread means it is as often faster as slower,
+        which no amount of p90 can turn into a cost.
+
+        The proxy comparisons look alike on p90 alone (+502) and are opposite
+        in meaning: their p10 is -494, i.e. the gateway is ~500 ms faster about
+        as often as it is ~500 ms slower. OpenAI's semantic VAD, by contrast,
+        was +3490 at p90 against -6 at p10 — real, and one-sided.
+        """
+        if not self.diffs or math.isnan(self.tail_ms) or math.isnan(self.low_tail_ms):
+            return False
+        # one-sided when the far side is small relative to the near side
+        return abs(self.low_tail_ms) < 0.4 * abs(self.tail_ms)
+
+    @property
     def tail_unrepresented(self) -> bool:
         """The median does not represent the upper tail of this comparison.
 
@@ -395,9 +419,15 @@ class PairedResult:
         if self.not_comparable:
             return f"**not comparable** — {self.not_comparable}"
         if self.tail_unrepresented:
-            # Describe both numbers; claim nothing about the shape between them.
-            return (f"**median {self.median:+.0f} ms, p90 {self.tail_ms:+.0f} ms** — "
-                    f"median unrepresentative, judge on the tail")
+            # Describe the numbers; claim nothing about modes. But DO say which
+            # side the spread sits on, because a one-sided tail is a cost and a
+            # two-sided one is variance, and p90 alone cannot tell them apart.
+            if self.one_sided:
+                return (f"**median {self.median:+.0f} ms, p90 {self.tail_ms:+.0f} ms** — "
+                        f"one-sided tail, judge on the tail")
+            return (f"median {self.median:+.0f} ms, p10/p90 "
+                    f"{self.low_tail_ms:+.0f}/{self.tail_ms:+.0f} ms — "
+                    f"wide both ways, not a one-sided cost")
         direction = "slower" if self.median > 0 else "faster"
         if self.survives:
             return f"**{direction} by {abs(self.median):.0f} ms**"
@@ -454,7 +484,7 @@ def compute_paired(turns: list[dict], metrics: list[str]) -> dict[str, list[Pair
 
 
 def paired_table(results: list[PairedResult]) -> list[str]:
-    rows = ["| comparison | pairs | median Δ | 95% CI | **p90 Δ** | p (raw) | p (Holm) | verdict |",
+    rows = ["| comparison | pairs | median Δ | 95% CI | **p10 / p90 Δ** | p (raw) | p (Holm) | verdict |",
             "|---|---:|---:|---|---:|---:|---:|---|"]
     for r in results:
         if r.not_comparable:
@@ -463,7 +493,8 @@ def paired_table(results: list[PairedResult]) -> list[str]:
             continue
         rows.append(
             f"| `{r.treat}` − `{r.ctrl}`<br><sub>{r.question}</sub> | {len(r.diffs)} | "
-            f"**{r.median:+.0f}** | [{r.lo:+.0f}, {r.hi:+.0f}] | {pct(r.diffs, 90):+.0f} | "
+            f"**{r.median:+.0f}** | [{r.lo:+.0f}, {r.hi:+.0f}] | "
+            f"{pct(r.diffs, 10):+.0f} / {pct(r.diffs, 90):+.0f} | "
             f"{r.p_raw:.3f} | {r.p_adj:.3f} | {r.verdict()} |")
     return rows
 
