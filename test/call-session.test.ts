@@ -97,7 +97,7 @@ const SETTINGS_ROW = {
   realtime_model: '', realtime_voice: '',
 };
 
-function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline') {
+function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline', settings: Partial<typeof SETTINGS_ROW> = {}) {
   const writes: { sql: string; args: unknown[] }[] = [];
   const ctl = {
     failUpdates: false, // transient failure writing the finished call row
@@ -126,7 +126,7 @@ function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline') {
                 return CALL_ROW;
               }
               if (sql.includes('FROM businesses')) return BIZ_ROW;
-              if (sql.includes('FROM agent_settings')) return { ...SETTINGS_ROW, engine };
+              if (sql.includes('FROM agent_settings')) return { ...SETTINGS_ROW, engine, ...settings };
               return null;
             },
             async all() {
@@ -236,8 +236,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function newSession(engine: 'pipeline' | 'realtime' = 'pipeline') {
-  const backing = fakeDb(engine);
+function newSession(engine: 'pipeline' | 'realtime' = 'pipeline', settings: Partial<typeof SETTINGS_ROW> = {}) {
+  const backing = fakeDb(engine, settings);
   const storage = new FakeStorage();
   const state = { storage } as unknown as DurableObjectState;
   const session = new CallSession(state, fakeEnv(backing.db));
@@ -578,6 +578,80 @@ describe('finalize closes attached sockets', () => {
     await flush();
     expect(storage.alarmAt).toBeNull();
     expect(storage.map.size).toBe(0);
+  });
+});
+
+describe('realtime session payload', () => {
+  /**
+   * The `session.update` a tier's engine actually receives, driven through the
+   * real start path rather than by reaching into the class — the bug these
+   * pin is "what we put on the wire", so the wire is what gets inspected.
+   */
+  const sessionFor = async (realtime_model: string): Promise<Record<string, unknown>> => {
+    const { session } = newSession('realtime', { realtime_model });
+    await session.fetch(upgradeRequest());
+    serverSockets.at(-1)!.receive({ type: 'start' });
+    await flush();
+    upstreamSockets.at(-1)!.emit('open', {});
+    await flush();
+    const update = upstreamSockets.at(-1)!.messages().find((m) => m.type === 'session.update');
+    expect(update, `no session.update reached the ${realtime_model} engine`).toBeDefined();
+    return update!.session as Record<string, unknown>;
+  };
+
+  const turnDetection = async (model: string): Promise<Record<string, unknown>> => {
+    const s = await sessionFor(model);
+    const audio = s.audio as { input?: { turn_detection?: Record<string, unknown> } };
+    return audio?.input?.turn_detection ?? {};
+  };
+
+  it('gives gpt-realtime tiers semantic VAD, which is where splitting was measured', async () => {
+    // server_vad ends the caller's turn at a clause pause on this brain 10/10;
+    // the same brain on a semantic detector, 0/10 (McNemar p = 0.00195).
+    expect(await turnDetection('gpt-realtime-2')).toEqual({ type: 'semantic_vad', eagerness: 'auto' });
+  });
+
+  it('defaults an unmeasured gpt-realtime tier to its family, not to server VAD', async () => {
+    // gpt-realtime-2.1 is not in the table yet. Falling back to server_vad
+    // would silently ship the splitting behaviour to every newly enabled
+    // native tier; a measurement that says it does not split is one line in
+    // TURN_DETECTION_BY_TIER.
+    expect(await turnDetection('gpt-realtime-2.1')).toEqual({ type: 'semantic_vad', eagerness: 'auto' });
+  });
+
+  it('leaves the HD tier on the tuned server VAD it was measured with', async () => {
+    // 0/10 splits already, and semantic VAD scored *worse* on this brain
+    // (strict success 0.333 -> 0.259). The gateway rewrites this to
+    // azure_semantic_vad_multilingual on the way through regardless.
+    expect(await turnDetection('kataleptic-realtime-hd')).toEqual({
+      type: 'server_vad',
+      threshold: 0.7,
+      prefix_padding_ms: 300,
+      silence_duration_ms: 550,
+    });
+  });
+
+  it('leaves cascade tiers on server VAD, which is the only detector they accept', async () => {
+    // Voice Live rejects OpenAI semantic VAD on a cascaded pipeline outright,
+    // so leaking the family default here would break every call on the tier.
+    const td = await turnDetection('kataleptic-realtime');
+    expect(td.type).toBe('server_vad');
+    expect(td.threshold).toBe(0.7);
+  });
+
+  it('never asks for noise reduction, on any tier', async () => {
+    // azure_deep_noise_suppression returns an empty transcript for ~32% of
+    // English utterances and takes clean-audio WER from 4.8% to 47.8%, and
+    // improves robustness nowhere. Not setting it is already correct; this is
+    // what stops it being added later as an improvement.
+    const keys = (v: unknown): string[] =>
+      v && typeof v === 'object' && !Array.isArray(v)
+        ? Object.entries(v as Record<string, unknown>).flatMap(([k, val]) => [k, ...keys(val)])
+        : [];
+    for (const model of ['gpt-realtime-2', 'kataleptic-realtime-hd', 'kataleptic-realtime']) {
+      const offenders = keys(await sessionFor(model)).filter((k) => /noise/i.test(k));
+      expect(offenders, `${model} session payload asks for noise reduction`).toEqual([]);
+    }
   });
 });
 
