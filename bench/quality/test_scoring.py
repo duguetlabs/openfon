@@ -1417,8 +1417,40 @@ class TestReportsMatchTheirData(unittest.TestCase):
             out, code = self._run(docs=docs)
             self.assertEqual(code, 1)
             self.assertLess(out["cells_checked"], 30)
-            self.assertTrue(any("stopped matching" in x for x in out["problems"]),
-                            out["problems"])
+            self.assertTrue(any("no longer being checked" in x
+                                for x in out["problems"]), out["problems"])
+
+    def test_one_report_going_blind_is_not_covered_by_the_other(self):
+        """The floor holds per report, not in aggregate.
+
+        Enforced globally, 25 cells from one document and 40 from the other
+        clear a floor of 30 — so either could fall to zero, its tables silently
+        unchecked, while the run still reported clean. Strip the tables from one
+        document only and the run must still fail, naming that document.
+        """
+        for victim in ("voice-engine-quality-2026-08.md",
+                       "voice-engine-quality-2026-08-gpt-realtime-2-1.md"):
+            with self.subTest(report=victim), tempfile.TemporaryDirectory() as tmp:
+                docs = self._sandbox(tmp)
+                p = docs / victim
+                p.write_text("\n".join(
+                    line for line in p.read_text().splitlines()
+                    if not line.strip().startswith("|")))
+                out, code = self._run(docs=docs)
+                self.assertEqual(out["cells_per_report"][victim], 0)
+                self.assertEqual(code, 1, "a blind report must fail on its own")
+                self.assertTrue(
+                    any(x.startswith(victim) and "no longer being checked" in x
+                        for x in out["problems"]),
+                    f"nothing named {victim}: {out['problems']}")
+
+    def test_every_mapped_report_reports_its_own_coverage(self):
+        """Coverage is only actionable if you can see where it went."""
+        out, _ = self._run()
+        import check_report
+        self.assertEqual(set(out["cells_per_report"]), set(check_report.RESULTS_FOR))
+        for doc, (_sub, want) in check_report.RESULTS_FOR.items():
+            self.assertGreaterEqual(out["cells_per_report"][doc], want)
 
     def test_a_stale_arm_count_beside_a_named_tree_is_caught(self):
         """"…covering all seven arms" when the CSV holds eight.

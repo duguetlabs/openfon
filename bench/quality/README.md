@@ -129,12 +129,18 @@ CSVs it was written from. Three review rounds found the same defect — a senten
 correct when written and stale after the study was extended — and prose does not
 fail CI on its own. This makes it fail: `test_scoring.py` runs it.
 
-`RESULTS_FOR` maps each report to its own pass. The 2.1 run re-judged every arm
-and overwrote `results/` in place, so the merged report is checked against
-`results/main-report/`, the pass that produced it. **A re-run that changes
-existing arms' numbers should write to a new directory and add a mapping**, not
-overwrite; a report whose data has been overwritten cannot be verified by anyone,
-including you. A report with no mapping is a failure, not a skip.
+`RESULTS_FOR` maps each report to its own pass *and* to the number of table cells
+it must resolve. The 2.1 run re-judged every arm and overwrote `results/` in
+place, so the merged report is checked against `results/main-report/`, the pass
+that produced it. **A re-run that changes existing arms' numbers should write to
+a new directory and add a mapping**, not overwrite; a report whose data has been
+overwritten cannot be verified by anyone, including you. A report with no mapping
+is a failure, not a skip.
+
+The cell count is enforced **per report**, not across the run — otherwise two
+documents mask each other and one can silently stop being checked while the
+totals still look healthy. If you remove a table on purpose, lower that report's
+number in the same commit.
 
 ## Things that will bite you
 

@@ -14,7 +14,10 @@ The rule this enforces is the same one `COMPLETENESS.md` states for the scorers:
 **a check that resolves nothing must fail, not pass.** A parser that silently
 matched zero table cells would report "no problems" for a document made entirely
 of wrong numbers, which is this repository's signature bug wearing a new hat.
-Hence `MIN_CELLS`: the run is an error if it did not actually compare anything.
+Hence the per-report cell floors in `RESULTS_FOR`: the run is an error if any
+mapped report stopped being compared. Enforcing that in aggregate was not enough
+— two documents then mask each other, and one can fall to zero coverage while the
+run still reports clean.
 
 Usage:  python3 check_report.py [--results results] [--docs ../../docs/research]
 Exits non-zero, listing each disagreement, if the documents and the data differ.
@@ -55,17 +58,27 @@ METRIC_FIELDS = {
     "ttfa p95": "ttfa_p95_ms",
 }
 
-MIN_CELLS = 30  # floor: fewer means the parser stopped matching, not that the doc is clean
-
-# Each report is checked against the pass it was written from. The 2.1 run
-# re-judged every arm and overwrote results/ in place, so the merged report's
-# figures are NOT reproducible from the current CSVs — they are reproducible from
+# Each report is checked against the pass it was written from, and carries the
+# number of table cells it is *expected* to resolve. The 2.1 run re-judged every
+# arm and overwrote results/ in place, so the merged report's figures are NOT
+# reproducible from the current CSVs — they are reproducible from
 # results/main-report/, restored from the commit that published them. A report
 # with no mapping here is an error, not a skip: an unchecked document is exactly
 # the state this file exists to prevent.
+#
+# The cell count is a declared expectation, not a guess, and it is enforced **per
+# report**. A single global floor let two documents mask each other: 25 cells
+# from one and 40 from the other clear a floor of 30, so either could fall to
+# zero — its tables silently unchecked — while the run still reported clean. Same
+# rule as everywhere else in this harness: compare what you got against what you
+# expected, for each thing you expected it of.
+#
+# Removing a table on purpose means lowering the number here in the same commit.
+# That is the point: coverage changes should be visible in the diff.
 RESULTS_FOR = {
-    "voice-engine-quality-2026-08.md": "main-report",
-    "voice-engine-quality-2026-08-gpt-realtime-2-1.md": ".",
+    # report: (results subdirectory, table cells it must resolve)
+    "voice-engine-quality-2026-08.md": ("main-report", 25),
+    "voice-engine-quality-2026-08-gpt-realtime-2-1.md": (".", 40),
 }
 
 
@@ -407,28 +420,38 @@ def main() -> int:
     docs = Path(a.docs)
 
     problems: list[str] = []
-    checked = 0
+    per_doc: dict[str, int] = {}
     seen_docs = 0
     for md_path in sorted(docs.glob("voice-engine-quality-*.md")):
         seen_docs += 1
         md = md_path.read_text()
         doc = md_path.name
-        sub = RESULTS_FOR.get(doc)
-        if sub is None:
+        entry = RESULTS_FOR.get(doc)
+        if entry is None:
             problems.append(
                 f"{doc}: no entry in RESULTS_FOR, so nothing checked it. Add the "
                 "results directory this report was written from.")
             continue
+        sub, want_cells = entry
         results = (root / sub).resolve()
         summary_path = results / "summary.csv"
         if not summary_path.exists():
             problems.append(f"{doc}: {summary_path} is missing; its figures "
                             "cannot be verified")
             continue
-        summary = {r["arm"]: r for r in csv.DictReader(summary_path.open())}
+        with summary_path.open() as f:
+            summary = {r["arm"]: r for r in csv.DictReader(f)}
         p, n = check_tables(md, doc, summary)
         problems += p
-        checked += n
+        per_doc[doc] = n
+        # Per report, not in aggregate: a document whose tables stopped resolving
+        # must fail on its own account, not be carried by the other one.
+        if n < want_cells:
+            problems.append(
+                f"{doc}: only {n} table cells resolved, expected {want_cells}. "
+                "Its numeric tables are no longer being checked — this is not "
+                "evidence the report is correct. If a table was removed on "
+                "purpose, lower the count for this report in RESULTS_FOR.")
         problems += check_judge_agreement(md, doc, results)
         problems += check_cost_table(md, doc)
         problems += check_run_counts(md, doc, results)
@@ -438,17 +461,23 @@ def main() -> int:
     if not seen_docs:
         print(f"no reports found under {docs}", file=sys.stderr)
         return 2
-    # A parser that matched nothing must not read as a clean document.
-    if checked < MIN_CELLS:
-        problems.append(
-            f"only {checked} table cells resolved (expected >= {MIN_CELLS}). "
-            "The parser stopped matching — this is not evidence the reports are correct.")
+    # Every mapped report must have been reached. A report that exists in
+    # RESULTS_FOR but produced no entry above was skipped by one of the `continue`
+    # paths, each of which records its own problem; this catches any future path
+    # that forgets to.
+    for doc in RESULTS_FOR:
+        if doc not in per_doc and not any(doc in p for p in problems):
+            problems.append(f"{doc}: mapped in RESULTS_FOR but never checked")
 
+    checked = sum(per_doc.values())
     if a.json:
         print(json.dumps({"docs": seen_docs, "cells_checked": checked,
-                          "problems": problems}, indent=2))
+                          "cells_per_report": per_doc, "problems": problems},
+                         indent=2))
     else:
         print(f"checked {checked} table cells across {seen_docs} report(s)")
+        for doc, n in sorted(per_doc.items()):
+            print(f"    {n:3d}  {doc}")
         for p in problems:
             print(f"  MISMATCH {p}")
         if not problems:

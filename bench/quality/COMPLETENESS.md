@@ -39,7 +39,17 @@ correct ones, which is worse than no numbers.
 | 11 | `score_asr.py` cell check | is every ASR cell whole | **set of clip ids** per `(arm, lang, condition)`: no duplicates, size equals `--expect-clips`, and identical across arms for the same `(lang, condition)` | clips present but with empty references — surfaced separately as `unscorable_refs`. Counting rows was the bug: a duplicated id beside a missing one totals correctly and double-weights the duplicate in the WER. |
 | 13 | `score_asr.py` robustness rows | can dWER/SNR50 be computed | a `clean` baseline exists per `(arm, lang)`; **emits nothing and says so** if not | nothing known. `summary[0]` used to raise `IndexError` after the detailed CSV had been written. |
 | 12 | `judge.py` `parse_verdicts` | is this verdict usable | one verdict per expected candidate id, scores literally `int` in range | nothing known. `bool` passing as `int` was the bug: `true` became `0.0` downstream. |
-| 14 | `check_report.py` | do the reports still quote their own data | every resolvable table cell, judge-agreement figure, cost total, run count, Track A condition list, and any count written beside a named CSV or results directory, against the tree that report was written from (`RESULTS_FOR`) | **free prose**, deliberately: a count not tied to a named artifact is not matched. Resolving *nothing* is an error (`MIN_CELLS`); an unmapped report is an error, not a skip; an empty judge intersection is reported, not raised. |
+| 14 | `check_report.py` | do the reports still quote their own data | every resolvable table cell, judge-agreement figure, cost total, run count, Track A condition list, and any count written beside a named CSV or results directory, against the tree that report was written from (`RESULTS_FOR`) | **free prose**, deliberately: a count not tied to a named artifact is not matched. Each report must resolve its **declared** cell count, enforced per report; an unmapped report is an error, not a skip; an empty judge intersection is reported, not raised. |
+
+**Why the floor is per report.** It was first written as one global minimum, and
+that is the same bug in the check that exists to catch the bug: with 25 cells
+from one document and 40 from the other, a floor of 30 is cleared by either
+alone — so one report's tables could stop resolving entirely, be certified
+unchecked, and the run would still print clean. Two documents masked each other.
+The count is now declared per report in `RESULTS_FOR` and compared per report,
+which is the rule at the top of this file applied to the checker's own coverage.
+Removing a table on purpose means lowering that number in the same commit, so a
+coverage change shows up in the diff instead of in nothing.
 
 **What #14 does not cover, and why.** Scanning every "N arms" in the text found
 five false positives on two documents — sentences about judge files, about
