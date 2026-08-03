@@ -1423,6 +1423,54 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
             self.assertEqual(r["n"], "0")
             self.assertEqual(r["wer"], "", "an absent cell must have no WER")
 
+    def test_allow_incomplete_does_not_excuse_an_outage(self):
+        """Codex, on 2f4abfc: one flag suppressed two different things.
+
+        `--allow-incomplete` exists because the committed matrix is asymmetric
+        by design, so the documented workflow *always* passes it. Outages,
+        duplicate clip ids and cross-arm clip-set mismatches shared the same
+        `problems` list, so following the README could publish an exhausted
+        runner as a complete 100 % WER cell — precisely the failure checks #2a
+        and #11 exist to prevent, defeated by the flag next to them.
+
+        A missing cell is a statement about coverage, which the flag may
+        relax. An outage is a statement about whether the numbers mean
+        anything, which nothing may.
+        """
+        rows = [json.loads(l) for l in
+                (HERE / "results" / "asr.jsonl").read_text().splitlines()
+                if l.strip()]
+
+        def score(mutate):
+            with tempfile.TemporaryDirectory() as tmp:
+                hyp = Path(tmp) / "asr.jsonl"
+                hyp.write_text("".join(
+                    json.dumps(mutate(dict(r)), ensure_ascii=False) + "\n"
+                    for r in rows))
+                return subprocess.run(
+                    [sys.executable, str(HERE / "score_asr.py"), "--hyp",
+                     str(hyp), "--expect-clips", "25", "--allow-incomplete",
+                     "--out", str(Path(tmp) / "out.csv")],
+                    capture_output=True, text=True, cwd=str(HERE),
+                    env={"PATH": "/usr/bin:/bin"})
+
+        # The committed matrix, asymmetric by design, still scores.
+        self.assertEqual(score(lambda r: r).returncode, 0,
+                         "the committed run no longer scores")
+
+        # One cell turned into an outage must not.
+        def outage(r):
+            if (r["arm"], r["lang"], r["condition"]) == (
+                    "native-gpt-realtime-2", "en_us", "clean"):
+                r["error"], r["hypothesis"] = "transport outage", ""
+            return r
+
+        r = score(outage)
+        self.assertNotEqual(r.returncode, 0,
+                            "--allow-incomplete published an outage as a 100 % "
+                            "WER cell")
+        self.assertIn("not gaps in coverage", r.stderr + r.stdout)
+
     def test_the_readme_documents_the_signal_the_scorer_emits(self):
         readme = (HERE / "README.md").read_text()
         self.assertIn("complete=0", readme)
@@ -1631,6 +1679,67 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
         self.assertEqual(documented, actual,
                          "the documented seed-2 arms do not match the arms in "
                          "judge_seed2.csv")
+
+    def test_the_snapshot_carries_everything_the_checker_reads(self):
+        """Codex, on 2f4abfc: step 7 could not succeed on a fresh $OUT.
+
+        `check_report.py` recomputes the merged report's noise-suppression
+        tables from `main-report/dns_probe_*.jsonl`, and the snapshot copied
+        only the generated CSVs — so the documented verification step failed
+        for everyone whose `results/` was not already populated. Seventh
+        instance of the same class: **instructions get checked against the
+        repository as it stands, not against a fresh run.**
+
+        Asserted by *executing* the workflow's own mkdir and cp over a fake
+        tree, rather than by matching their text — a glob in the copy either
+        picks a file up or it does not, and only running it can say which.
+        """
+        want = {p.name for p in (HERE / "results" / "main-report").iterdir()
+                if p.is_file()}
+        self.assertTrue(want, "the merged report's snapshot is empty")
+        snapshot = [l for l in self._workflow_commands()
+                    if "main-report" in l or l.strip().startswith("cp ")
+                    or l.rstrip().endswith("\\")]
+        # The mkdir + cp pair, taken as written including its continuations.
+        start = next(i for i, l in enumerate(snapshot) if "mkdir" in l)
+        script = "\n".join(snapshot[start:])
+        self.assertIn("cp ", script, "the workflow never snapshots the pass")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "results"
+            src.mkdir()
+            for p in (HERE / "results").iterdir():      # what the run produces
+                if p.is_file():
+                    (src / p.name).write_text("x")
+            r = subprocess.run(["/bin/bash", "-c", script],
+                               capture_output=True, text=True,
+                               env={"PATH": "/usr/bin:/bin", "OUT": tmp})
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            got = {p.name for p in (src / "main-report").iterdir()}
+        self.assertEqual(
+            want - got, set(),
+            "the documented snapshot omits files check_report.py reads from "
+            "main-report/, so step 7 fails on any fresh $OUT")
+
+    def test_the_workflow_generates_the_probe_inputs_it_verifies(self):
+        """The other half: copying them is no use if nothing produces them.
+
+        `run_all.sh` does not run the noise-suppression probes — they are a
+        separate experiment — so the workflow has to invoke `probe_dns.py`
+        itself, for every probe file the reports are checked against.
+        """
+        cmds = "\n".join(self._workflow_commands())
+        self.assertIn("probe_dns.py", cmds,
+                      "nothing in the workflow generates the DNS probe inputs")
+        names = {p.stem for p in (HERE / "results" / "main-report").glob(
+            "dns_probe_*.jsonl")}
+        # de_clean / de_cafe_snr10 / ... -> the condition token each needs.
+        for stem in names:
+            token = stem.replace("dns_probe_de_", "").replace("dns_probe_", "")
+            with self.subTest(probe=stem):
+                self.assertIn(token, cmds,
+                              f"{stem}.jsonl is checked against but the "
+                              f"workflow never probes {token!r}")
 
     def test_the_workflow_snapshots_the_base_pass_before_appending(self):
         """Step 7 must be runnable on a fresh $OUT.

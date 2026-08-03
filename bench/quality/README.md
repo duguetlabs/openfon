@@ -114,9 +114,23 @@ score() {  # score <results-dir> [judge-arms]
     --scenarios fixtures/scenarios.json --trials 3 --out $R/summary.csv
 }
 score $OUT/results
+
+#    The noise-suppression probes. run_all.sh does not run these — they are a
+#    separate experiment, not part of the matrix — but the merged report's DNS
+#    tables are recomputed from their raw output, so step 7 cannot verify that
+#    report without them. Four files, ~1.5 audio-minutes each.
+python probe_dns.py --lang en_us --n 50 --data $DATA/conditions \
+                    --out $OUT/results/dns_probe_en.jsonl
+for c in clean cafe_snr10 cafe_snr5; do
+  python probe_dns.py --lang de_de --n 50 --data $DATA/conditions \
+                      --condition $c --legs off,deep \
+                      --out $OUT/results/dns_probe_de_$c.jsonl
+done
+
 mkdir -p $OUT/results/main-report
 cp $OUT/results/{summary,summary_per_run,slots,judge,judge_seed2}.csv \
-   $OUT/results/asr_scores{,_summary}.csv $OUT/results/main-report/
+   $OUT/results/asr_scores{,_summary}.csv \
+   $OUT/results/dns_probe_*.jsonl $OUT/results/main-report/
 
 # 6. Append the addendum's arms, then re-score the combined matrix.
 #    A deliberately smaller matrix: six of the eight conditions, and only the

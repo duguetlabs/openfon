@@ -70,6 +70,14 @@ and fails when it is not — which is the only state a new reader is ever in.
   the instructions.
 - `CONDITIONS` was not overrideable; `--only` was never passed; an unknown
   `--only` id ran nothing and exited 0.
+- The snapshot copied only the generated CSVs, while `check_report.py` also
+  recomputes the merged report's noise-suppression tables from
+  `main-report/dns_probe_*.jsonl` — and nothing in the workflow ran
+  `probe_dns.py` at all, because the probes are a separate experiment from the
+  matrix `run_all.sh` drives. Step 7 therefore failed for every reader whose
+  `results/` was not already populated. The test executes the workflow's own
+  `mkdir`/`cp` over a fake tree rather than matching their text: a glob either
+  picks a file up or it does not, and only running it can say which.
 
 The other diagnostics ask where an expectation comes from. This one asks **what
 state is the reader in when they follow this, and have I ever been in it?** The
@@ -388,6 +396,17 @@ anything that fails visibly, or only under a debug flag, gets written down.**
   −1. Nothing reported rests on it — the published numbers come from the default
   path, which refuses that data outright. If you use the flag, read
   `missing_runs`; a negative value means duplicates, not completeness.
+
+  In `score_asr.py` this went further and had to be fixed rather than
+  documented: the flag suppressed *every* cell problem, and the ASR matrix is
+  asymmetric by design so the documented workflow always passes it. Outages,
+  duplicate clip ids and cross-arm clip-set mismatches were therefore
+  suppressed too — checks #2a and #11 defeated by the flag standing next to
+  them. **An escape hatch may only relax the property it was opened for.** A
+  short cell is a statement about coverage, which `--allow-incomplete` is
+  allowed to relax; an outage is a statement about whether the numbers mean
+  anything, which nothing may. Two lists now, and only the first is
+  suppressible.
 - **`--allow-incomplete` omits entirely-missing ASR cells.** A cell with zero
   rows is absent from the output rather than present with `complete=0`, because
   arms and conditions are discovered from the data. Same reasoning: the default

@@ -106,24 +106,38 @@ def main() -> None:
     # number. Corresponding cells must also contain the *same* clips, or the
     # arms are being compared on different audio.
     expect = a.expect_clips or max(len(v) for v in groups.values())
-    problems = []
+    # Two lists, not one. `--allow-incomplete` exists because the committed
+    # matrix is asymmetric *by design* — some cells were never meant to be run —
+    # and the documented workflow therefore always passes it. Putting outages
+    # and identity violations in the same list made that flag suppress them
+    # too, so following the README could publish an exhausted runner as a
+    # complete 100 % WER cell, or double-weight a duplicated clip.
+    #
+    # "This cell is smaller than expected" is a statement about coverage, and
+    # coverage is the thing the flag is allowed to relax. "These rows are all
+    # errors" and "these arms were scored on different audio" are statements
+    # about whether the numbers mean anything at all, and no flag may relax
+    # those. A deliberately absent cell and a cell that failed must never be
+    # able to excuse each other.
+    gaps: list[str] = []
+    integrity: list[str] = []
     for arm in arms:
         for lang in langs:
             for cond in conds:
                 ids = [r["id"] for r in groups.get((arm, lang, cond), [])]
                 dupes = sorted({i for i in ids if ids.count(i) > 1})
                 if dupes:
-                    problems.append(f"{arm}/{lang}/{cond}: duplicate clip "
-                                    f"{','.join(dupes[:3])}")
+                    integrity.append(f"{arm}/{lang}/{cond}: duplicate clip "
+                                     f"{','.join(dupes[:3])}")
                 elif len(ids) != expect:
-                    problems.append(f"{arm}/{lang}/{cond}: {len(ids)} of {expect}")
+                    gaps.append(f"{arm}/{lang}/{cond}: {len(ids)} of {expect}")
                 rs = groups.get((arm, lang, cond), [])
                 if rs and all(r.get("error") for r in rs):
                     # Every row errored: this is an outage, not a 100% WER. The
                     # clip ids are all present, so nothing else here would notice.
-                    problems.append(f"{arm}/{lang}/{cond}: every row is an error "
-                                    f"({rs[0].get('error', '')[:60]}) — that is an "
-                                    f"outage, not a measurement")
+                    integrity.append(f"{arm}/{lang}/{cond}: every row is an error "
+                                     f"({rs[0].get('error', '')[:60]}) — that is an "
+                                     f"outage, not a measurement")
 
     # Same (lang, condition) across arms must mean the same clips.
     for lang in langs:
@@ -135,15 +149,21 @@ def main() -> None:
                 ref = max(distinct, key=len)
                 for arm, s in sets.items():
                     if s and s != ref:
-                        problems.append(
+                        integrity.append(
                             f"{arm}/{lang}/{cond}: clip set differs from the other "
                             f"arms (missing {sorted(ref - s)[:3]}, "
                             f"extra {sorted(s - ref)[:3]})")
 
-    if problems and not a.allow_incomplete:
-        sys.exit(f"{len(problems)} (arm, lang, condition) cell problem(s) "
-                 f"({'; '.join(problems[:6])}"
-                 f"{'…' if len(problems) > 6 else ''}). Re-run the gaps, pass "
+    if integrity:
+        sys.exit(f"{len(integrity)} cell(s) cannot be scored as measurements "
+                 f"({'; '.join(integrity[:6])}"
+                 f"{'…' if len(integrity) > 6 else ''}). These are outages or "
+                 "clip-identity violations, not gaps in coverage, so "
+                 "--allow-incomplete does not apply: re-run them.")
+    if gaps and not a.allow_incomplete:
+        sys.exit(f"{len(gaps)} (arm, lang, condition) cell problem(s) "
+                 f"({'; '.join(gaps[:6])}"
+                 f"{'…' if len(gaps) > 6 else ''}). Re-run the gaps, pass "
                  f"--expect-clips, or use --allow-incomplete.")
 
     # Iterate the expected cross-product, not the groups that happen to exist.
