@@ -298,10 +298,23 @@ follow, and each was a review finding first:
 * **Each table names its data, in the document**, `<!-- data: v21-ttfa -->` directly above
   it. A table in scope without one fails. Merging every file under `results/` had let a
   **superseded** run validate a current section — the pre-marker `vltier-ttfa` block and
-  its replacement `vltier2-ttfa` contain the same arms, so a retracted figure still passed.
+  its replacement `vltier2-ttfa` contain the same arms, so a retracted figure still passed,
+  and one had, in the recommendation table.
+* **A cell is what gets bound, not a table.** A table quoting two runs says which column or
+  row came from which — `<!-- data: full2; column "run 1" = full -->` — and row and column
+  scopes intersect. Unioning two runs and accepting a figure from either is the same hole
+  one level down: it let the headline table's primary-run delta be replaced by the other
+  run's.
 * **`published/` is the published study and is committed**; `results/` is scratch and is
   ignored. A re-run is not evidence until it is promoted, which is a deliberate `cp` and a
-  visible diff.
+  visible diff. A run no table quotes fails too — it is either evidence or it is gone.
+* **A comparison is an ordered pair.** `X − Y` and `Y − X` are different claims and a
+  reader cannot tell a swapped label from a sign error by looking. The reverse of every
+  comparison is derived with its directional statistics negated, so relabelling without
+  flipping the sign is a drift.
+* **An allowlist entry is no wider than the part that is unverifiable.** The deflection
+  tables are hand counts — but only their *numerators* are. Exempting the tables exempted
+  their denominators too, and one was wrong.
 
 The declared row count per report is compared by **equality**, so a table that leaves scope
 fails rather than quietly lowering a number nobody reads. And the test suite alters every
@@ -315,7 +328,7 @@ the full inventory of what this harness verifies and how each check can be foole
 python3 -m unittest discover -s bench/realtime -v
 ```
 
-193 tests, split across `test_analyze.py` (the statistics behind every published table —
+200 tests, split across `test_analyze.py` (the statistics behind every published table —
 percentiles, paired differences, the exact sign test, the bootstrap CI, the Holm
 step-down, exact McNemar, matched-cell construction, and the verdict gating) and
 `test_harness.py` (the controls that make a run trustworthy — echo verification, cache

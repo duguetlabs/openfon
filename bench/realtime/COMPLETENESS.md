@@ -68,6 +68,52 @@ is not a reason to keep it, because "nothing reads it" is one edit away from
 "something reads it again". Two runs were caught by that rule when it was added;
 one earned a table, the other was removed.
 
+**And the fix had the bug in it.** A table quoting two runs was bound to both,
+and the two derivations were unioned — so within that table a figure from either
+run satisfied any cell. The headline table's primary-run delta could be replaced
+by the *other* run's `−18 ms` and still pass. That is the merge hole exactly, one
+level down: **the boundary moved rather than closing.** The unit is the cell now.
+A table declares which column or which row came from which run, row and column
+scopes intersect, and a cell whose scopes do not overlap is reported rather than
+falling back to the default. Ask of any binding: *is there more than one run this
+cell could have come from?* If yes, it has not been checked against the one it
+claims.
+
+The general form, since this is the third time the same correction has been
+needed at a finer grain: **a fix that narrows a boundary should be tested at the
+new boundary, not at the old one.** Table-level binding was verified by showing a
+superseded *table* could not pass, which is true and was not the question.
+
+## Two more shapes, both about a check that is wider than the claim
+
+**A comparison is an ordered pair, and the checker treated it as a set.**
+`vl-gateway − vl-direct` at −100 ms passed equally as `vl-direct − vl-gateway` at
+−100 ms, where the correct answer is +100. Both orderings look plausible on the
+page, so this is exactly the class of error a reader cannot catch: it is the
+paired equivalent of the sign counts that had to be printed because a median's
+direction was ambiguous. Every comparison's reverse is now derived with its
+directional statistics negated — median, CI bounds, p10/p90 — while n, p-values
+and sign counts carry over unchanged.
+
+**An allowlist entry has to be as narrow as the thing that is actually
+unverifiable.** The deflection tables were exempt as "manual", which is true of
+the *numerator* — a hand reading of each reply — and false of everything else in
+the row. The denominator is the arm's usable turns and the percentage is
+arithmetic. Exempting the table exempted those too, and one was wrong:
+`vlnat-azsemantic` was published at 2/**19** — 10.5%, where 19 is that arm's TTFA
+count (one turn excluded) rather than the number of replies read. All twenty are
+present. Corrected to 2/20 — 10.0%, which also removes an apparent spread across
+the three native arms that was never there.
+
+Removing the wide entries emptied `UNCHECKABLE_TABLES` entirely, and the reason
+is worth recording: the three remaining entries — endpoint configuration, arm
+configuration, quoted transcripts — described tables **with no figures at all**,
+so they were never candidates and the entries exempted nothing. An allowlist
+that lists things it does not need to list is not harmless; it is where the one
+entry that *is* doing real work hides. The other harness reached this from the
+opposite direction, when "lives in a different CSV" turned out to be an argument
+for checking against that CSV.
+
 ---
 
 ## The checks
@@ -86,7 +132,9 @@ one earned a table, the other was removed.
 | 10 | `PairedResult.upper_tail_dominates` | is a large p90 a cost or variance | p10 against p90 — **magnitude**, plus the sign counts reported alongside | it describes; it does not diagnose. Two quantiles cannot establish bimodality, and an earlier version asserted it. It also cannot tell frequency: the cost case was faster on 35% of turns, and "almost never faster" was wrong. |
 | 11 | `verify_live.py` | does the config verifier still match reality | every **registered** arm's real echo verifies clean, **and** four mutations of that echo are each caught | a hand-maintained arm list was the bug — it printed OK while checking none of the newest arms. A fatal first echo now retries, and the **clean** echo is adopted before mutations run. |
 | 12 | `check_report_tables.py` | is every published figure current | **every figure-bearing row of every table that names an arm** — row-major or column-major, dash or `vs`, prefixed or not — against the analyzer, re-derived from the run that table declares. Coverage compared by **equality** against a count declared in the checker | free prose, deliberately: a figure not in a table beside an arm is not matched. Everything else is verified or in `UNCHECKABLE_TABLES` with a reason, and no entry may name something the analyzer computes. |
-| 12b | `check_report_tables.py` bindings | which data may validate this table | the `<!-- data: … -->` directive **in the document**, resolved against committed `published/`; a table with no binding, or one naming an absent run, is reported, and a run no table quotes is reported too | a row quoting two runs is bound to both, so a run-1 figure in a run-2 column would pass. Merging every file under `results/` was the bug it replaced: a superseded run validated a section written from its replacement, and did. |
+| 12b | `check_report_tables.py` bindings | which run may validate this **cell** | the `<!-- data: … -->` directive **in the document**, with `column "…" =` and `row "…" =` scopes intersecting; a table with no binding, one naming an absent run, a cell whose scopes do not overlap, and a run no table quotes are each reported | nothing known within a table. Two earlier versions were fooled: merging every file under `results/` let a superseded run validate its replacement's section, and binding a *table* to two runs let either satisfy any cell. |
+| 12d | `check_report_tables.py` direction | is this comparison the one it is labelled as | the ordered pair only; the reverse is derived with median, CI and p10/p90 **negated** | the split counts, which swap rather than negate and so are set-identical under reversal. |
+| 12e | `check_report_tables.py` manual counts | is a hand-counted rate self-consistent | `k/n` against the arm's usable turns in the bound runs (summed — counts add), and `p%` against `k/n` | `k` itself, which is a reading of the transcripts. Exempting the whole table was the bug: it exempted `n` and `p` too, and one `n` was wrong. |
 | 12c | `test_harness.py` mutation sweep | can the checker be fooled by a document it never read | **every** figure the checker reports as verified, altered one at a time; each alteration must be caught | nothing known. This is the test that a checker passing on absent, unbound or unparsed data cannot survive. |
 | 13 | `safety.py` | can a credential leave the process | every string through `safe_print` or `scrub_record`, at the **process boundary** | per-call-site redaction was the bug: it was fixed in `bench.py` and a later script reintroduced the leak simply by printing an exception. |
 
@@ -116,11 +164,16 @@ one earned a table, the other was removed.
   convention is that each arm is compared with its own baseline, and the row
   gives no way to know which; naming the control in the row label — as the
   `config_ms` row does — narrows it to the one pair.
-- **A row is checked against its table's declared run, not its own.** A row that
-  legitimately quotes two runs — the merged report's headline table carries a
-  run-1 column — is bound to both, and a figure from either satisfies it. Binding
-  at row granularity would catch a run-1 value pasted into a run-2 column; this
-  does not.
+- **A cell bound to more than one run still unions them.** Exactly one such cell
+  exists in either report — `gw-hd-server`'s `1/40` deflection denominator, which
+  is the *sum* over two blocks, and counts are additive in a way percentiles are
+  not. A test enumerates it by value rather than tolerating a count, so a second
+  one cannot appear quietly. The rule when adding a table: *if you can say which
+  run a cell came from, say it in the directive.*
+- **Reversing a comparison is caught by its directional statistics, not by its
+  counts.** The split counts and sign counts swap rather than negate, so they are
+  set-identical under reversal; the median, CI and p10/p90 are what catch it. A
+  row quoting only counts would not be direction-checked.
 - **One vantage point.** All measurements are from a laptop in Austria, where
   the Cloudflare edge is 30 ms away and Azure swedencentral 61 ms. Pairing
   cancels drift, not path length. A Worker-side run would settle it.

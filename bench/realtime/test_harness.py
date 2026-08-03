@@ -692,18 +692,19 @@ class TestReportCheckerCoversEveryFigureRow(unittest.TestCase):
         """Otherwise a directive earlier in the document would silently bind a
         table someone added later, against a run it has nothing to do with."""
         tbl = self.c.tables("<!-- data: full2 -->\n\n| arm |\n|---|\n| `vl-direct` | 1 |")
-        self.assertEqual(tbl[0].tags, ("full2",))
+        self.assertEqual(tbl[0].binding.all_tags, ("full2",))
         tbl = self.c.tables("<!-- data: full2 -->\n\nprose\n\n| arm |\n|---|\n| `vl-direct` | 1 |")
-        self.assertIsNone(tbl[0].tags)
+        self.assertIsNone(tbl[0].binding)
 
     def test_a_superseded_run_cannot_validate_a_current_section(self):
         """The reason bindings exist. `vltier-ttfa` predates the per-cell marker
-        fix and was replaced by `vltier2-ttfa`; it is not in `published/`, and naming
-        it is an error rather than a second opinion."""
+        fix and was replaced by `vltier2-ttfa`; it is not in `published/`, and
+        naming it is an error rather than a second opinion."""
         self.assertEqual(list(self.c.DATA.glob("*vltier-ttfa.jsonl")), [])
         for report in self.reports:
             for tbl in self.c.tables(report.read_text()):
-                self.assertNotIn("vltier-ttfa", tbl.tags or ())
+                self.assertNotIn("vltier-ttfa",
+                                 tbl.binding.all_tags if tbl.binding else ())
 
     def test_no_run_sits_in_the_evidence_directory_unquoted(self):
         """The other direction of the same rule. A superseded run left beside its
@@ -711,38 +712,155 @@ class TestReportCheckerCoversEveryFigureRow(unittest.TestCase):
         it today is not a reason to keep it."""
         self.assertEqual(self.c.orphans(self.reports), [])
 
-    def test_every_binding_names_a_committed_dataset(self):
+    def test_every_binding_names_a_committed_run(self):
         for report in self.reports:
             for tbl in self.c.tables(report.read_text()):
-                for tag in tbl.tags or ():
+                for tag in (tbl.binding.all_tags if tbl.binding else ()):
                     self.assertEqual(
                         len(list(self.c.DATA.glob(f"turns-*-{tag}.jsonl"))), 1,
                         f"{report.name}: binding `{tag}` resolves to no single run")
 
+    # — the hole a table-level binding still left open —
+
+    def test_a_column_answers_to_its_own_run(self):
+        """`full2,full` unioned both runs and dropped which produced what, so the
+        headline table's primary-run delta could be replaced by the *other*
+        run's and still pass. That is the superseded-data hole one level down."""
+        r = self.docs / "realtime-latency-2026-08.md"
+        text = r.read_text()
+        self.assertIn('column "run 1" = full', text,
+                      "the run-1 column must name its own run")
+        bad, out = self.run_check(self.rewritten(r, text.replace(
+            "| gpt-realtime-2 via gateway − direct | **+12 ms** |",
+            "| gpt-realtime-2 via gateway − direct | **−18 ms** |", 1)))
+        self.assertGreater(bad, 0, "run 1's figure passed in run 2's column")
+        self.assertIn("-18", out)
+
+    def test_every_figure_cell_resolves_to_one_run(self):
+        """The invariant the clauses exist to hold. A cell that could have come
+        from either of two runs has not been checked against the one it claims —
+        which is the merge bug, and it is a property of the *bindings*, not of
+        the checker, so it has to be asserted against the documents."""
+        multi = []
+        for report in self.reports:
+            for tbl in self.c.tables(report.read_text()):
+                if not tbl.binding:
+                    continue
+                head = tbl.head_cells
+                for n, line in tbl.body:
+                    if not self.c.figures(line) or self.c.allowlisted_row(line):
+                        continue
+                    cells = self.c.cells_of(line)
+                    for i, cell in enumerate(cells):
+                        if not self.c.figures("| " + cell):
+                            continue
+                        tags = tbl.binding.tags_for(
+                            cells[0], head[i] if i < len(head) else "")
+                        if len(tags) > 1:
+                            multi.append((report.name, n, tags, cell.strip()))
+        # The one exception is additive by nature: `gw-hd-server` appears in two
+        # blocks and its deflection denominator is the sum. Counts add across
+        # runs; no percentile ever does, which is why this list is enumerated
+        # rather than tolerated.
+        self.assertEqual([(r, c) for r, _n, _t, c in multi],
+                         [("realtime-21-2026-08.md", "**1/40 — 2.5%**")],
+                         f"cells bound to more than one run: {multi}")
+
+    def test_a_cell_bound_to_nothing_is_reported(self):
+        """An empty row ∩ column intersection means the directive contradicts
+        itself. Falling back to the default would be absence reading as a pass."""
+        b = self.c.parse_binding(
+            '<!-- data: full2; column "x" = full; row "y" = full2 -->')
+        self.assertEqual(b.tags_for("y row", "x column"), ())
+        self.assertEqual(b.tags_for("other", "x column"), ("full",))
+        self.assertEqual(b.tags_for("y row", "other"), ("full2",))
+        self.assertEqual(b.tags_for("other", "other"), ("full2",))
+
+    # — direction —
+
+    def test_reversing_a_comparison_reverses_its_statistics(self):
+        """`X − Y` and `Y − X` are not the same claim, and a reader cannot tell
+        a swapped label from a sign error by inspection."""
+        ev = self.c.evidence(("full2",))
+        fwd = ("| `vl-gateway` − `vl-direct` | 25 | **−100** | [−280, −15] "
+               "| **−374 / +171** | **7 / 18** | 0.043 | 0.866 |")
+        rev = ("| `vl-direct` − `vl-gateway` | 25 | **+100** | [+15, +280] "
+               "| **−171 / +374** | **18 / 7** | 0.043 | 0.866 |")
+        for row in (fwd, rev):
+            self.assertEqual(
+                self.c.figures(row) - self.c.available(ev, self.c.row_arms(row)),
+                set(), row)
+        stale = rev.replace("**+100**", "**−100**")
+        self.assertIn("-100", str(sorted(
+            self.c.figures(stale) - self.c.available(ev, self.c.row_arms(stale)))))
+
+    # — allowlists no wider than the unverifiable part —
+
+    def test_a_manual_count_still_checks_its_denominator(self):
+        """Exempting the deflection tables wholesale exempted `20` and `10.0%`
+        along with the hand-counted `2`, so `2/19` passed against a run of 20."""
+        ev = self.c.evidence(("vltier2-ttfa",))
+        self.assertEqual(
+            self.c.check_manual_count(ev, "**2/20 — 10.0%**", ["vl21mini-azsem"]), "")
+        self.assertIn("denominator", self.c.check_manual_count(
+            ev, "**2/19 — 10.5%**", ["vl21mini-azsem"]))
+        self.assertIn("not 2/20", self.c.check_manual_count(
+            ev, "**2/20 — 40.0%**", ["vl21mini-azsem"]))
+        self.assertIn("exceeds", self.c.check_manual_count(
+            ev, "**21/20**", ["vl21mini-azsem"]))
+        self.assertIn("expected a `k/n`", self.c.check_manual_count(
+            ev, "**about a fifth**", ["vl21mini-azsem"]))
+
+    def test_a_manual_count_denominator_adds_across_the_bound_runs(self):
+        """Counts add; distributions do not. `gw-hd-server` appears in two
+        blocks, so its denominator is 40 and no percentile ever crosses runs."""
+        ev = self.c.evidence(("vltier2-ttfa", "v21-ttfa"))
+        self.assertEqual(ev.n_ok("gw-hd-server"),
+                         self.c.evidence(("vltier2-ttfa",)).n_ok("gw-hd-server")
+                         + self.c.evidence(("v21-ttfa",)).n_ok("gw-hd-server"))
+        self.assertEqual(
+            self.c.check_manual_count(ev, "**1/40 — 2.5%**", ["gw-hd-server"]), "")
+
+    def test_no_allowlist_entry_is_wider_than_it_needs_to_be(self):
+        """`UNCHECKABLE_TABLES` is empty because every entry it once held was
+        either exempting a derivable denominator or exempting a table with no
+        figures at all. An entry has to name the part that is unverifiable."""
+        self.assertEqual(self.c.UNCHECKABLE_TABLES, {})
+        for allow in (self.c.MANUAL_COUNT_TABLES, self.c.UNCHECKABLE_ROWS):
+            for key, reason in allow.items():
+                self.assertTrue(reason.strip(),
+                                f"{key} allowlisted without a reason")
+                self.assertNotIn("not yet", reason.lower(),
+                                 f"{key}: 'not yet checked' is a plan, not a reason")
+
     def test_a_multi_run_binding_unions_derivations_not_turns(self):
         """Rounds are numbered from 1 in every run, so concatenating two would
         collide in the `(round, utterance)` cell key and lose half the pairs."""
-        one = self.c.Dataset.load(("full2",))
-        both = self.c.Dataset.load(("full2", "full"))
+        one = self.c.evidence(("full2",))
+        both = self.c.evidence(("full2", "full"))
         self.assertNotIsInstance(both, str, both)
-        for arm, figs in one.arm.items():
-            self.assertTrue(figs <= both.arm[arm],
+        for arm in one.runs[0].arm:
+            self.assertTrue(one.arm(arm) <= both.arm(arm),
                             "a union must not drop what one run derived alone")
-        self.assertTrue(any(both.arm[a] - one.arm[a] for a in one.arm),
+        self.assertTrue(any(both.arm(a) - one.arm(a) for a in one.runs[0].arm),
                         "and it must add what the other run derived")
 
     def test_a_row_that_names_no_arm_anywhere_is_reported(self):
-        ds = self.c.Dataset.load(("full2",))
-        why = self.c.check_row(ds, "| something | 123 |", header_arms=[])
+        tbl = self.c.tables("<!-- data: full2 -->\n| x | y |\n|---|---|\n"
+                            "| something | 123 |")[0]
+        why = self.c.check_row(tbl, "| something | 123 |",
+                               lambda _r, _c: self.c.evidence(("full2",)))
         self.assertIn("names no arm", why)
 
     def test_the_sign_is_part_of_the_figure(self):
         """`+352` where the analyzer says `−352` is a drift, not a match."""
-        ds = self.c.Dataset.load(("full2",))
+        ev = self.c.evidence(("full2",))
         row = "| `vl-gateway` − `vl-direct` | 25 | **−100** | [−280, −15] |"
-        self.assertEqual(self.c.check_row(ds, row, []), "")
+        self.assertEqual(
+            self.c.figures(row) - self.c.available(ev, self.c.row_arms(row)), set())
         flipped = row.replace("**−100**", "**+100**")
-        self.assertIn("+100", self.c.check_row(ds, flipped, []))
+        self.assertIn("+100", self.c.figures(flipped)
+                      - self.c.available(ev, self.c.row_arms(flipped)))
 
     def test_identifiers_are_not_figures(self):
         """`gw-2-server` and `gpt-4.1-mini` carry digits and are not values."""

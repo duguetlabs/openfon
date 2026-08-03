@@ -17,7 +17,7 @@ the first is reported alongside as a replication. Harness and full method in
 **No. Routing through the Kataleptic gateway costs no detectable latency in either
 direction, for either engine.**
 
-<!-- data: full2,full -->
+<!-- data: full2; column "run 1" = full -->
 | comparison | run 2 (primary) | 95% CI | **p10 / p90 Δ** | slower / faster | p raw / Holm | run 1 |
 |---|---:|---|---:|---:|---:|---:|
 | gpt-realtime-2 via gateway − direct | **+12 ms** | [−90, +141] | **−494 / +502** | **12 / 11** | 1.00 / 1.00 | −18 ms |
