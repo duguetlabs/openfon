@@ -315,6 +315,20 @@ CONDITION_LABELS = {
     "telephony + 3 % loss": "tel_loss3",
 }
 LANGS = ("en_us", "de_de")
+
+# The arms each report's "Track A was run on N conditions" sentence covers.
+# Declared here rather than derived from the ASR rows, so an arm that produced
+# no rows at all is a failure instead of quietly leaving the expectation.
+#
+# `vl-native-brain-21` is deliberately absent: Voice Live rejects manual-commit
+# transcription on a gpt-realtime brain ("turn_detection must be of type
+# AzureSemanticVAD"), so that arm is Track B only and has no ASR rows by design.
+# An arm that is intentionally unrun and one that is missing look identical in
+# the data; only a declaration can tell them apart.
+TRACK_A_ARMS = {
+    "voice-engine-quality-2026-08-gpt-realtime-2-1.md": (
+        "native-gpt-realtime-21", "native-gpt-realtime-21-mini"),
+}
 # "47.76 (8e)" -> WER 47.76 with 8 empty transcripts.
 WER_CELL = re.compile(r"^(\d+(?:\.\d+)?)(?:\s*\((\d+)e\))?$")
 
@@ -686,21 +700,24 @@ def check_conditions(md: str, doc: str, results: Path, root: Path) -> list[str]:
             f"{doc}: states a Track A matrix but there are no ASR rows under "
             f"{results}, so the claim cannot be checked against data"]
 
-    # Which arms the claim is about, decided outside the data being checked:
-    # the arms this report added, i.e. present in its own pass and absent from
-    # the baseline snapshot. Inferring them from the ASR rows would be checking
-    # the data against itself.
-    own, base = arm_set(results / "summary.csv"), arm_set(root / "main-report" / "summary.csv")
-    if own is None or base is None:
-        return problems + [f"{doc}: cannot determine which arms the Track A "
-                           "claim covers (a summary.csv is missing)"]
-    expected = sorted((own - base) & set(present))
+    # Which arms the claim is about — declared, not observed. An earlier version
+    # intersected the report's new arms with `set(present)`, so an arm with *no*
+    # ASR rows at all dropped out of the expectation and the remaining one
+    # satisfied the claim: an entirely absent arm passed. That is the
+    # declared-expectation rule broken inside the fix for the `any()` finding —
+    # "every expected arm" is only as strong as where `expected` comes from, and
+    # it came from the data being checked.
+    expected = sorted(TRACK_A_ARMS.get(doc, ()))
     if not expected:
         return problems + [
-            f"{doc}: no arm added by this report has ASR rows, so the "
-            f"'{m.group(1)} conditions' claim covers nothing checkable"]
+            f"{doc}: states a Track A matrix but TRACK_A_ARMS declares no arms "
+            "for it, so nothing checked the claim. Add the arm list."]
     for arm in expected:
-        if present[arm] != named:
+        if arm not in present:
+            problems.append(
+                f"{doc}: names a {m.group(1)}-condition Track A matrix covering "
+                f"{arm}, which has no ASR rows at all under {results}")
+        elif present[arm] != named:
             problems.append(
                 f"{doc}: names conditions {sorted(named)} but {arm} has "
                 f"{sorted(present[arm])} in the committed ASR rows")

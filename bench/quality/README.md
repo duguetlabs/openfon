@@ -82,8 +82,15 @@ DATA=/path/to/data
 #    and OUT defaults to bench/quality, so omitting it would destroy the
 #    committed data both reports quote. The script now refuses rather than
 #    letting that happen; set OUT and it proceeds.
+#
+#    Set OUT once and use $OUT in EVERY path below. A bare `results/...` here
+#    resolves against bench/quality, so it would score the committed data and
+#    then overwrite the committed CSVs with the result — the same destruction
+#    the truncation guard prevents in step 4, arriving through path resolution
+#    instead of a truncating command.
 cd bench/quality
-OUT=/tmp/mybench DATA=$DATA PY=../../.venv/bin/python ./run_all.sh
+export OUT=/tmp/mybench
+OUT=$OUT DATA=$DATA PY=../../.venv/bin/python ./run_all.sh
 
 #    Its defaults reproduce the MERGED report only: three ASR arms x 2 langs x
 #    8 conditions x 25 clips = 1200 ASR rows, and five scenario arms x 11
@@ -94,12 +101,12 @@ OUT=/tmp/mybench DATA=$DATA PY=../../.venv/bin/python ./run_all.sh
 #    barge-in ones are excluded from scoring, so they were not re-run).
 #    APPEND=1 adds to the run above instead of truncating it, so the whole
 #    committed matrix lands in one directory.
-OUT=/tmp/mybench DATA=$DATA PY=../../.venv/bin/python TRACK=a APPEND=1 \
+OUT=$OUT DATA=$DATA PY=../../.venv/bin/python TRACK=a APPEND=1 \
   ASR_ARMS="native-gpt-realtime-21 native-gpt-realtime-21-mini" \
   CONDITIONS="clean,cafe_snr10,cafe_snr5,cafe_snr0,tel,tel_cafe_snr10" \
   ./run_all.sh                                            # +600 ASR rows
 
-OUT=/tmp/mybench DATA=$DATA PY=../../.venv/bin/python TRACK=b APPEND=1 \
+OUT=$OUT DATA=$DATA PY=../../.venv/bin/python TRACK=b APPEND=1 \
   SC_ARMS="native-gpt-realtime-21 native-gpt-realtime-21-mini vl-native-brain-21" \
   ONLY="book-de-01,book-en-01,codeswitch-01,emergency-de-01,holiday-de-01,hours-de-01,hours-en-01,message-de-01,reschedule-en-01" \
   ./run_all.sh                                            # +81 scenario runs
@@ -113,13 +120,18 @@ OUT=/tmp/mybench DATA=$DATA PY=../../.venv/bin/python TRACK=b APPEND=1 \
 # accepts that; without it the run aborts and writes nothing. Absent cells are
 # emitted with n=0 and complete=0 rather than omitted, so the gaps are visible
 # in the CSV instead of showing up as a complete matrix with fewer rows.
-python score_asr.py   --hyp results/asr.jsonl --expect-clips 25 --allow-incomplete \
-                      --out results/asr_scores.csv
-python score_slots.py --runs results/scenarios.jsonl --out results/slots.csv
-KATALEPTIC_KEY=... python judge.py --runs results/scenarios.jsonl --out results/judge.csv --seed 1
-KATALEPTIC_KEY=... python judge.py --runs results/scenarios.jsonl --out results/judge_seed2.csv --seed 2
-python summarize.py --slots results/slots.csv --judge results/judge.csv \
-  --scenarios fixtures/scenarios.json --trials 3 --out results/summary.csv
+python score_asr.py   --hyp $OUT/results/asr.jsonl --expect-clips 25 --allow-incomplete \
+                      --out $OUT/results/asr_scores.csv
+python score_slots.py --runs $OUT/results/scenarios.jsonl --out $OUT/results/slots.csv
+KATALEPTIC_KEY=... python judge.py --runs $OUT/results/scenarios.jsonl \
+                      --out $OUT/results/judge.csv --seed 1
+KATALEPTIC_KEY=... python judge.py --runs $OUT/results/scenarios.jsonl \
+                      --out $OUT/results/judge_seed2.csv --seed 2
+python summarize.py --slots $OUT/results/slots.csv --judge $OUT/results/judge.csv \
+  --scenarios fixtures/scenarios.json --trials 3 --out $OUT/results/summary.csv
+
+# 6. Check the reports against the run (uses committed results/ by default).
+python check_report.py --results $OUT/results
 
 # What every completeness check compares, and how it can be fooled:
 #   bench/quality/COMPLETENESS.md

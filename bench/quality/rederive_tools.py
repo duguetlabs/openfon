@@ -41,6 +41,21 @@ def calls_from_log(path: Path) -> list[str]:
     return names
 
 
+def first_appearance(names: list[str]) -> list[str]:
+    """Distinct names in order of first appearance.
+
+    The invariant a rewrite must preserve. Comparing *sets* accepts a
+    reordering — ["lookup", "end_call"] against ["end_call", "lookup"] — which
+    is not a deduplication, and for multi-tool scenarios the order carries
+    scoring meaning.
+    """
+    out: list[str] = []
+    for n in names:
+        if n not in out:
+            out.append(n)
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", required=True)
@@ -58,22 +73,29 @@ def main() -> None:
             continue
         before, after = list(r.get("tool_calls") or []), rebuilt
         # Deduplication may only remove REPEATS of a name already present. Any
-        # set-level difference in either direction means the log and the run
-        # disagree about what happened, not that duplicates were collapsed:
-        #   missing -> the log is partial (truncated, redacted, overwritten) and
-        #              applying it would delete a real tool call
-        #   extra   -> the log contains an invocation the run never recorded, and
-        #              applying it would invent one
-        # Both silently change benchmark results, so both are refused. A guard
-        # that only checks the direction someone thought of is half a guard.
-        if set(before) != set(after):
+        # other difference means the log and the run disagree about what
+        # happened, not that duplicates were collapsed:
+        #   missing  -> the log is partial (truncated, redacted, overwritten) and
+        #               applying it would delete a real tool call
+        #   extra    -> the log contains an invocation the run never recorded, and
+        #               applying it would invent one
+        #   reordered-> the same calls in a different order, which is not a
+        #               deduplication at all; order carries scoring meaning in
+        #               the multi-tool scenarios
+        # All silently change benchmark results, so all are refused. Comparing
+        # sets caught the first two and accepted the third — a guard that only
+        # checks the differences someone thought of is a partial guard, and
+        # membership is a weaker property than the sequence it stands in for.
+        if first_appearance(before) != first_appearance(after):
             missing, extra = sorted(set(before) - set(after)), sorted(set(after) - set(before))
+            reordered = not missing and not extra
             stats["REFUSED: log and run disagree"] += 1
             print(f"  {r['arm']}/{r['scenario']}/t{r['trial']}: "
                   f"log={after} run={before}"
                   f"{f' missing={missing}' if missing else ''}"
-                  f"{f' extra={extra}' if extra else ''} — left unchanged",
-                  file=sys.stderr)
+                  f"{f' extra={extra}' if extra else ''}"
+                  f"{' reordered (same calls, different order)' if reordered else ''}"
+                  f" — left unchanged", file=sys.stderr)
             continue
         stats["unchanged" if before == after else "rewritten"] += 1
         r["tool_calls"] = rebuilt

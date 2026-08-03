@@ -1127,6 +1127,32 @@ class TestRederiveIsDedupeOnly(unittest.TestCase):
                 {"s": ["end_call"]})
             self.assertEqual(out[0]["tool_calls"], ["end_call"])
 
+    def test_a_reordering_is_refused(self):
+        """Same calls, different order, identical sets.
+
+        The guard compared sets, so a reordering passed as a "deduplication"
+        and the run's tool sequence was replaced by the log's. Order carries
+        scoring meaning in the multi-tool scenarios, and membership is a weaker
+        property than the sequence it was standing in for.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            r, out = self.run_tool(
+                tmp, [{"arm": "a", "scenario": "s", "trial": 1,
+                       "tool_calls": ["lookup", "end_call"]}],
+                {"s": ["end_call", "lookup"]})
+            self.assertEqual(out[0]["tool_calls"], ["lookup", "end_call"],
+                             "the run's order was overwritten by the log's")
+            self.assertIn("reordered", r.stderr)
+
+    def test_a_reordering_with_repeats_is_still_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, out = self.run_tool(
+                tmp, [{"arm": "a", "scenario": "s", "trial": 1,
+                       "tool_calls": ["lookup", "lookup", "end_call"]}],
+                {"s": ["end_call", "lookup"]})
+            self.assertEqual(out[0]["tool_calls"],
+                             ["lookup", "lookup", "end_call"])
+
     def test_a_log_missing_a_call_is_refused(self):
         """A partial log must not delete a tool call the run recorded."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -1406,6 +1432,35 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
         m = re.search(r'CONDITIONS="([^"]+)"', readme)
         self.assertIsNotNone(m)
         self.assertEqual(set(m.group(1).split(",")), conds)
+
+    def test_the_documented_workflow_never_writes_to_committed_results(self):
+        """Once OUT is introduced, every path must go through it.
+
+        Step 4 wrote the fresh run to $OUT while step 5 still used bare
+        `results/...`, which resolves against bench/quality because the earlier
+        `cd` is still in effect. Following the workflow therefore scored the
+        committed data and overwrote the committed CSVs with the result — the
+        destruction the truncation guard prevents in step 4, arriving through
+        path resolution instead of a truncating command.
+
+        Checked as a shape rather than a line: no command after OUT appears may
+        name `results/` without `$OUT`.
+        """
+        import re
+        block = re.search(r"```bash\n(.*?)```", (HERE / "README.md").read_text(),
+                          re.S)
+        self.assertIsNotNone(block, "no bash block in the README")
+        lines = block.group(1).splitlines()
+        out_at = next((i for i, l in enumerate(lines) if "OUT=" in l), None)
+        self.assertIsNotNone(out_at, "the workflow never sets OUT")
+        offenders = [
+            l for l in lines[out_at:]
+            if not l.strip().startswith("#") and "results/" in l
+            and "$OUT/results/" not in l and "OUT=" not in l
+        ]
+        self.assertEqual(offenders, [],
+                         "these commands resolve against the committed "
+                         "results/ directory")
 
     def test_run_all_refuses_to_truncate_committed_results(self):
         """Following the README must not destroy the data the reports quote.
@@ -1793,6 +1848,43 @@ class TestReportsMatchTheirData(unittest.TestCase):
                 out["cells_per_report"][doc], want,
                 f"{doc}: resolves {out['cells_per_report'][doc]} cells but "
                 f"RESULTS_FOR declares {want}; re-derive the count")
+
+    def test_an_entirely_absent_track_a_arm_is_reported(self):
+        """`expected` must not be filtered by what is present.
+
+        It was intersected with the observed arms, so an arm with no ASR rows
+        at all dropped out of the expectation and the remaining one satisfied
+        the claim — an absent arm passed. That is the declared-expectation rule
+        broken inside the fix for the `any()` finding: "every expected arm" is
+        only as strong as where `expected` comes from.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            res = self._results_copy(tmp)
+            keep = [l for l in (res / "asr.jsonl").read_text().splitlines()
+                    if json.loads(l)["arm"] != "native-gpt-realtime-21-mini"]
+            (res / "asr.jsonl").write_text("\n".join(keep) + "\n")
+            out, code = self._run(docs=docs, results=res)
+            self.assertEqual(code, 1, "an absent arm must not pass")
+            self.assertTrue(
+                any("native-gpt-realtime-21-mini" in x and "no ASR rows" in x
+                    for x in out["problems"]), out["problems"])
+
+    def test_the_track_a_arm_declaration_excludes_the_track_b_only_arm(self):
+        """`vl-native-brain-21` has no ASR rows by design.
+
+        An intentionally unrun arm and a missing one look identical in the data;
+        only a declaration tells them apart, which is why the set is declared.
+        """
+        import check_report
+        declared = set(check_report.TRACK_A_ARMS[
+            "voice-engine-quality-2026-08-gpt-realtime-2-1.md"])
+        self.assertNotIn("vl-native-brain-21", declared)
+        with (HERE / "results" / "asr.jsonl").open() as f:
+            present = {json.loads(l)["arm"] for l in f}
+        self.assertNotIn("vl-native-brain-21", present)
+        self.assertTrue(declared <= present, f"{declared - present} declared "
+                                             "but absent from the ASR rows")
 
     def test_a_cited_csv_that_does_not_exist_is_reported(self):
         with tempfile.TemporaryDirectory() as tmp:

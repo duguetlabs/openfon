@@ -37,6 +37,31 @@ this report a problem or fall through?** A `KeyError` is that failure at its
 loudest, a bare `continue` at its quietest, and an `any()` at its most
 plausible-looking.
 
+**A third form, and the one that keeps recurring after a fix: a tightening can
+stop one step short of the property it was reaching for.** Three found in a
+single round, each a *narrower* version of a check already tightened once:
+
+- **set instead of sequence.** The dedupe guard compared `set(before)` against
+  `set(after)`, having already been fixed once to check both directions. A
+  reordering has an identical set, is not a deduplication, and order carries
+  scoring meaning. Membership is a weaker property than the sequence it stands
+  in for; it now compares distinct names in order of first appearance.
+- **present instead of declared.** `check_conditions` was fixed from "any arm
+  matches" to "every expected arm matches" — and then computed `expected` by
+  intersecting with the observed rows, so an arm with *no* data left the
+  expectation and an entirely absent arm passed. The declared-expectation rule
+  broken inside the fix for the previous finding.
+- **truncation instead of any write.** `run_all.sh` was guarded against
+  truncating committed results; the documented step 5 then overwrote the same
+  files through relative paths, because a `cd` earlier in the workflow was still
+  in effect. Guarding the command that destroys data does not guard the
+  outcome.
+
+The test for it: after fixing a check, ask **what is the weakest input that
+still passes?** If the answer is a case you would call a bug, the fix landed
+short. Each of these was found by someone asking that; none was found by the
+person who had just tightened the check.
+
 **The other half, and the one you can answer by inspection: what sentence was
 this check written for, and is that sentence inside what it reads?** The rule
 above is about where the *expectation* comes from; this is about whether the
