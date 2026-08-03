@@ -1099,6 +1099,54 @@ class TestUnscoredScenariosAreExcluded(unittest.TestCase):
                     self.assertNotEqual(sc.get("scored"), False)
 
 
+class TestRederiveIsDedupeOnly(unittest.TestCase):
+    """`rederive_tools.py` may collapse repeats and do nothing else."""
+
+    def run_tool(self, tmp, runs, logs):
+        logdir = Path(tmp) / "logs"
+        logdir.mkdir(exist_ok=True)
+        for name, calls in logs.items():
+            with open(logdir / f"sc-a-{name}-t1.jsonl", "w") as f:
+                for i, c in enumerate(calls):
+                    f.write(json.dumps({"t": 0, "ev": {
+                        "type": "response.function_call_arguments.done",
+                        "call_id": f"c{i}", "name": c}}) + "\n")
+        rp = Path(tmp) / "runs.jsonl"
+        rp.write_text("".join(json.dumps(r) + "\n" for r in runs))
+        r = subprocess.run(
+            [sys.executable, str(HERE / "rederive_tools.py"), "--runs", str(rp),
+             "--logdir", str(logdir)], capture_output=True, text=True)
+        return r, [json.loads(l) for l in open(rp)]
+
+    def test_duplicates_are_collapsed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, out = self.run_tool(
+                tmp, [{"arm": "a", "scenario": "s", "trial": 1,
+                       "tool_calls": ["end_call", "end_call"]}],
+                {"s": ["end_call"]})
+            self.assertEqual(out[0]["tool_calls"], ["end_call"])
+
+    def test_a_log_missing_a_call_is_refused(self):
+        """A partial log must not delete a tool call the run recorded."""
+        with tempfile.TemporaryDirectory() as tmp:
+            r, out = self.run_tool(
+                tmp, [{"arm": "a", "scenario": "s", "trial": 1,
+                       "tool_calls": ["end_call", "other"]}],
+                {"s": ["end_call"]})
+            self.assertEqual(out[0]["tool_calls"], ["end_call", "other"])
+            self.assertIn("missing=['other']", r.stderr)
+
+    def test_a_log_inventing_a_call_is_refused(self):
+        """The contract is dedupe-only: additions are as wrong as deletions."""
+        with tempfile.TemporaryDirectory() as tmp:
+            r, out = self.run_tool(
+                tmp, [{"arm": "a", "scenario": "s", "trial": 1,
+                       "tool_calls": ["end_call"]}],
+                {"s": ["end_call", "invented"]})
+            self.assertEqual(out[0]["tool_calls"], ["end_call"])
+            self.assertIn("extra=['invented']", r.stderr)
+
+
 class TestFixtureHygiene(unittest.TestCase):
     """The scenarios are public and synthetic; keep them that way."""
 

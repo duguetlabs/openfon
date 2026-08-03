@@ -57,14 +57,23 @@ def main() -> None:
             stats["log missing"] += 1
             continue
         before, after = list(r.get("tool_calls") or []), rebuilt
-        # Deduplication may only REMOVE repeats of a name already present. If the
-        # rebuilt set is missing a call the run recorded, the log is partial —
-        # truncated, redacted, or overwritten by a later run — and applying it
-        # would delete a real tool call rather than a duplicate. Refuse, and say so.
-        if not set(before) <= set(after):
-            stats["REFUSED: log is missing calls the run recorded"] += 1
-            print(f"  {r['arm']}/{r['scenario']}/t{r['trial']}: log has {after}, "
-                  f"run has {before} — left unchanged", file=sys.stderr)
+        # Deduplication may only remove REPEATS of a name already present. Any
+        # set-level difference in either direction means the log and the run
+        # disagree about what happened, not that duplicates were collapsed:
+        #   missing -> the log is partial (truncated, redacted, overwritten) and
+        #              applying it would delete a real tool call
+        #   extra   -> the log contains an invocation the run never recorded, and
+        #              applying it would invent one
+        # Both silently change benchmark results, so both are refused. A guard
+        # that only checks the direction someone thought of is half a guard.
+        if set(before) != set(after):
+            missing, extra = sorted(set(before) - set(after)), sorted(set(after) - set(before))
+            stats["REFUSED: log and run disagree"] += 1
+            print(f"  {r['arm']}/{r['scenario']}/t{r['trial']}: "
+                  f"log={after} run={before}"
+                  f"{f' missing={missing}' if missing else ''}"
+                  f"{f' extra={extra}' if extra else ''} — left unchanged",
+                  file=sys.stderr)
             continue
         stats["unchanged" if before == after else "rewritten"] += 1
         r["tool_calls"] = rebuilt
