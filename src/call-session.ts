@@ -90,78 +90,85 @@ const WS_OPEN = 1;
 
 // ---- turn detection ----
 // Which detector a realtime tier gets is a measured property of that tier, not
-// a house style, so it lives in a table rather than in the payload builder.
+// a house style, so it lives in a table rather than inline in the payload
+// builder. Every tier resolves to server VAD today; the table exists so that
+// stays a decision on the record rather than a default nobody revisited.
 //
 // Higher threshold: ambient noise was triggering barge-ins that cut off the
 // greeting; prefix padding keeps word onsets unclipped.
 type TurnDetection = Record<string, string | number>;
 const SERVER_VAD: TurnDetection = { type: 'server_vad', threshold: 0.7, prefix_padding_ms: 300, silence_duration_ms: 550 };
 
-// OpenAI's semantic detector. `eagerness` is the only field it takes; this is
-// the shape bench/realtime/arms.py verified against these endpoints, and every
-// gpt-realtime tier echoed it back unchanged when probed live 2026-08-03 (the
-// service adds its own `create_response` / `interrupt_response` defaults on
-// top, which we do not set on either detector).
+// The trade, so it does not get re-litigated from half the evidence — all of it
+// in docs/research/realtime-latency-2026-08.md § "Follow-up: is the splitting
+// the brain or the turn detector?":
 //
-// The server_vad tuning above is dropped rather than ported, because there is
-// nothing to port it to: this detector has no energy gate to threshold, no
-// prefix padding and no fixed silence hangover. The 0.7 threshold and 300 ms of
-// padding existed to stop ambient noise ending a turn and clipping word onsets;
-// a detector that ends the turn on what the caller said rather than on how loud
-// the room is defends against the same thing by another mechanism, so those two
-// settings have no successor here and are simply gone.
-const SEMANTIC_VAD: TurnDetection = { type: 'semantic_vad', eagerness: 'auto' };
-
-// One line per measured tier. `server_vad` ends the caller's turn at a clause
-// pause on gpt-realtime-2 — 10 of 10 turns, against 0 of 10 for the same brain
-// on a semantic detector, with the serving stack held constant (exact McNemar
-// p = 0.00195; docs/research/realtime-latency-2026-08.md). The splits are
-// inaudible: the fragment's response is cancelled before a single audio delta
-// goes out, so the caller hears nothing and the model simply answers a sentence
-// fragment as a complete turn, billing a discarded response on every pause.
-// Being inaudible is why manual testing never caught it.
+//   * `server_vad` splits a caller's utterance at a clause pause on
+//     gpt-realtime tiers — 10 of 10 turns, against 0 of 10 for the same brain
+//     and serving stack on a semantic detector (exact McNemar p = 0.00195).
+//     Inaudibly: the fragment's response is cancelled before any audio goes
+//     out, so the caller hears nothing and the model answers a sentence
+//     fragment as a complete turn, billing a discarded response each time.
+//   * OpenAI's `semantic_vad` fixes that and costs too much for a phone call:
+//     end-of-turn p50 1189 ms against server VAD's 736, and a **p90 of
+//     4512 ms**. The engine-only delta is −87 ms and null, so the whole penalty
+//     is the detector deciding, not the model thinking.
+//   * Azure's semantic detector is genuinely free — 707 ms p50, the tightest
+//     spread of any arm measured, 0/10 splits. It is only reachable through
+//     Voice Live, and Kataleptic exposes no tier that pairs Voice Live with a
+//     gpt-realtime brain. That combination is the actual fix and it is not
+//     currently purchasable.
 //
-// It is not a global win, which is why this is a table and not a flag. On the
-// HD tier's gpt-4.1-mini, which does not split under `server_vad` (0 of 10),
-// semantic VAD measured *worse* — strict success 0.333 -> 0.259, pass^3
-// 0.222 -> 0.111, TTFA p95 +133 ms
-// (docs/research/voice-engine-quality-2026-08.md).
-//
-// The trade this buys on gpt-realtime tiers, stated because it is real: OpenAI's
-// semantic detector is slower to decide the caller has stopped — p50 1189 ms
-// against server VAD's 736 ms, and a p90 of 4512 ms. Inference and synthesis are
-// unchanged (engine-only delta −87 ms, null), so the whole cost is the detector
-// deciding. Splitting is gone; end-of-turn has a tail.
+// So: the splitting is real and stays, because every available remedy is worse
+// than the defect. Revisit when a Voice Live + gpt-realtime tier exists.
+// Two detectors with opposite latency profiles both get called "semantic VAD";
+// collapsing them is how this nearly shipped the 4.5 s tail.
 const TURN_DETECTION_BY_TIER: Record<string, TurnDetection> = {
-  'gpt-realtime-2': SEMANTIC_VAD, // splits 10/10 under server_vad, 0/10 under semantic
-  // Leave the HD tier alone — and it is not merely that it does not split
-  // (0/10) and scored worse on semantic VAD. Sending `semantic_vad` here is
-  // *fatal*: the gateway translates it to Voice Live's
-  // `azure_semantic_vad_multilingual`, and Voice Live forbids changing the
-  // detector type once a session has one, which the gateway's own injected
-  // session.update has already set. Probed live 2026-08-03:
-  // "Cannot change turn detection type during session (from server_vad to
-  // azure_semantic_vad_multilingual)" — an error at session start, on every
-  // HD call.
+  // Splits 10/10 under server_vad. Left on it anyway — see the trade above.
+  'gpt-realtime-2': SERVER_VAD,
+  // Does not split (0/10), and semantic VAD measured *worse* on this brain
+  // (strict success 0.333 -> 0.259, pass^3 0.222 -> 0.111, TTFA p95 +133 ms;
+  // docs/research/voice-engine-quality-2026-08.md).
+  //
+  // It is also not a free experiment. Probed live 2026-08-03, `semantic_vad`
+  // on this tier is **rejected outright**: the gateway translates it to Voice
+  // Live's `azure_semantic_vad_multilingual`, and Voice Live refuses to change
+  // the detector type once a session has one — which the gateway's own injected
+  // session.update has already set. "Cannot change turn detection type during
+  // session (from server_vad to azure_semantic_vad_multilingual)", an error at
+  // session start, on every HD call. A rule keyed on the model *name* rather
+  // than on the tier would have shipped exactly that.
   'kataleptic-realtime-hd': SERVER_VAD,
-  // Cascade: no evidence it splits, and it does not honour the semantic
-  // detector either. It *accepts* `semantic_vad` and then quietly serves
-  // `server_vad` back with Azure's defaults (0.5 / 500), discarding the
-  // tuning above — so a wrong entry here would fail silently rather than
-  // loudly. Probed live 2026-08-03.
+  // Cascade: no evidence it splits, and it will not honour a semantic detector
+  // anyway. Worse than rejecting it — probed live 2026-08-03, it *accepts*
+  // `semantic_vad` and then quietly serves `server_vad` back at Azure's
+  // defaults (0.5 / 500), discarding the tuning above. Nothing fails; the call
+  // just runs on settings nobody chose. Only reading the `session.updated` echo
+  // shows it, which is the lesson both benchmarks kept re-learning: a config we
+  // cannot confirm is not a config.
   'kataleptic-realtime': SERVER_VAD,
 };
 
-// Exact ids first, family default second: a gpt-realtime tier measured *not* to
-// split is one line in the table above, and a newly enabled one inherits what
-// its family was measured to need until someone measures it. gpt-realtime-2.1
-// and -2.1-mini are being benchmarked now and are unlisted for exactly that
-// reason: they are live and accept this payload, but nobody has counted their
-// splits yet. Cascade and chat tiers keep server VAD — the semantic detector is
-// either rejected or silently ignored there (see above) and there is no
-// splitting on them to fix.
+// Exact tier ids, with server VAD as the fallback for anything unlisted —
+// deliberately not a rule keyed on the model name, because the two live
+// substitutions above are both cases where a name-shaped rule would have been
+// applied to a tier that cannot honour it.
+//
+// This is the seam for the decision: changing one tier's detector is one line
+// in the table. gpt-realtime-2.1 and -2.1-mini are being measured for splitting
+// now and are unlisted, so they take the fallback — which is the right answer
+// either way, since a tier that splits still has no remedy worth its cost and a
+// tier that does not split needs no change.
+//
+// If a semantic entry is ever added here, note that OpenAI's detector takes
+// only `{type: 'semantic_vad', eagerness: 'auto'}` — verified against these
+// endpoints by bench/realtime/arms.py and echoed back unchanged by every
+// gpt-realtime tier when probed live. The 0.7 threshold and 300 ms prefix
+// padding have no successor there: that detector has no energy gate, no prefix
+// padding and no fixed silence hangover, so the tuning is dropped rather than
+// ported.
 function turnDetectionFor(model: string): TurnDetection {
-  return TURN_DETECTION_BY_TIER[model] ?? (model.startsWith('gpt-realtime') ? SEMANTIC_VAD : SERVER_VAD);
+  return TURN_DETECTION_BY_TIER[model] ?? SERVER_VAD;
 }
 
 export class CallSession implements DurableObject {

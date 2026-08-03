@@ -605,38 +605,43 @@ describe('realtime session payload', () => {
     return audio?.input?.turn_detection ?? {};
   };
 
-  it('gives gpt-realtime tiers semantic VAD, which is where splitting was measured', async () => {
-    // server_vad ends the caller's turn at a clause pause on this brain 10/10;
-    // the same brain on a semantic detector, 0/10 (McNemar p = 0.00195).
-    expect(await turnDetection('gpt-realtime-2')).toEqual({ type: 'semantic_vad', eagerness: 'auto' });
+  const TUNED_SERVER_VAD = { type: 'server_vad', threshold: 0.7, prefix_padding_ms: 300, silence_duration_ms: 550 };
+
+  it('keeps gpt-realtime tiers on server VAD, splitting and all', async () => {
+    // server_vad ends the caller's turn at a clause pause on this brain 10/10,
+    // where a semantic detector splits 0/10 (McNemar p = 0.00195) — but
+    // OpenAI's semantic detector costs a 4512 ms p90 end-of-turn, which is
+    // worse on a phone call than an inaudible re-segmentation. The remedy that
+    // is actually free is Azure's, and no Kataleptic tier pairs it with a
+    // gpt-realtime brain. Asserted rather than left implicit so that flipping
+    // it is a deliberate edit here and in TURN_DETECTION_BY_TIER.
+    expect(await turnDetection('gpt-realtime-2')).toEqual(TUNED_SERVER_VAD);
   });
 
-  it('defaults an unmeasured gpt-realtime tier to its family, not to server VAD', async () => {
-    // gpt-realtime-2.1 is not in the table yet. Falling back to server_vad
-    // would silently ship the splitting behaviour to every newly enabled
-    // native tier; a measurement that says it does not split is one line in
-    // TURN_DETECTION_BY_TIER.
-    expect(await turnDetection('gpt-realtime-2.1')).toEqual({ type: 'semantic_vad', eagerness: 'auto' });
+  it('gives an unlisted tier the tuned server VAD, not an untuned default', async () => {
+    // gpt-realtime-2.1 is being measured for splitting and is deliberately not
+    // in the table. Whatever that measurement says, the fallback is the right
+    // answer — a tier that splits has no remedy worth its cost, and one that
+    // does not split needs no change — but the tuning still has to reach it.
+    expect(await turnDetection('gpt-realtime-2.1')).toEqual(TUNED_SERVER_VAD);
   });
 
-  it('leaves the HD tier on the tuned server VAD it was measured with', async () => {
-    // 0/10 splits already, and semantic VAD scored *worse* on this brain
-    // (strict success 0.333 -> 0.259). The gateway rewrites this to
-    // azure_semantic_vad_multilingual on the way through regardless.
-    expect(await turnDetection('kataleptic-realtime-hd')).toEqual({
-      type: 'server_vad',
-      threshold: 0.7,
-      prefix_padding_ms: 300,
-      silence_duration_ms: 550,
-    });
+  it('never moves the HD tier off server VAD, which would fail every call at session start', async () => {
+    // Probed live: `semantic_vad` here is translated by the gateway to
+    // azure_semantic_vad_multilingual and then rejected — "Cannot change turn
+    // detection type during session" — because the gateway's own injected
+    // session.update has already set the type. This is not a preference; any
+    // other detector type breaks the tier outright.
+    expect(await turnDetection('kataleptic-realtime-hd')).toEqual(TUNED_SERVER_VAD);
   });
 
-  it('leaves cascade tiers on server VAD, which is the only detector they accept', async () => {
-    // Voice Live rejects OpenAI semantic VAD on a cascaded pipeline outright,
-    // so leaking the family default here would break every call on the tier.
-    const td = await turnDetection('kataleptic-realtime');
-    expect(td.type).toBe('server_vad');
-    expect(td.threshold).toBe(0.7);
+  it('never moves cascade tiers off server VAD, which would silently lose the tuning', async () => {
+    // The worse failure of the two, because nothing errors. Probed live, the
+    // cascade *accepts* `semantic_vad` and serves `server_vad` back at Azure's
+    // defaults (0.5 / 500) — the call runs on settings nobody chose, and only
+    // the session.updated echo shows it. A confirmed-different config must not
+    // read as valid.
+    expect(await turnDetection('kataleptic-realtime')).toEqual(TUNED_SERVER_VAD);
   });
 
   it('never asks for noise reduction, on any tier', async () => {
