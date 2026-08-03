@@ -279,12 +279,19 @@ that table is what happened when it was not applied to `verify_live.py` itself.
 ./venv/bin/python check_report_tables.py ../../docs/research/*.md
 ```
 
-Four review rounds found report rows that had drifted from the analyzer after a schema or
-data change — including hand-entered **sign counts**, which exist precisely to remove an
-ambiguity and so are the worst thing to get wrong by typing. "Regenerate, don't edit" kept
-being advice; this makes it a check. It re-derives every `| comparison |` row from the
-datasets in `results/` and fails on any that no dataset reproduces. Run it after touching
-the analyzer or a report, and before claiming a report is generated.
+Five review rounds found report rows that had drifted from the analyzer — including
+hand-entered **sign counts**, which exist precisely to remove an ambiguity and so are the
+worst thing to get wrong by typing. "Regenerate, don't edit" kept being advice; this makes
+it a check.
+
+**Every table row mentioning an arm pair is a candidate**, whether or not it starts with
+one, and each is either verified or listed in `UNCHECKABLE` with a reason — coverage is
+asserted by equality. The first version matched only rows *beginning* with a backticked
+arm, so twelve metric-prefixed rows were silently skipped, including the whole table of
+results that survive correction, while it reported OK. That is the same defect the quality
+harness's checker had, arrived at independently. See
+[`COMPLETENESS.md`](COMPLETENESS.md) for the full inventory of what this harness verifies
+and how each check can be fooled.
 
 ### Tests
 

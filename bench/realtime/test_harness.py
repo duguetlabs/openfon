@@ -546,3 +546,60 @@ class TestVerifierNeverDropsAnAdvisory(unittest.TestCase):
         fatal, advisory = GA_ARM.verify_echo(echo)
         self.assertEqual(fatal, [])
         self.assertTrue(advisory, "retry echo must still surface its advisory")
+
+
+class TestReportCheckerSeesEveryComparisonRow(unittest.TestCase):
+    """The first version recognised only rows BEGINNING with a backticked arm,
+    so metric-prefixed rows were silently skipped — twelve of them, including
+    the whole table of results that survive correction. Same defect the quality
+    harness's checker had. A parser that drops what it does not recognise
+    reports success for rows it never looked at."""
+
+    PREFIXED = "| `connect_ms`, `vl-gateway` − `vl-direct` | −121 ms | 0.000 |"
+    PLAIN = "| `vl-gateway` − `vl-direct` | 25 | **−100** | [−280, −15] |"
+    PROSE = "| end-of-turn, `vl21mini-azsem` − `vl21mini-server` | 20 | **+0 ms** |"
+
+    def test_prefixed_rows_are_candidates(self):
+        import check_report_tables as c
+        for row in (self.PREFIXED, self.PLAIN, self.PROSE):
+            self.assertIsNotNone(c.ARM_PAIR.search(row), f"not a candidate: {row}")
+
+    def test_metric_prefix_is_extracted_backticked_and_prose(self):
+        import check_report_tables as c
+        m = c.METRIC_PREFIX.match(self.PREFIXED)
+        self.assertEqual(m.group("code"), "connect_ms")
+        m2 = c.METRIC_PREFIX.match(self.PROSE)
+        self.assertEqual(c.PROSE_METRIC[m2.group("prose").strip().lower()],
+                         "speech_stopped_ms")
+
+    def test_a_plain_row_has_no_metric_prefix(self):
+        import check_report_tables as c
+        self.assertIsNone(c.METRIC_PREFIX.match(self.PLAIN))
+
+    def test_reproduces_needs_more_than_the_median(self):
+        """A row cannot match on a coincidence of one number."""
+        import check_report_tables as c
+
+        class R:
+            # distinct percentiles, so "median alone" is a real test rather
+            # than one where every statistic happens to equal the median
+            median = -121.0
+            diffs = [-389, -300, -250, -200, -160, -121, -90, -60, -40, -21]
+            sign_counts = (0, 10)
+            lo, hi, p_adj, p_raw = -150.0, -90.0, 0.0, 0.0
+        self.assertFalse(c.reproduces(R(), {"-121"}))          # median alone
+        self.assertTrue(c.reproduces(R(), {"-121", "0.000"}))  # median + p
+        self.assertTrue(c.reproduces(R(), {"-121", "-389"}))   # median + p10
+        self.assertFalse(c.reproduces(R(), {"-999", "0.000"}))  # wrong median
+
+    def test_unknown_arms_are_unresolved_not_skipped(self):
+        """Absence must never read as a pass."""
+        import check_report_tables as c
+        row = "| `made_up`, `no-such-arm` − `native-direct` | −1 ms |"
+        self.assertIsNotNone(c.ARM_PAIR.search(row))   # still a candidate
+
+    def test_the_allowlist_is_the_only_way_to_not_check_a_row(self):
+        import check_report_tables as c
+        self.assertIsInstance(c.UNCHECKABLE, dict)
+        for key, reason in c.UNCHECKABLE.items():
+            self.assertTrue(reason.strip(), f"{key} allowlisted without a reason")
