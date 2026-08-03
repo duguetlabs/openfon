@@ -18,6 +18,25 @@ Corollary: **absence is never a pass.** If a benchmark's failure modes all
 inflate its own results, the numbers it produces are indistinguishable from
 correct ones, which is worse than no numbers.
 
+**The operational form of the rule: hold a declared expectation that does not
+come from the data being checked.** Every instance of this bug is a branch that
+checks data against itself. A floor over however many cells happened to resolve;
+a scenario universe inferred from the results that are supposed to fill it; a
+rate denominated on the rows that arrived; an agreement figure required only when
+it is already present. Each one is satisfied by its input degrading, because the
+expectation degrades with it. The fix is always the same shape — take the
+expectation from somewhere the checked data cannot influence: the fixture, the
+arm list, a count declared in the source, the baseline snapshot.
+
+Corollary for *checkers* specifically, which is where this class concentrates: a
+checker's output is derived from what it checks, so when its input goes missing
+the result drifts toward "fine" rather than toward an error. Absent input and
+clean input produce the same verdict unless something outside both distinguishes
+them. Ask of every branch: **if the input were missing or malformed here, would
+this report a problem or fall through?** A `KeyError` is that failure at its
+loudest, a bare `continue` at its quietest, and an `any()` at its most
+plausible-looking.
+
 ---
 
 ## The checks
@@ -40,6 +59,16 @@ correct ones, which is worse than no numbers.
 | 13 | `score_asr.py` robustness rows | can dWER/SNR50 be computed | a `clean` baseline exists per `(arm, lang)`; **emits nothing and says so** if not | nothing known. `summary[0]` used to raise `IndexError` after the detailed CSV had been written. |
 | 12 | `judge.py` `parse_verdicts` | is this verdict usable | one verdict per expected candidate id, scores literally `int` in range | nothing known. `bool` passing as `int` was the bug: `true` became `0.0` downstream. |
 | 14 | `check_report.py` | do the reports still quote their own data | every resolvable table cell, judge-agreement figure, cost total, run count, Track A condition list, and any count written beside a named CSV or results directory, against the tree that report was written from (`RESULTS_FOR`) | **free prose**, deliberately: a count not tied to a named artifact is not matched. Each report must resolve its **declared** cell count, enforced per report; an unmapped report is an error, not a skip; an empty judge intersection is reported, not raised. |
+
+**Every branch in `check_report.py` was swept against the question above**, after
+three findings in one round were all fall-throughs inside it. Nine places were
+changed: an alias resolving to an arm absent from `summary.csv` raised `KeyError`
+and produced no output at all; missing agreement fields `continue`d, so deleting
+the entire three-row table while keeping the heading exited zero; the condition
+set was accepted if `any` arm matched, letting the other carry a different
+matrix; a cited CSV that does not exist, an empty CSV, a missing
+`summary_per_run.csv`, an unparseable total cell, a total with no line items, and
+a non-numeric count all fell through silently. Each now reports.
 
 **Why the floor is per report.** It was first written as one global minimum, and
 that is the same bug in the check that exists to catch the bug: with 25 cells

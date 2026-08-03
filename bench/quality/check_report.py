@@ -89,10 +89,24 @@ def norm_label(s: str) -> str:
 
 
 def resolve_arm(label: str, arms: set[str]) -> str | None:
+    """The arm a table label names, or None if the label names no arm at all.
+
+    Returns names that may be absent from `summary` — an alias pointing at an
+    arm the CSV does not have is a *finding* ("the report has a column for an
+    arm this pass never ran"), not a lookup to index blindly. Callers must check
+    membership; `missing_arm` builds the message.
+    """
     lab = norm_label(label)
     if lab in arms:
         return lab
     return ARM_LABELS.get(lab)
+
+
+def missing_arm(doc: str, arm: str, summary: dict) -> str:
+    return (f"{doc}: has a table entry for arm {arm!r}, which is not in this "
+            f"report's summary.csv (it has {sorted(summary)}). Either the "
+            "report names an arm the pass never ran, or it is being checked "
+            "against the wrong results directory.")
 
 
 def parse_number(cell: str) -> float | None:
@@ -150,6 +164,10 @@ def check_tables(md: str, doc: str, summary: dict[str, dict[str, str]]) -> tuple
                     got = parse_number(row[i])
                     if got is None:
                         continue
+                    if arm not in summary:
+                        if (msg := missing_arm(doc, arm, summary)) not in problems:
+                            problems.append(msg)
+                        continue
                     want = parse_number(summary[arm].get(field, ""))
                     checked += 1
                     if want is None:
@@ -169,6 +187,10 @@ def check_tables(md: str, doc: str, summary: dict[str, dict[str, str]]) -> tuple
                         continue
                     got = parse_number(tbl[r][i])
                     if got is None:
+                        continue
+                    if arm not in summary:
+                        if (msg := missing_arm(doc, arm, summary)) not in problems:
+                            problems.append(msg)
                         continue
                     want = parse_number(summary[arm].get(field, ""))
                     checked += 1
@@ -199,8 +221,20 @@ def check_judge_agreement(md: str, doc: str, results: Path) -> list[str]:
     if not (a_path.exists() and b_path.exists()):
         return [f"{doc}: no judge files under {results}, so the agreement claim "
                 "cannot be verified"]
-    a = list(csv.DictReader(a_path.open()))
-    b = list(csv.DictReader(b_path.open()))
+    with a_path.open() as f:
+        a = list(csv.DictReader(f))
+    with b_path.open() as f:
+        b = list(csv.DictReader(f))
+    # Columns are indexed below; a renamed or dropped one must be reported, not
+    # raised. Same reason resolve_arm no longer indexes summary blindly.
+    need = ("scenario", "arm", "trial", "groundedness", "resolution", "tone")
+    for path, rows in ((a_path, a), (b_path, b)):
+        if not rows:
+            return [f"{doc}: {path.name} has no rows, so the judge-agreement "
+                    "claim cannot be verified against it"]
+        if absent := [c for c in need if c not in rows[0]]:
+            return [f"{doc}: {path.name} is missing column(s) {absent}, so the "
+                    "judge-agreement claim cannot be verified against it"]
     key = lambda r: (r["scenario"], r["arm"], r["trial"])  # noqa: E731
     da, db = {key(r): r for r in a}, {key(r): r for r in b}
     shared = sorted(set(da) & set(db))
@@ -222,11 +256,28 @@ def check_judge_agreement(md: str, doc: str, results: Path) -> list[str]:
     problems = []
     for field in ("groundedness", "resolution", "tone"):
         n = sum(1 for k in shared if da[k][field].strip() == db[k][field].strip())
+        rate = n / len(shared) * 100
         fm = re.search(field, region, re.I)
         if not fm:
+            # Every dimension must state its agreement. Skipping a missing one
+            # meant the whole three-row table could be deleted — heading intact —
+            # and the run still passed: the reliability evidence disappears and
+            # CI certifies the report anyway. Absence of the evidence is the
+            # finding, exactly as it is everywhere else in this harness.
+            problems.append(
+                f"{doc}: the judge-agreement claim does not state {field}. "
+                f"Every judge dimension the report scores needs its reliability "
+                f"figure; recomputed it is {n}/{len(shared)} ({rate:.1f} %).")
             continue
         window = region[fm.end():fm.end() + 80]
         frac = re.search(r"(\d+)\s*/\s*(\d+)", window)
+        pctm = re.search(r"(\d+\.\d+)\s*%", window)
+        if not frac and not pctm:
+            problems.append(
+                f"{doc}: {field} appears in the judge-agreement claim with no "
+                f"figure next to it, so nothing was compared; recomputed it is "
+                f"{n}/{len(shared)} ({rate:.1f} %).")
+            continue
         if frac:
             got = (int(frac.group(1)), int(frac.group(2)))
             if got != (n, len(shared)):
@@ -234,11 +285,10 @@ def check_judge_agreement(md: str, doc: str, results: Path) -> list[str]:
                     f"{doc}: judge agreement on {field} — document says "
                     f"{got[0]}/{got[1]}, the two judge files agree on "
                     f"{n}/{len(shared)} shared rows")
-        pctm = re.search(r"(\d+\.\d+)\s*%", window)
-        if pctm and abs(float(pctm.group(1)) - n / len(shared) * 100) > 0.05:
+        if pctm and abs(float(pctm.group(1)) - rate) > 0.05:
             problems.append(
                 f"{doc}: judge agreement on {field} — document says "
-                f"{pctm.group(1)} %, recomputed {n / len(shared) * 100:.1f} %")
+                f"{pctm.group(1)} %, recomputed {rate:.1f} %")
     # Row counts and arm coverage for these files are checked by
     # check_arm_counts' "`<file>.csv` (…)" form, which covers any named CSV.
     return problems
@@ -252,12 +302,19 @@ def as_int(token: str) -> int | None:
     return int(token) if token.isdigit() else WORDS.get(token.lower())
 
 
-def arms_in(results: Path) -> int | None:
-    p = results / "summary.csv"
-    if not p.exists():
+def arm_set(summary_csv: Path) -> set[str] | None:
+    if not summary_csv.exists():
         return None
-    with p.open() as f:
-        return len({r["arm"] for r in csv.DictReader(f)})
+    with summary_csv.open() as f:
+        rows = list(csv.DictReader(f))
+    if not rows or "arm" not in rows[0]:
+        return None
+    return {r["arm"] for r in rows}
+
+
+def arms_in(results: Path) -> int | None:
+    s = arm_set(results / "summary.csv")
+    return None if s is None else len(s)
 
 
 def check_arm_counts(md: str, doc: str, own: Path, root: Path) -> list[str]:
@@ -279,22 +336,33 @@ def check_arm_counts(md: str, doc: str, own: Path, root: Path) -> list[str]:
     # Form 1: `<file>.csv` (…, N rows, M arms)
     for m in re.finditer(r"`(?:[\w/.-]*/)?([\w.-]+\.csv)`\s*\(([^)]*)\)", md):
         fname, paren = m.group(1), m.group(2)
+        rm = re.search(r"(\d+)\s+rows", paren)
+        am = re.search(r"(\w+)\s+arms", paren)
+        n = as_int(am.group(1)) if am else None
+        if not rm and n is None:
+            continue  # a parenthetical that makes no count claim
         path = own / fname
         if not path.exists():
+            # The document names a file and states its size; if the file is not
+            # there, that is the finding. Skipping quietly meant a report could
+            # cite a CSV that no longer exists and still pass.
+            problems.append(f"{doc}: cites `{fname}` with a row/arm count, but "
+                            f"{path} does not exist")
             continue
         with path.open() as f:
             rows = list(csv.DictReader(f))
-        rm = re.search(r"(\d+)\s+rows", paren)
         if rm and int(rm.group(1)) != len(rows):
             problems.append(f"{doc}: says {fname} has {rm.group(1)} rows; "
                             f"it has {len(rows)}")
-        am = re.search(r"(\w+)\s+arms", paren)
-        n = as_int(am.group(1)) if am else None
-        if n is not None and "arm" in (rows[0] if rows else {}):
-            got = len({r["arm"] for r in rows})
-            if got != n:
-                problems.append(f"{doc}: says {fname} covers {am.group(1)} arms; "
-                                f"it covers {got}")
+        if n is not None:
+            if not rows or "arm" not in rows[0]:
+                problems.append(f"{doc}: says {fname} covers {am.group(1)} arms, "
+                                "but that file has no rows with an 'arm' column")
+            else:
+                got = len({r["arm"] for r in rows})
+                if got != n:
+                    problems.append(f"{doc}: says {fname} covers {am.group(1)} "
+                                    f"arms; it covers {got}")
 
     # Form 2: a sentence naming a results directory and an arm count. Prefer the
     # current tree when the sentence names both, since a sentence mentioning the
@@ -321,44 +389,70 @@ def check_arm_counts(md: str, doc: str, own: Path, root: Path) -> list[str]:
     return problems
 
 
-def check_conditions(md: str, doc: str, results: Path) -> list[str]:
+def check_conditions(md: str, doc: str, results: Path, root: Path) -> list[str]:
     """"Track A was run on six conditions" followed by five names.
 
     Checked two ways: the stated count against the names listed, and the names
     against the conditions actually present in the committed ASR rows. Anchored
     on the phrase that introduces the matrix, not on any "run on N conditions" —
     the merged report has an unrelated control re-run "on two conditions".
+
+    The data comparison is per expected arm, not `any` arm. Accepting the claim
+    because *one* arm matched let the other carry a different matrix while the
+    report's coverage statement went unchallenged — the claim is about the arms
+    this study added, so every one of them has to satisfy it.
     """
     m = re.search(r"Track A was run on (\w+) conditions", md)
     if not m:
         return []
     stated = as_int(m.group(1))
     if stated is None:
-        return []
+        return [f"{doc}: states Track A conditions as {m.group(1)!r}, which is "
+                "not a number this checker can compare"]
     tail = md[m.end(): m.end() + 400]
     kept = re.search(r"Kept:(.*?)(?:Cut:|\n\n)", tail, re.S)
     if not kept:
         return [f"{doc}: states {stated} Track A conditions but does not list "
                 "them, so the matrix cannot be reproduced"]
-    named = re.findall(r"`([a-z0-9_]+)`", kept.group(1))
+    named = set(re.findall(r"`([a-z0-9_]+)`", kept.group(1)))
     problems = []
-    if len(set(named)) != stated:
+    if len(named) != stated:
         problems.append(f"{doc}: states {m.group(1)} Track A conditions but "
-                        f"names {len(set(named))}: {sorted(set(named))}")
-    # And against the data, not only against itself.
-    present = {}
+                        f"names {len(named)}: {sorted(named)}")
+
+    present: dict[str, set[str]] = {}
+    found_any = False
     for name in ("asr.jsonl", "asr_fixed.jsonl", "asr_control.jsonl"):
         p = results / name
         if not p.exists():
             continue
+        found_any = True
         for line in p.read_text().splitlines():
             r = json.loads(line)
             present.setdefault(r["arm"], set()).add(r["condition"])
-    if present and not any(s == set(named) for s in present.values()):
-        problems.append(
-            f"{doc}: the conditions named ({sorted(set(named))}) match no arm's "
-            f"condition set in the committed ASR rows "
-            f"({ {a: sorted(s) for a, s in sorted(present.items())} })")
+    if not found_any or not present:
+        return problems + [
+            f"{doc}: states a Track A matrix but there are no ASR rows under "
+            f"{results}, so the claim cannot be checked against data"]
+
+    # Which arms the claim is about, decided outside the data being checked:
+    # the arms this report added, i.e. present in its own pass and absent from
+    # the baseline snapshot. Inferring them from the ASR rows would be checking
+    # the data against itself.
+    own, base = arm_set(results / "summary.csv"), arm_set(root / "main-report" / "summary.csv")
+    if own is None or base is None:
+        return problems + [f"{doc}: cannot determine which arms the Track A "
+                           "claim covers (a summary.csv is missing)"]
+    expected = sorted((own - base) & set(present))
+    if not expected:
+        return problems + [
+            f"{doc}: no arm added by this report has ASR rows, so the "
+            f"'{m.group(1)} conditions' claim covers nothing checkable"]
+    for arm in expected:
+        if present[arm] != named:
+            problems.append(
+                f"{doc}: names conditions {sorted(named)} but {arm} has "
+                f"{sorted(present[arm])} in the committed ASR rows")
     return problems
 
 
@@ -369,17 +463,28 @@ def check_cost_table(md: str, doc: str) -> list[str]:
     """
     problems = []
     for tbl in tables(md):
-        items, total = [], None
+        items, total, total_unparsed = [], None, False
         for row in tbl:
             if not row:
                 continue
             val = parse_number(row[-1])
+            is_total = "total" in norm_label(row[0])
             if val is None:
+                # A total row whose figure stopped parsing silently disabled the
+                # whole check for that table. Reformatting the cell must not be
+                # a way to switch off the arithmetic.
+                total_unparsed = total_unparsed or is_total
                 continue
-            if "total" in norm_label(row[0]):
+            if is_total:
                 total = val
             else:
                 items.append(val)
+        if total_unparsed and total is None:
+            problems.append(f"{doc}: a table has a 'total' row whose last cell "
+                            "is not a number, so its arithmetic was not checked")
+        if total is not None and not items:
+            problems.append(f"{doc}: a table states a total ({total:.2f}) with "
+                            "no parseable line items to check it against")
         if total is not None and items:
             s = round(sum(items), 2)
             if abs(s - total) > 0.011:
@@ -390,23 +495,34 @@ def check_cost_table(md: str, doc: str) -> list[str]:
 
 def check_run_counts(md: str, doc: str, results: Path) -> list[str]:
     """'N of the M new runs …' — both halves move when the study is extended."""
+    # Look for the claim first: a missing data file only matters if something
+    # depends on it, and when something does, its absence is a problem rather
+    # than a reason to return clean.
+    m = re.search(r"\*\*(\w+) of the (\d+) new runs\*\*", md)
+    if not m:
+        return []
     per_run = results / "summary_per_run.csv"
     if not per_run.exists():
-        return []
-    rows = list(csv.DictReader(per_run.open()))
+        return [f"{doc}: states a new-run count but {per_run} is missing, so it "
+                "cannot be checked"]
+    with per_run.open() as f:
+        rows = list(csv.DictReader(f))
+    if not rows or "arm" not in rows[0]:
+        return [f"{doc}: states a new-run count but {per_run.name} has no usable "
+                "rows, so it cannot be checked"]
     new = {"native-gpt-realtime-21", "native-gpt-realtime-21-mini", "vl-native-brain-21"}
     n_new = sum(1 for r in rows if r["arm"] in new)
     dropped = sum(1 for r in rows if r["arm"] in new and r.get("ttfa_trustworthy") == "0")
 
-    problems = []
-    m = re.search(r"\*\*(\w+) of the (\d+) new runs\*\*", md)
-    if m:
-        got = as_int(m.group(1))
-        if got != dropped or int(m.group(2)) != n_new:
-            problems.append(
-                f"{doc}: says {m.group(1)} of {m.group(2)} new runs were dropped from "
-                f"the latency percentiles; summary_per_run.csv has {dropped} of {n_new}")
-    return problems
+    got = as_int(m.group(1))
+    if got is None:
+        return [f"{doc}: new-run count {m.group(1)!r} is not a number this "
+                "checker can compare"]
+    if got != dropped or int(m.group(2)) != n_new:
+        return [f"{doc}: says {m.group(1)} of {m.group(2)} new runs were dropped "
+                f"from the latency percentiles; summary_per_run.csv has "
+                f"{dropped} of {n_new}"]
+    return []
 
 
 def main() -> int:
@@ -456,7 +572,7 @@ def main() -> int:
         problems += check_cost_table(md, doc)
         problems += check_run_counts(md, doc, results)
         problems += check_arm_counts(md, doc, results, root)
-        problems += check_conditions(md, doc, results)
+        problems += check_conditions(md, doc, results, root)
 
     if not seen_docs:
         print(f"no reports found under {docs}", file=sys.stderr)

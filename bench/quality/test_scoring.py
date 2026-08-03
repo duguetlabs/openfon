@@ -1492,9 +1492,12 @@ class TestReportsMatchTheirData(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertTrue(any("conditions but names 5" in x
                                 for x in out["problems"]), out["problems"])
-            # ...and against the data, not only against its own count.
-            self.assertTrue(any("match no arm's condition set" in x
-                                for x in out["problems"]), out["problems"])
+            # ...and against the data, not only against its own count. Every
+            # expected arm is named, not just the first one that disagrees.
+            for arm in ("native-gpt-realtime-21", "native-gpt-realtime-21-mini"):
+                self.assertTrue(
+                    any(f"but {arm} has" in x for x in out["problems"]),
+                    f"{arm} unreported: {out['problems']}")
 
     def test_no_shared_judge_rows_is_reported_not_raised(self):
         """An empty intersection is a legitimate state that needs a message.
@@ -1523,6 +1526,105 @@ class TestReportsMatchTheirData(unittest.TestCase):
             self.assertEqual(code, 1, "should report, not pass")
             self.assertTrue(any("share no" in x for x in out["problems"]),
                             out["problems"])
+
+    def _results_copy(self, tmp, drop_arm=None, drop_condition=None):
+        """A writable copy of the results tree, optionally degraded."""
+        res = Path(tmp) / "results"
+        (res / "main-report").mkdir(parents=True)
+        for f in (HERE / "results").glob("*.csv"):
+            (res / f.name).write_text(f.read_text())
+        for f in (HERE / "results").glob("*.jsonl"):
+            (res / f.name).write_text(f.read_text())
+        for f in (HERE / "results" / "main-report").glob("*.csv"):
+            (res / "main-report" / f.name).write_text(f.read_text())
+        if drop_arm:
+            with (res / "summary.csv").open() as f:
+                rows = [r for r in csv.DictReader(f) if r["arm"] != drop_arm]
+            with (res / "summary.csv").open("w", newline="") as f:
+                w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+                w.writeheader()
+                w.writerows(rows)
+        if drop_condition:
+            arm, cond = drop_condition
+            keep = [l for l in (res / "asr.jsonl").read_text().splitlines()
+                    if not (json.loads(l)["arm"] == arm
+                            and json.loads(l)["condition"] == cond)]
+            (res / "asr.jsonl").write_text("\n".join(keep) + "\n")
+        return res
+
+    def test_an_arm_missing_from_summary_is_reported_not_raised(self):
+        """An alias can point at an arm the CSV does not have.
+
+        Indexing `summary[arm]` raised KeyError and produced no output at all —
+        the checker saying nothing about a real report/data disagreement. Second
+        instance of crash-instead-of-report in this file.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            res = self._results_copy(tmp, drop_arm="native-gpt-realtime-21")
+            out, code = self._run(docs=docs, results=res)
+            self.assertEqual(code, 1)
+            self.assertTrue(any("not in this report's summary.csv" in x
+                                for x in out["problems"]), out["problems"])
+
+    def test_deleting_the_agreement_evidence_fails(self):
+        """The reliability evidence disappearing must not read as compliance.
+
+        Missing fields used to `continue`, so removing the whole three-row table
+        while leaving the heading exited zero: the check built because agreement
+        was quoted from the wrong pass could be satisfied by there being no
+        agreement figures at all.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08-gpt-realtime-2-1.md"
+            import re as _re
+            p.write_text(_re.sub(r"\| field \| agreement \|.*?\| tone \|[^\n]*\n",
+                                 "", p.read_text(), flags=_re.S))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1, "deleted evidence must not pass")
+            for field in ("groundedness", "resolution", "tone"):
+                self.assertTrue(any(field in x for x in out["problems"]),
+                                f"{field} unreported: {out['problems']}")
+
+    def test_conditions_are_checked_against_every_expected_arm(self):
+        """`any(...)` accepted the claim as soon as one arm matched.
+
+        The other could then carry a different matrix while the report's
+        coverage statement went unchallenged.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            res = self._results_copy(
+                tmp, drop_condition=("native-gpt-realtime-21-mini", "tel"))
+            out, code = self._run(docs=docs, results=res)
+            self.assertEqual(code, 1)
+            self.assertTrue(
+                any("native-gpt-realtime-21-mini has" in x
+                    for x in out["problems"]),
+                f"the arm that lost a condition went unreported: {out['problems']}")
+
+    def test_a_cited_csv_that_does_not_exist_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08-gpt-realtime-2-1.md"
+            p.write_text(p.read_text().replace("`results/judge.csv` (seed 1,",
+                                               "`results/nonexistent.csv` (seed 1,"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1)
+            self.assertTrue(any("does not exist" in x for x in out["problems"]),
+                            out["problems"])
+
+    def test_a_claim_whose_data_file_is_missing_is_reported(self):
+        """A missing file matters exactly when something depends on it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            res = self._results_copy(tmp)
+            (res / "summary_per_run.csv").unlink()
+            out, code = self._run(docs=docs, results=res)
+            self.assertEqual(code, 1)
+            self.assertTrue(any("summary_per_run.csv" in x and "missing" in x
+                                for x in out["problems"]), out["problems"])
 
     def test_the_merged_report_keeps_its_own_results_snapshot(self):
         """The 2.1 run re-judged every arm and overwrote results/ in place.
