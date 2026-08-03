@@ -630,6 +630,23 @@ export class CallSession implements DurableObject {
   // mismatch: a control we cannot confirm is not a control, which is the rule
   // both benchmarks arrived at after silent substitutions went unnoticed for a
   // whole run.
+  private static at(obj: unknown, path: string): unknown {
+    return path.split('.').reduce<unknown>((o, k) => (o && typeof o === 'object' ? (o as Record<string, unknown>)[k] : undefined), obj);
+  }
+
+  // A copy of the payload with these subtrees removed, so "everything else" is
+  // a diff over a smaller object rather than a filter over rendered text.
+  private static without(obj: SessionConfig, paths: string[]): unknown {
+    const copy = structuredClone(obj) as Record<string, unknown>;
+    for (const path of paths) {
+      const keys = path.split('.');
+      const leaf = keys.pop() as string;
+      const parent = keys.length ? CallSession.at(copy, keys.join('.')) : copy;
+      if (parent && typeof parent === 'object') delete (parent as Record<string, unknown>)[leaf];
+    }
+    return copy;
+  }
+
   private static diffSession(sent: unknown, echoed: unknown, path: string): string[] {
     // Nothing was asked for here, so there is nothing to verify. This looks
     // like the opposite of the rule above and is the same one: what matters is
@@ -664,27 +681,28 @@ export class CallSession implements DurableObject {
     // theirs by detector. That asymmetry is exactly how the benchmark found it.
     if ((echoed as SessionConfig).instructions !== sent.instructions) return;
 
-    // The whole payload, not a list of subtrees somebody remembered to add.
-    // Everything we asked for is compared; the enforced subtrees are the ones
-    // worth re-sending for, and the rest is reported so a silent substitution
-    // is at least a visible one.
-    const divergences = CallSession.diffSession(sent, echoed, 'session');
-    if (!divergences.length) return;
-    const enforcedPaths = this.enforcedSessionPaths().map((p) => `session.${p}`);
-    // A divergence counts as enforced when it is at, below, **or above** an
-    // enforced path. The ancestor direction is the one the widened comparison
-    // lost: an echo that drops `audio.input` wholesale reports a single
-    // `session.audio.input absent — unverifiable`, which is at or below
-    // nothing, so it read as advisory and no re-send went out — while the
-    // detector, the formats and the transcription were all unverifiable at
-    // once. The per-path version enforced that case by construction, because
-    // it looked up each enforced path and found the parent missing.
-    const isEnforced = (d: string): boolean => {
-      const path = d.split(/[ =]/)[0];
-      return enforcedPaths.some((p) => path === p || path.startsWith(`${p}.`) || p.startsWith(`${path}.`));
-    };
-    const enforced = divergences.filter(isEnforced);
-    const advisory = divergences.filter((d) => !isEnforced(d));
+    // Everything we asked for is compared. The enforced subtrees are the ones
+    // worth re-sending for; the rest is reported so a silent substitution is at
+    // least a visible one. **Both sets are computed structurally, by diffing
+    // subtrees — never by reading the wording of a divergence back out.**
+    //
+    // The first version classified by string-matching `diffSession`'s
+    // human-readable output against each enforced path, which put a safety
+    // decision at the mercy of a display format: change the delimiter after
+    // the path and an enforced divergence quietly becomes advisory, skipping
+    // the re-send, with a clean log. That is this line's own bug reproduced in
+    // a new medium, and the tell was that the matcher needed a clause for
+    // `path absent — unverifiable` — it was already leaning on prose.
+    //
+    // Diffing at each enforced path also keeps the dropped-ancestor case right
+    // by construction instead of by special case: if the echo has no `audio`,
+    // `at(echoed, 'audio.input.turn_detection')` is undefined, `diffSession`
+    // reports it absent, and it lands in the enforced set.
+    const enforcedPaths = this.enforcedSessionPaths();
+    const enforced = enforcedPaths.flatMap((p) =>
+      CallSession.diffSession(CallSession.at(sent, p), CallSession.at(echoed, p), `session.${p}`)
+    );
+    const advisory = CallSession.diffSession(CallSession.without(sent, enforcedPaths), echoed, 'session');
     if (advisory.length) console.log(`call ${this.callId}: session echo differs (advisory): ${advisory.join('; ')}`);
     if (!enforced.length) return;
 

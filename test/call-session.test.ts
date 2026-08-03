@@ -846,6 +846,29 @@ describe('session echo read-back', () => {
     expect(updatesSent(up)).toBe(2);
   });
 
+  it('classifies by structure, not by how a divergence is worded', async () => {
+    // The classification used to string-match `diffSession`'s human-readable
+    // output against each enforced path, so a change to the message format
+    // would silently move an enforced divergence into advisory and skip the
+    // re-send. Pinned two ways, both independent of wording: a substitution
+    // *under* an enforced path re-sends, and a substitution nowhere near one
+    // does not — and the whole-block drop above covers the ancestor case that
+    // the string matcher needed a special clause for.
+    const { up, sent } = await started('gpt-realtime-2');
+    const under = structuredClone(sent);
+    under.audio!.input!.format = { type: 'audio/pcmu' };
+    echo(up, under);
+    await flush();
+    expect(updatesSent(up), 'a substituted format is enforced').toBe(2);
+
+    const { up: up2, sent: sent2 } = await started('gpt-realtime-2');
+    const outside = structuredClone(sent2) as Sess & { instructions?: string; tools?: unknown[] };
+    outside.tools = [];
+    echo(up2, outside);
+    await flush();
+    expect(updatesSent(up2), 'tools are not worth a re-send').toBe(1);
+  });
+
   it('reports a divergence outside the enforced subtrees without re-sending', async () => {
     // The read-back covers the whole payload now, not a list of subtrees
     // somebody remembered to add. Measured first: on all five tiers nothing
