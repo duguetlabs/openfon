@@ -618,12 +618,20 @@ describe('realtime session payload', () => {
     expect(await turnDetection('gpt-realtime-2')).toEqual(TUNED_SERVER_VAD);
   });
 
-  it('gives an unlisted tier the tuned server VAD, not an untuned default', async () => {
-    // gpt-realtime-2.1 is being measured for splitting and is deliberately not
-    // in the table. Whatever that measurement says, the fallback is the right
-    // answer — a tier that splits has no remedy worth its cost, and one that
-    // does not split needs no change — but the tuning still has to reach it.
+  it('keeps the 2.1 tiers on server VAD too', async () => {
+    // Both split 12/12 under server_vad, exactly like gpt-realtime-2. Semantic
+    // VAD would take 2.1 to 0/12 but only takes 2.1-mini to 4/12 — a mitigation
+    // rather than a fix on mini, and on 2.1 still subject to the same
+    // end-of-turn tail that rules it out on gpt-realtime-2.
     expect(await turnDetection('gpt-realtime-2.1')).toEqual(TUNED_SERVER_VAD);
+    expect(await turnDetection('gpt-realtime-2.1-mini')).toEqual(TUNED_SERVER_VAD);
+  });
+
+  it('gives a tier nobody has measured the tuned server VAD, not an untuned default', async () => {
+    // A new tier id reaching the fallback must still get the settings that were
+    // tuned against real ambient noise, not whatever the service defaults to
+    // (Voice Live: 200 ms of silence; the GA surface: 500).
+    expect(await turnDetection('gpt-realtime-9-unreleased')).toEqual(TUNED_SERVER_VAD);
   });
 
   it('never moves the HD tier off server VAD, which would fail every call at session start', async () => {
@@ -657,6 +665,127 @@ describe('realtime session payload', () => {
       const offenders = keys(await sessionFor(model)).filter((k) => /noise/i.test(k));
       expect(offenders, `${model} session payload asks for noise reduction`).toEqual([]);
     }
+  });
+});
+
+describe('session echo read-back', () => {
+  // The gateway dials its upstream lazily and injects a session.update of its
+  // own, which races with ours and wins about 1 session in 8 — the same race
+  // that swapped the STT model on 22 of 25 turns in the latency benchmark. The
+  // benchmark rejects those sessions; production cannot, so it re-asserts.
+  type Sess = {
+    instructions?: string;
+    audio?: {
+      input?: { turn_detection?: Record<string, unknown>; transcription?: Record<string, unknown> };
+      output?: { voice?: string };
+    };
+  };
+
+  /** Start a realtime call and hand back the engine socket plus what we sent. */
+  const started = async () => {
+    const { session } = newSession('realtime');
+    await session.fetch(upgradeRequest());
+    serverSockets.at(-1)!.receive({ type: 'start' });
+    await flush();
+    const up = upstreamSockets.at(-1)!;
+    up.emit('open', {});
+    await flush();
+    const sent = up.messages().find((m) => m.type === 'session.update')!.session as Sess;
+    return { up, sent };
+  };
+
+  const echo = (up: FakeSocket, session: Sess) => up.receive({ type: 'session.updated', session });
+  const updatesSent = (up: FakeSocket) => up.messages().filter((m) => m.type === 'session.update').length;
+  /** A copy of what we sent, with the turn detector quietly replaced. */
+  const substituted = (sent: Sess): Sess => {
+    const s = structuredClone(sent);
+    s.audio!.input!.turn_detection = { type: 'server_vad', threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 200 };
+    return s;
+  };
+
+  it('re-sends the payload when the engine applied a different turn detector', async () => {
+    const { up, sent } = await started();
+    echo(up, substituted(sent));
+    await flush();
+    expect(updatesSent(up)).toBe(2);
+    // Byte-identical to the original, not a rebuild — a rebuild could differ
+    // from what the comparison was made against.
+    const [first, second] = up.messages().filter((m) => m.type === 'session.update');
+    expect(second.session).toEqual(first.session);
+  });
+
+  it('stays quiet when the echo matches what we asked for', async () => {
+    const { up, sent } = await started();
+    // Services add their own defaults on top; extra fields are not a mismatch,
+    // only fields we set coming back changed are.
+    const s = structuredClone(sent);
+    s.audio!.input!.turn_detection!.create_response = true;
+    echo(up, s);
+    await flush();
+    expect(updatesSent(up)).toBe(1);
+  });
+
+  it('ignores the gateway session that is not ours', async () => {
+    // The gateway's own injected update produces an echo of its own, and it
+    // arrives first. Treating it as a failed read-back would re-send on every
+    // single call — the discriminator is whose instructions came back.
+    const { up, sent } = await started();
+    const theirs = substituted(sent);
+    theirs.instructions = 'gateway defaults';
+    echo(up, theirs);
+    await flush();
+    expect(updatesSent(up)).toBe(1);
+  });
+
+  it('gives up rather than looping when the engine keeps substituting', async () => {
+    const { up, sent } = await started();
+    for (let i = 0; i < 6; i++) {
+      echo(up, substituted(sent));
+      await flush();
+    }
+    // Two re-sends, then it stops and complains. An unbounded read-back is a
+    // message loop with an engine that has made its position clear.
+    expect(updatesSent(up)).toBe(3);
+  });
+
+  it('does not fight the gateway over the transcription model', async () => {
+    // The gateway substitutes its own STT deployment persistently — it won 22
+    // of 25 turns in the benchmark — and it cannot corrupt what the caller
+    // hears. Logged, not re-sent, or every session would burn its budget.
+    const { up, sent } = await started();
+    const s = structuredClone(sent);
+    s.audio!.input!.transcription = { ...s.audio!.input!.transcription, model: 'whisper' };
+    echo(up, s);
+    await flush();
+    expect(updatesSent(up)).toBe(1);
+  });
+
+  it('re-asserts on the replacement connection after a rotation', async () => {
+    // A rotation sends a fresh configuration, so it gets its own budget and
+    // becomes what later echoes are compared against — and the re-send has to
+    // reach the socket that answered, which mid-rotation is not the one the
+    // exhausted budget belonged to.
+    vi.useFakeTimers();
+    const { up, sent } = await started();
+    for (let i = 0; i < 3; i++) {
+      echo(up, substituted(sent));
+      await flush();
+    }
+    expect(updatesSent(up)).toBe(3); // budget spent on the outgoing connection
+
+    up.receive({ type: 'session.expiring' });
+    await flush();
+    const newUp = upstreamSockets.at(-1)!;
+    expect(newUp).not.toBe(up);
+    newUp.emit('open', {});
+    await flush();
+    expect(updatesSent(newUp)).toBe(1);
+
+    const resumed = newUp.messages().find((m) => m.type === 'session.update')!.session as Sess;
+    echo(newUp, substituted(resumed));
+    await flush();
+    expect(updatesSent(newUp)).toBe(2); // fresh configuration, fresh budget
+    expect(updatesSent(up)).toBe(3); // and nothing went to the old socket
   });
 });
 
