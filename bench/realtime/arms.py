@@ -471,8 +471,25 @@ VOICE_LIVE_TIER_ARMS: list[Arm] = [
         tags=("native", "direct", "voicelive-stack", "semantic", "v21mini")),
 ]
 
+# The matched control the tier claim needs: same brain, same stack, only the
+# detector differs. Without it, comparing the proposed tier's 731 ms end-of-turn
+# against a gateway server-VAD arm varies brain, serving path and detector at
+# once, and cannot attribute the result to the detector.
+VOICE_LIVE_CONTROL_ARMS: list[Arm] = [
+    Arm(id="vl21mini-server",
+        label="Voice Live serving gpt-realtime-2.1-mini, server VAD",
+        dialect="vl", creds="azure",
+        voice="marin", voice_type="openai", transcription=WHISPER,
+        brain="gpt-realtime-2.1-mini",
+        _url=(f"wss://{AZURE_HOST}/voice-live/realtime"
+              f"?api-version={VOICE_LIVE_API_VERSION}&model=gpt-realtime-2.1-mini"),
+        turn_detection=dict(TURN_DETECTION),
+        notes="Isolates the detector on the proposed tier's own stack.",
+        tags=("native", "direct", "voicelive-stack", "v21mini", "control")),
+]
+
 ARMS_BY_ID = {a.id: a for a in ARMS + VAD_ARMS + REALTIME_21_ARMS
-              + VOICE_LIVE_TIER_ARMS}
+              + VOICE_LIVE_TIER_ARMS + VOICE_LIVE_CONTROL_ARMS}
 
 # Paired comparisons: (treatment, control, question). analyze.py reports only
 # the ones whose two arms both appear in the dataset, so the main run and the
@@ -514,6 +531,8 @@ PAIRS = [
      "mini vs full brain on the proposed tier"),
     ("vl21mini-azsem", "gw-hd-server",
      "proposed mini tier vs the current HD tier"),
+    ("vl21mini-azsem", "vl21mini-server",
+     "Azure semantic vs server VAD, brain AND stack held constant"),
 ]
 
 

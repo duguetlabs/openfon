@@ -219,14 +219,19 @@ and counting it as a clean non-split would manufacture significance out of failu
 Tables show raw and adjusted p side by side, so a demoted result stays visible instead of
 disappearing.
 
-**A third guard, added after a median hid a tail for the third time.** Every paired table
+**A third guard, added after a median hid a tail for the third time — and then narrowed.** Every paired table
 carries the **p90 of the paired differences**, and a comparison whose p90 is both above
 `TAIL_FLOOR_MS` and more than 5× its median is reported as *"median X but p90 Y — bimodal,
-judge on the tail"* rather than by its median at all. The case that forced this: OpenAI's
+judge on the tail"* rather than by its median alone. The case that forced this: OpenAI's
 semantic VAD costs ~100 ms on four turns in five and ~3.5 s on the fifth, and a paired
-median of +106 ms was published as "no detectable difference". A median describes the
-typical turn and is silent about the turn that ruins a phone call. If you add a metric,
-assume its cost may be bimodal until the p90 says otherwise.
+median of +106 ms was published as "no detectable difference".
+
+The verdict **describes both numbers and diagnoses nothing**. An earlier version said
+"bimodal", which two quantiles cannot establish — a broad symmetric spread with median 0
+and p90 800 trips the same rule as a genuine second mode. That wording was itself added to
+fix an over-claim and became one. Whether a case really is bimodal is a question for the
+actual differences, shown in prose where a reader can check it. Describing what you
+measured is always defensible; inferring a distribution's shape from two quantiles is not.
 
 ### Tests
 

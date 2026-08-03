@@ -148,14 +148,15 @@ Paired, on identical caller audio in the same round:
 
 | comparison | pairs | median Δ | 95% CI | p90 Δ | p raw | p Holm | verdict |
 |---|---:|---:|---|---:|---:|---:|---|
-| `native-gateway` − `native-direct` | 23 | **+12** | [−90, +141] | **+502** | 1.000 | 1.000 | median +12 but p90 +502 — bimodal, judge on the tail |
+| `native-gateway` − `native-direct` | 23 | **+12** | [−90, +141] | **+502** | 1.000 | 1.000 | median +12, p90 +502 — median unrepresentative |
 | `vl-gateway` − `vl-direct` | 25 | **−100** | [−280, −15] | +171 | 0.043 | 0.866 | borderline — faster by 100 ms, not robust to Holm |
-| `vl-native-brain` − `native-direct` | 25 | **−46** | [−152, −1] | **+508** | 0.043 | 0.866 | median −46 but p90 +508 — bimodal, judge on the tail |
+| `vl-native-brain` − `native-direct` | 25 | **−46** | [−152, −1] | **+508** | 0.043 | 0.866 | median −46, p90 +508 — median unrepresentative |
 
 > Regenerated 2026-08-03 with the current analyzer. Two changes: the Holm values are
 > 0.866, not the 0.779 published earlier — that figure predated `session_ready_ms` joining
-> the metric family and was never regenerated — and two rows now carry a bimodal flag,
-> because the p90 of their paired differences is an order of magnitude above the median.
+> the metric family and was never regenerated — and two rows are now flagged as having an
+> unrepresentative median, because the p90 of their paired differences is an order of
+> magnitude above it. The flag describes both numbers; it does not claim a shape.
 > Neither changes a conclusion; both were published as cleaner than the data supports.
 
 p-values are Holm-corrected across all 27 paired tests in the run (see

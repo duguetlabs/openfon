@@ -29,7 +29,7 @@ import websockets
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from arms import ARMS, VAD_ARMS, Arm  # noqa: E402
+from arms import ARMS_BY_ID, Arm  # noqa: E402
 from bench import load_kataleptic_key  # noqa: E402
 from safety import safe_print  # noqa: E402
 
@@ -101,7 +101,11 @@ async def main() -> int:
         raise SystemExit("set AZURE_REALTIME_KEY (see README)")
 
     failures = 0
-    for arm in ARMS + VAD_ARMS:
+    # Every REGISTERED arm, not a hand-maintained list. Iterating a subset
+    # printed OK while checking none of the newest model/detector
+    # combinations — 'absent reads as a pass', in the tool built to catch
+    # exactly that.
+    for arm in ARMS_BY_ID.values():
         try:
             sess = await capture(arm, azure_key, kat_key)
         except Exception as e:                                # noqa: BLE001
@@ -116,8 +120,21 @@ async def main() -> int:
         fatal, advisory = arm.verify_echo(sess)
         note = ""
         if fatal:
-            note = f"  FALSE ABORT: {fatal}"
-            failures += 1
+            # A fatal on a REAL echo is either the checker being wrong or the
+            # endpoint genuinely substituting config. The gateway's known
+            # session-update injection race does the latter intermittently, so
+            # retry once to tell them apart rather than blaming the checker.
+            try:
+                again = await capture(arm, azure_key, kat_key)
+                refatal, _ = arm.verify_echo(again) if again else (fatal, [])
+            except Exception:                                 # noqa: BLE001
+                refatal = fatal
+            if refatal:
+                note = f"  CHECKER OR ENDPOINT WRONG (twice): {fatal}"
+                failures += 1
+            else:
+                note = (f"  intermittent divergence, clean on retry — the known "
+                        f"injection race: {fatal}")
         elif advisory:
             note = f"  (advisory: {advisory})"
 

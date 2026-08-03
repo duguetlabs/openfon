@@ -466,3 +466,21 @@ class TestMarkerIsPerCellNotPerArm(unittest.TestCase):
         a = ARMS_BY_ID["native-direct"]
         self.assertNotEqual(a.session_payload("MKCELL01")["instructions"],
                             a.session_payload("MKCELL02")["instructions"])
+
+
+class TestVerifierCoversEveryRegisteredArm(unittest.TestCase):
+    """verify_live iterated a hand-maintained subset and printed OK while
+    checking none of the newest combinations — "absent reads as a pass", in the
+    tool built to catch exactly that."""
+
+    def test_verifier_enumerates_the_registry(self):
+        import inspect, verify_live
+        src = inspect.getsource(verify_live.main)
+        self.assertIn("ARMS_BY_ID.values()", src)
+        self.assertNotIn("ARMS + VAD_ARMS", src)
+
+    def test_no_registered_arm_is_unreachable_from_the_cli(self):
+        """Every arm must be selectable, so a registered arm cannot be dead."""
+        import bench, inspect
+        self.assertIn('args.arms == "all"', inspect.getsource(bench.main))
+        self.assertTrue(len(ARMS_BY_ID) >= 17)

@@ -631,7 +631,7 @@ class TestConfirmedDifferentConfigIsExcluded(unittest.TestCase):
         self.assertAlmostEqual(ttfa.p_adj, ttfa.p_raw)
 
 
-class TestBimodalCostIsNotReportedAsNull(unittest.TestCase):
+class TestTailIsDescribedNotDiagnosed(unittest.TestCase):
     """A median says what a typical turn costs and is silent about a bimodal
     cost. OpenAI semantic VAD costs ~100 ms on four turns in five and ~3.5 s on
     the fifth; the median called that "no detectable difference" until a
@@ -643,10 +643,24 @@ class TestBimodalCostIsNotReportedAsNull(unittest.TestCase):
 
     def test_the_real_case_is_flagged(self):
         r = result(106, 0.263, 1.000, lo=-106, hi=536, diffs=self.BIMODAL)
-        self.assertTrue(r.tail_severe)
-        self.assertIn("bimodal", r.verdict())
+        self.assertTrue(r.tail_unrepresented)
         self.assertIn("p90", r.verdict())
         self.assertNotIn("no detectable difference", r.verdict())
+
+    def test_the_verdict_claims_no_distribution_shape(self):
+        """Two quantiles cannot tell a second mode from broad variance, so the
+        automated verdict must describe both numbers and diagnose nothing."""
+        r = result(106, 0.263, 1.000, lo=-106, hi=536, diffs=self.BIMODAL)
+        self.assertNotIn("bimodal", r.verdict().lower())
+        self.assertIn("median unrepresentative", r.verdict())
+
+    def test_a_broad_symmetric_spread_is_described_not_called_bimodal(self):
+        """The case that showed the old wording over-claimed: median ~0 with a
+        wide symmetric spread trips the same rule as a genuine second mode."""
+        sym = [-800, -600, -400, -200, -50, 50, 200, 400, 600, 800]
+        r = result(0, 1.0, 1.0, lo=-500, hi=500, diffs=sym)
+        self.assertTrue(r.tail_unrepresented)          # median is unrepresentative
+        self.assertNotIn("bimodal", r.verdict().lower())   # but says nothing of shape
 
     def test_tail_is_the_p90_of_paired_differences(self):
         r = result(106, 0.263, 1.0, diffs=self.BIMODAL)
@@ -655,25 +669,24 @@ class TestBimodalCostIsNotReportedAsNull(unittest.TestCase):
     def test_a_uniformly_small_cost_is_not_flagged(self):
         tight = [95, 100, 105, 98, 102, 99, 101, 103, 97, 100]
         r = result(100, 0.5, 1.0, lo=95, hi=105, diffs=tight)
-        self.assertFalse(r.tail_severe)
-        self.assertNotIn("bimodal", r.verdict())
+        self.assertFalse(r.tail_unrepresented)
 
     def test_a_large_but_consistent_effect_is_still_directional(self):
         big = [340, 350, 360, 345, 355, 352, 348, 351, 349, 353]
         r = result(-350, 0.000, 0.002, lo=-542, hi=-149,
                    diffs=[-x for x in big])
-        self.assertFalse(r.tail_severe)
+        self.assertFalse(r.tail_unrepresented)
         self.assertIn("faster by 350 ms", r.verdict())
 
     def test_floor_stops_tiny_ratios_from_tripping_it(self):
         # p90 five times a 2 ms median is still nothing worth flagging
         r = result(2, 0.5, 1.0, diffs=[1, 2, 2, 2, 3, 2, 2, 2, 2, 40])
         self.assertLess(r.tail_ms, TAIL_FLOOR_MS)
-        self.assertFalse(r.tail_severe)
+        self.assertFalse(r.tail_unrepresented)
 
     def test_empty_diffs_do_not_crash(self):
         r = result(0, 1.0, 1.0, diffs=[])
-        self.assertFalse(r.tail_severe)
+        self.assertFalse(r.tail_unrepresented)
 
 
 class TestPairedTableAlwaysCarriesTheTail(unittest.TestCase):

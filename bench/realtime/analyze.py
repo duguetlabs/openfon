@@ -27,6 +27,11 @@ Three rules keep a verdict honest in both directions:
       it is reported as "no detectable difference; CI admits up to 122 ms" —
       never as "no practical difference", which would assert something the
       data does not support.
+  The paired p90 is reported alongside every median, and when it dwarfs the
+      median the verdict says both numbers rather than the median alone. It
+      does NOT say "bimodal": two quantiles cannot tell a second mode from
+      broad variance, and describing what was measured is defensible where
+      inferring a shape is not.
 
 A directional claim needs the first two; an equivalence claim needs the third.
 Everything else is reported as a null with the bound the data actually gives.
@@ -73,9 +78,10 @@ ALPHA = 0.05
 # 50 ms is a conservative floor that still admits anything worth acting on.
 PRACTICAL_MS = 50.0
 
-# A paired p90 above this, and far above the median, means the cost is bimodal
-# and the median is the wrong summary. 500 ms is well past anything a caller
-# would not notice as dead air.
+# A paired p90 above this, and far above the median, means the median is not a
+# fair summary of the comparison — not that the distribution has two modes,
+# which two quantiles cannot establish. 500 ms is well past anything a caller
+# would fail to notice as dead air.
 TAIL_FLOOR_MS = 500.0
 
 # An equivalence claim needs enough observations for the bootstrap interval to
@@ -366,8 +372,21 @@ class PairedResult:
         return pct(self.diffs, 90) if self.diffs else float("nan")
 
     @property
-    def tail_severe(self) -> bool:
-        """The tail costs an order of magnitude more than the median."""
+    def tail_unrepresented(self) -> bool:
+        """The median does not represent the upper tail of this comparison.
+
+        This says nothing about the *shape* of the distribution. Two quantiles
+        cannot distinguish a second mode from ordinary broad variance — a
+        symmetric spread with median 0 and p90 800 trips this exactly as a
+        genuinely bimodal cost does. An earlier version asserted "bimodal" on
+        this basis, which inferred structure the data does not establish; it
+        was added to fix a median hiding a tail and over-corrected into a
+        different over-claim.
+
+        All it licenses is: report both numbers and let the reader judge.
+        Whether a given case is bimodal is a question for the actual
+        differences, and belongs in prose where it can be shown.
+        """
         if not self.diffs or math.isnan(self.tail_ms):
             return False
         return self.tail_ms > max(TAIL_FLOOR_MS, 5 * abs(self.median))
@@ -375,10 +394,10 @@ class PairedResult:
     def verdict(self) -> str:
         if self.not_comparable:
             return f"**not comparable** — {self.not_comparable}"
-        if self.tail_severe:
-            # never let a null median stand alone when the tail is severe
-            return (f"**median {self.median:+.0f} ms but p90 {self.tail_ms:+.0f} ms** — "
-                    f"bimodal, judge on the tail")
+        if self.tail_unrepresented:
+            # Describe both numbers; claim nothing about the shape between them.
+            return (f"**median {self.median:+.0f} ms, p90 {self.tail_ms:+.0f} ms** — "
+                    f"median unrepresentative, judge on the tail")
         direction = "slower" if self.median > 0 else "faster"
         if self.survives:
             return f"**{direction} by {abs(self.median):.0f} ms**"

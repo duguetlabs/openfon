@@ -403,7 +403,10 @@ async def main() -> int:
     ap.add_argument("--rounds", type=int, default=25,
                     help="turns per arm (default 25)")
     ap.add_argument("--arms", default="",
-                    help="comma-separated arm ids (default: all five)")
+                    help="comma-separated arm ids. Default is ARMS — the original "
+                         "five-arm proxy design, NOT every registered arm; later "
+                         "arms answer different questions and are selected "
+                         "explicitly. `--arms all` runs everything registered.")
     ap.add_argument("--out", default=str(HERE / "results"))
     ap.add_argument("--reply-timeout", type=float, default=20.0,
                     help="seconds of silence streamed while waiting for the reply")
@@ -416,8 +419,12 @@ async def main() -> int:
                          "(e.g. --utterances de-short for clause-pause splitting)")
     args = ap.parse_args()
 
-    selected = ([ARMS_BY_ID[a.strip()] for a in args.arms.split(",") if a.strip()]
-                if args.arms else list(ARMS))
+    if args.arms == "all":
+        selected = list(ARMS_BY_ID.values())
+    elif args.arms:
+        selected = [ARMS_BY_ID[a.strip()] for a in args.arms.split(",") if a.strip()]
+    else:
+        selected = list(ARMS)
     azure_key = os.environ.get("AZURE_REALTIME_KEY", "")
     if not azure_key and any(a.creds == "azure" for a in selected):
         raise SystemExit("set AZURE_REALTIME_KEY (see README)")
