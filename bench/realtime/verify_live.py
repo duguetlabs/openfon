@@ -143,8 +143,12 @@ async def main() -> int:
                 # tool built to catch false passes. `advisory` is re-derived
                 # for the same reason: it described the discarded echo.
                 sess, fatal, advisory = again, refatal, readvisory
-        if advisory and not note:
-            note = f"  (advisory: {advisory})"
+        if advisory:
+            # Append, never replace. Requiring an empty note meant a clean
+            # retry that still carried a voice or STT mismatch reported as
+            # fully clean, because the intermittent-race message already
+            # occupied the slot — the retry path swallowing information again.
+            note += f"  (advisory: {advisory})"
 
         # Mutations are only meaningful against an echo that verified clean:
         # if the baseline is already fatal, every mutation "passes" for the

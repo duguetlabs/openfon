@@ -526,3 +526,23 @@ class TestMutationChecksNeedAVerifiedBaseline(unittest.TestCase):
         import inspect, verify_live
         src = inspect.getsource(verify_live.main)
         self.assertIn("sess, fatal, advisory = again, refatal, readvisory", src)
+
+
+class TestVerifierNeverDropsAnAdvisory(unittest.TestCase):
+    """Three findings in verify_live this round, all the retry path swallowing
+    information: the wrong echo, then the wrong advisory. An advisory is
+    appended to whatever note already exists, never gated on it being empty."""
+
+    def test_advisory_is_appended_not_conditional(self):
+        import inspect, verify_live
+        src = inspect.getsource(verify_live.main)
+        self.assertIn('note += f"  (advisory:', src)
+        self.assertNotIn("if advisory and not note:", src)
+
+    def test_a_clean_retry_can_still_carry_an_advisory(self):
+        """The real shape: gateway substitutes turn_detection (fatal, races),
+        retry is clean on that but still substitutes the STT model."""
+        echo = ga_echo(stt="whisper")            # advisory-only divergence
+        fatal, advisory = GA_ARM.verify_echo(echo)
+        self.assertEqual(fatal, [])
+        self.assertTrue(advisory, "retry echo must still surface its advisory")
