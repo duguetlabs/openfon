@@ -372,6 +372,18 @@ which is the rule at the top of this file applied to the checker's own coverage.
 Removing a table on purpose means lowering that number in the same commit, so a
 coverage change shows up in the diff instead of in nothing.
 
+**The gap bit once, and the sentence was wrong in a way the numbers were not.**
+The addendum read "`vl-native-brain-21` matches the other Voice Live arms
+10/27" — a *group* phrase over a count that is per-arm: 10/27 is against
+`vl-gpt41mini-semvad` alone, the group figures are 21/27 and 13/27, and the
+strongest single match is `vl-native-brain` at **19/27**. So the sentence
+understated its own evidence and attributed it to the wrong comparator, in the
+prose and again in the claims table a reader meets first. The conclusion was
+never at risk — 19 against the same-surface arm versus 1 against the whisper-1
+arm is the sharper version of the same finding — but **a correct number with
+the wrong noun beside it is still a wrong claim**, and nothing in this harness
+was looking at it. It is recomputed from `scenarios.jsonl` by a test now.
+
 **What #14 does not cover, and why.** Scanning every "N arms" in the text found
 five false positives on two documents — sentences about judge files, about
 scenario matrices, about arms in a table. A checker that cries wolf gets switched

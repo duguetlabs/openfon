@@ -3135,6 +3135,57 @@ class TestReportsMatchTheirData(unittest.TestCase):
                 self.assertTrue(any("headline spend" in x for x in out["problems"]),
                                 out["problems"])
 
+    def test_the_transcript_identity_counts_are_reproducible(self):
+        """Codex, on a6fdfc4 — the one finding that moved a published claim.
+
+        The addendum read "`vl-native-brain-21` matches the other Voice Live
+        arms 10/27", which describes a *group* while 10/27 is the count against
+        one arm, `vl-gpt41mini-semvad`. The group figures are 21/27 (any of the
+        four Voice Live arms) and 13/27 (any gpt-4.1-mini one), and the
+        strongest single match is `vl-native-brain` at 19/27 — so the sentence
+        understated its own evidence while attributing it to the wrong
+        comparator. The conclusion is unchanged and better supported: 19 against
+        the same-surface arm, 1 against the whisper-1 arm.
+
+        These counts sit in prose, which #14 deliberately does not match, so
+        they are recomputed here instead — the same rule the harness applies
+        everywhere else: a number nothing regenerates is a number that goes
+        stale.
+        """
+        runs = [json.loads(l) for l in
+                (HERE / "results" / "scenarios.jsonl").read_text().splitlines()
+                if l.strip()]
+        by: dict[str, dict] = {}
+        for r in runs:
+            by.setdefault(r["arm"], {})[(r["scenario"], r["trial"])] = tuple(
+                m["text"] for m in r.get("transcript", [])
+                if m["role"] == "caller_asr")
+        target = by["vl-native-brain-21"]
+
+        def identical(other: str) -> int:
+            o = by.get(other, {})
+            return sum(1 for k, v in target.items() if k in o and o[k] == v)
+
+        md = (HERE / ".." / ".." / "docs" / "research" /
+              "voice-engine-quality-2026-08-gpt-realtime-2-1.md").read_text()
+        for arm, label in (("vl-native-brain", "`vl-native-brain`"),
+                           ("vl-gpt41mini-semvad", "`vl-gpt41mini-semvad`"),
+                           ("native-gpt-realtime-21", "Foundry 2.1")):
+            with self.subTest(arm=arm):
+                n = identical(arm)
+                self.assertIn(f"{n}/{len(target)}", md,
+                              f"the report states no {n}/{len(target)} count "
+                              f"for {label}; recomputed from scenarios.jsonl")
+        # And the comparator must be named, not left as "the other arms" — the
+        # count is per-arm, so a group phrase misdescribes it. Checked
+        # everywhere the claim appears: the same wording was in the claims
+        # table at the top of the document as well as in the prose below it,
+        # and fixing only the prose left the summary a reader meets first
+        # saying the old thing.
+        for phrase in ("the other Voice Live arms 10/27",
+                       "10/27 transcript matches to the other Voice Live arms"):
+            self.assertNotIn(phrase, md)
+
     def test_the_merged_report_keeps_its_own_results_snapshot(self):
         """The 2.1 run re-judged every arm and overwrote results/ in place.
 

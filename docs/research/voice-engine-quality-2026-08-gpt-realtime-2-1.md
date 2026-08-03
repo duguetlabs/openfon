@@ -17,7 +17,7 @@ into three claims, and they do not go the same way:
 
 | claim | verdict | evidence |
 |---|---|---|
-| Voice Live transcribes a gpt-realtime brain with `azure-speech` | **confirmed** | the session echo, plus 10/27 transcript matches to the other Voice Live arms against 1/27 to Foundry 2.1 |
+| Voice Live transcribes a gpt-realtime brain with `azure-speech` | **confirmed** | the session echo, plus 19/27 identical caller transcripts to `vl-native-brain` against 1/27 to Foundry 2.1 |
 | that buys **best-in-class** slot capture (0.960) | **refuted, structurally** | 0.920. The 0.960 needs `server_vad`, which this combination is not allowed to use |
 | it keeps gpt-realtime groundedness | **confirmed** | 0.926, inside the gpt-realtime band (0.926–0.963) and far above every gpt-4.1-mini arm (0.778–0.815) |
 
@@ -36,10 +36,12 @@ model=gpt-realtime-2.1  ->  session.model = "gpt-realtime-2.1-global-standard"
                             input_audio_transcription = {"model": "azure-speech", …}
 ```
 
-And the caller transcripts confirm it empirically: `vl-native-brain-21` matches
-the other Voice Live arms 10/27 and the Foundry 2.1 arm **1/27**. The recogniser
-follows the **surface**, not the brain — the mirror image of the whisper-1
-finding.
+And the caller transcripts confirm it empirically. Counting runs whose caller-ASR
+transcript list is *identical*, `vl-native-brain-21` matches
+`vl-native-brain` (azure-speech, same VAD) **19/27** and the semantic-VAD control
+`vl-gpt41mini-semvad` 10/27, against **1/27** for the Foundry 2.1 arm on
+whisper-1. The recogniser follows the **surface**, not the brain — the mirror
+image of the whisper-1 finding.
 
 **But slot capture lands at 0.920, not 0.960, and the missing 0.040 is the VAD.**
 Voice Live *rejects* `server_vad` for a gpt-realtime brain — "turn_detection
