@@ -233,6 +233,27 @@ fix an over-claim and became one. Whether a case really is bimodal is a question
 actual differences, shown in prose where a reader can check it. Describing what you
 measured is always defensible; inferring a distribution's shape from two quantiles is not.
 
+### Treat a new checker as unverified code
+
+Every verification mechanism in this harness has itself needed verifying, and the
+second-order bug was usually subtler than the one the mechanism was built to catch:
+
+| the checker | what it was built to catch | what was wrong with *it* |
+|---|---|---|
+| echo read-back | the endpoint ignoring a requested setting | absent read as valid — a missing field passed |
+| `verify_echo` audio contract | a silent codec substitution | checked the rate, never the codec type |
+| completeness checks | measuring a failed turn | failed turns counted as clean non-splits |
+| the tail guard | a median hiding a bimodal cost | asserted "bimodal" from two quantiles, which cannot establish it |
+| `verify_live` | a checker that has drifted from reality | iterated a hand-maintained list, so it skipped half the arms |
+| `verify_live` retry | blaming the checker for an endpoint's intermittent substitution | kept the bad echo, so every later mutation "passed" against an already-invalid baseline |
+
+The pattern is consistent enough to plan for: **a new checker is unverified code until
+something has tried to fool it.** Concretely — give it a known-bad input and confirm it
+fails, not just a known-good one and confirm it passes; and check that a "pass" cannot be
+produced by absent data, a stale baseline, or a subset of the things it claims to cover.
+`verify_live.py` exists because that reasoning applied to `verify_echo`; the last row of
+that table is what happened when it was not applied to `verify_live.py` itself.
+
 ### Tests
 
 ```bash

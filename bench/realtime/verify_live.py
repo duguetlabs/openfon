@@ -126,18 +126,32 @@ async def main() -> int:
             # retry once to tell them apart rather than blaming the checker.
             try:
                 again = await capture(arm, azure_key, kat_key)
-                refatal, _ = arm.verify_echo(again) if again else (fatal, [])
             except Exception:                                 # noqa: BLE001
-                refatal = fatal
+                again = None
+            refatal, readvisory = (arm.verify_echo(again) if again
+                                   else (fatal, advisory))
             if refatal:
                 note = f"  CHECKER OR ENDPOINT WRONG (twice): {fatal}"
                 failures += 1
             else:
                 note = (f"  intermittent divergence, clean on retry — the known "
                         f"injection race: {fatal}")
-        elif advisory:
+                # Adopt the CLEAN echo for everything downstream. Keeping the
+                # bad one would run every mutation check against an already
+                # invalid session, so each mutation would look "detected"
+                # because of the pre-existing mismatch — a false pass in the
+                # tool built to catch false passes. `advisory` is re-derived
+                # for the same reason: it described the discarded echo.
+                sess, fatal, advisory = again, refatal, readvisory
+        if advisory and not note:
             note = f"  (advisory: {advisory})"
 
+        # Mutations are only meaningful against an echo that verified clean:
+        # if the baseline is already fatal, every mutation "passes" for the
+        # wrong reason.
+        if fatal:
+            safe_print(f"  {arm.id:<18} echo did NOT verify; mutations not run{note}")
+            continue
         missed = [k for k in MUTATIONS if not arm.verify_echo(mutate(sess, arm, k))[0]]
         failures += len(missed)
         status = "all caught" if not missed else f"MISSED {missed}"

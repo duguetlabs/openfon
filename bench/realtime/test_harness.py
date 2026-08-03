@@ -484,3 +484,45 @@ class TestVerifierCoversEveryRegisteredArm(unittest.TestCase):
         import bench, inspect
         self.assertIn('args.arms == "all"', inspect.getsource(bench.main))
         self.assertTrue(len(ARMS_BY_ID) >= 17)
+
+
+class TestMutationChecksNeedAVerifiedBaseline(unittest.TestCase):
+    """A mutation check asks "would the checker notice this substitution?".
+    Against an echo that is ALREADY invalid the answer is yes regardless, so
+    every mutation reports "detected" for the wrong reason. verify_live kept
+    the bad echo after a clean retry and ran mutations against it — a false
+    pass in the tool built to catch false passes."""
+
+    def _bad_echo(self):
+        echo = ga_echo()
+        echo["audio"]["input"]["turn_detection"]["threshold"] = 0.5   # substituted
+        return echo
+
+    def test_an_invalid_baseline_makes_every_mutation_look_detected(self):
+        """The property that makes the bug silent: the check passes anyway."""
+        bad = self._bad_echo()
+        self.assertTrue(GA_ARM.verify_echo(bad)[0], "baseline must be invalid")
+        for kind in ("codec", "rate"):
+            mutated = dict(bad)
+            fatal, _ = GA_ARM.verify_echo(mutated)
+            self.assertTrue(fatal, "an unmutated bad echo already reports fatal — "
+                                   "so a mutation against it proves nothing")
+
+    def test_a_clean_baseline_makes_the_check_meaningful(self):
+        clean = ga_echo()
+        self.assertEqual(GA_ARM.verify_echo(clean)[0], [])
+        broken = ga_echo()
+        broken["audio"]["output"]["format"] = {"type": "audio/pcmu"}
+        self.assertTrue(GA_ARM.verify_echo(broken)[0])
+
+    def test_verifier_skips_mutations_when_the_echo_did_not_verify(self):
+        import inspect, verify_live
+        src = inspect.getsource(verify_live.main)
+        self.assertIn("mutations not run", src)
+
+    def test_verifier_adopts_the_retry_echo(self):
+        """State must not survive the retry boundary: the clean echo replaces
+        the bad one, and advisory is re-derived from it."""
+        import inspect, verify_live
+        src = inspect.getsource(verify_live.main)
+        self.assertIn("sess, fatal, advisory = again, refatal, readvisory", src)
