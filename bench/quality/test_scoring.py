@@ -2446,6 +2446,69 @@ class TestReportsMatchTheirData(unittest.TestCase):
             self.assertTrue(any("DNS" in x for x in out["problems"]),
                             out["problems"])
 
+    def test_the_family_ranges_are_checked_on_both_seeds(self):
+        """Codex, on 4c89a84: the seed-comparison evidence was unchecked.
+
+        The family table's rows are arm *families* and its cells are ranges, so
+        neither axis resolved — and a range is not `looks_numeric` either, so
+        the unresolved-row report stayed silent too. Both halves of the
+        "families separate cleanly under reseeding" claim could be replaced
+        with arbitrary ranges.
+        """
+        for row, edited in (
+                ("| 0.926–0.963 | 0.889–0.963 |", "| 0.111–0.999 | 0.889–0.963 |"),
+                ("| 0.778–0.815 | 0.704–0.815 |", "| 0.778–0.815 | 0.111–0.999 |")):
+            with self.subTest(row=row), tempfile.TemporaryDirectory() as tmp:
+                docs = self._sandbox(tmp)
+                p = docs / "voice-engine-quality-2026-08-gpt-realtime-2-1.md"
+                self.assertIn(row, p.read_text(), "the family table has moved")
+                p.write_text(p.read_text().replace(row, edited))
+                out, code = self._run(docs=docs)
+                self.assertEqual(code, 1, "an edited family range passed")
+                self.assertTrue(any("family" in x for x in out["problems"]),
+                                out["problems"])
+
+    def test_an_undeclared_seed2_gap_is_reported(self):
+        """The seed-2 pass covers seven arms, and that has to be *declared*.
+
+        An arm intentionally unjudged and an arm whose rows went missing look
+        identical in judge_seed2.csv. `SEED2_ABSENT` names the one with its
+        reason; any other absence must fail rather than quietly shrink the
+        range the document is checked against.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            res = self._results_copy(tmp)
+            with (res / "judge_seed2.csv").open() as f:
+                rows = list(csv.DictReader(f))
+            keep = [r for r in rows if r["arm"] != "vl-native-brain"]
+            self.assertLess(len(keep), len(rows), "vl-native-brain has moved")
+            with (res / "judge_seed2.csv").open("w", newline="") as f:
+                w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+                w.writeheader()
+                w.writerows(keep)
+            out, code = self._run(docs=docs, results=res)
+            self.assertEqual(code, 1, "an undeclared seed-2 gap passed")
+            self.assertTrue(any("SEED2_ABSENT" in x for x in out["problems"]),
+                            out["problems"])
+
+    def test_a_stated_change_is_checked_against_its_endpoints(self):
+        """A subtraction's inputs were verified and its result was not.
+
+        The parenthetical is a published figure like any other: with the
+        endpoints correct, `−0.074` could be rewritten `−9.999` and the run
+        stayed green with unchanged coverage.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08.md"
+            self.assertIn("(**−0.074**)", p.read_text())
+            p.write_text(p.read_text().replace("(**−0.074**)", "(**−9.999**)"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1, "a stale stated change passed")
+            self.assertTrue(any("states a change" in x for x in out["problems"]),
+                            out["problems"])
+
     def test_an_unmapped_report_fails_rather_than_being_skipped(self):
         """A document nothing checks must not read as a document that passed."""
         with tempfile.TemporaryDirectory() as tmp:

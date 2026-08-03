@@ -170,11 +170,17 @@ RESULTS_FOR = {
     # arm *pair* so neither axis resolved and both were skipped whole; +5 for
     # the English DNS empty-transcript column, written `24 %`, which the unit
     # pattern could not read.
-    "voice-engine-quality-2026-08.md": ("main-report", 217),
+    # 217 -> 227: +10 for the change stated in each delta cell's parenthetical,
+    # which was dropped rather than checked — the checker verifying a
+    # subtraction's inputs but not its result.
+    "voice-engine-quality-2026-08.md": ("main-report", 227),
     # 61 -> 62: the `gpt-realtime-2 / 2.1` recogniser row states one figure for
     # two arms and was compared against one of them. Both arms are a claim, so
     # both are counted.
-    "voice-engine-quality-2026-08-gpt-realtime-2-1.md": (".", 62),
+    # 62 -> 70: +8 for the family table's two multi-arm rows, whose cells are
+    # ranges across a family — neither axis resolved and a range is not
+    # `looks_numeric`, so they were neither compared nor reported.
+    "voice-engine-quality-2026-08-gpt-realtime-2-1.md": (".", 70),
 }
 
 
@@ -1176,7 +1182,7 @@ def main() -> int:
         problems += p
         for fn in (check_wer_tables, check_snr50_table,
                    check_recogniser_table, check_delta_tables,
-                   check_dns_tables_wrapper):
+                   check_family_table, check_dns_tables_wrapper):
             p2, n2 = fn(md, doc, results, summary)
             problems += p2
             n += n2
@@ -1288,6 +1294,35 @@ DELTA_TABLES = {
 }
 
 
+def numerator(half: str) -> float:
+    """The count a fraction cell states, so `18/27 → 19/27 (+1)` checks out."""
+    m = re.fullmatch(r"(\d+)\s*/\s*(\d+)", norm_label(half))
+    return float(m.group(1)) if m else (parse_number(half) or 0.0)
+
+
+def delta_tokens(cell: str, n: int) -> list[float | None] | None:
+    """The change(s) stated in the parenthetical, or None if there is none.
+
+    `(**−0.074**)`, `(+1)`, `(no change)` and the compound `(**+5 / +133**)`.
+    The minus is U+2212 in these documents, not a hyphen.
+    """
+    if "(" not in cell or ")" not in cell:
+        return None
+    inner = cell[cell.find("(") + 1:cell.rfind(")")].replace("**", "")
+    inner = inner.replace("−", "-").replace("–", "-").replace("—", "-")
+    parts = [p.strip() for p in inner.split("/")]
+    if len(parts) != n:
+        return None
+    out: list[float | None] = []
+    for p in parts:
+        if "no change" in p.lower():
+            out.append(0.0)
+            continue
+        p = p[1:].strip() if p.startswith("+") else p
+        out.append(float(p) if re.fullmatch(r"-?\d+(\.\d+)?", p) else None)
+    return out
+
+
 def check_delta_tables(md: str, doc: str, results: Path,
                        summary: dict) -> tuple[list[str], int]:
     """`0.333 → 0.259 (−0.074)` against both arms of the declared pair.
@@ -1325,8 +1360,10 @@ def check_delta_tables(md: str, doc: str, results: Path,
                         "resolves to no summary.csv field. Add it to "
                         "METRIC_FIELDS.")
                 continue
-            body = row[1].split("(")[0]      # drop the stated difference
+            body = row[1].split("(")[0]
             segs = body.split("/") if len(fields) == 2 else [body]
+            stated = delta_tokens(row[1], len(fields))
+            endpoints: list[tuple[float, float] | None] = []
             if len(segs) != len(fields):
                 problems.append(f"{doc}: delta cell {row[1]!r} does not state "
                                 f"{len(fields)} value pair(s) for {lab!r}")
@@ -1336,7 +1373,9 @@ def check_delta_tables(md: str, doc: str, results: Path,
                 if len(halves) != 2:
                     problems.append(f"{doc}: delta cell {seg.strip()!r} "
                                     f"({lab}) is not an 'a → b' pair")
+                    endpoints.append(None)
                     continue
+                shown: list[float] = []
                 for arm, half in zip(pair, halves):
                     parsed = parse_cell(half.strip(), 1)
                     if parsed is None:
@@ -1355,6 +1394,121 @@ def check_delta_tables(md: str, doc: str, results: Path,
                         problems.append(
                             f"{doc}: delta table {lab} for {arm} — document "
                             f"says {got[0]:g}, summary.csv says {want:g}")
+                    # The stated change is arithmetic on the endpoints as the
+                    # document writes them, so it is checked against those —
+                    # a fraction row states its change in numerator counts
+                    # (`18/27 → 19/27 (+1)`), not in the rate.
+                    shown.append(numerator(half) if not exact else got[0])
+                endpoints.append((shown[0], shown[1]) if len(shown) == 2 else None)
+
+            # The parenthetical is a published figure too. Dropping it meant
+            # `−0.074` could become `−9.999` with the endpoints still right and
+            # the run still green — the checker verifying the inputs of a
+            # subtraction and not its result.
+            if stated is not None and len(stated) == len(endpoints):
+                for tok, ends in zip(stated, endpoints):
+                    if tok is None or ends is None:
+                        continue
+                    checked += 1
+                    if abs(tok - (ends[1] - ends[0])) > 0.0011:
+                        problems.append(
+                            f"{doc}: delta table {lab} states a change of "
+                            f"{tok:g}, but {ends[0]:g} → {ends[1]:g} is "
+                            f"{ends[1] - ends[0]:g}")
+    return problems, checked
+
+
+# The addendum's family table: rows are *families* of arms, cells are ranges
+# across the family, and both judge seeds are stated side by side. The
+# single-arm row resolves through ARM_LABELS and is checked by check_tables;
+# the two multi-arm rows resolved to nothing, and a range is not `looks_numeric`
+# either, so they were neither compared nor reported — the seed-comparison
+# evidence for "the families separate cleanly" could be set to any two ranges.
+FAMILY_ROWS = {
+    "gpt-realtime brains": ("native-gpt-realtime-2", "native-gpt-realtime-21",
+                            "vl-native-brain", "vl-native-brain-21"),
+    "gpt-4.1-mini": ("vl-gpt41mini", "vl-gpt41mini-dns", "vl-gpt41mini-semvad"),
+}
+
+# Arms the second judge pass does not cover, declared with the reason. The
+# seed-2 column's range is therefore over seven arms where seed 1 has eight,
+# and that is a property of the study, not of the data: an arm intentionally
+# unjudged and an arm whose rows went missing look identical in judge_seed2.csv,
+# and only a declaration tells them apart. Any *other* absence is reported.
+SEED2_ABSENT = {
+    "vl-native-brain-21": "the seed-2 pass predates this arm; it covers the "
+                          "seven arms judge_seed2.csv holds, not all eight",
+}
+
+
+def check_family_table(md: str, doc: str, results: Path,
+                       summary: dict) -> tuple[list[str], int]:
+    """Groundedness ranges per arm family, for both judge seeds."""
+    problems: list[str] = []
+    checked = 0
+    arms = set(summary)
+    seed2_path = results / "judge_seed2.csv"
+    seed2: list[dict] = []
+    if seed2_path.exists():
+        with seed2_path.open() as f:
+            seed2 = list(csv.DictReader(f))
+    fixture = HERE / "fixtures" / "scenarios.json"
+    scored = {sc["id"] for sc in json.loads(fixture.read_text())["scenarios"]
+              if sc.get("scored", True)} if fixture.exists() else set()
+
+    for tbl in tables(md):
+        head = [norm_label(c) for c in tbl[0]] if tbl else []
+        if head[:2] != ["family", "arms"]:
+            continue
+        # Which column states which seed, from the header rather than position.
+        cols = {i: ("seed2" if "seed 2" in c else "seed1")
+                for i, c in enumerate(head) if i > 1}
+        for row in tbl[1:]:
+            if len(row) < 3 or resolve_arm(row[0], arms):
+                continue          # a single-arm row; check_tables owns it
+            family = FAMILY_ROWS.get(norm_label(row[0]))
+            if family is None:
+                problems.append(f"{doc}: family row {row[0]!r} names no arm "
+                                "set; add it to FAMILY_ROWS")
+                continue
+            if absent := [a for a in family if a not in summary]:
+                for a in absent:
+                    if (msg := missing_arm(doc, a, summary)) not in problems:
+                        problems.append(msg)
+                continue
+            for i, seed in cols.items():
+                if i >= len(row):
+                    continue
+                got = parse_range(row[i])
+                if got is None:
+                    problems.append(f"{doc}: family {norm_label(row[0])!r} "
+                                    f"{seed} cell {row[i]!r} is not a range "
+                                    "this checker can read")
+                    continue
+                if seed == "seed1":
+                    covers = family
+                    vals = [parse_number(summary[a].get("judge_grounded", ""))
+                            for a in covers]
+                else:
+                    covers = tuple(a for a in family if a not in SEED2_ABSENT)
+                    vals = [None if (v := seed2_grounded(seed2, a, scored)) is None
+                            else round(v, 3) for a in covers]
+                if not covers or any(v is None for v in vals):
+                    missing = [a for a, v in zip(covers, vals) if v is None]
+                    problems.append(
+                        f"{doc}: family {norm_label(row[0])!r} {seed} — no "
+                        f"groundedness for {missing or list(family)}. An arm "
+                        "that is intentionally unjudged belongs in "
+                        "SEED2_ABSENT with the reason; otherwise its rows are "
+                        "missing.")
+                    continue
+                checked += 2      # both ends of the range are claims
+                want = (min(vals), max(vals))   # type: ignore[type-var]
+                if abs(got[0] - want[0]) > 0.0006 or abs(got[1] - want[1]) > 0.0006:
+                    problems.append(
+                        f"{doc}: family {norm_label(row[0])!r} {seed} "
+                        f"groundedness — document says {got[0]:g}–{got[1]:g}, "
+                        f"the data gives {want[0]:g}–{want[1]:g}")
     return problems, checked
 
 

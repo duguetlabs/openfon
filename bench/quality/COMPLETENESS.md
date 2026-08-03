@@ -50,7 +50,14 @@ which silently dropped the five English DNS percentages carrying the
 noise-suppression recommendation. Each fix was right and each left the next
 dimension open, because "unrecognised" was being enumerated rather than defined.
 
-Six rounds of this, so state the generalisation rather than the list: **the
+Then the *family* table, whose rows are arm families and whose cells are
+ranges — unresolved on the arm axis like the delta tables, and invisible to the
+unresolved-row report as well, because `looks_numeric` does not recognise a
+range. And the *stated change* in each delta cell: the endpoints were compared
+and the `(−0.074)` beside them was dropped, so the checker verified a
+subtraction's inputs and not its result.
+
+Seven rounds of this, so state the generalisation rather than the list: **the
 checker only sees a figure if a table shape it already knows resolves both an
 arm and a metric for it.** Every gap so far has been a new way for one of those
 to come out empty, and the coverage count cannot see any of them — an
