@@ -12,6 +12,27 @@ the first is reported alongside as a replication. Harness and full method in
 > gpt-realtime-2 — the mini tier by a full second — and both still split utterances under
 > server VAD exactly as gpt-realtime-2 does.
 
+> **Provenance (added 2026-08-03): both runs predate the per-cell marker fix, and the
+> answer survives it.** Until `d5f3b2a` the harness drew a random `MK<8 hex>` marker
+> **per turn** rather than per `(round, utterance)` cell, so the two arms of a pair were
+> answering system prompts that differed in one ten-character token. `full` (08-01) and
+> `full2` (08-02) both predate that change; the 2.1 report's blocks are marked for the
+> same reason.
+>
+> It does not reach this answer, and the direction is what matters. The marker is drawn
+> **independently of the arm**, so it cannot bias a paired comparison either way — it adds
+> a little within-cell *variance*, bounded by a token or two of tokenization difference in
+> a ~1000-token prompt. Noise widens the confidence interval, and a wider interval makes a
+> null **easier** to reach. So the confound cannot have manufactured "no detectable
+> difference"; it can only have made a real difference harder to see, and the intervals
+> quoted below are if anything conservative. The claim is stated as an interval for exactly
+> that reason: **the data rules out a proxy cost larger than about 140 ms on the native
+> pair and 280 ms on the Voice Live pair**, and that bound is unaffected.
+>
+> What would settle it beyond argument is a post-fix replication of the two proxy pairs
+> (4 arms × 25 rounds, ~100 turns, ~$1.60). It has not been run: the reasoning above is
+> not a judgement call about size, it is a statement about direction.
+
 ## Answer
 
 **No. Routing through the Kataleptic gateway costs no detectable latency in either
