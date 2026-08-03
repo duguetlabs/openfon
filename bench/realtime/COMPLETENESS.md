@@ -117,6 +117,34 @@ checked" was a claim the test had never tested. It iterates every figure now.
 That is the same shape as the checker's own history, in the checker's own test
 suite: the mechanism that verifies the mechanism needed verifying.
 
+### The fifth turn happened in a *generalisation*, which is where they hide
+
+Not in this harness — in `src/call-session.ts`, whose session read-back was
+widened from a hand-maintained list of subtrees to a comparison of the whole
+payload. That is the right change and it is the same rule this file argues for:
+report wherever we expressed an intent, rather than wherever somebody
+remembered to look.
+
+It lost an enforcement for free. Comparing the whole payload reports **one**
+divergence at the highest level that differs, so an echo dropping `audio.input`
+wholesale yields a single `session.audio.input absent — unverifiable`. The
+matcher recognised enforced paths only at-or-below, so that string matched
+nothing enforced — and the case where the detector, both audio formats *and*
+the transcription config are unverifiable **at once** was classified advisory
+and got no re-send, while a single changed leaf still triggered one. **The worst
+case was the quietest.** The per-path version had enforced it by construction:
+it looked up each enforced path and found the parent missing.
+
+So, alongside the four turns of the screw: **when a check is generalised, the
+thing to re-derive is not what it now covers but what the specific version
+enforced for free.** A generalisation is a rewrite of the *reasons* a check
+fires, and reasons that were structural in the old form — "we looked up this
+exact path, so a missing parent shows up as a missing path" — become
+incidental in the new one. Ask what the old shape made true by accident.
+
+It is also the same sentence as the rest of this file: absence read as the
+weaker signal, inside the change built to make absence visible.
+
 ## Two more shapes, both about a check that is wider than the claim
 
 **A comparison is an ordered pair, and the checker treated it as a set.**
