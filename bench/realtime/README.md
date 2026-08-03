@@ -273,6 +273,19 @@ produced by absent data, a stale baseline, or a subset of the things it claims t
 `verify_live.py` exists because that reasoning applied to `verify_echo`; the last row of
 that table is what happened when it was not applied to `verify_live.py` itself.
 
+### Reports are checked against the analyzer, not trusted
+
+```bash
+./venv/bin/python check_report_tables.py ../../docs/research/*.md
+```
+
+Four review rounds found report rows that had drifted from the analyzer after a schema or
+data change — including hand-entered **sign counts**, which exist precisely to remove an
+ambiguity and so are the worst thing to get wrong by typing. "Regenerate, don't edit" kept
+being advice; this makes it a check. It re-derives every `| comparison |` row from the
+datasets in `results/` and fails on any that no dataset reproduces. Run it after touching
+the analyzer or a report, and before claiming a report is generated.
+
 ### Tests
 
 ```bash

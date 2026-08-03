@@ -538,11 +538,15 @@ degrades reply quality. The first is a barge-in study; the second is task #6.
 
 Paired on `en-short`, where nothing splits on any arm:
 
-| comparison | median Δ ttfa | 95% CI | p raw / Holm |
-|---|---:|---|---:|
-| `vlnat-azsemantic` − `vl-native-brain`<br><sub>Azure semantic vs server VAD, brain and stack held constant</sub> | **−72 ms** | [−600, +255] | 1.000 / 1.000 |
-| `nat-semantic` − `native-direct`<br><sub>OpenAI semantic vs server VAD, brain held constant</sub> | **+662 ms** | [+248, +3425] | 0.021 / 0.645 |
-| `vlmini-azsemantic` − `vl-direct`<br><sub>Azure semantic vs server VAD, brain gpt-4.1-mini</sub> | +177 ms | [−69, +260] | 0.344 / 1.000 |
+| comparison | median Δ ttfa | 95% CI | **p10 / p90 Δ** | slower / faster | p raw / Holm |
+|---|---:|---|---:|---:|---:|
+| `vlnat-azsemantic` − `vl-native-brain`<br><sub>Azure semantic vs server VAD, brain and stack held constant</sub> | **−72 ms** | [−600, +255] | −1025 / +489 | **5 / 5** | 1.000 / 1.000 |
+| `nat-semantic` − `native-direct`<br><sub>OpenAI semantic vs server VAD, brain held constant</sub> | **+662 ms** | [+248, +3425] | **−78 / +3651** | **9 / 1** | 0.021 / 0.645 |
+| `vlmini-azsemantic` − `vl-direct`<br><sub>Azure semantic vs server VAD, brain gpt-4.1-mini</sub> | +177 ms | [−69, +260] | −244 / +318 | 7 / 3 | 0.344 / 1.000 |
+
+Note the sign counts: Azure's detector on the same brain and stack is 5 slower / 5 faster —
+a coin flip. OpenAI's is 9 slower / 1 faster **and** its losses reach +3651 ms against a
+best case of −78 ms. Asymmetric in both, which is why it is the one that hurts.
 
 `speech_stopped_ms` shows the mechanism directly — this is the detector's own decision time:
 

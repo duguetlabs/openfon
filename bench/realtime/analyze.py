@@ -425,6 +425,19 @@ class PairedResult:
     def verdict(self) -> str:
         if self.not_comparable:
             return f"**not comparable** — {self.not_comparable}"
+        if self.survives:
+            # A corrected, consistently-signed, practically-sized effect is a
+            # finding. The tail guard AUGMENTS it — broad tails do not make a
+            # real effect unreal — so the directional verdict comes first and
+            # carries the tail alongside rather than being replaced by it.
+            direction = "slower" if self.median > 0 else "faster"
+            core = f"**{direction} by {abs(self.median):.0f} ms**"
+            if self.tail_unrepresented:
+                slower, faster = self.sign_counts
+                return (f"{core} — but spread is wide "
+                        f"(p10/p90 {self.low_tail_ms:+.0f}/{self.tail_ms:+.0f}, "
+                        f"{slower} slower / {faster} faster)")
+            return core
         if self.tail_unrepresented:
             # Describe the numbers; claim nothing about modes. But DO say which
             # side the spread sits on, because a one-sided tail is a cost and a
@@ -438,8 +451,6 @@ class PairedResult:
                     f"{self.low_tail_ms:+.0f}/{self.tail_ms:+.0f} ms — "
                     f"wide both ways ({slower} slower / {faster} faster), not a cost")
         direction = "slower" if self.median > 0 else "faster"
-        if self.survives:
-            return f"**{direction} by {abs(self.median):.0f} ms**"
         if self.p_adj < ALPHA and not self.practical:
             return (f"significant but below the {PRACTICAL_MS:.0f} ms floor "
                     f"({self.median:+.0f} ms)")

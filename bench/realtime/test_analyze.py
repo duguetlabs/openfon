@@ -779,3 +779,33 @@ class TestMagnitudeAsymmetryNotFrequency(unittest.TestCase):
         self.assertFalse(r.upper_tail_dominates)
         self.assertFalse(r.tail_unrepresented)
         self.assertEqual(r.sign_counts, (0, 0))
+
+
+class TestDirectionalResultIsNotSuppressedByTheTailGuard(unittest.TestCase):
+    """The tail guard must AUGMENT a finding, not replace it. A corrected,
+    consistently-signed, practically-sized effect with broad tails is still an
+    effect — an earlier ordering let the descriptive guard override it, which
+    is the opposite of what the guard is for."""
+
+    # 18 slower / 2 faster, median +100, wide both ways
+    WIDE_BUT_REAL = ([-800, -700] + [100] * 12 + [600, 700, 800, 900, 1000, 1100])
+
+    def _r(self):
+        return result(100, 0.0004, 0.004, lo=60, hi=400, diffs=self.WIDE_BUT_REAL)
+
+    def test_the_directional_finding_survives(self):
+        r = self._r()
+        self.assertTrue(r.survives)
+        self.assertTrue(r.tail_unrepresented)     # both conditions hold
+        self.assertIn("slower by 100 ms", r.verdict())
+
+    def test_the_tail_is_reported_alongside_not_instead(self):
+        v = self._r().verdict()
+        self.assertIn("spread is wide", v)
+        self.assertIn("18 slower / 2 faster", v)
+
+    def test_it_is_not_demoted_to_a_non_finding(self):
+        v = self._r().verdict()
+        for demotion in ("not a cost", "no detectable difference",
+                         "judge on the tail"):
+            self.assertNotIn(demotion, v)
