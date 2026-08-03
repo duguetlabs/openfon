@@ -584,22 +584,44 @@ export class CallSession implements DurableObject {
   private static readonly MAX_SESSION_RESENDS = 2;
 
   // Subtrees whose silent substitution changes what the caller experiences, so
-  // they are worth re-sending for. Split the way bench/realtime/arms.py splits
-  // it, and for the same reason: some divergences are the service doing
-  // something we asked it not to, and some are the service being itself.
-  // Advisory ones are logged only — the gateway injects its own transcription
-  // deployment persistently (it won 22 of 25 turns), and tiers coerce voices to
-  // their own catalog, so re-sending would fight them every session and lose.
+  // they are worth re-sending for. Everything *else* we send is compared too
+  // and logged — there is no second list of paths to keep in step with the
+  // payload, because a hand-maintained list is a list of the substitutions
+  // somebody thought of. The rule is the one `diffSession` already applies:
+  // report wherever we expressed an intent.
   //
-  // Both lists are only as useful as they are quiet. A line that appears on
-  // every call is one that gets filtered within a day, and it takes the real
-  // substitutions with it — so a divergence is only reported where we actually
-  // asked for something (see diffSession).
+  // Measured before widening it, because the read-back is only as useful as it
+  // is quiet — a line on every call gets filtered within a day and takes the
+  // real substitutions with it. Two sessions per tier on all five tiers, whole
+  // payload including tools: **nothing outside `transcription` diverges
+  // anywhere.** Formats, turn detection, tools, tool_choice and voice come back
+  // verbatim, so the wider net costs no noise.
   private static readonly ENFORCED_SESSION_PATHS = ['audio.input.turn_detection', 'audio.input.format', 'audio.output.format'];
-  private static readonly ADVISORY_SESSION_PATHS = ['audio.input.transcription', 'audio.output.voice'];
 
-  private static at(obj: unknown, path: string): unknown {
-    return path.split('.').reduce<unknown>((o, k) => (o && typeof o === 'object' ? (o as Record<string, unknown>)[k] : undefined), obj);
+  // Transcription is enforced everywhere it *can* be, which is everywhere but
+  // the HD tier.
+  //
+  // It used to be advisory on the grounds that the gateway's substitution is
+  // persistent and re-sending would lose. That was wrong, and the way it was
+  // wrong is worth keeping: the gateway injects its own transcription default
+  // asynchronously, so this is a *race*, not an override. Whichever
+  // `session.update` lands last wins, and a re-send lands last by construction.
+  // Measured on the three native tiers, six sessions each: an update sent after
+  // the injected one keeps our model and vocabulary prompt **18/18**. The loss
+  // is intermittent — one sitting lost it 4/4, another kept it 18/18 untouched —
+  // which is exactly why re-asserting beats reasoning about the odds.
+  //
+  // HD is the exception and cannot be fixed from this side: Azure Voice Live
+  // latches `input_audio_transcription` on the *first* `session.update` of a
+  // session and ignores it in every later one (reproduced against Azure
+  // directly, with no gateway in the path), and the gateway spends that one
+  // update on its own voice default. 0/18 there, under three different
+  // strategies. Enforcing it would burn both re-sends on every HD call and
+  // report a failure nobody can act on.
+  private enforcedSessionPaths(): string[] {
+    return this.realtimeModel === 'kataleptic-realtime-hd'
+      ? CallSession.ENFORCED_SESSION_PATHS
+      : [...CallSession.ENFORCED_SESSION_PATHS, 'audio.input.transcription'];
   }
 
   // Every field we sent, compared against the echo — derived from the request
@@ -608,6 +630,23 @@ export class CallSession implements DurableObject {
   // mismatch: a control we cannot confirm is not a control, which is the rule
   // both benchmarks arrived at after silent substitutions went unnoticed for a
   // whole run.
+  private static at(obj: unknown, path: string): unknown {
+    return path.split('.').reduce<unknown>((o, k) => (o && typeof o === 'object' ? (o as Record<string, unknown>)[k] : undefined), obj);
+  }
+
+  // A copy of the payload with these subtrees removed, so "everything else" is
+  // a diff over a smaller object rather than a filter over rendered text.
+  private static without(obj: SessionConfig, paths: string[]): unknown {
+    const copy = structuredClone(obj) as Record<string, unknown>;
+    for (const path of paths) {
+      const keys = path.split('.');
+      const leaf = keys.pop() as string;
+      const parent = keys.length ? CallSession.at(copy, keys.join('.')) : copy;
+      if (parent && typeof parent === 'object') delete (parent as Record<string, unknown>)[leaf];
+    }
+    return copy;
+  }
+
   private static diffSession(sent: unknown, echoed: unknown, path: string): string[] {
     // Nothing was asked for here, so there is nothing to verify. This looks
     // like the opposite of the rule above and is the same one: what matters is
@@ -642,11 +681,29 @@ export class CallSession implements DurableObject {
     // theirs by detector. That asymmetry is exactly how the benchmark found it.
     if ((echoed as SessionConfig).instructions !== sent.instructions) return;
 
-    const diff = (paths: string[]): string[] =>
-      paths.flatMap((p) => CallSession.diffSession(CallSession.at(sent, p), CallSession.at(echoed, p), p));
-    const advisory = diff(CallSession.ADVISORY_SESSION_PATHS);
+    // Everything we asked for is compared. The enforced subtrees are the ones
+    // worth re-sending for; the rest is reported so a silent substitution is at
+    // least a visible one. **Both sets are computed structurally, by diffing
+    // subtrees — never by reading the wording of a divergence back out.**
+    //
+    // The first version classified by string-matching `diffSession`'s
+    // human-readable output against each enforced path, which put a safety
+    // decision at the mercy of a display format: change the delimiter after
+    // the path and an enforced divergence quietly becomes advisory, skipping
+    // the re-send, with a clean log. That is this line's own bug reproduced in
+    // a new medium, and the tell was that the matcher needed a clause for
+    // `path absent — unverifiable` — it was already leaning on prose.
+    //
+    // Diffing at each enforced path also keeps the dropped-ancestor case right
+    // by construction instead of by special case: if the echo has no `audio`,
+    // `at(echoed, 'audio.input.turn_detection')` is undefined, `diffSession`
+    // reports it absent, and it lands in the enforced set.
+    const enforcedPaths = this.enforcedSessionPaths();
+    const enforced = enforcedPaths.flatMap((p) =>
+      CallSession.diffSession(CallSession.at(sent, p), CallSession.at(echoed, p), `session.${p}`)
+    );
+    const advisory = CallSession.diffSession(CallSession.without(sent, enforcedPaths), echoed, 'session');
     if (advisory.length) console.log(`call ${this.callId}: session echo differs (advisory): ${advisory.join('; ')}`);
-    const enforced = diff(CallSession.ENFORCED_SESSION_PATHS);
     if (!enforced.length) return;
 
     if (state.resends >= CallSession.MAX_SESSION_RESENDS) {
@@ -716,8 +773,23 @@ export class CallSession implements DurableObject {
             transcription: {
               // Native S2S tiers only support their own transcription models;
               // forcing ours silently disables caller transcripts there.
+              //
+              // Do NOT "fix" the HD tier by asking for `azure-speech` here, even
+              // though that is what it always ends up using. The gateway strips
+              // an unsupported `prompt` only when it is the one choosing
+              // azure-speech; name it ourselves and the prompt goes upstream
+              // intact, where Azure rejects the **entire** session.update —
+              // instructions, voice and tools with it.
               model: this.realtimeModel.startsWith('gpt-realtime') ? 'whisper-1' : this.env.DEFAULT_STT_MODEL,
-              prompt: this.biz && this.settings ? sttVocab(this.biz, this.settings) : undefined,
+              // Not sent on HD, where it cannot take effect: Azure Voice Live
+              // answers `prompt is not yet supported for azure-speech`, and its
+              // transcription config is latched by the first `session.update`
+              // of the session, which the gateway spends on its own default.
+              // Sending it anyway would only produce an advisory line on every
+              // HD call about a field nobody can apply. If Kataleptic stops
+              // spending that first update, this can go back to unconditional —
+              // and `phrase_list` becomes the supported spelling of it there.
+              ...(this.realtimeModel === 'kataleptic-realtime-hd' ? {} : { prompt: this.biz && this.settings ? sttVocab(this.biz, this.settings) : undefined }),
               // On cascade tiers this is a greeting seed + STT accuracy hint,
               // not a pin: per-utterance detection overrides it once the caller
               // speaks (verified 2026-06-13 after Kataleptic's fix).
