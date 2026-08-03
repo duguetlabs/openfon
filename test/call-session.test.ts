@@ -618,18 +618,22 @@ describe('realtime session payload', () => {
     expect(await turnDetection('gpt-realtime-2')).toEqual(TUNED_SERVER_VAD);
   });
 
-  it('gives gpt-realtime-2.1 the semantic detector, where it is free', async () => {
-    // The one tier where the fix costs nothing: splitting 12/12 -> 0/12
-    // (Holm p = 0.00293) at +106 ms, statistically null. The newer brain did
-    // not split less than gpt-realtime-2 — it made the detector cheap.
-    expect(await turnDetection('gpt-realtime-2.1')).toEqual({ type: 'semantic_vad', eagerness: 'auto' });
+  it('keeps gpt-realtime-2.1 on server VAD despite a null median', async () => {
+    // The trap this test exists for. Semantic VAD fixes 2.1's splitting outright
+    // (12/12 -> 0/12) and looks free at the median: +106 ms paired, null. It is
+    // not free — the paired distribution is bimodal, p90 +3490 ms, so about one
+    // turn in five costs 3.5 s, and `speech_stopped_ms` p90 is 4442 ms against
+    // server VAD's 805. That is the same tail gpt-realtime-2 is rejected for
+    // (4512 ms), measured the same way.
+    //
+    // This row was briefly shipped as semantic_vad on the median alone. Anyone
+    // changing it back should have a p90 in hand, not a p50.
+    expect(await turnDetection('gpt-realtime-2.1')).toEqual(TUNED_SERVER_VAD);
   });
 
-  it('keeps 2.1-mini on server VAD, where the same detector does not work', async () => {
+  it('keeps 2.1-mini on server VAD, where the same detector does not even work', async () => {
     // Semantic VAD only reaches 4/12 on mini — still one turn in three — while
-    // costing +734 ms and a 5123 ms p90, the worst of the three tiers. Asserted
-    // separately from 2.1 precisely because the two look like they should
-    // agree and do not.
+    // costing +734 ms and a 5123 ms p90, the worst of the three tiers.
     expect(await turnDetection('gpt-realtime-2.1-mini')).toEqual(TUNED_SERVER_VAD);
   });
 
@@ -637,11 +641,6 @@ describe('realtime session payload', () => {
     // A new tier id reaching the fallback must still get the settings that were
     // tuned against real ambient noise, not whatever the service defaults to
     // (Voice Live: 200 ms of silence; the GA surface: 500).
-    //
-    // And specifically not gpt-realtime-2.1's semantic detector, despite the
-    // shared name: the price of that detector has differed on every tier
-    // measured, and on two of three it was the wrong bet. Measure, then add a
-    // row.
     expect(await turnDetection('gpt-realtime-9-unreleased')).toEqual(TUNED_SERVER_VAD);
   });
 
