@@ -473,8 +473,10 @@ def main() -> int:
             else None)
     ok = [t for t in turns if t["ok"]]
     paired_results = compute_paired(ok, [m for m, _ in METRICS])
-    n_tests = sum(1 for v in paired_results.values() for r in v
-                  if not r.not_comparable)
+    tested = [r for v in paired_results.values() for r in v if not r.not_comparable]
+    n_tests = len(tested)
+    n_comparisons = len({(r.treat, r.ctrl) for r in tested})
+    n_metrics = len({r.metric for r in tested})
     out: list[str] = []
 
     def w(s: str = "") -> None:
@@ -484,8 +486,9 @@ def main() -> int:
       f"({len(turns) - len(ok)} failed or produced no audio).")
     w()
     w(f"**{n_tests} paired hypothesis tests** in this run "
-      f"({n_tests // max(1, len(METRICS))} comparisons x {len(METRICS)} metrics "
-      f"present in this dataset). At α={ALPHA} that is "
+      f"({n_comparisons} comparison(s) x {n_metrics} metric(s) present in this "
+      f"dataset; the product may exceed the count when a metric is excluded for "
+      f"a comparison). At α={ALPHA} that is "
       f"~{n_tests * ALPHA:.1f} spurious rejections expected under the null, so "
       f"p-values are Holm-corrected across the whole family. A directional verdict "
       f"additionally requires a median shift of at least {PRACTICAL_MS:.0f} ms; "

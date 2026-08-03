@@ -431,3 +431,38 @@ class TestMalformedRateIsRecordedNotRaised(unittest.TestCase):
 
     def test_numeric_string_rate_is_accepted(self):
         self.assertEqual(VL_ARM.verify_echo(vl_echo(rate="24000"))[0], [])
+
+
+class TestMarkerIsPerCellNotPerArm(unittest.TestCase):
+    """The marker goes into the system prompt. Generating a fresh one per arm
+    put a different random token in treatment and control within the same
+    (round, utterance) cell — variance introduced by the very check meant to
+    remove uncertainty. It must be an argument, supplied once per cell."""
+
+    def test_run_turn_requires_a_marker_from_the_caller(self):
+        import inspect
+        from bench import run_turn
+        sig = inspect.signature(run_turn)
+        self.assertIn("marker", sig.parameters)
+        self.assertEqual(sig.parameters["marker"].kind,
+                         inspect.Parameter.KEYWORD_ONLY)
+
+    def test_run_turn_does_not_mint_its_own_marker(self):
+        import inspect
+        from bench import run_turn
+        src = inspect.getsource(run_turn)
+        self.assertNotIn("token_hex", src,
+                         "run_turn must not generate a marker; the cell owns it")
+
+    def test_the_same_marker_reaches_every_arm_in_a_cell(self):
+        """Two arms handed the same marker must produce byte-identical
+        instructions, which is what the pairing assumes."""
+        a, b = ARMS_BY_ID["native-direct"], ARMS_BY_ID["native-gateway"]
+        pa = a.session_payload("MKCELL01")
+        pb = b.session_payload("MKCELL01")
+        self.assertEqual(pa["instructions"], pb["instructions"])
+
+    def test_different_cells_still_get_different_markers(self):
+        a = ARMS_BY_ID["native-direct"]
+        self.assertNotEqual(a.session_payload("MKCELL01")["instructions"],
+                            a.session_payload("MKCELL02")["instructions"])
