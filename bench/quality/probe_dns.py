@@ -49,11 +49,14 @@ LEGS = {
 }
 
 
+FFMPEG_TIMEOUT_S = 120
+
+
 def pcm(path: Path, rate: int) -> bytes:
     return subprocess.run(
         ["ffmpeg", "-loglevel", "error", "-i", str(path),
          "-ac", "1", "-ar", str(rate), "-f", "s16le", "-"],
-        check=True, capture_output=True,
+        check=True, capture_output=True, timeout=FFMPEG_TIMEOUT_S,
     ).stdout
 
 

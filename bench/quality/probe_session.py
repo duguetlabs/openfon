@@ -24,12 +24,15 @@ from engines import ARMS, connect_kwargs
 MARKER = "openfon-bench-probe"
 
 
+FFMPEG_TIMEOUT_S = 120
+
+
 def load_pcm24k(path: Path) -> bytes:
     """Read a 16 kHz mono WAV and resample to 24 kHz PCM16 via ffmpeg."""
     out = subprocess.run(
         ["ffmpeg", "-loglevel", "error", "-i", str(path),
          "-ac", "1", "-ar", "24000", "-f", "s16le", "-"],
-        check=True, capture_output=True,
+        check=True, capture_output=True, timeout=FFMPEG_TIMEOUT_S,
     )
     return out.stdout
 

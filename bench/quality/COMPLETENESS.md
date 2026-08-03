@@ -80,6 +80,24 @@ anything that fails visibly, or only under a debug flag, gets written down.**
 - **Time-slot matching is approximate.** Numeric strings (phone numbers, dates)
   parse as clock mentions, and spoken composite times record only the hour, so
   both inflate. Stated in the report's limitations rather than chased further.
+- **Which hangs the bounds actually cover.** "Bounded" is narrower than it
+  reads, so: `asyncio.wait_for` schedules its cancellation on the event loop and
+  therefore cannot fire while the loop is blocked. Anything synchronous on that
+  thread is invisible to it — which meant the 300 s scenario bound could not
+  have stopped a stalled `az` or `ffmpeg`, the two most likely environmental
+  hangs for someone re-running this later. Those now carry their own
+  `subprocess.run(timeout=)` (`AZ_CLI_TIMEOUT_S`, `FFMPEG_TIMEOUT_S`), which is
+  the only mechanism that bounds them. **Covered:** stalled handshake, silent
+  peer, a stuck `await` anywhere in a scenario or batch, a hung `az` or
+  `ffmpeg`. **Not covered:** any *other* long-running synchronous call added to
+  the event-loop thread in future — the outer bound will not save it, so give it
+  its own timeout or move it off-thread.
+- **A timeout reports which bound fired.** Inner `wait_for` timeouts raise the
+  same `TimeoutError` as the outer one, so every failure used to be logged as
+  "hard timeout after 300s" regardless of whether it took 300 s or 10. The
+  handler now reports measured elapsed time and labels inner versus outer. A
+  message that misreports which bound fired is worse than none: it sends the
+  next debugger to the wrong place.
 - **Hangs are bounded in three layers, after two incidents.** `open_timeout`
   and keepalive pings bound the handshake; `asyncio.wait_for` bounds every
   individual receive, including the first (`open_timeout` does *not* cover the

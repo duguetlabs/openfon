@@ -2,7 +2,7 @@
 
 Run 2026-08-03, extended the same day with a Voice-Live-served 2.1 arm.
 Against the same fixtures, scenarios and scorers as
-[the main report](./voice-engine-quality-2026-08.md). Spend **$9.03** (cap $12).
+[the main report](./voice-engine-quality-2026-08.md). Spend **$8.85** (cap $12).
 
 Deployments `gpt-realtime-2.1` and `gpt-realtime-2.1-mini`, both dated
 2026-07-07 on `duguet-labs-eu`, same Foundry GA surface as `gpt-realtime-2`.
@@ -216,7 +216,7 @@ the service's. The probe above is the evidence, not the logs.
 | `vl-native-brain-21` Track B | — | 11.8 | 0.070 | 0.82 |
 | run lost to a hung handshake (see below) | — | ~4.5 | 0.070 | 0.32 |
 | judge re-run over 246 runs | | | | 0.30 |
-| **total** | | | | **9.03** |
+| **total** | | | | **8.85** |
 
 ### One harness fix this run forced
 
@@ -226,3 +226,10 @@ stopped dead for 13 minutes on a zero-byte log with no error raised — the
 "operational hang" `COMPLETENESS.md` listed as documented-not-fixed, reached by
 a route it did not anticipate. `connect_kwargs` now sets `open_timeout=30` and
 keepalive pings, so a stalled handshake fails instead of hanging.
+
+Chasing that exposed a limit in the wall-clock bound added alongside it:
+`asyncio.wait_for` schedules its cancellation *on the event loop*, so it cannot
+fire while the loop itself is blocked — and both `az` (credential lookup) and
+`ffmpeg` (audio decode) are synchronous subprocesses on that thread. Those now
+carry their own `timeout=`, which is the only thing that can bound them. What is
+covered, and what is not, is enumerated in `COMPLETENESS.md`.

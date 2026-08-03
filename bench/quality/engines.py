@@ -57,6 +57,7 @@ def azure_key() -> str:
                 ["az", "cognitiveservices", "account", "keys", "list",
                  "-n", AZURE_ACCOUNT, "-g", AZURE_RG, "--query", "key1", "-o", "tsv"],
                 check=True, capture_output=True, text=True,
+                timeout=AZ_CLI_TIMEOUT_S,
             ).stdout.strip()
     return _KEY_CACHE["key"]
 
@@ -309,6 +310,10 @@ ARMS: dict[str, Arm] = {
 # zero-byte log and no error. `open_timeout` bounds the handshake; `ping_*`
 # make a silently dead connection surface as an exception rather than a stall.
 CONNECT_TIMEOUT_S = 30
+# `az` runs synchronously on the event-loop thread, so a stalled CLI blocks the
+# loop itself and no asyncio timeout can fire while it is stuck. Its own timeout
+# is the only thing that bounds it.
+AZ_CLI_TIMEOUT_S = 60
 PING_INTERVAL_S = 20
 PING_TIMEOUT_S = 20
 

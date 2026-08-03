@@ -1183,13 +1183,37 @@ class TestHangsAreBounded(unittest.TestCase):
                 self.assertIn("asyncio.wait_for(ws.recv()", head)
                 self.assertIn("timeout=", head)
 
+    def test_blocking_subprocesses_carry_their_own_timeout(self):
+        """`asyncio.wait_for` cannot fire while the event loop is blocked, so a
+        synchronous subprocess on that thread is invisible to the outer bound."""
+        import re
+        for mod, const in (("engines.py", "AZ_CLI_TIMEOUT_S"),
+                           ("run_scenarios.py", "FFMPEG_TIMEOUT_S"),
+                           ("run_asr.py", "FFMPEG_TIMEOUT_S"),
+                           ("probe_session.py", "FFMPEG_TIMEOUT_S"),
+                           ("probe_dns.py", "FFMPEG_TIMEOUT_S")):
+            with self.subTest(module=mod):
+                src = (HERE / mod).read_text()
+                self.assertIn(const, src)
+                for call in re.finditer(r"subprocess\.run\((.*?)\)\s*[.\n]", src, re.S):
+                    self.assertIn("timeout=", call.group(1),
+                                  f"{mod}: a subprocess.run without a timeout")
+
+    def test_a_timeout_reports_which_bound_fired(self):
+        src = (HERE / "run_scenarios.py").read_text()
+        self.assertIn("outer wall-clock bound", src)
+        self.assertIn("an inner step timeout, not the outer bound", src)
+        # ...and the measured duration, not the nominal one.
+        self.assertIn("timeout after {elapsed:.1f}s", src)
+        self.assertNotIn("hard timeout after {SCENARIO_HARD_TIMEOUT_S}s", src)
+
     def test_each_runner_has_an_outer_wall_clock_bound(self):
         """Belt-and-braces: no step-specific timeout can cover a step nobody
         thought of, so the whole unit is bounded too."""
         sc = (HERE / "run_scenarios.py").read_text()
         self.assertIn("SCENARIO_HARD_TIMEOUT_S", sc)
         self.assertIn("asyncio.wait_for(\n                    run_scenario(", sc)
-        self.assertIn("hard timeout after", sc)
+        self.assertIn("timeout after", sc)
         asr = (HERE / "run_asr.py").read_text()
         self.assertIn("BATCH_HARD_TIMEOUT_S", asr)
         self.assertIn("transcribe_batch(a.arm, a.lang, clips, log),", asr)

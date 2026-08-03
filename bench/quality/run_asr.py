@@ -42,11 +42,16 @@ LANG_CODE = {"en_us": "en", "de_de": "de", "fr_fr": "fr", "es_419": "es",
              "da_dk": "da", "fi_fi": "fi"}
 
 
+# ffmpeg also runs synchronously on the event-loop thread. Same reasoning as
+# AZ_CLI_TIMEOUT_S: while it blocks, asyncio cannot run a timeout callback.
+FFMPEG_TIMEOUT_S = 120
+
+
 def pcm24k(path: Path) -> bytes:
     return subprocess.run(
         ["ffmpeg", "-loglevel", "error", "-i", str(path),
          "-ac", "1", "-ar", "24000", "-f", "s16le", "-"],
-        check=True, capture_output=True,
+        check=True, capture_output=True, timeout=FFMPEG_TIMEOUT_S,
     ).stdout
 
 

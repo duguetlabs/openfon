@@ -46,11 +46,16 @@ MAX_SESSION_S = 180                 # hard cap so a runaway session cannot bill 
 SCENARIO_HARD_TIMEOUT_S = 300
 
 
+# ffmpeg also runs synchronously on the event-loop thread. Same reasoning as
+# AZ_CLI_TIMEOUT_S: while it blocks, asyncio cannot run a timeout callback.
+FFMPEG_TIMEOUT_S = 120
+
+
 def pcm24k(path: Path) -> bytes:
     return subprocess.run(
         ["ffmpeg", "-loglevel", "error", "-i", str(path),
          "-ac", "1", "-ar", "24000", "-f", "s16le", "-"],
-        check=True, capture_output=True,
+        check=True, capture_output=True, timeout=FFMPEG_TIMEOUT_S,
     ).stdout
 
 
@@ -359,14 +364,31 @@ async def main() -> None:
             continue
         logp = Path(a.logdir) / f"sc-{a.arm}-{sc['id']}-t{a.trial}.jsonl"
         with open(logp, "w") as log:
+            t_start = time.time()
             try:
                 r = await asyncio.wait_for(
                     run_scenario(a.arm, sc, Path(a.audio), a.trial, log),
                     timeout=SCENARIO_HARD_TIMEOUT_S)
             except asyncio.TimeoutError:
+                # An inner `wait_for` — the 10 s first-receive, the 30 s open
+                # timeout — raises the same TimeoutError and lands here too.
+                # Reporting every one of them as "hard timeout after 300s"
+                # misstates both the cause and the duration, which sends the
+                # next person debugging this to the wrong bound. Distinguish by
+                # how long it actually took, and always report the real elapsed.
+                elapsed = time.time() - t_start
+                which = ("outer wall-clock bound"
+                         if elapsed >= SCENARIO_HARD_TIMEOUT_S - 1
+                         else "an inner step timeout, not the outer bound")
                 r = {"arm": a.arm, "trial": a.trial, "scenario": sc["id"],
                      "lang": sc["lang"], "intent": sc["intent"],
-                     "error": f"hard timeout after {SCENARIO_HARD_TIMEOUT_S}s",
+                     "error": f"timeout after {elapsed:.1f}s ({which})",
+                     "turns": [], "transcript": [], "tool_calls": [],
+                     "audio_in_s": 0.0, "audio_out_bytes": 0}
+            except subprocess.TimeoutExpired as e:
+                r = {"arm": a.arm, "trial": a.trial, "scenario": sc["id"],
+                     "lang": sc["lang"], "intent": sc["intent"],
+                     "error": f"subprocess timeout: {e}",
                      "turns": [], "transcript": [], "tool_calls": [],
                      "audio_in_s": 0.0, "audio_out_bytes": 0}
             except Exception as e:  # noqa: BLE001
