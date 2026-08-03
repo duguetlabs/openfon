@@ -142,10 +142,16 @@ logs free?" while `run_all.sh` was asking "is this run safe to start?".
 first invocation — the identical destroy-then-recreate failure, through a
 different input, inside its own remedy. **A preflight is only as strong as the
 question it answers; state that question and check every input that can
-falsify it.** Both runners now validate arm, data root, manifests and caller
-audio before the preflight returns, and hoisting the manifests out of the loop
-closed the same shape a third time (a missing manifest for condition 5 used to
-abort after four had been billed).
+falsify it.** Both runners now validate arm, data root, manifests, clip counts
+and caller audio before the preflight returns, and hoisting the manifests out
+of the loop closed the same shape a third time (a missing manifest for
+condition 5 used to abort after four had been billed).
+
+Two more arrived on the *next* review of the same fix, both "the file parsed"
+standing in for "the run can proceed": a manifest with fewer entries than `--n`
+(a short cell, which the scorer refuses — after the calls are paid for), and a
+manifest naming a wav that is not on disk (which ffmpeg discovers mid-run).
+**A preflight that reads a listing has checked the listing, not the inputs.**
 
 Two riders, both instances of rules already in this file. A guard that fires at
 the moment one file is opened is a guard that fires **after** earlier units of
@@ -256,6 +262,18 @@ and collapsing the two is how a checker certifies what it never read. The em
 dash these tables write for an unused leg is a *stated* absence, so `is_absent`
 names the placeholders explicitly rather than treating everything it cannot
 parse as missing.
+
+**The DNS tables carried two more, and the second is the sharpest instance of
+"absence reads as agreement" in this file.** An unmapped German condition row
+was a bare `continue` — and because nothing incremented `checked`, the *exact*
+coverage count still certified the document as fully compared, so the silent
+gap came with a receipt. Worse: `wer_cer([])` is `NaN`, every comparison
+against `NaN` is False, and the cell counted as checked anyway — so a probe
+file missing its `off` or `deep` leg certified **any** WER the document stated,
+at full coverage. `abs(got - want) > tol` is not a test that a recomputation
+happened; it is a test that it did not disagree, and a value that cannot
+disagree passes it. Required legs are now checked for presence and every
+recomputed figure for finiteness, on both the English and German paths.
 
 **A coverage number counted from current behaviour certifies current behaviour,
 including its blind spots.** The per-report counts were first read off whatever

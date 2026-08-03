@@ -19,6 +19,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -1825,7 +1826,7 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
         # the runners cannot even import. Skipping there would leave the
         # property untested exactly where nobody watches it. The specific
         # refusal message is asserted only where the runner can run.
-        venv = Path(HERE).parent.parent / "venv" / "bin" / "python"
+        venv = Path(HERE).parents[2] / "venv" / "bin" / "python"
         py, real = (str(venv), True) if venv.exists() else (sys.executable, False)
         for track, fname, env in (
                 ("a", "asr.jsonl", {"ASR_ARMS": "NO-SUCH-ARM"}),
@@ -1858,6 +1859,81 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
                         r"missing",
                         "the preflight stopped the run without saying which "
                         "input was wrong")
+
+    def test_the_preflight_refuses_a_cell_the_scorer_would_reject(self):
+        """Codex, on 1200a40, twice over the same guarantee.
+
+        A manifest that exists is not a manifest that can be run. A short cell
+        (fewer entries than `--n`) and a manifest naming a wav that is not
+        there both cleared the preflight, so `run_all.sh` truncated the results
+        and the failure surfaced during scoring or from ffmpeg — after the
+        calls had been billed. "Validated" has to mean the inputs were looked
+        at, not that a file listing them parsed.
+        """
+        venv = Path(HERE).parents[2] / "venv" / "bin" / "python"
+        if not venv.exists():                            # pragma: no cover
+            self.skipTest("the runner needs websockets; the composition is "
+                          "asserted by test_a_bad_input_does_not_clear_the_"
+                          "results_it_cannot_replace, which runs everywhere")
+        rows = [{"id": "c1", "wav": "c1.wav", "reference": "hello"},
+                {"id": "c2", "wav": "c2.wav", "reference": "there"}]
+
+        def run(manifest, wavs):
+            """run_all.sh over a fabricated DATA root, FORCE=1 over results.
+
+            Both languages are built whole; only en_us is degraded per case, so
+            a failure names the property under test rather than an incidental
+            gap in the fixture.
+            """
+            tmp = tempfile.mkdtemp()
+            self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+            for lang in ("en_us", "de_de"):
+                whole = Path(tmp) / "conditions" / "clean" / lang
+                whole.mkdir(parents=True)
+                (whole / "manifest.jsonl").write_text(
+                    "".join(json.dumps(x) + "\n" for x in rows))
+                for w in ("c1.wav", "c2.wav"):
+                    (whole / w).write_bytes(b"RIFF")
+            d = Path(tmp) / "conditions" / "clean" / "en_us"
+            (d / "manifest.jsonl").write_text(
+                "".join(json.dumps(x) + "\n" for x in manifest))
+            for w in ("c1.wav", "c2.wav"):
+                (d / w).unlink()
+            for w in wavs:
+                (d / w).write_bytes(b"RIFF")
+            res = Path(tmp) / "results"
+            res.mkdir()
+            (res / "asr.jsonl").write_text('{"row": 1}\n')
+            r = subprocess.run(
+                ["/bin/bash", str(HERE / "run_all.sh")],
+                capture_output=True, text=True, cwd=str(HERE),
+                env={"PATH": "/usr/bin:/bin", "PY": str(venv), "OUT": tmp,
+                     "DATA": str(tmp), "FORCE": "1", "TRACK": "a", "N": "2",
+                     "ASR_ARMS": "vl-gpt41mini", "CONDITIONS": "clean"})
+            return r, (res / "asr.jsonl").read_bytes()
+
+        # One manifest entry against --n 2: a short cell the scorer refuses.
+        r, kept = run(rows[:1], ["c1.wav"])
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("--n is 2", r.stderr)
+        self.assertEqual(kept, b'{"row": 1}\n', "the results were truncated")
+
+        # Two entries, one wav: the manifest parses and still cannot be run.
+        r, kept = run(rows, ["c1.wav"])
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("do not exist", r.stderr)
+        self.assertIn("c2.wav", r.stderr)
+        self.assertEqual(kept, b'{"row": 1}\n', "the results were truncated")
+
+        # A whole matrix clears the preflight and the run proceeds — the guard
+        # must not refuse everything, which would pass both assertions above
+        # for free. (The runners then fail on the network, which is not what
+        # this asserts: the preflight is what must have let them through.)
+        r, _ = run(rows, ["c1.wav", "c2.wav"])
+        self.assertNotIn("--n is 2", r.stderr)
+        self.assertNotIn("do not exist", r.stderr)
+        self.assertNotIn("not certified safe to start", r.stderr,
+                         "a whole matrix was refused before it could start")
 
     def test_a_broken_preflight_is_not_reported_as_a_log_collision(self):
         """"Bounded" naming the wrong bound, in a new place.
@@ -2058,6 +2134,54 @@ class TestReportsMatchTheirData(unittest.TestCase):
         # ...and the committed reports, which are full of em dashes, stay clean.
         out, code = self._run()
         self.assertEqual(code, 0, out["problems"])
+
+    # The German DNS table lives in the merged report, which RESULTS_FOR maps to
+    # results/main-report/ — so the probe files to degrade are the ones there.
+    GERMAN_DNS_ROW = "| cafe 5 dB | 9.84 | **16.84** | 1 |"
+
+    def test_an_unmapped_german_dns_condition_is_reported(self):
+        """Codex, on 1200a40: a new row was skipped *and* left coverage exact.
+
+        The bare `continue` meant arbitrary figures in an unmapped condition
+        row were never compared, and because nothing incremented `checked`, the
+        exact per-report count still agreed the document was fully compared —
+        the silent gap and the certificate that hides it, in one branch. The
+        English DNS path already reported this.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08.md"
+            self.assertIn(self.GERMAN_DNS_ROW, p.read_text(),
+                          "the German DNS table has moved")
+            p.write_text(p.read_text().replace(
+                self.GERMAN_DNS_ROW,
+                self.GERMAN_DNS_ROW + "\n| cafe 99 dB | 1.11 | 2.22 | 3 |"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1, "an unmapped condition row must not pass")
+            self.assertTrue(any("DNS_GERMAN_ROWS" in x for x in out["problems"]),
+                            out["problems"])
+
+    def test_a_dns_row_that_recomputes_to_nan_is_reported(self):
+        """`wer_cer([])` is NaN, and every comparison against NaN is False.
+
+        A probe file missing its `off` or `deep` leg therefore certified any
+        WER the document stated, while still counting the cell as checked —
+        absence reading as agreement, with full coverage to vouch for it.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            res = self._results_copy(tmp)
+            for f in (HERE / "results" / "main-report").glob("dns_probe_*.jsonl"):
+                (res / "main-report" / f.name).write_text(f.read_text())
+            target = res / "main-report" / "dns_probe_de_cafe_snr5.jsonl"
+            self.assertTrue(target.exists(), "the German DNS probe has moved")
+            kept = [l for l in target.read_text().splitlines()
+                    if l.strip() and json.loads(l)["leg"] != "off"]
+            target.write_text("\n".join(kept) + "\n")
+            out, code = self._run(docs=docs, results=res)
+            self.assertEqual(code, 1, "a missing leg must not certify the row")
+            self.assertTrue(any("cannot be recomputed" in x
+                                for x in out["problems"]), out["problems"])
 
     def test_an_unmapped_report_fails_rather_than_being_skipped(self):
         """A document nothing checks must not read as a document that passed."""

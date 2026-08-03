@@ -269,6 +269,22 @@ async def main() -> None:
             # here rather than measured.
             sys.exit(f"{mpath} lists no clips, so {a.lang}/{cond} would "
                      "produce an empty cell rather than a measurement")
+        if len(clips) < a.n:
+            # A short cell is not a small measurement; score_asr.py compares
+            # each cell's clip ids against --expect-clips and refuses it. Left
+            # to the scorer, that refusal arrives after the calls have been
+            # paid for — and, in run_all.sh's FORCE path, after the results it
+            # was replacing are gone.
+            sys.exit(f"{mpath} lists {len(manifest)} clip(s) but --n is {a.n}. "
+                     "A short cell is refused by the scorer, so this run would "
+                     "be billed and then rejected")
+        if absent := [c["path"] for c in clips if not Path(c["path"]).exists()]:
+            # The manifest naming a wav does not make it present, and ffmpeg
+            # discovers that mid-run. "Validated" has to mean the inputs were
+            # looked at, not that a file listing them parsed.
+            sys.exit(f"{len(absent)} clip(s) named by {mpath} do not exist:\n  "
+                     + "\n  ".join(absent[:10])
+                     + ("\n  ..." if len(absent) > 10 else ""))
         clips_by_cond[cond] = clips
 
     # Validate every log this invocation will write before the first batch is

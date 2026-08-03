@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -1368,22 +1369,50 @@ def check_dns_tables(md: str, doc: str, results: Path) -> tuple[list[str], int]:
                     if got is None or w is None:
                         continue
                     checked += 1
-                    if abs(got - w) > 0.011:
+                    # Same NaN trap as the German path: a leg whose references
+                    # are all empty recomputes to NaN, and every comparison
+                    # against NaN is False.
+                    if not math.isfinite(w):
+                        problems.append(
+                            f"{doc}: DNS {leg} column {norm_label(tbl[0][k])!r} "
+                            f"recomputed to {w}, so the document's {got:g} was "
+                            "not verified")
+                    elif abs(got - w) > 0.011:
                         problems.append(
                             f"{doc}: DNS {leg} column {norm_label(tbl[0][k])!r} "
                             f"— document says {got:g}, recomputed {w:g}")
         elif head[:1] == ["condition"] and "no nr" in head:
             for row in tbl[1:]:
                 fname = DNS_GERMAN_ROWS.get(norm_label(row[0]))
-                if fname is None or len(row) < 4:
+                if fname is None:
+                    # Was a bare `continue`, so a new condition row carried
+                    # arbitrary figures past the checker — and because nothing
+                    # incremented `checked`, the exact coverage count agreed
+                    # that the document was fully compared. The English path
+                    # already reports this; both do now.
+                    if any(looks_numeric(c) for c in row[1:]):
+                        problems.append(f"{doc}: German DNS condition {row[0]!r} "
+                                        "is not in DNS_GERMAN_ROWS, so its "
+                                        "figures were not compared")
+                    continue
+                if len(row) < 4:
                     continue
                 src = legs(results / fname)
                 if not src:
                     problems.append(f"{doc}: has a German DNS row for "
                                     f"{row[0]!r} but {fname} is missing")
                     continue
-                deep = src.get("deep", [])
-                want = [round(wer_cer(src.get("off", []), "de_de")[0], 2),
+                # `wer_cer([])` is NaN, every NaN comparison below is False, and
+                # the cell still counts as checked — so a file missing a leg
+                # certified any WER at full coverage. A recomputation that
+                # produced no number is a failure to check, not a match.
+                if absent := [leg for leg in ("off", "deep") if not src.get(leg)]:
+                    problems.append(
+                        f"{doc}: {fname} has no {'/'.join(absent)} leg(s), so "
+                        f"the German DNS row for {row[0]!r} cannot be recomputed")
+                    continue
+                deep = src["deep"]
+                want = [round(wer_cer(src["off"], "de_de")[0], 2),
                         round(wer_cer(deep, "de_de")[0], 2),
                         sum(1 for r in deep if not r["hypothesis"].strip())]
                 for k, w in enumerate(want, start=1):
@@ -1391,7 +1420,12 @@ def check_dns_tables(md: str, doc: str, results: Path) -> tuple[list[str], int]:
                     if got is None:
                         continue
                     checked += 1
-                    if abs(got - w) > 0.011:
+                    if not math.isfinite(w):
+                        problems.append(
+                            f"{doc}: German DNS {norm_label(row[0])!r} column "
+                            f"{norm_label(tbl[0][k])!r} recomputed to {w}, so "
+                            f"the document's {got:g} was not verified")
+                    elif abs(got - w) > 0.011:
                         problems.append(
                             f"{doc}: German DNS {norm_label(row[0])!r} column "
                             f"{norm_label(tbl[0][k])!r} — document says {got:g}, "
