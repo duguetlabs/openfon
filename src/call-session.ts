@@ -88,6 +88,111 @@ interface CallRow {
 // type — needed to tell "this connection still works" from "it is gone".
 const WS_OPEN = 1;
 
+// ---- turn detection ----
+// Which detector a realtime tier gets is a measured property of that tier, not
+// a house style, so it lives in a table rather than inline in the payload
+// builder. Every tier resolves to server VAD today; the table exists so that
+// stays a decision on the record rather than a default nobody revisited.
+//
+// Higher threshold: ambient noise was triggering barge-ins that cut off the
+// greeting; prefix padding keeps word onsets unclipped.
+type TurnDetection = Record<string, string | number>;
+const SERVER_VAD: TurnDetection = { type: 'server_vad', threshold: 0.7, prefix_padding_ms: 300, silence_duration_ms: 550 };
+
+// What we send in `session.update`, and therefore what the echo is checked
+// against. Loose on purpose: the fields differ by tier and the comparison walks
+// whatever we actually sent rather than a list someone has to remember to
+// update.
+type SessionConfig = Record<string, unknown>;
+
+// The trade, so it does not get re-litigated from half the evidence — all of it
+// in docs/research/realtime-latency-2026-08.md § "Follow-up: is the splitting
+// the brain or the turn detector?":
+//
+//   * `server_vad` splits a caller's utterance at a clause pause on
+//     gpt-realtime tiers — 10 of 10 turns, against 0 of 10 for the same brain
+//     and serving stack on a semantic detector (exact McNemar p = 0.00195).
+//     Inaudibly: the fragment's response is cancelled before any audio goes
+//     out, so the caller hears nothing and the model answers a sentence
+//     fragment as a complete turn, billing a discarded response each time.
+//   * OpenAI's `semantic_vad` fixes that and costs too much for a phone call:
+//     end-of-turn p50 1189 ms against server VAD's 736, and a **p90 of
+//     4512 ms**. The engine-only delta is −87 ms and null, so the whole penalty
+//     is the detector deciding, not the model thinking.
+//   * Azure's semantic detector is genuinely free — 707 ms p50, the tightest
+//     spread of any arm measured, 0/10 splits. It is only reachable through
+//     Voice Live, and Kataleptic exposes no tier that pairs Voice Live with a
+//     gpt-realtime brain. That combination is the actual fix and it is not
+//     currently purchasable.
+//
+// So: the splitting is real and stays, because every available remedy is worse
+// than the defect. Revisit when a Voice Live + gpt-realtime tier exists.
+// Two detectors with opposite latency profiles both get called "semantic VAD";
+// collapsing them is how this nearly shipped the 4.5 s tail.
+//
+// The whole gpt-realtime family behaves the same way, so none of this is
+// specific to one model id (72-turn run, all controls verified): 2, 2.1 and
+// 2.1-mini all split **12/12** under `server_vad`, against HD's 0/12. Semantic
+// VAD takes 2.1 to 0/12 (Holm p = 0.00293) but only takes **2.1-mini to 4/12**
+// (Holm p = 0.02344) — still one turn in three, with the detector confirmed
+// echoed back on all 12. On mini the semantic detector is a mitigation, not a
+// fix, which counts against that tier as a default on its own, before latency
+// is even considered.
+const TURN_DETECTION_BY_TIER: Record<string, TurnDetection> = {
+  // Splits 12/12 under server_vad. Left on it anyway — see the trade above.
+  'gpt-realtime-2': SERVER_VAD,
+  // 12/12 too, and semantic VAD would take it to 0/12 — the one tier where the
+  // detector is a clean fix. Still server VAD pending the latency block: if 2.1
+  // carries gpt-realtime-2's 4512 ms p90 end-of-turn tail, fixing the splitting
+  // does not pay for it. One line to flip when those numbers land.
+  'gpt-realtime-2.1': SERVER_VAD,
+  // 12/12, and semantic VAD only gets it to 4/12. Nothing available fixes this
+  // tier, so the detector choice is not what decides it.
+  'gpt-realtime-2.1-mini': SERVER_VAD,
+  // Does not split (0/10), and semantic VAD measured *worse* on this brain
+  // (strict success 0.333 -> 0.259, pass^3 0.222 -> 0.111, TTFA p95 +133 ms;
+  // docs/research/voice-engine-quality-2026-08.md).
+  //
+  // It is also not a free experiment. Probed live 2026-08-03, `semantic_vad`
+  // on this tier is **rejected outright**: the gateway translates it to Voice
+  // Live's `azure_semantic_vad_multilingual`, and Voice Live refuses to change
+  // the detector type once a session has one — which the gateway's own injected
+  // session.update has already set. "Cannot change turn detection type during
+  // session (from server_vad to azure_semantic_vad_multilingual)", an error at
+  // session start, on every HD call. A rule keyed on the model *name* rather
+  // than on the tier would have shipped exactly that.
+  'kataleptic-realtime-hd': SERVER_VAD,
+  // Cascade: no evidence it splits, and it will not honour a semantic detector
+  // anyway. Worse than rejecting it — probed live 2026-08-03, it *accepts*
+  // `semantic_vad` and then quietly serves `server_vad` back at Azure's
+  // defaults (0.5 / 500), discarding the tuning above. Nothing fails; the call
+  // just runs on settings nobody chose. Only reading the `session.updated` echo
+  // shows it, which is the lesson both benchmarks kept re-learning: a config we
+  // cannot confirm is not a config.
+  'kataleptic-realtime': SERVER_VAD,
+};
+
+// Exact tier ids, with server VAD as the fallback for anything unlisted —
+// deliberately not a rule keyed on the model name, because the two live
+// substitutions above are both cases where a name-shaped rule would have been
+// applied to a tier that cannot honour it.
+//
+// This is the seam for the decision: changing one tier's detector is one line
+// in the table. An unlisted tier takes the fallback, which is deliberately the
+// tuned server VAD rather than an untuned one — a tier nobody has measured
+// should still get the settings that were tuned against real ambient noise.
+//
+// If a semantic entry is ever added here, note that OpenAI's detector takes
+// only `{type: 'semantic_vad', eagerness: 'auto'}` — verified against these
+// endpoints by bench/realtime/arms.py and echoed back unchanged by every
+// gpt-realtime tier when probed live. The 0.7 threshold and 300 ms prefix
+// padding have no successor there: that detector has no energy gate, no prefix
+// padding and no fixed silence hangover, so the tuning is dropped rather than
+// ported.
+function turnDetectionFor(model: string): TurnDetection {
+  return TURN_DETECTION_BY_TIER[model] ?? SERVER_VAD;
+}
+
 export class CallSession implements DurableObject {
   private ws: WebSocket | null = null;
   private callId = '';
@@ -414,6 +519,15 @@ export class CallSession implements DurableObject {
   // still mid-response and has to stay both readable and writable until its
   // replacement is actually open, or rotating — which exists so a call does not
   // drop mid-sentence — would itself swallow seconds of speech.
+  //
+  // **Ask of anything new that touches upstream state: what does this do while
+  // two sockets are alive?** That window has now produced the same bug three
+  // times — the receive guard keyed on "is this the write target" (dropping the
+  // working connection's audio), the reconnect counter shared across an episode
+  // (hanging up on the second drop), and the session read-back holding one
+  // `sent`/`resends` pair per call (a superseded socket's echo spending the
+  // replacement's budget). Every one was a per-connection fact stored per call.
+  // State that belongs to a connection is keyed by the connection.
   private readableUpstreams = new Set<WebSocket>();
 
   private sendUpstream(obj: unknown, target: WebSocket | null = this.upstream): void {
@@ -447,9 +561,122 @@ export class CallSession implements DurableObject {
   private greetingGuardUntil = 0; // ignore barge-in flushes while our greeting plays
   private endPending = false; // caller said farewell; hang up after the agent's sign-off
 
+  // ---- session echo read-back ----
+  // The gateway dials its upstream lazily and injects a `session.update` of its
+  // own, which races with ours. When it wins, the call runs on settings nobody
+  // chose and nothing anywhere says so. Measured over 8 sessions per tier, our
+  // turn detector came back as sent on 7 and was replaced on 1 — the same race
+  // that substituted the STT model on 22 of 25 turns in the latency benchmark.
+  // At ~1 in 8 this is not an edge case; it is a routine, silent config loss.
+  //
+  // The benchmark harness rejects those sessions. Production cannot reject
+  // anything, so it re-asserts instead: compare the echo against what we sent
+  // and, if something that matters differs, send the whole payload again.
+  //
+  // Keyed by socket, because `session.updated` arrives per connection and during
+  // a rotation two connections are alive at once (see `readableUpstreams`). Held
+  // as one field per call, the outgoing socket's echo would have been compared
+  // against the replacement's config, spent the replacement's retry budget, and
+  // re-sent to a socket that is about to close. A WeakMap rather than bookkeeping
+  // we have to remember to clean up: a socket nobody references is a session
+  // nobody can echo.
+  private sessionState = new WeakMap<WebSocket, { sent: SessionConfig; resends: number }>();
+  private static readonly MAX_SESSION_RESENDS = 2;
+
+  // Subtrees whose silent substitution changes what the caller experiences, so
+  // they are worth re-sending for. Split the way bench/realtime/arms.py splits
+  // it, and for the same reason: some divergences are the service doing
+  // something we asked it not to, and some are the service being itself.
+  // Advisory ones are logged only — the gateway injects its own transcription
+  // deployment persistently (it won 22 of 25 turns), and tiers coerce voices to
+  // their own catalog, so re-sending would fight them every session and lose.
+  //
+  // Both lists are only as useful as they are quiet. A line that appears on
+  // every call is one that gets filtered within a day, and it takes the real
+  // substitutions with it — so a divergence is only reported where we actually
+  // asked for something (see diffSession).
+  private static readonly ENFORCED_SESSION_PATHS = ['audio.input.turn_detection', 'audio.input.format', 'audio.output.format'];
+  private static readonly ADVISORY_SESSION_PATHS = ['audio.input.transcription', 'audio.output.voice'];
+
+  private static at(obj: unknown, path: string): unknown {
+    return path.split('.').reduce<unknown>((o, k) => (o && typeof o === 'object' ? (o as Record<string, unknown>)[k] : undefined), obj);
+  }
+
+  // Every field we sent, compared against the echo — derived from the request
+  // rather than from a hardcoded list, so a field added to the payload is
+  // checked without anyone remembering to add it here. Absent counts as a
+  // mismatch: a control we cannot confirm is not a control, which is the rule
+  // both benchmarks arrived at after silent substitutions went unnoticed for a
+  // whole run.
+  private static diffSession(sent: unknown, echoed: unknown, path: string): string[] {
+    // Nothing was asked for here, so there is nothing to verify. This looks
+    // like the opposite of the rule above and is the same one: what matters is
+    // whether we expressed an intent. An echo that *drops* a field we set is a
+    // substitution; an echo that *fills in* a field we deliberately left unset
+    // is the tier answering a question we asked it to answer. `voice` is the
+    // live case — gpt-realtime tiers are sent no voice ('' = tier default) and
+    // echo back the one they chose, which is intended behaviour and not news.
+    if (sent === undefined) return [];
+    if (sent === null || typeof sent !== 'object') {
+      if (sent === echoed) return [];
+      return [`${path}=${JSON.stringify(echoed)} (asked ${JSON.stringify(sent)})`];
+    }
+    if (echoed === null || typeof echoed !== 'object') return [`${path} absent — unverifiable`];
+    return Object.entries(sent as Record<string, unknown>).flatMap(([k, v]) =>
+      CallSession.diffSession(v, (echoed as Record<string, unknown>)[k], `${path}.${k}`)
+    );
+  }
+
+  private checkSessionEcho(echoed: unknown, from: WebSocket): void {
+    // This connection's own configuration and its own budget. A late echo from
+    // a socket being rotated out is therefore checked against what *that* socket
+    // was told, and can neither spend the live connection's retries nor push a
+    // re-send at it.
+    const state = this.sessionState.get(from);
+    if (!state || !echoed || typeof echoed !== 'object') return;
+    const sent = state.sent;
+    // The gateway's own injected update produces an echo too, and it arrives
+    // first. Only the echo carrying our instructions is a report on what we
+    // asked for — and it is still the right discriminator when the race is
+    // lost, because a losing session comes back as ours by instructions and
+    // theirs by detector. That asymmetry is exactly how the benchmark found it.
+    if ((echoed as SessionConfig).instructions !== sent.instructions) return;
+
+    const diff = (paths: string[]): string[] =>
+      paths.flatMap((p) => CallSession.diffSession(CallSession.at(sent, p), CallSession.at(echoed, p), p));
+    const advisory = diff(CallSession.ADVISORY_SESSION_PATHS);
+    if (advisory.length) console.log(`call ${this.callId}: session echo differs (advisory): ${advisory.join('; ')}`);
+    const enforced = diff(CallSession.ENFORCED_SESSION_PATHS);
+    if (!enforced.length) return;
+
+    if (state.resends >= CallSession.MAX_SESSION_RESENDS) {
+      // Out of attempts. Say so loudly rather than silently: the call carries
+      // on, and the owner's log is the only place this can surface.
+      console.error(`call ${this.callId}: session config not applied after ${state.resends} re-sends: ${enforced.join('; ')}`);
+      return;
+    }
+    state.resends++;
+    console.warn(`call ${this.callId}: session config was substituted, re-sending (${state.resends}): ${enforced.join('; ')}`);
+    // Byte-identical to what we sent, and aimed at the socket that answered —
+    // during a rotation that is not necessarily the current write target.
+    this.sendUpstream({ type: 'session.update', session: sent }, from);
+  }
+
+  // Every session.update goes through here so what we recorded cannot drift from
+  // what actually went on the wire, and so a fresh configuration gets a fresh
+  // re-send budget — on the connection it was sent to, and only that one. The
+  // re-send path deliberately does not come back through this method: resetting
+  // the budget from inside a retry is how a retry becomes a loop.
+  private sendSessionUpdate(voice: string, instructions: string, target: WebSocket | null = this.upstream): void {
+    if (!target) return;
+    const payload = this.realtimeSessionPayload(voice, instructions);
+    this.sessionState.set(target, { sent: payload.session, resends: 0 });
+    this.sendUpstream(payload, target);
+  }
+
   // Full session payload, resent whenever the voice changes — partial updates
   // are not guaranteed to preserve transcription config.
-  private realtimeSessionPayload(voice: string, instructions: string): unknown {
+  private realtimeSessionPayload(voice: string, instructions: string): { type: string; session: SessionConfig } {
     return {
       type: 'session.update',
       session: {
@@ -470,11 +697,22 @@ export class CallSession implements DurableObject {
           : {}),
         audio: {
           input: {
+            // There is deliberately no noise-reduction field in here, and a
+            // test pins its absence. Azure's `azure_deep_noise_suppression`
+            // returns an empty transcript for ~32% of English utterances and
+            // takes clean-audio WER from 4.8% to 47.8%; on German it drops
+            // nothing and is merely harmful (40.4% against 20.5% at 0 dB cafe
+            // noise). It improves robustness nowhere — including under the
+            // noise it exists to remove — and `near_field` / `far_field`
+            // measured as exact no-ops. See
+            // docs/research/voice-engine-quality-2026-08.md § "Noise
+            // suppression". Sending nothing is already the right answer; the
+            // note and the test exist so it does not get "improved" later.
+            //
             // 24 kHz: the lowest rate every tier accepts (native S2S models reject 16 kHz)
             format: { type: 'audio/pcm', rate: 24000 },
-            // Higher threshold: ambient noise was triggering barge-ins that cut
-            // off the greeting; prefix padding keeps word onsets unclipped.
-            turn_detection: { type: 'server_vad', threshold: 0.7, prefix_padding_ms: 300, silence_duration_ms: 550 },
+            // Per-tier, from the measurements — see TURN_DETECTION_BY_TIER.
+            turn_detection: turnDetectionFor(this.realtimeModel),
             transcription: {
               // Native S2S tiers only support their own transcription models;
               // forcing ours silently disables caller transcripts there.
@@ -513,7 +751,7 @@ export class CallSession implements DurableObject {
     if (voice === prevVoice) return; // multilingual voices cover all languages — nothing to swap
     console.log(`call ${this.callId}: language switch -> ${detected}, voice -> ${voice}`);
     this.sessionVoice = voice;
-    this.sendUpstream(this.realtimeSessionPayload(voice, this.realtimeInstructions));
+    this.sendSessionUpdate(voice, this.realtimeInstructions);
   }
 
   // True when the engine should speak the greeting itself: its reply voice is
@@ -527,17 +765,28 @@ export class CallSession implements DurableObject {
     return this.realtimeModel !== 'kataleptic-realtime-hd' && !this.realtimeModel.startsWith('gpt-realtime');
   }
 
-  // end_call function calling is verified on every tier (HD since its brain
-  // moved to gpt-4.1-mini, 2026-06-13 — 2/2 clean structural invocations; the
-  // upstream narration net converts any remaining prose-shaped calls). The
-  // caller-farewell heuristic stays armed on non-native tiers as
-  // belt-and-braces, since no cascaded LLM is 100% invocation-disciplined.
+  // Every tier accepts the tool. None of them reliably calls it: measured over
+  // 33 goodbye turns per engine, the agent invoked `end_call` on 23-25 of them,
+  // with no meaningful spread between engines — and on one scenario it fired
+  // 1 time in 15 after capturing every detail correctly
+  // (docs/research/voice-engine-quality-2026-08.md, Track B).
+  //
+  // So the caller-farewell heuristic and the hangup safety net below are not
+  // belt-and-braces. They are the primary mechanism on roughly a quarter of
+  // calls, and removing either one would leave those calls running until a
+  // watchdog picks them up. Do not remove them.
   private toolsSupported(): boolean {
     return true;
   }
 
   // Agent-initiated hangup: tell the client to end once playback drains, with
   // a server-side safety net if it never does.
+  //
+  // Reached three ways, and the ranking is not what it looks like: `end_call`
+  // is the intended path but only fires on 23-25 of 33 goodbye turns on every
+  // tier measured (see toolsSupported), so the caller-farewell backstop and
+  // this timer carry the rest. Idempotent by design, because more than one of
+  // them firing on the same call is the normal case rather than the odd one.
   private endingSent = false;
 
   private beginHangup(): void {
@@ -633,7 +882,7 @@ export class CallSession implements DurableObject {
         // everything that happened up to the moment it takes over.
         const briefing = typeof instructions === 'function' ? instructions() : instructions;
         this.upstream = ws; // handover: from here we write to the new socket
-        this.sendUpstream(this.realtimeSessionPayload(this.sessionVoice, briefing), ws);
+        this.sendSessionUpdate(this.sessionVoice, briefing, ws);
         if (greetWith) {
           this.sendUpstream(
             {
@@ -647,7 +896,7 @@ export class CallSession implements DurableObject {
       });
       ws.addEventListener('message', (ev) => {
         if (!this.readableUpstreams.has(ws)) return; // abandoned or rotated out
-        this.onUpstreamMessage(ev).catch((err) => console.error('upstream handler error', err));
+        this.onUpstreamMessage(ev, ws).catch((err) => console.error('upstream handler error', err));
       });
       ws.addEventListener('error', () => {
         clearTimeout(timer);
@@ -754,7 +1003,7 @@ export class CallSession implements DurableObject {
     }
   }
 
-  private async onUpstreamMessage(ev: MessageEvent): Promise<void> {
+  private async onUpstreamMessage(ev: MessageEvent, from: WebSocket): Promise<void> {
     if (typeof ev.data !== 'string') return;
     const msg = JSON.parse(ev.data) as {
       type: string;
@@ -763,6 +1012,7 @@ export class CallSession implements DurableObject {
       language?: string;
       item?: { type?: string; name?: string };
       name?: string;
+      session?: SessionConfig;
       error?: { message?: string };
     };
     switch (msg.type) {
@@ -800,10 +1050,16 @@ export class CallSession implements DurableObject {
           this.maybeSwitchVoice(text, normalizeLang(msg.language));
           this.send({ type: 'transcript', text });
           this.history.push({ role: 'user', content: text });
-          // Caller-farewell backstop (primary mechanism on HD, belt-and-braces
-          // on cascades whose models might not call the tool): armed after at
-          // least one real exchange. beginHangup is idempotent, so this firing
-          // alongside end_call is harmless.
+          // Caller-farewell backstop, armed after at least one real exchange.
+          // Not a fallback: `end_call` fires on 23-25 of 33 goodbye turns on
+          // every tier measured (see toolsSupported), so on roughly a quarter
+          // of calls this is what ends them. beginHangup is idempotent, so
+          // this firing alongside end_call is harmless.
+          //
+          // Still skipped on gpt-realtime tiers, where it has never been
+          // armed — those calls rely on end_call alone and are exposed to the
+          // same ~25% miss rate. Arming it there is a behaviour change, not a
+          // comment fix, so it is proposed in the PR rather than done here.
           this.endPending = !this.realtimeModel.startsWith('gpt-realtime') && this.history.length > 3 && isFarewell(text);
           if (this.endPending) {
             // Event ordering isn't guaranteed: if the sign-off reply's
@@ -831,6 +1087,11 @@ export class CallSession implements DurableObject {
         // Some paths (e.g. narration-to-call conversion) synthesize only this
         // event without a function_call output item.
         if (msg.name === 'end_call') this.beginHangup();
+        break;
+      case 'session.updated':
+        // Read back what the service actually applied. Nothing else in the
+        // call ever notices a substitution.
+        this.checkSessionEcho(msg.session, from);
         break;
       case 'session.expiring':
         // Vendor extension: the engine warns a minute before its hard session
