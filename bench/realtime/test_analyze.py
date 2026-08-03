@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from analyze import (ALPHA, MIN_EQUIVALENCE_N, PRACTICAL_MS,  # noqa: E402
-                     PairedResult, usable_for,
+                     TAIL_FLOOR_MS, PairedResult, usable_for,
                      bootstrap_median_ci, compute_paired, describe,
                      holm, mcnemar_exact_p, paired, pct, sign_test_p,
                      split_cells, split_rate_table)
@@ -23,10 +23,12 @@ from arms import ARMS_BY_ID, invalidated_metrics  # noqa: E402
 from bench import redact  # noqa: E402
 
 
-def result(median, p_raw, p_adj, metric="ttfa_ms", lo=None, hi=None, n=None):
+def result(median, p_raw, p_adj, metric="ttfa_ms", lo=None, hi=None, n=None,
+           diffs=None):
     n = MIN_EQUIVALENCE_N if n is None else n
     return PairedResult(metric=metric, treat="gw", ctrl="direct", question="q",
-                        diffs=[median] * n, median=median,
+                        diffs=diffs if diffs is not None else [median] * n,
+                        median=median,
                         lo=median - 10 if lo is None else lo,
                         hi=median + 10 if hi is None else hi,
                         p_raw=p_raw, p_adj=p_adj)
@@ -626,3 +628,48 @@ class TestConfirmedDifferentConfigIsExcluded(unittest.TestCase):
         ttfa = res["ttfa_ms"][0]
         # family is 1 real test, not 2 — so no scaling is applied
         self.assertAlmostEqual(ttfa.p_adj, ttfa.p_raw)
+
+
+class TestBimodalCostIsNotReportedAsNull(unittest.TestCase):
+    """A median says what a typical turn costs and is silent about a bimodal
+    cost. OpenAI semantic VAD costs ~100 ms on four turns in five and ~3.5 s on
+    the fifth; the median called that "no detectable difference" until a
+    reviewer checked the percentiles. Third time a median hid a tail here."""
+
+    # the real shape: 16 cheap turns, 4 catastrophic ones
+    BIMODAL = [80, 90, 100, 110, 120, 95, 105, 130, 70, 115,
+               100, 100, 100, 100, 100, 100, 3400, 3500, 3600, 3800]
+
+    def test_the_real_case_is_flagged(self):
+        r = result(106, 0.263, 1.000, lo=-106, hi=536, diffs=self.BIMODAL)
+        self.assertTrue(r.tail_severe)
+        self.assertIn("bimodal", r.verdict())
+        self.assertIn("p90", r.verdict())
+        self.assertNotIn("no detectable difference", r.verdict())
+
+    def test_tail_is_the_p90_of_paired_differences(self):
+        r = result(106, 0.263, 1.0, diffs=self.BIMODAL)
+        self.assertGreater(r.tail_ms, 3000)
+
+    def test_a_uniformly_small_cost_is_not_flagged(self):
+        tight = [95, 100, 105, 98, 102, 99, 101, 103, 97, 100]
+        r = result(100, 0.5, 1.0, lo=95, hi=105, diffs=tight)
+        self.assertFalse(r.tail_severe)
+        self.assertNotIn("bimodal", r.verdict())
+
+    def test_a_large_but_consistent_effect_is_still_directional(self):
+        big = [340, 350, 360, 345, 355, 352, 348, 351, 349, 353]
+        r = result(-350, 0.000, 0.002, lo=-542, hi=-149,
+                   diffs=[-x for x in big])
+        self.assertFalse(r.tail_severe)
+        self.assertIn("faster by 350 ms", r.verdict())
+
+    def test_floor_stops_tiny_ratios_from_tripping_it(self):
+        # p90 five times a 2 ms median is still nothing worth flagging
+        r = result(2, 0.5, 1.0, diffs=[1, 2, 2, 2, 3, 2, 2, 2, 2, 40])
+        self.assertLess(r.tail_ms, TAIL_FLOOR_MS)
+        self.assertFalse(r.tail_severe)
+
+    def test_empty_diffs_do_not_crash(self):
+        r = result(0, 1.0, 1.0, diffs=[])
+        self.assertFalse(r.tail_severe)

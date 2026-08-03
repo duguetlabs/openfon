@@ -73,6 +73,11 @@ ALPHA = 0.05
 # 50 ms is a conservative floor that still admits anything worth acting on.
 PRACTICAL_MS = 50.0
 
+# A paired p90 above this, and far above the median, means the cost is bimodal
+# and the median is the wrong summary. 500 ms is well past anything a caller
+# would not notice as dead air.
+TAIL_FLOOR_MS = 500.0
+
 # An equivalence claim needs enough observations for the bootstrap interval to
 # mean anything. Resampling a single paired difference always returns [d, d],
 # so n=1 would "prove" equivalence from one sample — and `--rounds 1` is the
@@ -349,9 +354,31 @@ class PairedResult:
             return float("nan")
         return max(abs(self.lo), abs(self.hi))
 
+    @property
+    def tail_ms(self) -> float:
+        """Worst-case cost at the p90 of the PAIRED differences.
+
+        A median says what a typical turn costs; it is silent about a bimodal
+        cost. OpenAI's semantic VAD costs ~100 ms on four turns in five and
+        ~3.5 s on the fifth — a median of +106 ms called that "no detectable
+        difference" until a reviewer checked the percentiles.
+        """
+        return pct(self.diffs, 90) if self.diffs else float("nan")
+
+    @property
+    def tail_severe(self) -> bool:
+        """The tail costs an order of magnitude more than the median."""
+        if not self.diffs or math.isnan(self.tail_ms):
+            return False
+        return self.tail_ms > max(TAIL_FLOOR_MS, 5 * abs(self.median))
+
     def verdict(self) -> str:
         if self.not_comparable:
             return f"**not comparable** — {self.not_comparable}"
+        if self.tail_severe:
+            # never let a null median stand alone when the tail is severe
+            return (f"**median {self.median:+.0f} ms but p90 {self.tail_ms:+.0f} ms** — "
+                    f"bimodal, judge on the tail")
         direction = "slower" if self.median > 0 else "faster"
         if self.survives:
             return f"**{direction} by {abs(self.median):.0f} ms**"
@@ -408,7 +435,7 @@ def compute_paired(turns: list[dict], metrics: list[str]) -> dict[str, list[Pair
 
 
 def paired_table(results: list[PairedResult]) -> list[str]:
-    rows = ["| comparison | pairs | median Δ | 95% CI | p90 Δ | p (raw) | p (Holm) | verdict |",
+    rows = ["| comparison | pairs | median Δ | 95% CI | **p90 Δ** | p (raw) | p (Holm) | verdict |",
             "|---|---:|---:|---|---:|---:|---:|---|"]
     for r in results:
         if r.not_comparable:

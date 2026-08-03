@@ -219,6 +219,15 @@ and counting it as a clean non-split would manufacture significance out of failu
 Tables show raw and adjusted p side by side, so a demoted result stays visible instead of
 disappearing.
 
+**A third guard, added after a median hid a tail for the third time.** Every paired table
+carries the **p90 of the paired differences**, and a comparison whose p90 is both above
+`TAIL_FLOOR_MS` and more than 5× its median is reported as *"median X but p90 Y — bimodal,
+judge on the tail"* rather than by its median at all. The case that forced this: OpenAI's
+semantic VAD costs ~100 ms on four turns in five and ~3.5 s on the fifth, and a paired
+median of +106 ms was published as "no detectable difference". A median describes the
+typical turn and is silent about the turn that ruins a phone call. If you add a metric,
+assume its cost may be bimodal until the p90 says otherwise.
+
 ### Tests
 
 ```bash
