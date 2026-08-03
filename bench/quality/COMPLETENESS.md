@@ -88,6 +88,14 @@ still passes?** If the answer is a case you would call a bug, the fix landed
 short. Each of these was found by someone asking that; none was found by the
 person who had just tightened the check.
 
+**Verifying a fix is itself a run, and it destroyed data.** The guard on
+`results/` was added, then a raw log was emptied anyway — by the act of checking
+that a new test failed against the old behaviour, which ran the real runner
+against the real `logs/` directory. The protected artifact was not the one at
+risk. Ask of any guard: *what else does this operation touch?* Here the answer
+was the only artifact from which a result can be rebuilt without paying for the
+call again.
+
 Two more of the same, both in the `--only`/`CONDITIONS` validation added to stop
 typos: **a malformed selection read as an absent one.** `--only ','` parsed to an
 empty set and the caller tested `if want`, so every paid scenario ran;
@@ -130,6 +138,7 @@ the intent rather than the behaviour.
 | 1 | `run_scenarios.py` `main()` | did this arm/trial complete | every scenario ran without raising **and** produced at least one agent turn; **exits non-zero** if any failed | nothing known. A silently-empty scenario used to reach the scorer as a valid row. |
 | 2a | `run_asr.py` `main()` | did every condition produce results | retries not exhausted for any condition; **exits non-zero** if any were | nothing known. Exiting zero was the bug: a full cell of error rows has every expected clip id, so the scorer scored an outage as 100% WER. Paired with #11's all-error guard. |
 | 2 | `run_asr.py` `transcribe_batch()` | is this session still coherent | each clip gets `input_audio_buffer.committed`; a timeout **raises** `CommitDesync` rather than continuing | nothing known. Continuing was the bug: a late commit was consumed as the next clip's, cascading wrong hypotheses. |
+| 16 | `engines.open_log` | may this raw log be replaced | the target is absent or empty, unless `--force-logs` | nothing known. Nothing guarded `logs/` at all: the runners open with mode `"w"` before doing any work and `--logdir` defaults to the committed directory, so a stray invocation from `bench/quality` empties a log and a subsequent failure leaves it empty. That happened — `sc-vl-gpt41mini-book-de-01-t1.jsonl` was zeroed while *verifying a test*, and the run became unre-scorable while its result still claimed an `end_call`. |
 | 3 | `run_all.sh` | did the matrix complete | every runner invocation's exit code; collects failures and **exits non-zero**. Also **refuses to start** if `$OUT/results/*.jsonl` are non-empty, unless `APPEND=1` (adds arms, destroys nothing) or `FORCE=1` (replaces) | a runner that exits 0 having swallowed its errors — which is why #1 exists. The refusal was added after the README's own step 4 was found to destroy the committed study: `OUT` defaults to `$HERE`, so the documented invocation truncated the data both reports quote and replaced it with a smaller run under the old arm set. |
 | 4 | `summarize.py` trial check | did every arm run everything | **set of trial ids** per `(arm, scenario)` equals `{1..k}`, no duplicates, no extras | nothing known. Counting rows was the bug: three copies of trial 1 satisfied `--trials 3`. Runners append to JSONL, so re-runs duplicate rather than replace. |
 | 5 | `summarize.py` judge check | was every run judged | a verdict row exists for every `(arm, trial, scenario)`; empty `--judge` file is an **error**, not "no judge" | a judge that returns verdicts for the wrong candidates — blocked in `parse_verdicts` by id membership. |

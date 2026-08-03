@@ -341,3 +341,31 @@ def load_prompt() -> dict[str, Any]:
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "fixtures", "riverside-prompt.json")) as f:
         return json.load(f)
+
+
+def open_log(path, force: bool = False):
+    """Open a raw event log for writing, refusing to destroy a populated one.
+
+    The runners open their log with mode "w" *before* doing any work, and
+    `--logdir` defaults to `logs` — the committed directory. So any invocation
+    from `bench/quality` that names an arm/scenario/trial already on disk empties
+    that log, and if the run then fails (missing audio, no credentials, a
+    validation exit) the file stays empty.
+
+    That is not hypothetical: `sc-vl-gpt41mini-book-de-01-t1.jsonl` was emptied
+    exactly this way while verifying that a new test failed against the old
+    behaviour — the check ran the real runner against the real log directory.
+    The result row still recorded its `end_call`, so the run became
+    unre-scorable and `rederive_tools.py` reported a log/result disagreement.
+
+    `run_all.sh` guards `results/`; nothing guarded `logs/`, and the logs are the
+    only artifact from which results can be rebuilt without paying again.
+    """
+    import os
+    if not force and os.path.exists(path) and os.path.getsize(path) > 0:
+        raise SystemExit(
+            f"refusing to truncate {path}, which already holds "
+            f"{os.path.getsize(path)} bytes. Raw logs are the only artifact a "
+            f"result can be re-scored from without re-running the call. Pass "
+            f"--logdir somewhere new, or --force-logs to replace it.")
+    return open(path, "w")

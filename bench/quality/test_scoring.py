@@ -1627,6 +1627,48 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
         self.assertLess(first("APPEND=1"), first("check_report.py"),
                         "the check runs before the extension is appended")
 
+    def test_every_committed_result_can_be_rescored_from_its_log(self):
+        """The logs are the only artifact a result rebuilds from without paying.
+
+        `sc-vl-gpt41mini-book-de-01-t1.jsonl` was emptied while verifying that a
+        new test failed against the old behaviour: the check ran the real runner,
+        whose `--logdir` defaults to the committed `logs/`, and it opens the log
+        with mode "w" before doing any work. The result row still recorded its
+        `end_call`, so the run became unre-scorable.
+        """
+        with (HERE / "results" / "scenarios.jsonl").open() as f:
+            runs = [json.loads(l) for l in f if l.strip()]
+        empty = []
+        for r in runs:
+            log = (HERE / "logs" /
+                   f"sc-{r['arm']}-{r['scenario']}-t{r['trial']}.jsonl")
+            if not log.exists() or log.stat().st_size == 0:
+                empty.append(log.name)
+        self.assertEqual(empty, [], "these runs cannot be re-scored from raw events")
+
+    def test_a_populated_log_is_not_truncated(self):
+        """`--logdir` defaults to the committed directory, so this is the guard
+        standing between a stray invocation and unrecoverable data."""
+        from engines import open_log
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "log.jsonl"
+            with open_log(p) as f:          # fresh file: fine
+                f.write("{}\n")
+            with self.assertRaises(SystemExit) as cm:
+                open_log(p)                 # populated: refused
+            self.assertIn("refusing to truncate", str(cm.exception))
+            self.assertEqual(p.read_text(), "{}\n", "the log was modified")
+            with open_log(p, force=True) as f:   # explicit replacement
+                f.write("")
+            self.assertEqual(p.read_text(), "")
+
+    def test_both_runners_guard_their_logs(self):
+        for mod in ("run_scenarios.py", "run_asr.py"):
+            with self.subTest(module=mod):
+                src = (HERE / mod).read_text()
+                self.assertIn("open_log(logp", src)
+                self.assertNotIn('open(logp, "w")', src)
+
     def test_run_all_refuses_to_truncate_committed_results(self):
         """Following the README must not destroy the data the reports quote.
 
@@ -2152,6 +2194,59 @@ class TestReportsMatchTheirData(unittest.TestCase):
                     label.replace(" ", "_"), columns,
                     f"{label!r} names a column present in the committed CSVs, "
                     "so it is checkable; verify it instead of allowlisting it")
+
+    def test_the_headline_table_is_checked(self):
+        """Grouped labels resolved to no arm, so the table was skipped whole.
+
+        `Voice Live + gpt-4.1-mini` and `gpt-realtime-2 (either stack)` matched
+        nothing, and the report's main comparison — the table a reader looks at
+        first — could be set to 9999–9999 and stay green. The group column states
+        a range, so it is checked against the min and max across its arms.
+        """
+        cases = [
+            ("| Time to first audio, p95 | **1719 ms** | 3325–3722 ms |",
+             "| Time to first audio, p95 | **1719 ms** | 9999–9999 ms |"),
+            # A degenerate range: both arms agree, so it is written as one value.
+            ("| Judge groundedness | 0.704 | **1.000** |",
+             "| Judge groundedness | 0.704 | **0.500** |"),
+            # And the single-arm column of the same table.
+            ("| Time to first audio, p50 | **1315 ms** | 2077–2408 ms |",
+             "| Time to first audio, p50 | **1111 ms** | 2077–2408 ms |"),
+        ]
+        for original, mutated in cases:
+            with self.subTest(row=original[:40]), tempfile.TemporaryDirectory() as tmp:
+                docs = self._sandbox(tmp)
+                p = docs / "voice-engine-quality-2026-08.md"
+                self.assertIn(original, p.read_text())
+                p.write_text(p.read_text().replace(original, mutated))
+                out, code = self._run(docs=docs)
+                self.assertEqual(code, 1, "the headline table must be checked")
+
+    def test_each_cost_line_satisfies_its_own_arithmetic(self):
+        """Summing the last column left the inputs unverified.
+
+        70.0 minutes could become 700.0 with $6.33 unchanged — the same
+        internal-consistency-of-a-subset gap that let the headline spend drift
+        away from the table it summarises.
+        """
+        cases = [
+            ("voice-engine-quality-2026-08.md",
+             "| native-gpt-realtime-2 | 70.0 | 20.4 | 0.07 | 6.33 |",
+             "| native-gpt-realtime-2 | 700.0 | 20.4 | 0.07 | 6.33 |"),
+            ("voice-engine-quality-2026-08-gpt-realtime-2-1.md",
+             "| `gpt-realtime-2.1` | 52.5 | 13.5 | 0.070 | 4.62 |",
+             "| `gpt-realtime-2.1` | 52.5 | 13.5 | 0.140 | 4.62 |"),
+        ]
+        for report, original, mutated in cases:
+            with self.subTest(report=report), tempfile.TemporaryDirectory() as tmp:
+                docs = self._sandbox(tmp)
+                p = docs / report
+                self.assertIn(original, p.read_text())
+                p.write_text(p.read_text().replace(original, mutated))
+                out, code = self._run(docs=docs)
+                self.assertEqual(code, 1)
+                self.assertTrue(any("cost line" in x for x in out["problems"]),
+                                out["problems"])
 
     def test_the_headline_spend_is_checked_against_the_cost_table(self):
         """The guard must catch the defect it was written for.

@@ -30,7 +30,7 @@ from pathlib import Path
 
 import websockets
 
-from engines import ARMS, connect_kwargs, load_prompt
+from engines import ARMS, connect_kwargs, load_prompt, open_log
 from events import function_call, redact, response_cancelled, scenario_filter
 
 FRAME_MS = 40                       # 40 ms frames ~= a realistic RTP cadence
@@ -352,6 +352,8 @@ async def main() -> None:
     ap.add_argument("--only", help="comma-separated scenario ids")
     ap.add_argument("--out", required=True)
     ap.add_argument("--logdir", default="logs")
+    ap.add_argument("--force-logs", action="store_true",
+                    help="replace existing raw logs (they are the only\n                          artifact a result can be re-scored from)")
     a = ap.parse_args()
 
     failed: list[str] = []
@@ -368,7 +370,7 @@ async def main() -> None:
         if want and sc["id"] not in want:
             continue
         logp = Path(a.logdir) / f"sc-{a.arm}-{sc['id']}-t{a.trial}.jsonl"
-        with open(logp, "w") as log:
+        with open_log(logp, a.force_logs) as log:
             t_start = time.time()
             try:
                 r = await asyncio.wait_for(

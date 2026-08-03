@@ -52,6 +52,16 @@ ARM_LABELS = {
     "gpt-realtime-2.1": "native-gpt-realtime-21",
     "2.1-mini": "native-gpt-realtime-21-mini",
     "gpt-realtime-2.1-mini": "native-gpt-realtime-21-mini",
+    "voice live + gpt-4.1-mini": "vl-gpt41mini",
+}
+
+# Columns that stand for SEVERAL arms and state a range ("2077–2408 ms"), or a
+# single value where the two coincide. The merged report's headline table — the
+# one a reader looks at first — is built this way, and neither label resolved to
+# an arm, so the whole table was skipped: its p95 range could be set to
+# 9999–9999 and the run stayed green with unchanged coverage.
+ARM_GROUPS = {
+    "gpt-realtime-2 (either stack)": ("native-gpt-realtime-2", "vl-native-brain"),
 }
 
 # label -> the summary.csv field(s) it states. A two-field entry is a compound
@@ -75,6 +85,12 @@ METRIC_FIELDS: dict[str, tuple[str, ...]] = {
     "ttfa p50": ("ttfa_p50_ms",),
     "ttfa p95": ("ttfa_p95_ms",),
     "ttfa p50 / p95": ("ttfa_p50_ms", "ttfa_p95_ms"),
+    # Headline-table spellings.
+    "time to first audio, p50": ("ttfa_p50_ms",),
+    "time to first audio, p95": ("ttfa_p95_ms",),
+    "caller-slot capture, heard": ("slot_heard",),
+    "caller-slot capture, echoed back": ("slot_echoed",),
+    "strict task success": ("success_mean",),
 }
 
 # Rows that carry numbers beside an arm but are NOT summary.csv figures. Every
@@ -135,7 +151,7 @@ UNCHECKED_METRICS = {
 # That is the point: coverage changes should be visible in the diff.
 RESULTS_FOR = {
     # report: (results subdirectory, table cells it must resolve)
-    "voice-engine-quality-2026-08.md": ("main-report", 152),
+    "voice-engine-quality-2026-08.md": ("main-report", 173),
     "voice-engine-quality-2026-08-gpt-realtime-2-1.md": (".", 55),
 }
 
@@ -228,6 +244,20 @@ def parse_cell(cell: str, n_fields: int) -> tuple[list[float], bool] | None:
     return None
 
 
+def parse_range(cell: str) -> tuple[float, float] | None:
+    """"2077–2408 ms" -> (2077, 2408); "**1.000**" -> (1.0, 1.0).
+
+    A group column collapses to a single value when its arms agree, so a lone
+    number is a degenerate range rather than an unparseable cell.
+    """
+    c = norm_label(cell).replace("ms", "").replace("$", "").strip()
+    if m := re.fullmatch(r"(-?\d+(?:\.\d+)?)\s*[–—-]\s*(-?\d+(?:\.\d+)?)", c):
+        return float(m.group(1)), float(m.group(2))
+    if (v := parse_number(cell)) is not None:
+        return v, v
+    return None
+
+
 def looks_numeric(cell: str) -> bool:
     """Does this cell state a figure at all? Used to decide whether an
     unrecognised row is a silent gap or just prose."""
@@ -274,6 +304,36 @@ def check_tables(md: str, doc: str, summary: dict[str, dict[str, str]],
                     if (a := resolve_arm(c, arms)) and i > 0}
         row_arms = {r: a for r, row in enumerate(tbl[1:], 1)
                     if row and (a := resolve_arm(row[0], arms))}
+        col_groups = {i: g for i, c in enumerate(head)
+                      if i > 0 and (g := ARM_GROUPS.get(norm_label(c)))}
+
+        def compare_group(label: str, group: tuple[str, ...], cell: str) -> None:
+            """A range cell against the min and max across the group's arms."""
+            nonlocal checked
+            fields = METRIC_FIELDS.get(norm_label(label))
+            if fields is None or len(fields) != 1:
+                return
+            got = parse_range(cell)
+            if got is None:
+                return
+            missing = [a for a in group if a not in summary]
+            if missing:
+                for a in missing:
+                    if (msg := missing_arm(doc, a, summary)) not in problems:
+                        problems.append(msg)
+                return
+            vals = [parse_number(summary[a].get(fields[0], "")) for a in group]
+            if any(v is None for v in vals):
+                problems.append(f"{doc}: {label} for {group} — summary.csv holds "
+                                "a non-numeric value")
+                return
+            checked += 2  # both ends of the range are claims
+            want = (min(vals), max(vals))  # type: ignore[type-var]
+            if abs(got[0] - want[0]) > 1e-9 or abs(got[1] - want[1]) > 1e-9:
+                problems.append(
+                    f"{doc}: {norm_label(label)} across {'/'.join(group)} — "
+                    f"document says {got[0]:g}–{got[1]:g}, summary.csv gives "
+                    f"{want[0]:g}–{want[1]:g}")
 
         def compare(label: str, arm: str, cells: list[str]) -> None:
             """One metric label against one arm's summary row."""
@@ -342,13 +402,16 @@ def check_tables(md: str, doc: str, summary: dict[str, dict[str, str]],
                             f"{doc}: {arm}/{field} — document says {g:g}, "
                             f"summary.csv says {want:g}")
 
-        if col_arms:  # metrics down the first column
+        if col_arms or col_groups:  # metrics down the first column
             for row in tbl[1:]:
                 if not row:
                     continue
                 for i, arm in col_arms.items():
                     if i < len(row):
                         compare(row[0], arm, [row[i]])
+                for i, group in col_groups.items():
+                    if i < len(row):
+                        compare_group(row[0], group, row[i])
         elif row_arms:  # metrics across the header
             for r, arm in row_arms.items():
                 for i, c in enumerate(head):
@@ -795,6 +858,35 @@ def check_cost_table(md: str, doc: str) -> list[str]:
     """
     problems = []
     totals: list[float] = []
+
+    # Each line's own arithmetic, not just the column sum. The header row names
+    # the inputs, so `(Track A min + Track B min) x $/min` can be checked against
+    # the stated `$`. Summing only the last column let 70.0 minutes become 700.0
+    # with the $6.33 unchanged — the same "internal consistency of a subset" gap
+    # that let the headline spend drift away from the table it summarises.
+    for tbl in tables(md):
+        head = [norm_label(c) for c in tbl[0]] if tbl else []
+        if "$" not in head or "$/min" not in head:
+            continue
+        mins = [i for i, c in enumerate(head) if c.endswith("min") and c != "$/min"]
+        rate_i, dollar_i = head.index("$/min"), head.index("$")
+        for row in tbl[1:]:
+            if len(row) <= dollar_i or "total" in norm_label(row[0]):
+                continue
+            rate = parse_number(row[rate_i]) if rate_i < len(row) else None
+            paid = parse_number(row[dollar_i])
+            parts = [v for i in mins if i < len(row)
+                     and (v := parse_number(row[i])) is not None]
+            if rate is None or paid is None or not parts:
+                continue  # a line that states no inputs claims no arithmetic
+            want = round(sum(parts) * rate, 2)
+            # Line items are rounded to the cent, and "~" marks an estimate.
+            tol = 0.02 if "~" in "".join(row) else 0.011
+            if abs(want - paid) > tol:
+                problems.append(
+                    f"{doc}: cost line {norm_label(row[0])!r} — "
+                    f"{' + '.join(f'{p:g}' for p in parts)} min x {rate:g} = "
+                    f"{want:.2f}, but the line states {paid:.2f}")
     for tbl in tables(md):
         items, total, total_unparsed = [], None, False
         for row in tbl:

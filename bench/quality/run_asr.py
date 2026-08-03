@@ -25,7 +25,7 @@ from pathlib import Path
 
 import websockets
 
-from engines import ARMS, connect_kwargs
+from engines import ARMS, connect_kwargs, open_log
 
 class CommitDesync(RuntimeError):
     """The commit stream fell out of sync; the session must not be reused."""
@@ -205,6 +205,8 @@ async def main() -> None:
     ap.add_argument("--n", type=int, default=30)
     ap.add_argument("--out", required=True)
     ap.add_argument("--logdir", default="logs")
+    ap.add_argument("--force-logs", action="store_true",
+                    help="replace existing raw logs (they are the only\n                          artifact a result can be re-scored from)")
     a = ap.parse_args()
 
     root = Path(a.data)
@@ -228,7 +230,7 @@ async def main() -> None:
                  for m in manifest[: a.n]]
         print(f"[{a.arm}] {a.lang}/{cond}: {len(clips)} clips", file=sys.stderr)
         logp = Path(a.logdir) / f"asr-{a.arm}-{a.lang}-{cond}.jsonl"
-        with open(logp, "w") as log:
+        with open_log(logp, a.force_logs) as log:
             for attempt in (1, 2):
                 t_start = time.time()
                 try:
