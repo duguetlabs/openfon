@@ -1534,6 +1534,44 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
         self.assertIsNone(scenario_filter(None, known))
         self.assertIsNone(scenario_filter("", known))
 
+    def test_a_malformed_filter_is_not_an_absent_one(self):
+        """`--only ','` parsed to an empty set and read as "no filter".
+
+        The caller tested `if want`, so every paid scenario ran. The same
+        empty-is-absent confusion the whole harness keeps producing, this time
+        inside the validation added to stop typos slipping through.
+        """
+        with self.assertRaises(ValueError) as cm:
+            scenario_filter(",", {"a"})
+        self.assertIn("names no scenario ids", str(cm.exception))
+        with self.assertRaises(ValueError):
+            scenario_filter(" , , ", {"a"})
+        # Genuinely absent still means "run everything".
+        self.assertIsNone(scenario_filter(None, {"a"}))
+        self.assertIsNone(scenario_filter("", {"a"}))
+
+    def test_a_malformed_condition_list_does_not_clear_the_data(self):
+        """`CONDITIONS=','` truncated asr.jsonl and reported success.
+
+        run_asr.py parsed zero conditions and exited 0, while run_all.sh had
+        already emptied the file — real data cleared by a run that then did
+        nothing. Validation has to happen before the truncation, not after.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            res = Path(tmp) / "results"
+            res.mkdir()
+            (res / "asr.jsonl").write_text('{"row": 1}\n')
+            before = (res / "asr.jsonl").read_bytes()
+            env = {"PATH": "/usr/bin:/bin", "DATA": "/x", "OUT": tmp,
+                   "APPEND": "1", "CONDITIONS": ","}
+            r = subprocess.run(["/bin/bash", str(HERE / "run_all.sh")],
+                               capture_output=True, text=True, cwd=str(HERE),
+                               env=env)
+            self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+            self.assertIn("names nothing", r.stderr)
+            self.assertEqual((res / "asr.jsonl").read_bytes(), before,
+                             "the data was cleared before the check ran")
+
     def test_an_unknown_judge_arm_is_refused(self):
         r = subprocess.run(
             [sys.executable, str(HERE / "judge.py"), "--runs",
@@ -2080,18 +2118,40 @@ class TestReportsMatchTheirData(unittest.TestCase):
     def test_no_report_figure_is_left_declared_unchecked(self):
         """UNCHECKED_METRICS must not become a hiding place.
 
-        Anything listed there has to be genuinely not a checkable measurement —
-        a cost, a configuration, a judge-free recomputation — not a figure that
-        was inconvenient to wire up. Track A WER sat here for one commit; this
-        keeps the next one honest.
+        Two rules. The first — no entry may say "not yet checked" — was too weak
+        on its own: the judge-free entries passed it because "judge-free
+        recomputation" reads as a category rather than an excuse, while both
+        figures were sitting in summary_per_run.csv the whole time.
+
+        So the second, which is mechanical rather than a matter of wording: **no
+        entry may name a column that exists in any committed CSV.** Living in a
+        different file is an argument for checking against that file, not for
+        skipping.
+
+        Its reach, stated rather than assumed — it catches `slots all heard`,
+        whose label *is* a column, and would have caught it the day it was
+        allowlisted. It does **not** catch `deterministic success` (a derived
+        conjunction, no column of its own) or the Track A labels (`cafe 20 dB`
+        is a display name for the value `cafe_snr20`, not a column). So it is a
+        partial guard covering the easiest third of the cases, and the judgement
+        the first rule asks for still has to be exercised. Claiming otherwise
+        would be the half-implemented invariant this file keeps finding.
         """
         import check_report
+        columns = set()
+        for csv_path in sorted((HERE / "results").rglob("*.csv")):
+            with csv_path.open() as f:
+                columns.update(next(csv.reader(f), []))
         for label, reason in check_report.UNCHECKED_METRICS.items():
             with self.subTest(label=label):
                 self.assertNotIn(
                     "not yet checked", reason.lower(),
                     f"{label!r} is a report figure with no verification; either "
                     "check it against its source or say why it cannot be")
+                self.assertNotIn(
+                    label.replace(" ", "_"), columns,
+                    f"{label!r} names a column present in the committed CSVs, "
+                    "so it is checkable; verify it instead of allowlisting it")
 
     def test_the_headline_spend_is_checked_against_the_cost_table(self):
         """The guard must catch the defect it was written for.

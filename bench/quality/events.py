@@ -74,9 +74,18 @@ def scenario_filter(only: str | None, known: set[str]) -> set[str] | None:
     image, and a test that shells out to the runner to check a pure validation
     fails for a reason unrelated to what it is testing.
     """
-    if not only:
+    if only is None or only == "":
         return None
     want = {s.strip() for s in only.split(",") if s.strip()}
+    if not want:
+        # `--only ','` parsed to an empty set, and the caller tested `if want`,
+        # so a malformed selection was indistinguishable from no selection and
+        # every paid scenario ran. A malformed filter is not an absent one —
+        # the same empty-is-absent confusion this harness keeps producing, here
+        # inside the validation added to stop typos slipping through.
+        raise ValueError(
+            f"--only {only!r} names no scenario ids. Pass a comma-separated "
+            "list, or omit --only entirely to run every scenario.")
     if unknown := sorted(want - known):
         raise ValueError(
             f"--only names {len(unknown)} scenario id(s) not in the fixture: "

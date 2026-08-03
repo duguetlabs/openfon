@@ -88,6 +88,16 @@ still passes?** If the answer is a case you would call a bug, the fix landed
 short. Each of these was found by someone asking that; none was found by the
 person who had just tightened the check.
 
+Two more of the same, both in the `--only`/`CONDITIONS` validation added to stop
+typos: **a malformed selection read as an absent one.** `--only ','` parsed to an
+empty set and the caller tested `if want`, so every paid scenario ran;
+`CONDITIONS=','` bypassed the default, `run_asr.py` parsed zero conditions and
+exited 0, and `run_all.sh` had already truncated `asr.jsonl` — data cleared by a
+run that then did nothing and reported success. Empty-is-absent, inside the fix
+for a different problem. Both now raise, and `run_all.sh` validates **before** it
+truncates, because checking afterwards reports the failure and has still
+destroyed the file.
+
 **The other half, and the one you can answer by inspection: what sentence was
 this check written for, and is that sentence inside what it reads?** The rule
 above is about where the *expectation* comes from; this is about whether the
@@ -201,10 +211,23 @@ tracked so a `de_DE` figure is not compared against `en_US` — and
 `check_snr50_table` against `asr_scores_summary.csv`, including the literal `<0
 (degenerate)`. That took the merged report from 50 checked cells to 152.
 
-The rule now has a test: no entry in `UNCHECKED_METRICS` may give "not yet
-checked" as its reason. Everything listed has to be genuinely not a measurement
-— a cost, a configuration, a judge-free recomputation — rather than a figure it
-was inconvenient to wire up.
+**And it happened again one round later, in the entry that read as a category.**
+"Judge-free recomputation" sounds like a kind of thing rather than an excuse, so
+`slots all heard` and `deterministic success` stayed allowlisted while both were
+computable from `summary_per_run.csv` — the decision-supporting table could be
+edited from 0.593 to 0.999 and pass. `PER_RUN_METRICS` now recomputes both. The
+convention that makes them reproduce is worth recording: a scenario with no slots
+satisfies "all slots heard" *vacuously* (`slots_all_heard` is empty, not 0, for
+the twelve information-only runs), which is what `summarize.py` does for
+`success`; counting only `"1"` gives 0.333 against the report's 0.778.
+
+Two rules guard the list now. **No entry may say "not yet checked"** — wording,
+and too weak alone, since both of the above passed it. **No entry may name a
+column present in any committed CSV** — mechanical, and honest about its reach:
+it catches `slots all heard`, whose label is a column, but not `deterministic
+success` (derived, no column) nor the Track A labels (`cafe 20 dB` is a display
+name for the value `cafe_snr20`). It covers the easiest third of the cases; the
+judgement still has to be exercised.
 
 **Why the floor is per report.** It was first written as one global minimum, and
 that is the same bug in the check that exists to catch the bug: with 25 cells

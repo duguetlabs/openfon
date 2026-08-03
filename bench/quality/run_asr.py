@@ -212,7 +212,15 @@ async def main() -> None:
     Path(a.logdir).mkdir(parents=True, exist_ok=True)
     results: list[dict] = []
 
-    for cond in [c.strip() for c in a.conditions.split(",") if c.strip()]:
+    conditions = [c.strip() for c in a.conditions.split(",") if c.strip()]
+    if not conditions:
+        # `--conditions ','` parsed to nothing, the loop never ran, and the
+        # process exited 0 having done no work — while run_all.sh had already
+        # truncated asr.jsonl and went on to report the full Track A matrix as
+        # successful. A malformed selection is not an empty one.
+        sys.exit(f"--conditions {a.conditions!r} names no conditions")
+
+    for cond in conditions:
         d = root / cond / a.lang
         manifest = [json.loads(l) for l in (d / "manifest.jsonl").read_text().splitlines()]
         clips = [{"id": m["id"], "path": str(d / m["wav"]),

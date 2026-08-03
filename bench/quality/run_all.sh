@@ -58,6 +58,24 @@ mkdir -p "$OUT/results" "$OUT/logs"
 # without it, reproducing it means running each block to its own directory and
 # concatenating the jsonl files by hand, which is exactly the kind of step that
 # gets done wrong. Appending destroys nothing, so it does not need the guard.
+# Validate the selections BEFORE anything is truncated. A malformed list is not
+# an empty one: `CONDITIONS=','` bypassed the default, run_asr.py parsed zero
+# conditions and exited 0, and this script had already emptied asr.jsonl and
+# went on to report the full Track A matrix as successful — real data cleared by
+# a run that then did nothing. Checking after the truncation would report the
+# failure and still have destroyed the file.
+nonempty() {  # nonempty <var-name> <value>
+  case "$(printf '%s' "$2" | tr -d ' ,')" in
+    "") echo "$1 is set to '$2', which names nothing. Unset it for the" >&2
+        echo "  default, or give a comma-separated list." >&2
+        exit 2 ;;
+  esac
+}
+[ -n "${CONDITIONS:-}" ] && nonempty CONDITIONS "$CONDITIONS"
+[ -n "${ONLY:-}" ]       && nonempty ONLY "$ONLY"
+[ -n "${ASR_ARMS:-}" ]   && nonempty ASR_ARMS "$ASR_ARMS"
+[ -n "${SC_ARMS:-}" ]    && nonempty SC_ARMS "$SC_ARMS"
+
 APPEND="${APPEND:-0}"
 if [ "${FORCE:-0}" != "1" ] && [ "$APPEND" != "1" ]; then
   for f in "$OUT/results/asr.jsonl" "$OUT/results/scenarios.jsonl"; do

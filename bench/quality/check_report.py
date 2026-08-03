@@ -96,13 +96,6 @@ UNCHECKED_METRICS = {
     "telephony + 3 % loss": "Track A WER — checked against asr_scores.csv",
     "en_us": "SNR50 — checked against asr_scores_summary.csv",
     "de_de": "SNR50 — checked against asr_scores_summary.csv",
-    # Judge-free recomputations: deliberately different quantities from the
-    # summary fields they resemble. `slots all heard` is the per-run conjunction
-    # (0.778), not `slot_heard` (0.893); `deterministic success` excludes the
-    # judge (0.593), unlike `success_mean` (0.556). Mapping either would compare
-    # two different measurements and manufacture a failure.
-    "slots all heard": "per-run conjunction, not summary.slot_heard",
-    "deterministic success": "judge-free success, not summary.success_mean",
     "(seed 2)": "second judge pass (judge_seed2.csv), not in summary.csv",
     # Costs and configuration.
     "cost": "catalog price, not a measurement",
@@ -143,7 +136,30 @@ UNCHECKED_METRICS = {
 RESULTS_FOR = {
     # report: (results subdirectory, table cells it must resolve)
     "voice-engine-quality-2026-08.md": ("main-report", 152),
-    "voice-engine-quality-2026-08-gpt-realtime-2-1.md": (".", 51),
+    "voice-engine-quality-2026-08-gpt-realtime-2-1.md": (".", 55),
+}
+
+
+# Figures recomputed per run rather than read from summary.csv. They are not
+# summary fields, but "lives in a different CSV" is an argument for checking
+# against that CSV — the same reasoning that moved Track A WER out of the
+# allowlist. Allowlisting these let the decision-supporting judge-free table be
+# edited freely: 0.593 -> 0.999 passed.
+#
+# A scenario with no slots satisfies "all slots heard" vacuously — `n_slots` is
+# 0 for the twelve information-only runs and `slots_all_heard` is empty, not 0.
+# Counting only "1" gives 0.333 against the report's 0.778; this is the same
+# convention summarize.py applies when it builds `success`.
+def _all_heard(r: dict) -> bool:
+    return r["slots_all_heard"] in ("1", "")
+
+
+PER_RUN_METRICS = {
+    "slots all heard": _all_heard,
+    "deterministic success": lambda r: (
+        _all_heard(r) and r["tool_ok"] == "1" and r["grounded_ok"] == "1"
+        and r["forbidden_hit"] in ("0", "") and not r["error"]
+        and int(r["agent_turns"] or 0) > 0),
 }
 
 
@@ -235,11 +251,17 @@ def tables(md: str) -> list[list[list[str]]]:
     return out
 
 
-def check_tables(md: str, doc: str, summary: dict[str, dict[str, str]]) -> tuple[list[str], int]:
-    """Compare every resolvable (arm, metric) cell against summary.csv."""
+def check_tables(md: str, doc: str, summary: dict[str, dict[str, str]],
+                 per_run: list[dict] | None = None) -> tuple[list[str], int]:
+    """Compare every resolvable (arm, metric) cell against the generated data."""
     problems: list[str] = []
     checked = 0
     arms = set(summary)
+
+    runs_by_arm: dict[str, list[dict]] = {}
+    for r in per_run or []:
+        if r.get("scored") == "1":
+            runs_by_arm.setdefault(r["arm"], []).append(r)
 
     for tbl in tables(md):
         if len(tbl) < 2:
@@ -257,6 +279,33 @@ def check_tables(md: str, doc: str, summary: dict[str, dict[str, str]]) -> tuple
             """One metric label against one arm's summary row."""
             nonlocal checked
             lab = norm_label(label)
+            if (pred := PER_RUN_METRICS.get(lab)) is not None:
+                for cell in cells:
+                    parsed = parse_cell(cell, 1)
+                    if parsed is None:
+                        continue
+                    got = parsed[0][0]
+                    if arm not in summary:
+                        if (msg := missing_arm(doc, arm, summary)) not in problems:
+                            problems.append(msg)
+                        continue
+                    rs = runs_by_arm.get(arm)
+                    # Denominated on expected runs, like every other rate here:
+                    # the per-run file is the numerator's source, never the
+                    # denominator's.
+                    n = parse_number(summary[arm].get("runs_expected", ""))
+                    if not rs or not n:
+                        problems.append(
+                            f"{doc}: states {lab} for {arm}, but "
+                            "summary_per_run.csv has no scored rows for it")
+                        continue
+                    checked += 1
+                    want = round(sum(1 for r in rs if pred(r)) / n, 3)
+                    if abs(got - want) > 0.0006:
+                        problems.append(
+                            f"{doc}: {arm}/{lab} — document says {got:g}, "
+                            f"recomputed from summary_per_run.csv {want:g}")
+                return
             fields = METRIC_FIELDS.get(lab)
             if fields is None:
                 # Unrecognised label. If it carries figures beside an arm, it is
@@ -859,7 +908,12 @@ def main() -> int:
             continue
         with summary_path.open() as f:
             summary = {r["arm"]: r for r in csv.DictReader(f)}
-        p, n = check_tables(md, doc, summary)
+        per_run_path = results / "summary_per_run.csv"
+        per_run: list[dict] = []
+        if per_run_path.exists():
+            with per_run_path.open() as f:
+                per_run = list(csv.DictReader(f))
+        p, n = check_tables(md, doc, summary, per_run)
         problems += p
         for fn in (check_wer_tables, check_snr50_table):
             p2, n2 = fn(md, doc, results, summary)
