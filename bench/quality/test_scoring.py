@@ -1201,12 +1201,36 @@ class TestHangsAreBounded(unittest.TestCase):
                                   f"{mod}: a subprocess.run without a timeout")
 
     def test_a_timeout_reports_which_bound_fired(self):
-        src = (HERE / "run_scenarios.py").read_text()
-        self.assertIn("outer wall-clock bound", src)
-        self.assertIn("an inner step timeout, not the outer bound", src)
-        # ...and the measured duration, not the nominal one.
-        self.assertIn("timeout after {elapsed:.1f}s", src)
-        self.assertNotIn("hard timeout after {SCENARIO_HARD_TIMEOUT_S}s", src)
+        """Both runners, not just the one where this was first found.
+
+        The inner `ws.recv()` waits raise the same `asyncio.TimeoutError` as the
+        outer wall-clock bound, so a handler that names the outer bound
+        unconditionally misstates cause and duration together. It was fixed in
+        `run_scenarios.py` first and `run_asr.py` kept the old shape for a round;
+        that is why this test iterates.
+        """
+        for mod, outer in (("run_scenarios.py", "outer wall-clock bound"),
+                           ("run_asr.py", "outer BATCH_HARD_TIMEOUT_S bound")):
+            with self.subTest(module=mod):
+                src = (HERE / mod).read_text()
+                self.assertIn(outer, src)
+                self.assertIn("not the outer bound", src)
+                # ...and the measured duration, not the nominal one.
+                self.assertIn("timeout after {elapsed:.1f}s", src)
+                self.assertIn("elapsed = time.time() - t_start", src)
+        scen = (HERE / "run_scenarios.py").read_text()
+        self.assertNotIn("hard timeout after {SCENARIO_HARD_TIMEOUT_S}s", scen)
+        asr = (HERE / "run_asr.py").read_text()
+        self.assertNotIn("batch exceeded BATCH_HARD_TIMEOUT_S", asr,
+                         "run_asr.py still attributes every TimeoutError to the "
+                         "900-second bound")
+
+    def test_an_asr_timeout_reason_is_never_falsy(self):
+        """`str(TimeoutError())` is "", and score_asr.py tests `error` for truth,
+        so an empty reason turns an outage back into a 100 %-WER data point."""
+        src = (HERE / "run_asr.py").read_text()
+        self.assertIn('str(e) or f"{type(e).__name__} (no message)"', src)
+        self.assertIn('"error": reason', src)
 
     def test_each_runner_has_an_outer_wall_clock_bound(self):
         """Belt-and-braces: no step-specific timeout can cover a step nobody
@@ -1285,6 +1309,134 @@ class TestFixtureHygiene(unittest.TestCase):
                         any(digits.startswith(p) for p in allowed),
                         f"{sc['id']} phone {value!r} is outside the ranges reserved "
                         f"for fiction — it could be someone's real number")
+
+
+class TestReportsMatchTheirData(unittest.TestCase):
+    """The reports are checked against the CSVs, and the checker can fail.
+
+    Three consecutive review rounds found the same defect: prose that was correct
+    when written and stale after the study was extended. Code that goes stale
+    fails a test; prose fails nothing. `check_report.py` closes that gap, and
+    these tests exist because a verifier nobody has seen fail is not evidence.
+    """
+
+    def _run(self, docs=None, results=None):
+        cmd = [sys.executable, str(HERE / "check_report.py"), "--json"]
+        if docs:
+            cmd += ["--docs", str(docs)]
+        if results:
+            cmd += ["--results", str(results)]
+        p = subprocess.run(cmd, capture_output=True, text=True,
+                           env={"PATH": "/usr/bin:/bin"})
+        return json.loads(p.stdout), p.returncode
+
+    def _sandbox(self, tmp):
+        """A docs dir of copies, checked against the real results tree."""
+        docs = Path(tmp) / "research"
+        docs.mkdir()
+        src = HERE / ".." / ".." / "docs" / "research"
+        for f in src.glob("voice-engine-quality-*.md"):
+            (docs / f.name).write_text(f.read_text())
+        return docs
+
+    def test_committed_reports_agree_with_committed_results(self):
+        out, code = self._run()
+        self.assertEqual(out["problems"], [], "the reports disagree with results/")
+        self.assertEqual(code, 0)
+        self.assertGreaterEqual(out["cells_checked"], 30)
+
+    def test_a_wrong_table_cell_is_caught(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08-gpt-realtime-2-1.md"
+            p.write_text(p.read_text().replace("| 0.667 |", "| 0.815 |"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1)
+            self.assertTrue(any("judge_grounded" in x for x in out["problems"]),
+                            out["problems"])
+
+    def test_a_stale_agreement_figure_is_caught(self):
+        """The exact defect: agreement quoted from an earlier, smaller pass."""
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08-gpt-realtime-2-1.md"
+            p.write_text(p.read_text().replace("209/219 (**95.4 %**)",
+                                               "214/219 (**97.7 %**)"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1)
+            self.assertTrue(any("groundedness" in x for x in out["problems"]),
+                            out["problems"])
+
+    def test_a_stale_run_count_is_caught(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08-gpt-realtime-2-1.md"
+            p.write_text(p.read_text().replace("**Ten of the 81 new runs**",
+                                               "**Seven of the 54 new runs**"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1)
+            self.assertTrue(any("new runs" in x for x in out["problems"]),
+                            out["problems"])
+
+    def test_a_cost_total_that_does_not_sum_is_caught(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08.md"
+            p.write_text(p.read_text().replace("| **total** | | | | **22.82** |",
+                                               "| **total** | | | | **23.19** |"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1)
+            self.assertTrue(any("cost table" in x for x in out["problems"]),
+                            out["problems"])
+
+    def test_an_unmapped_report_fails_rather_than_being_skipped(self):
+        """A document nothing checks must not read as a document that passed."""
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            (docs / "voice-engine-quality-2027-01-new-study.md").write_text(
+                "# A later study\n\n| arm | strict success |\n|---|---|\n"
+                "| gpt-realtime-2 | 0.999 |\n")
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1)
+            self.assertTrue(any("RESULTS_FOR" in x for x in out["problems"]),
+                            out["problems"])
+
+    def test_a_parser_that_matches_nothing_fails(self):
+        """The signature bug of this repository, aimed at the checker itself.
+
+        If the table format changes and the parser silently stops resolving
+        cells, "no problems" would mean "nothing was compared". That must be an
+        error, not a pass.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            for f in docs.glob("*.md"):
+                f.write_text("\n".join(
+                    line for line in f.read_text().splitlines()
+                    if not line.strip().startswith("|")))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1)
+            self.assertLess(out["cells_checked"], 30)
+            self.assertTrue(any("stopped matching" in x for x in out["problems"]),
+                            out["problems"])
+
+    def test_the_merged_report_keeps_its_own_results_snapshot(self):
+        """The 2.1 run re-judged every arm and overwrote results/ in place.
+
+        Without the snapshot the merged report's numbers are unverifiable, and a
+        reader re-running the scorers gets different figures with no explanation.
+        """
+        snap = HERE / "results" / "main-report" / "summary.csv"
+        self.assertTrue(snap.exists(), "merged-report results snapshot is missing")
+        with snap.open() as f:
+            rows = {r["arm"]: r for r in csv.DictReader(f)}
+        self.assertEqual(rows["native-gpt-realtime-2"]["success_mean"], "0.593")
+        with (HERE / "results" / "summary.csv").open() as f:
+            cur = {r["arm"]: r for r in csv.DictReader(f)}
+        self.assertNotEqual(cur["native-gpt-realtime-2"]["success_mean"],
+                            rows["native-gpt-realtime-2"]["success_mean"],
+                            "if these ever agree, drop the snapshot and the "
+                            "RESULTS_FOR indirection rather than keeping both")
 
 
 if __name__ == "__main__":

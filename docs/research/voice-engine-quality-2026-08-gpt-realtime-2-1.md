@@ -93,8 +93,9 @@ reduction, for no loss of groundedness.
 | Cost | **$0.03/min** | $0.07/min | $0.07/min | $0.035/min |
 
 *All figures from `bench/quality/results/summary.csv`, the single judge pass
-covering all seven arms. An earlier draft of this table carried the pre-extension
-pass and is superseded; the CSV is authoritative.*
+covering all eight arms. An earlier draft of this table carried the pre-extension
+pass and is superseded; the CSV is authoritative — `check_report.py` verifies
+every figure in this document against it.*
 
 ### The tension in that table, stated rather than smoothed
 
@@ -135,9 +136,20 @@ carry.
 Taking the four questions in turn.
 
 **Does 2.1 keep gpt-realtime-2's groundedness? Yes — and slightly exceeds it.**
-0.963 against 2's 0.926 in the same judge pass. The groundedness families are unambiguous and hold under reseeding:
-gpt-realtime-2, 2.1 and Voice-Live-served gpt-realtime-2 sit at 0.91–0.97; every
-gpt-4.1-mini arm **and 2.1-mini** sit at 0.73–0.82.
+0.963 against 2's 0.926 in the same judge pass. Two families separate cleanly in
+the current pass, and 2.1-mini belongs to neither:
+
+| family | arms | groundedness (seed 1) | (seed 2) |
+|---|---|---|---|
+| gpt-realtime brains | `native-2`, `native-21`, `vl-native-brain`, `vl-native-brain-21` | 0.926–0.963 | 0.889–0.963 |
+| gpt-4.1-mini | `vl-gpt41mini`, `-dns`, `-semvad` | 0.778–0.815 | 0.704–0.815 |
+| gpt-realtime-2.1-mini | `native-21-mini` | **0.667** | 0.778 |
+
+The family separation holds under reseeding — no gpt-realtime arm falls into the
+gpt-4.1-mini band on either seed. **2.1-mini's rank does not.** It is below every
+gpt-4.1-mini arm on seed 1 and above two of the three on seed 2, so "worse than
+the cheap tier" is a seed-1 result, not a stable one. What survives both seeds is
+that it sits well below the gpt-realtime band its name suggests it belongs to.
 
 **Does it close the slot-capture gap? No — and it structurally cannot.** 0.893,
 identical to gpt-realtime-2 to three decimals. Track A makes the reason
@@ -157,10 +169,12 @@ directly and its numbers should be preferred where they differ.)
 
 **Is 2.1-mini the single-default answer? No, and less so than first written.**
 It is genuinely fast — 1194 ms p50, *faster than Voice Live* — and half the cost
-of 2.1. But its groundedness is **0.667**, below every gpt-4.1-mini arm (0.778)
-and far below the gpt-realtime band. It buys the cheap tier's latency by giving
-up more of the property that justified the expensive one than the cheap tier
-itself does. Its strict success, 0.185, is the lowest of any arm tested.
+of 2.1. But its groundedness is **0.667**, far below the gpt-realtime band on
+both seeds: it buys the cheap tier's latency by giving up the property that
+justified paying for the expensive one. Its strict success, 0.185, and its
+pass^3, 0.111, are the lowest of any arm tested. Whether it is also worse than
+the gpt-4.1-mini arms is seed-dependent (above), so the case against it rests on
+the gpt-realtime gap and on task success, not on that ordering.
 
 ---
 
@@ -177,13 +191,33 @@ at the same n and should not carry a decision on its own.
 
 ## Method notes
 
-**Incumbent numbers differ slightly from the main report.** All seven arms were
+**Incumbent numbers differ slightly from the main report.** All eight arms were
 re-judged together in a single pass, so the comparison here is internally
-consistent, but the LLM judge is not perfectly reproducible: two seeds agreed on
-groundedness 214/219 (**97.7 %**), resolution 95.0 %, tone 76.3 %. That moves an
+consistent, but the LLM judge is not perfectly reproducible. That moves an
 incumbent arm's strict success by a run or two versus the merged report — for
 example `native-gpt-realtime-2` reads 0.556 here against 0.593 in the merged
 report, on identical call data. **Compare arms within this table, not across documents.**
+
+**Judge reliability, recomputed against the pass the report actually quotes.**
+`results/judge.csv` (seed 1, 246 rows, eight arms) against
+`results/judge_seed2.csv` (seed 2, 219 rows, seven arms — the second pass predates
+`vl-native-brain-21` and does not cover it). Agreement over the **219 rows
+present in both**, keyed on `(scenario, arm, trial)`:
+
+| field | agreement |
+|---|---|
+| groundedness | 209/219 (**95.4 %**) |
+| resolution | 204/219 (93.2 %) |
+| tone | 170/219 (77.6 %) |
+
+Both files span all 11 scenarios, including the two barge-in ones that are judged
+but not scored; the reported rates in `summary.csv` use only the 9 scored ones.
+Groundedness — the load-bearing metric here — is the most reproducible of the
+three, and tone is the least, which is why no claim in this report rests on tone.
+
+An earlier draft quoted 97.7 / 95.0 / 76.3 % from the *pre-extension* judge file.
+Those figures described a smaller pass than the numbers they were vouching for;
+the table above is computed from the two files named in it.
 
 **Track A was run on six conditions, not eight.** Kept: `clean` (needed as the
 dWER/SNR₅₀ baseline), `cafe_snr10`, `cafe_snr5`, `cafe_snr0` and
@@ -202,8 +236,9 @@ of future change ("try a newer realtime model to fix slot capture") is worth it.
 the recogniser is given the caller's language while production is not, so the
 absolute rates are optimistic; scripted turns continue past `end_call`; barge-in
 is not measured; and time-slot matching is approximate in the inflating
-direction. Seven of the 54 new runs contained a cancelled response and are
-excluded from the latency percentiles by `ttfa_trustworthy`.
+direction. **Ten of the 81 new runs** contained a cancelled response and are
+excluded from the latency percentiles by `ttfa_trustworthy` (4 `native-21`,
+3 `native-21-mini`, 3 `vl-native-brain-21`; 17 of 216 across all arms).
 
 ## The STT vocabulary prompt: rejected outright, and not the cause of `book-de-01`
 
@@ -261,3 +296,34 @@ fire while the loop itself is blocked — and both `az` (credential lookup) and
 `ffmpeg` (audio decode) are synchronous subprocesses on that thread. Those now
 carry their own `timeout=`, which is the only thing that can bound them. What is
 covered, and what is not, is enumerated in `COMPLETENESS.md`.
+
+### The methodological lesson from extending a finished study
+
+Review of this addendum found the same defect six times, and it is worth naming
+because it will recur on the next extension: **extending a study invalidates
+prose that quoted the original pass, and prose does not fail CI.**
+
+Every instance had the same shape — a sentence true when written, describing a
+pass since re-run. A results table, a groundedness band that excluded its own
+member, judge-agreement figures quoted from a smaller earlier pass, an arm count
+that said "seven" after an eighth was added, a run count that said "seven of 54"
+after a third new arm made it ten of 81, and a cost total in the merged report
+that never equalled its own line items. None of them broke a test. All of them
+would have been quoted by a reader.
+
+The judge-agreement case is the one that mattered most: those figures are the
+evidence that the LLM-judge metric can be trusted at all, and they were vouching
+for a pass they had not been computed over.
+
+Two things changed as a result:
+
+1. **`bench/quality/check_report.py`** compares every table cell, agreement
+   figure, cost total and run count in these documents against the CSVs they
+   quote, and `test_scoring.py` runs it. A stale figure now fails CI. It also
+   fails if it resolves *nothing*, since a parser that quietly stopped matching
+   would otherwise certify a document of wrong numbers.
+2. **A re-run must not overwrite the pass an existing report quotes.** This run
+   re-judged all eight arms and rewrote `results/` in place, which left the
+   merged report's figures unreproducible from the repository until its pass was
+   restored to `results/main-report/`. The next study writes to its own
+   directory.

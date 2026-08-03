@@ -118,6 +118,24 @@ disagreement rate is the reliability number, and it belongs in the report.
 `summarize.py` reports **pass^k** — scenarios an arm got right on *every* trial —
 next to the mean. A single-run pass rate rewards luck.
 
+### Checking the reports against the results
+
+```sh
+python3 check_report.py        # exits non-zero and lists every disagreement
+```
+
+Every figure in `docs/research/voice-engine-quality-*.md` is compared against the
+CSVs it was written from. Three review rounds found the same defect — a sentence
+correct when written and stale after the study was extended — and prose does not
+fail CI on its own. This makes it fail: `test_scoring.py` runs it.
+
+`RESULTS_FOR` maps each report to its own pass. The 2.1 run re-judged every arm
+and overwrote `results/` in place, so the merged report is checked against
+`results/main-report/`, the pass that produced it. **A re-run that changes
+existing arms' numbers should write to a new directory and add a mapping**, not
+overwrite; a report whose data has been overwritten cannot be verified by anyone,
+including you. A report with no mapping is a failure, not a skip.
+
 ## Things that will bite you
 
 These all cost real debugging time here; they are encoded in the harness.
@@ -155,9 +173,11 @@ score_asr.py      WER/CER, dWER, SNR50
 score_slots.py    programmatic Track B scoring
 judge.py          blind LLM judge, soft dimensions only
 summarize.py      per-arm aggregation incl. pass^k
+check_report.py   verifies the reports against the CSVs they quote
 gen_prompt.ts     freezes the real buildSystemPrompt output
 fixtures/         business fixture, scenarios, frozen prompt
 prepare/          dataset download + conditioning recipes
-results/          CSV/JSONL outputs
+results/          CSV/JSONL outputs (current pass)
+results/main-report/  the merged report's pass, which the 2.1 run overwrote
 logs/             raw event logs — results can be re-scored without re-spending
 ```

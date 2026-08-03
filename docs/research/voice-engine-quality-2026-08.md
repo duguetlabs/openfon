@@ -10,7 +10,7 @@
 
 Run 2026-08-02. Harness, raw logs and CSVs: [`bench/quality/`](../../bench/quality/).
 Datasets: [`voice-eval-datasets.md`](./voice-eval-datasets.md).
-Actual spend **$23.19** at catalog sell rates (direct Azure retail is lower).
+Actual spend **$22.82** at catalog sell rates (direct Azure retail is lower).
 
 ---
 
@@ -697,7 +697,12 @@ it never modelled the hang-up.
 | DNS teardown (`probe_dns.py`, 8 legs x 50) | 62.0 | — | 0.03 | 1.86 |
 | re-runs after the review fixes (150 calls) | — | 63.0 | ~0.045 | 2.83 |
 | judge (gpt-5.5, 6 full passes + 1 partial) | | | | 1.35 |
-| **total** | | | | **23.19** |
+| **total** | | | | **22.82** |
+
+*Corrected from $23.19 on 2026-08-03. Every line item equals its own minutes ×
+rate; the total did not equal the line items. $23.19 was a running estimate
+written before the table was itemized and never reconciled against it — the same
+defect found in the addendum's cost table. `check_report.py` now sums both.*
 
 Catalog sell rates; billed direct to the Azure sponsorship subscription, so the
 true cost is lower. The gateway's `DAILY_CAP_USD` breaker was never approached.

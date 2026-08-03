@@ -39,6 +39,32 @@ correct ones, which is worse than no numbers.
 | 11 | `score_asr.py` cell check | is every ASR cell whole | **set of clip ids** per `(arm, lang, condition)`: no duplicates, size equals `--expect-clips`, and identical across arms for the same `(lang, condition)` | clips present but with empty references — surfaced separately as `unscorable_refs`. Counting rows was the bug: a duplicated id beside a missing one totals correctly and double-weights the duplicate in the WER. |
 | 13 | `score_asr.py` robustness rows | can dWER/SNR50 be computed | a `clean` baseline exists per `(arm, lang)`; **emits nothing and says so** if not | nothing known. `summary[0]` used to raise `IndexError` after the detailed CSV had been written. |
 | 12 | `judge.py` `parse_verdicts` | is this verdict usable | one verdict per expected candidate id, scores literally `int` in range | nothing known. `bool` passing as `int` was the bug: `true` became `0.0` downstream. |
+| 14 | `check_report.py` | do the reports still quote their own data | every resolvable table cell, judge-agreement figure, cost total and run count in `docs/research/voice-engine-quality-*.md`, against the `results/` tree that report was written from (`RESULTS_FOR`) | prose that states no number, and any claim outside a table. Resolving *nothing* is an error (`MIN_CELLS`), because a parser that stopped matching would otherwise report a clean document. An unmapped report is an error, not a skip. |
+
+### Why #14 exists: the prose variant of the same class
+
+The rule at the top of this file — *compare what you got against what you
+expected* — was written about the scorers. It applies unchanged to the reports,
+and that took three further review rounds to see.
+
+**Extending a study invalidates prose that quoted the original pass, and prose
+does not fail CI.** Every stale-report finding has this shape: a sentence that
+was true when written, describing a pass that has since been re-run. Found in the
+addendum as a results table, a groundedness band, a judge-agreement figure, an
+arm count ("seven arms" after an eighth was added) and a run count ("seven of 54"
+after a third new arm made it ten of 81); and in the merged report as a cost
+total that never equalled its own line items.
+
+Two consequences are now permanent:
+
+- **Every number in a report is generated or checked against something
+  generated.** #14 is that check, and `test_scoring.py` runs it, so a stale
+  figure now fails CI exactly like stale code.
+- **A re-run must not overwrite the pass an existing report quotes.** The 2.1 run
+  re-judged all arms and rewrote `results/` in place, which left the merged
+  report's figures unreproducible from the repository until its pass was restored
+  to `results/main-report/`. A future study should write to its own directory and
+  add a `RESULTS_FOR` entry rather than repeating this.
 
 ## Known limitations, documented rather than fixed
 

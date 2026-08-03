@@ -222,6 +222,7 @@ async def main() -> None:
         logp = Path(a.logdir) / f"asr-{a.arm}-{a.lang}-{cond}.jsonl"
         with open(logp, "w") as log:
             for attempt in (1, 2):
+                t_start = time.time()
                 try:
                     results += await asyncio.wait_for(
                         transcribe_batch(a.arm, a.lang, clips, log),
@@ -236,8 +237,18 @@ async def main() -> None:
                     # sentinel. Every failure reason must be non-empty.
                     reason = str(e) or f"{type(e).__name__} (no message)"
                     if isinstance(e, asyncio.TimeoutError):
-                        reason = (f"batch exceeded BATCH_HARD_TIMEOUT_S "
-                                  f"({BATCH_HARD_TIMEOUT_S}s)")
+                        # The inner `ws.recv()` waits inside transcribe_batch (10 s
+                        # and 30 s) raise the same TimeoutError as this outer bound
+                        # and land here too. Attributing a failure that took eight
+                        # seconds to a 900-second deadline misstates both the cause
+                        # and the duration. Same distinction run_scenarios.py makes:
+                        # decide by elapsed, and always report the real elapsed.
+                        elapsed = time.time() - t_start
+                        which = ("outer BATCH_HARD_TIMEOUT_S bound "
+                                 f"({BATCH_HARD_TIMEOUT_S}s)"
+                                 if elapsed >= BATCH_HARD_TIMEOUT_S - 1
+                                 else "an inner recv timeout, not the outer bound")
+                        reason = f"timeout after {elapsed:.1f}s ({which})"
                     print(f"  batch failed ({type(e).__name__}: {reason}); "
                           f"{'retrying' if attempt == 1 else 'giving up'}", file=sys.stderr)
                     if attempt == 2:
