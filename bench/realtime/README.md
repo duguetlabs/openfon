@@ -276,22 +276,38 @@ that table is what happened when it was not applied to `verify_live.py` itself.
 ### Reports are checked against the analyzer, not trusted
 
 ```bash
-./venv/bin/python check_report_tables.py ../../docs/research/*.md
+python3 check_report_tables.py          # no arguments, no venv, no credentials
 ```
 
-Five review rounds found report rows that had drifted from the analyzer — including
+Six review rounds found report rows that had drifted from the analyzer — including
 hand-entered **sign counts**, which exist precisely to remove an ambiguity and so are the
 worst thing to get wrong by typing. "Regenerate, don't edit" kept being advice; this makes
-it a check.
+it a check. It runs on a fresh clone: the analysis path is stdlib-only and the datasets are
+committed, so it is in CI.
 
-**Every table row mentioning an arm pair is a candidate**, whether or not it starts with
-one, and each is either verified or listed in `UNCHECKABLE` with a reason — coverage is
-asserted by equality. The first version matched only rows *beginning* with a backticked
-arm, so twelve metric-prefixed rows were silently skipped, including the whole table of
-results that survive correction, while it reported OK. That is the same defect the quality
-harness's checker had, arrived at independently. See
-[`COMPLETENESS.md`](COMPLETENESS.md) for the full inventory of what this harness verifies
-and how each check can be fooled.
+**Its contract is "the full declared dataset", not "whatever is present".** Three things
+follow, and each was a review finding first:
+
+* **The unit is the table, not the row.** A table is in scope if anything in it names an
+  arm — in a row, in the header, or through a declared prose alias — and then *every*
+  figure-bearing row in it must be verified or listed in `UNCHECKABLE_TABLES` with a
+  reason. Three layouts were dropped silently, one per round: a metric prefix before the
+  pair, a split-rate row joined by `vs` rather than a dash, and a column-oriented table
+  naming its arms in the header. Coverage went from 19 rows to 107 when the parser stopped
+  recognising layouts and started accounting for rows.
+* **Each table names its data, in the document**, `<!-- data: v21-ttfa -->` directly above
+  it. A table in scope without one fails. Merging every file under `results/` had let a
+  **superseded** run validate a current section — the pre-marker `vltier-ttfa` block and
+  its replacement `vltier2-ttfa` contain the same arms, so a retracted figure still passed.
+* **`published/` is the published study and is committed**; `results/` is scratch and is
+  ignored. A re-run is not evidence until it is promoted, which is a deliberate `cp` and a
+  visible diff.
+
+The declared row count per report is compared by **equality**, so a table that leaves scope
+fails rather than quietly lowering a number nobody reads. And the test suite alters every
+verified figure in both reports one at a time and requires each to be caught — a checker
+that reads nothing passes every other test. See [`COMPLETENESS.md`](COMPLETENESS.md) for
+the full inventory of what this harness verifies and how each check can be fooled.
 
 ### Tests
 
@@ -299,7 +315,7 @@ and how each check can be fooled.
 python3 -m unittest discover -s bench/realtime -v
 ```
 
-86 tests, split across `test_analyze.py` (the statistics behind every published table —
+193 tests, split across `test_analyze.py` (the statistics behind every published table —
 percentiles, paired differences, the exact sign test, the bootstrap CI, the Holm
 step-down, exact McNemar, matched-cell construction, and the verdict gating) and
 `test_harness.py` (the controls that make a run trustworthy — echo verification, cache
@@ -323,7 +339,9 @@ added later whose author forgot to redact is still caught on the way to disk.
 **Use `safe_print`, never bare `print`, in anything under `bench/realtime/`.**
 
 `cache/` and `results/` are gitignored regardless — the caller WAVs regenerate from
-`utterances.json` on first run.
+`utterances.json` on first run. `published/` is **not** ignored: it holds the runs the published
+reports quote, scrubbed by `scrub_record` on the way to disk, and the checker above reads
+only from there.
 
 ## Cost and caps
 
@@ -348,3 +366,5 @@ turns on the shortest utterance, scaling with utterance length). Before a bigger
 | `utterances.json` | the fixed caller utterances (EN + DE, short + long) |
 | `verify_live.py` | checks `verify_echo` against the live endpoints, both directions |
 | `safety.py` | credential scrubbing at the process boundary (`safe_print`, `scrub_record`) |
+| `check_report_tables.py` | every figure the reports quote, re-derived from `published/` |
+| `published/` | the runs the published reports quote — committed; `results/` is scratch |

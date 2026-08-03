@@ -17,6 +17,7 @@ the first is reported alongside as a replication. Harness and full method in
 **No. Routing through the Kataleptic gateway costs no detectable latency in either
 direction, for either engine.**
 
+<!-- data: full2,full -->
 | comparison | run 2 (primary) | 95% CI | **p10 / p90 Δ** | slower / faster | p raw / Holm | run 1 |
 |---|---:|---|---:|---:|---:|---:|
 | gpt-realtime-2 via gateway − direct | **+12 ms** | [−90, +141] | **−494 / +502** | **12 / 11** | 1.00 / 1.00 | −18 ms |
@@ -135,6 +136,7 @@ turn's own measurement rather than the constant.
 
 Raw (what a caller on OpenFon's current settings experiences):
 
+<!-- data: full2 -->
 | arm | brain | n | min | **p50** | p90 | p99 | IQR |
 |---|---|---:|---:|---:|---:|---:|---:|
 | `native-direct` | gpt-realtime-2 | 25 | 1305 | **2205** | 2620 | 3404 | 376 |
@@ -148,6 +150,7 @@ that turn's *own measured* end-of-turn detection removed. Subtracting the nomina
 would be wrong: under server VAD the detector actually spends ~740 ms, and a semantic
 detector has no fixed hangover at all.
 
+<!-- data: full2 -->
 | arm | brain | min | **p50** | p90 | p99 |
 |---|---|---:|---:|---:|---:|
 | `native-direct` | gpt-realtime-2 | 611 | **1512** | 1857 | 2664 |
@@ -162,6 +165,7 @@ p raw 0.043 / Holm 0.87).
 
 Paired, on identical caller audio in the same round:
 
+<!-- data: full2 -->
 | comparison | pairs | median Δ | 95% CI | **p10 / p90 Δ** | slower / faster | p raw | p Holm | verdict |
 |---|---:|---:|---|---:|---:|---:|---:|---|
 | `native-gateway` − `native-direct` | 23 | **+12** | [−90, +141] | **−494 / +502** | **12 / 11** | 1.000 | 1.000 | wide both ways, not a cost |
@@ -214,6 +218,7 @@ silently substituted Azure semantic VAD or anything else). `speech_stopped_ms` t
 measures each server's *own* end-of-turn decision, from the end of caller speech to its
 `input_audio_buffer.speech_stopped`:
 
+<!-- data: full2 -->
 | arm | brain | min | **p50** | p90 | IQR |
 |---|---|---:|---:|---:|---:|
 | `native-direct` | gpt-realtime-2 | 686 | **724** | 747 | 40 |
@@ -240,6 +245,7 @@ end-of-turn speed — see the VAD-splits caveat below.
 
 ## Supporting metrics
 
+<!-- data: full2 -->
 | metric | native-direct | native-gateway | vl-direct | vl-gateway | vl-native-brain |
 |---|---:|---:|---:|---:|---:|
 | `speech_stopped_ms` p50 (VAD end-of-turn) | 724 | 707 | 733 | 731 | 727 |
@@ -306,6 +312,7 @@ What survives both gates:
 
 Everything in the primary run with an uncorrected p below 0.05 (27 tests in the family):
 
+<!-- data: full2 -->
 | result | median | p raw | p Holm | status |
 |---|---:|---:|---:|---|
 | `connect_ms`, `vl-gateway` − `vl-direct` | −121 ms | 0.000 | 0.000 | **survives both gates** |
@@ -480,6 +487,7 @@ Neither detector can be moved onto the other brain on the Foundry surface.
 
 ### Split rate — the detector, decisively
 
+<!-- data: vad-split2 -->
 | arm | brain | detector | turns split |
 |---|---|---|---:|
 | `native-direct` | gpt-realtime-2 | `server_vad` | **10/10** |
@@ -538,11 +546,19 @@ degrades reply quality. The first is a barge-in study; the second is task #6.
 
 Paired on `en-short`, where nothing splits on any arm:
 
+<!-- data: vad-ttfa -->
 | comparison | median Δ ttfa | 95% CI | **p10 / p90 Δ** | slower / faster | p raw / Holm |
 |---|---:|---|---:|---:|---:|
 | `vlnat-azsemantic` − `vl-native-brain`<br><sub>Azure semantic vs server VAD, brain and stack held constant</sub> | **−72 ms** | [−600, +255] | −1025 / +489 | **5 / 5** | 1.000 / 1.000 |
-| `nat-semantic` − `native-direct`<br><sub>OpenAI semantic vs server VAD, brain held constant</sub> | **+662 ms** | [+248, +3425] | **−78 / +3651** | **9 / 1** | 0.021 / 0.645 |
+| `nat-semantic` − `native-direct`<br><sub>OpenAI semantic vs server VAD, brain held constant</sub> | **+662 ms** | [+248, +3425] | **−78 / +3651** | **9 / 1** | 0.021 / 0.730 |
 | `vlmini-azsemantic` − `vl-direct`<br><sub>Azure semantic vs server VAD, brain gpt-4.1-mini</sub> | +177 ms | [−69, +260] | −244 / +318 | 7 / 3 | 0.344 / 1.000 |
+
+> Corrected within this run's family of **36** tests (4 comparisons × 9 metrics). The Holm
+> value on the middle row was published as 0.645, from a family of 31 — the same staleness
+> the main table above was corrected for when `session_ready_ms` joined the metric family,
+> missed here because this block is analysed separately. It changes nothing: 0.021 raw is
+> not significant at either family size, and the finding rests on the p90 either way. Found
+> by `check_report_tables.py` once it stopped skipping rows it did not recognise.
 
 Note the sign counts: Azure's detector on the same brain and stack is 5 slower / 5 faster —
 a coin flip. OpenAI's is 9 slower / 1 faster **and** its losses reach +3651 ms against a
@@ -550,6 +566,7 @@ best case of −78 ms. Asymmetric in both, which is why it is the one that hurts
 
 `speech_stopped_ms` shows the mechanism directly — this is the detector's own decision time:
 
+<!-- data: vad-ttfa -->
 | arm | detector | p50 | p90 | IQR |
 |---|---|---:|---:|---:|
 | `native-direct` | `server_vad` | 736 | 760 | 59 |
@@ -610,4 +627,13 @@ export AZURE_SPEECH_KEY=$(az cognitiveservices account keys list \
   -n openfon-speech -g openfon-rg --query key1 -o tsv)
 ./venv/bin/python bench.py --rounds 25 --tag full
 ./venv/bin/python analyze.py results/turns-<stamp>-full.jsonl
+```
+
+**Without spending anything**: the four runs behind this report — `full` (run 1), `full2`
+(run 2, primary), `vad-ttfa` and `vad-split2` — are committed under `bench/realtime/published/`,
+and each table names the one it quotes in an HTML comment above it. Re-derive every figure
+with no credentials, no network and no venv:
+
+```bash
+python3 bench/realtime/check_report_tables.py
 ```
