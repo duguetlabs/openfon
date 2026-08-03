@@ -2222,6 +2222,127 @@ class TestReportsMatchTheirData(unittest.TestCase):
                 out, code = self._run(docs=docs)
                 self.assertEqual(code, 1, "the headline table must be checked")
 
+    def test_an_unresolved_arm_column_or_row_is_reported(self):
+        """The arm axis had the row fix's hole, in both directions.
+
+        A column whose header names no arm was omitted from the comprehension,
+        so its cells were never compared — and because the *resolved* count was
+        unchanged, `RESULTS_FOR` still matched exactly. That defeats the coverage
+        equality as well as the comparison.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08-gpt-realtime-2-1.md"
+            s = p.read_text().replace(
+                "| | VL + gpt-4.1-mini | **VL + 2.1** | Foundry 2.1 |",
+                "| | VL + gpt-4.1-mini | **VL + 2.1** | Foundry 2.1 | vl-gpt41min |"
+            ).replace(
+                "| slots heard | **0.960** | 0.920 | 0.893 |",
+                "| slots heard | **0.960** | 0.920 | 0.893 | 9.999 |")
+            p.write_text(s)
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1, "a misspelled arm column must not pass")
+            self.assertTrue(any("names no arm" in x for x in out["problems"]),
+                            out["problems"])
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08.md"
+            p.write_text(p.read_text().replace(
+                "| vl-gpt41mini-dns | <0 (degenerate) | 9.6 dB |",
+                "| vl-gpt41mini-dns | <0 (degenerate) | 9.6 dB |\n"
+                "| vl-typo-arm | 1.0 dB | 2.0 dB |"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1, "a misspelled arm row must not pass")
+            self.assertTrue(any("names no arm" in x for x in out["problems"]),
+                            out["problems"])
+
+    def test_units_and_estimate_markers_do_not_hide_a_figure(self):
+        """A cell the parser cannot read is a cell it silently skips.
+
+        `~15` made a cost line uncheckable *and* silent — "approximate" is not
+        "unverifiable" — and `1.0 dB` hid an unresolved arm row, because the
+        row only reports when it carries something recognised as a figure.
+        """
+        import check_report
+        for cell, want in (("~15", 15.0), ("~0.05", 0.05), ("2.0 dB", 2.0),
+                           ("1719 ms", 1719.0), ("$0.03/min", 0.03),
+                           ("**4.47**", 4.47)):
+            with self.subTest(cell=cell):
+                self.assertEqual(check_report.parse_number(cell), want)
+        # Genuinely unparseable stays unparseable.
+        for cell in ("<0 (degenerate)", "47.76 (8e)", "Foundry `/openai/v1/`"):
+            with self.subTest(cell=cell):
+                self.assertIsNone(check_report.parse_number(cell))
+
+    def test_estimate_lines_are_checked_not_skipped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08.md"
+            p.write_text(p.read_text().replace(
+                "| pilots and probes | ~15 | — | ~0.05 | 0.75 |",
+                "| pilots and probes | ~150 | — | ~0.05 | 0.75 |"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1)
+            self.assertTrue(any("pilots and probes" in x for x in out["problems"]),
+                            out["problems"])
+
+    def test_every_committed_figure_is_actually_compared(self):
+        """The cheapest test of a checker: change a number, expect a complaint.
+
+        Run over every numeric table cell in both reports rather than the ones
+        someone thought to try — each silent-skip found so far (compound cell,
+        grouped column, misspelled column, unit-suffixed value, estimate marker)
+        was invisible to inspection and obvious to mutation.
+        """
+        import check_report
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            unchecked = []
+            for report in sorted(docs.glob("*.md")):
+                original = report.read_text()
+                lines = original.splitlines()
+                for i, line in enumerate(lines):
+                    if not line.strip().startswith("|"):
+                        continue
+                    cells = line.strip().strip("|").split("|")
+                    header = (lines[i - 2].strip().strip("|").split("|")
+                              if i >= 2 and lines[i - 2].strip().startswith("|")
+                              else [])
+                    for j, cell in enumerate(cells):
+                        # Only cells that ARE a figure. Bumping the first decimal
+                        # on the line hits `gpt-4.1-mini` and reports a model
+                        # name as an unchecked measurement.
+                        val = check_report.parse_number(cell)
+                        if val is None:
+                            continue
+                        # Cells declared unchecked, with a reason, are exempt —
+                        # the catalog $/min prices are Azure's published rates
+                        # and nothing in this repository can verify them. The
+                        # exemption is only as good as UNCHECKED_METRICS, which
+                        # its own test polices.
+                        labels = {check_report.norm_label(cells[0])}
+                        if j < len(header):
+                            labels.add(check_report.norm_label(header[j]))
+                        if labels & set(check_report.UNCHECKED_METRICS):
+                            continue
+                        mutated = list(cells)
+                        mutated[j] = cell.replace(
+                            f"{val:g}", f"{val + 1:g}", 1) if f"{val:g}" in cell \
+                            else f" {val + 1:g} "
+                        lines[i] = "| " + " | ".join(
+                            c.strip() for c in mutated) + " |"
+                        report.write_text("\n".join(lines) + "\n")
+                        _, code = self._run(docs=docs)
+                        if code == 0:
+                            unchecked.append(
+                                f"{report.name}:{i + 1} cell {j}: {cell.strip()}"
+                                f"  in  {line.strip()[:60]}")
+                        lines[i] = line
+                report.write_text(original)
+            self.assertEqual(
+                unchecked, [],
+                "these table figures can be changed without any check noticing")
+
     def test_each_cost_line_satisfies_its_own_arithmetic(self):
         """Summing the last column left the inputs unverified.
 

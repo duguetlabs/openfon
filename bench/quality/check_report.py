@@ -112,7 +112,6 @@ UNCHECKED_METRICS = {
     "telephony + 3 % loss": "Track A WER — checked against asr_scores.csv",
     "en_us": "SNR50 — checked against asr_scores_summary.csv",
     "de_de": "SNR50 — checked against asr_scores_summary.csv",
-    "(seed 2)": "second judge pass (judge_seed2.csv), not in summary.csv",
     # Costs and configuration.
     "cost": "catalog price, not a measurement",
     "$": "cost table", "$/min": "cost table",
@@ -120,6 +119,21 @@ UNCHECKED_METRICS = {
     "stack": "configuration", "brain": "configuration", "stt": "configuration",
     "arms": "lists arm names, not a measurement",
 }
+
+# Labels on the ARM axis that are not arms. Same contract as UNCHECKED_METRICS:
+# declared with a reason, so the alternative to checking is a decision rather
+# than silence.
+#
+# Cost tables are handled structurally instead of listed here — their rows are
+# spend lines ("pilots and probes", "judge re-run over 246 runs") that vary per
+# study, and check_cost_table already verifies every one of them against its own
+# arithmetic and the column total. Enumerating them would be a list of brittle
+# strings standing in for a rule.
+NON_ARM_LABELS: dict[str, str] = {}
+
+
+def is_cost_table(head: list[str]) -> bool:
+    return "$" in [norm_label(c) for c in head]
 
 # Each report is checked against the pass it was written from, and carries the
 # number of table cells it is *expected* to resolve. The 2.1 run re-judged every
@@ -151,8 +165,8 @@ UNCHECKED_METRICS = {
 # That is the point: coverage changes should be visible in the diff.
 RESULTS_FOR = {
     # report: (results subdirectory, table cells it must resolve)
-    "voice-engine-quality-2026-08.md": ("main-report", 173),
-    "voice-engine-quality-2026-08-gpt-realtime-2-1.md": (".", 55),
+    "voice-engine-quality-2026-08.md": ("main-report", 192),
+    "voice-engine-quality-2026-08-gpt-realtime-2-1.md": (".", 61),
 }
 
 
@@ -206,13 +220,30 @@ def missing_arm(doc: str, arm: str, summary: dict) -> str:
             "against the wrong results directory.")
 
 
+# Units and markers a figure may wear. Stripping these is not cosmetic: a cell
+# the parser cannot read is a cell it silently skips, so every unit it does not
+# know is a blind spot. `~15` made a whole cost line uncheckable *and* silent,
+# and `1.0 dB` hid an unresolved arm row — the same non-match invisibility as the
+# compound row and the grouped column, in one more dimension.
+UNITS = re.compile(r"\b(ms|db|s|min|%)\b|[$,]|/min")
+
+
 def parse_number(cell: str) -> float | None:
-    """Pull a single number out of a cell; None if the cell is not a lone number."""
-    c = norm_label(cell).replace("$", "").replace("ms", "").replace("/min", "")
-    c = c.replace(",", "").strip()
+    """Pull a single number out of a cell; None if the cell is not a lone number.
+
+    A leading `~` marks an estimate. It is stripped rather than rejected: "this
+    figure is approximate" is not the same as "this figure is unverifiable", and
+    treating it as the latter meant the row was never compared at all.
+    """
+    c = UNITS.sub("", norm_label(cell)).strip()
+    c = c[1:].strip() if c.startswith("~") else c
     if not re.fullmatch(r"-?\d+(\.\d+)?", c):
         return None
     return float(c)
+
+
+def is_estimate(cell: str) -> bool:
+    return "~" in cell
 
 
 def parse_cell(cell: str, n_fields: int) -> tuple[list[float], bool] | None:
@@ -281,8 +312,24 @@ def tables(md: str) -> list[list[list[str]]]:
     return out
 
 
+def seed2_grounded(rows: list[dict], arm: str, scored: set[str]) -> float | None:
+    """Groundedness from the SECOND judge pass, over the scored scenarios.
+
+    The family table states seed 1 and seed 2 side by side, and only seed 1 was
+    checked — "not in summary.csv" was true and beside the point, since
+    judge_seed2.csv is committed. Same argument as Track A and the judge-free
+    figures, third time.
+    """
+    rs = [r for r in rows if r["arm"] == arm and r["scenario"] in scored]
+    if not rs:
+        return None
+    return sum(1 for r in rs if r["groundedness"].strip() == "1") / len(rs)
+
+
 def check_tables(md: str, doc: str, summary: dict[str, dict[str, str]],
-                 per_run: list[dict] | None = None) -> tuple[list[str], int]:
+                 per_run: list[dict] | None = None,
+                 seed2: list[dict] | None = None,
+                 scored: set[str] | None = None) -> tuple[list[str], int]:
     """Compare every resolvable (arm, metric) cell against the generated data."""
     problems: list[str] = []
     checked = 0
@@ -306,6 +353,38 @@ def check_tables(md: str, doc: str, summary: dict[str, dict[str, str]],
                     if row and (a := resolve_arm(row[0], arms))}
         col_groups = {i: g for i, c in enumerate(head)
                       if i > 0 and (g := ARM_GROUPS.get(norm_label(c)))}
+
+        def report_unresolved(label: str, cells: list[str], axis: str) -> None:
+            """An arm label that resolves to nothing, beside figures.
+
+            Rows were made loud first, then number formats; the arm axis had the
+            same hole, and this one also defeats the coverage count — omitting a
+            whole column leaves the resolved total unchanged, so `RESULTS_FOR`
+            still matches exactly while arbitrary numbers sit unverified.
+            """
+            lab = norm_label(label)
+            if not lab or lab in NON_ARM_LABELS or lab in METRIC_FIELDS:
+                return
+            if not any(looks_numeric(c) for c in cells):
+                return
+            msg = (f"{doc}: table {axis} {label!r} carries figures but names no "
+                   "arm. Add it to ARM_LABELS or ARM_GROUPS if it is one, or to "
+                   "NON_ARM_LABELS with the reason it is not.")
+            if msg not in problems:
+                problems.append(msg)
+
+        if col_arms or col_groups:
+            for i, c in enumerate(head):
+                if i and i not in col_arms and i not in col_groups:
+                    report_unresolved(c, [r[i] for r in tbl[1:] if i < len(r)],
+                                      "column")
+        elif row_arms and not is_cost_table(head):
+            # check_cost_table owns every line of a cost table, including the
+            # ones that are not arms, so those rows are covered elsewhere
+            # rather than unchecked.
+            for r, row in enumerate(tbl[1:], 1):
+                if row and r not in row_arms:
+                    report_unresolved(row[0], row[1:], "row")
 
         def compare_group(label: str, group: tuple[str, ...], cell: str) -> None:
             """A range cell against the min and max across the group's arms."""
@@ -339,6 +418,28 @@ def check_tables(md: str, doc: str, summary: dict[str, dict[str, str]],
             """One metric label against one arm's summary row."""
             nonlocal checked
             lab = norm_label(label)
+            if lab == "(seed 2)":
+                for cell in cells:
+                    parsed = parse_cell(cell, 1)
+                    if parsed is None:
+                        continue
+                    if arm not in summary:
+                        if (msg := missing_arm(doc, arm, summary)) not in problems:
+                            problems.append(msg)
+                        continue
+                    want = (seed2_grounded(seed2 or [], arm, scored or set())
+                            if seed2 else None)
+                    if want is None:
+                        problems.append(
+                            f"{doc}: states a seed-2 groundedness for {arm}, but "
+                            "judge_seed2.csv has no scored rows for it")
+                        continue
+                    checked += 1
+                    if abs(parsed[0][0] - round(want, 3)) > 0.0006:
+                        problems.append(
+                            f"{doc}: {arm}/seed-2 groundedness — document says "
+                            f"{parsed[0][0]:g}, judge_seed2.csv gives {want:.3f}")
+                return
             if (pred := PER_RUN_METRICS.get(lab)) is not None:
                 for cell in cells:
                     parsed = parse_cell(cell, 1)
@@ -1005,9 +1106,18 @@ def main() -> int:
         if per_run_path.exists():
             with per_run_path.open() as f:
                 per_run = list(csv.DictReader(f))
-        p, n = check_tables(md, doc, summary, per_run)
+        seed2_path = results / "judge_seed2.csv"
+        seed2: list[dict] = []
+        if seed2_path.exists():
+            with seed2_path.open() as f:
+                seed2 = list(csv.DictReader(f))
+        fixture = HERE / "fixtures" / "scenarios.json"
+        scored = {sc["id"] for sc in json.loads(fixture.read_text())["scenarios"]
+                  if sc.get("scored", True)} if fixture.exists() else set()
+        p, n = check_tables(md, doc, summary, per_run, seed2, scored)
         problems += p
-        for fn in (check_wer_tables, check_snr50_table):
+        for fn in (check_wer_tables, check_snr50_table,
+                   check_recogniser_table, check_dns_tables_wrapper):
             p2, n2 = fn(md, doc, results, summary)
             problems += p2
             n += n2
@@ -1067,6 +1177,163 @@ def main() -> int:
             print("  all figures agree with results/")
     return 1 if problems else 0
 
+
+# --- Sources beyond summary.csv -------------------------------------------
+# Everything below exists because the mutation sweep in test_scoring.py found
+# these figures could be changed with nothing noticing. Each is derived from a
+# committed artifact, so each is checkable; "it lives in a different file" has
+# twice been the wrong reason to skip.
+
+# The (recogniser, VAD, brain) -> slots-heard table. Its rows are keyed by
+# configuration rather than arm name, so the arm is declared.
+RECOGNISER_ROWS = {
+    ("azure-speech", "server_vad", "gpt-4.1-mini"): "vl-gpt41mini",
+    ("azure-speech", "semantic", "gpt-4.1-mini"): "vl-gpt41mini-semvad",
+    ("azure-speech", "semantic", "gpt-realtime-2"): "vl-native-brain",
+    ("azure-speech", "semantic", "gpt-realtime-2.1"): "vl-native-brain-21",
+    ("whisper-1", "server_vad", "gpt-realtime-2 / 2.1"): "native-gpt-realtime-2",
+}
+
+# probe_dns.py legs, by the display name the reports use.
+DNS_LEGS = {
+    "no noise reduction": "off", "near_field": "near_field",
+    "far_field": "far_field", "azure_deep_noise_suppression": "deep",
+    "azure_deep_noise_suppression @ 16 khz": "deep@16k",
+}
+DNS_GERMAN_ROWS = {"clean": "dns_probe_de_clean.jsonl",
+                   "cafe 10 db": "dns_probe_de_cafe_snr10.jsonl",
+                   "cafe 5 db": "dns_probe_de_cafe_snr5.jsonl"}
+
+
+def check_dns_tables_wrapper(md: str, doc: str, results: Path,
+                             summary: dict) -> tuple[list[str], int]:
+    return check_dns_tables(md, doc, results)
+
+
+def check_recogniser_table(md: str, doc: str, results: Path,
+                           summary: dict) -> tuple[list[str], int]:
+    """Slots heard by (recogniser, VAD, brain) — the addendum's structural claim.
+
+    "Slot capture is a function of (recogniser, VAD) and nothing else" rests
+    entirely on these five numbers, and none of them was compared: the rows are
+    keyed by configuration, so no cell resolved to an arm.
+    """
+    problems: list[str] = []
+    checked = 0
+    for tbl in tables(md):
+        head = [norm_label(c) for c in tbl[0]] if tbl else []
+        if head[:3] != ["recogniser", "vad", "brain"]:
+            continue
+        for row in tbl[1:]:
+            if len(row) < 4:
+                continue
+            key = tuple(norm_label(c) for c in row[:3])
+            arm = RECOGNISER_ROWS.get(key)
+            got = parse_number(row[3])
+            if got is None:
+                continue
+            if arm is None:
+                problems.append(f"{doc}: recogniser table row {key} names no "
+                                "arm; add it to RECOGNISER_ROWS")
+                continue
+            if arm not in summary:
+                problems.append(missing_arm(doc, arm, summary))
+                continue
+            checked += 1
+            want = parse_number(summary[arm].get("slot_heard", ""))
+            if want is None or abs(got - want) > 1e-9:
+                problems.append(
+                    f"{doc}: {key} -> {arm} slots heard — document says {got:g}, "
+                    f"summary.csv says {summary[arm].get('slot_heard')!r}")
+    return problems, checked
+
+
+def check_dns_tables(md: str, doc: str, results: Path) -> tuple[list[str], int]:
+    """The noise-suppression probe tables, recomputed from dns_probe_*.jsonl.
+
+    These carry the "never enable Azure noise suppression" recommendation just
+    as Track A does — 4.01 -> 38.34 and the 24 % empty rate — and they were the
+    last unchecked figures in either report.
+    """
+    import importlib.util
+    problems: list[str] = []
+    checked = 0
+    has_en = any(norm_label(t[0][0]) == "leg" for t in tables(md) if t and t[0])
+    has_de = any(norm_label(t[0][0]) == "condition"
+                 and "no nr" in [norm_label(c) for c in t[0]]
+                 for t in tables(md) if t and t[0])
+    if not (has_en or has_de):
+        return problems, checked
+    if importlib.util.find_spec("jiwer") is None:      # pragma: no cover
+        return [f"{doc}: has noise-suppression tables but jiwer is not "
+                "installed, so they cannot be recomputed"], 0
+    sys.path.insert(0, str(HERE))
+    sys.path.insert(0, str(HERE / "prepare"))
+    from score_asr import wer_cer
+
+    def legs(path: Path) -> dict[str, list[dict]]:
+        out: dict[str, list[dict]] = {}
+        if not path.exists():
+            return out
+        for line in path.read_text().splitlines():
+            r = json.loads(line)
+            out.setdefault(r["leg"], []).append(r)
+        return out
+
+    for tbl in tables(md):
+        head = [norm_label(c) for c in tbl[0]] if tbl else []
+        if head[:1] == ["leg"]:
+            src = legs(results / "dns_probe_en.jsonl")
+            if not src:
+                problems.append(f"{doc}: has an English DNS table but "
+                                f"{results}/dns_probe_en.jsonl is missing")
+                continue
+            for row in tbl[1:]:
+                leg = DNS_LEGS.get(norm_label(row[0]))
+                if leg is None or leg not in src or len(row) < 4:
+                    if leg is None and any(looks_numeric(c) for c in row[1:]):
+                        problems.append(f"{doc}: DNS leg {row[0]!r} is not in "
+                                        "DNS_LEGS")
+                    continue
+                rs = src[leg]
+                ne = [r for r in rs if r["hypothesis"].strip()]
+                want = [round(100 * (len(rs) - len(ne)) / len(rs)),
+                        round(wer_cer(rs, "en_us")[0], 2),
+                        round(wer_cer(ne, "en_us")[0], 2) if ne else None]
+                for k, w in enumerate(want, start=1):
+                    got = parse_number(row[k])
+                    if got is None or w is None:
+                        continue
+                    checked += 1
+                    if abs(got - w) > 0.011:
+                        problems.append(
+                            f"{doc}: DNS {leg} column {norm_label(tbl[0][k])!r} "
+                            f"— document says {got:g}, recomputed {w:g}")
+        elif head[:1] == ["condition"] and "no nr" in head:
+            for row in tbl[1:]:
+                fname = DNS_GERMAN_ROWS.get(norm_label(row[0]))
+                if fname is None or len(row) < 4:
+                    continue
+                src = legs(results / fname)
+                if not src:
+                    problems.append(f"{doc}: has a German DNS row for "
+                                    f"{row[0]!r} but {fname} is missing")
+                    continue
+                deep = src.get("deep", [])
+                want = [round(wer_cer(src.get("off", []), "de_de")[0], 2),
+                        round(wer_cer(deep, "de_de")[0], 2),
+                        sum(1 for r in deep if not r["hypothesis"].strip())]
+                for k, w in enumerate(want, start=1):
+                    got = parse_number(row[k])
+                    if got is None:
+                        continue
+                    checked += 1
+                    if abs(got - w) > 0.011:
+                        problems.append(
+                            f"{doc}: German DNS {norm_label(row[0])!r} column "
+                            f"{norm_label(tbl[0][k])!r} — document says {got:g}, "
+                            f"recomputed {w:g}")
+    return problems, checked
 
 if __name__ == "__main__":
     sys.exit(main())

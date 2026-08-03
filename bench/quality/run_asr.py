@@ -247,17 +247,25 @@ async def main() -> None:
                     # sentinel. Every failure reason must be non-empty.
                     reason = str(e) or f"{type(e).__name__} (no message)"
                     if isinstance(e, asyncio.TimeoutError):
-                        # The inner `ws.recv()` waits inside transcribe_batch (10 s
-                        # and 30 s) raise the same TimeoutError as this outer bound
-                        # and land here too. Attributing a failure that took eight
-                        # seconds to a 900-second deadline misstates both the cause
-                        # and the duration. Same distinction run_scenarios.py makes:
-                        # decide by elapsed, and always report the real elapsed.
+                        # Several bounds raise this same exception and land here:
+                        # the 30 s handshake `open_timeout`, the 10 s and 30 s
+                        # `ws.recv()` waits, and the outer batch deadline.
+                        # Attributing a failure that took eight seconds to a
+                        # 900-second deadline misstates both cause and duration.
+                        #
+                        # The label is deliberately generic below the outer
+                        # bound. Naming it "an inner recv timeout" was wrong for
+                        # a handshake that never reached a receive — the third
+                        # time a new bound was described by the branch an older
+                        # one wrote. A bound this code cannot distinguish should
+                        # not be given a name that claims it can; the elapsed
+                        # time is the part that is always true.
                         elapsed = time.time() - t_start
                         which = ("outer BATCH_HARD_TIMEOUT_S bound "
                                  f"({BATCH_HARD_TIMEOUT_S}s)"
                                  if elapsed >= BATCH_HARD_TIMEOUT_S - 1
-                                 else "an inner recv timeout, not the outer bound")
+                                 else "an inner step timeout — connect or "
+                                      "receive — not the outer bound")
                         reason = f"timeout after {elapsed:.1f}s ({which})"
                     print(f"  batch failed ({type(e).__name__}: {reason}); "
                           f"{'retrying' if attempt == 1 else 'giving up'}", file=sys.stderr)

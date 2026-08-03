@@ -37,6 +37,22 @@ this report a problem or fall through?** A `KeyError` is that failure at its
 loudest, a bare `continue` at its quietest, and an `any()` at its most
 plausible-looking.
 
+**The parser's non-matches were invisible in one more dimension each round.**
+Rows first (the compound `TTFA p50 / p95`), then columns (the grouped headline
+labels), then arm labels on both axes, then number *formats* — `~15` made a cost
+line uncheckable and silent, `1.0 dB` hid an unresolved arm row. Each fix was
+right and each left the next dimension open, because "unrecognised" was being
+enumerated rather than defined.
+
+The cheapest way to find the next one is not to read the parser: **change a
+number and see whether anything complains.** `test_every_committed_figure_is_
+actually_compared` does that for every numeric cell in both reports, and it found
+34 unchecked figures the round it was written — the (recogniser, VAD) table
+carrying the addendum's structural claim, the noise-suppression probe tables
+carrying "never enable Azure DNS", and the second judge seed. All are checked
+now; the only cells still exempt are the catalog `$/min` prices, which are
+Azure's published rates with nothing in the repository to check them against.
+
 **A fourth, about documentation rather than code: instructions get verified
 against the repository as it stands, not against a fresh run.** Six findings on
 this harness share it, and every one passes when `results/` is already populated
