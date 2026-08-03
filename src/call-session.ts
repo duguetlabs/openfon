@@ -574,6 +574,11 @@ export class CallSession implements DurableObject {
   // Advisory ones are logged only — the gateway injects its own transcription
   // deployment persistently (it won 22 of 25 turns), and tiers coerce voices to
   // their own catalog, so re-sending would fight them every session and lose.
+  //
+  // Both lists are only as useful as they are quiet. A line that appears on
+  // every call is one that gets filtered within a day, and it takes the real
+  // substitutions with it — so a divergence is only reported where we actually
+  // asked for something (see diffSession).
   private static readonly ENFORCED_SESSION_PATHS = ['audio.input.turn_detection', 'audio.input.format', 'audio.output.format'];
   private static readonly ADVISORY_SESSION_PATHS = ['audio.input.transcription', 'audio.output.voice'];
 
@@ -588,6 +593,14 @@ export class CallSession implements DurableObject {
   // both benchmarks arrived at after silent substitutions went unnoticed for a
   // whole run.
   private static diffSession(sent: unknown, echoed: unknown, path: string): string[] {
+    // Nothing was asked for here, so there is nothing to verify. This looks
+    // like the opposite of the rule above and is the same one: what matters is
+    // whether we expressed an intent. An echo that *drops* a field we set is a
+    // substitution; an echo that *fills in* a field we deliberately left unset
+    // is the tier answering a question we asked it to answer. `voice` is the
+    // live case — gpt-realtime tiers are sent no voice ('' = tier default) and
+    // echo back the one they chose, which is intended behaviour and not news.
+    if (sent === undefined) return [];
     if (sent === null || typeof sent !== 'object') {
       if (sent === echoed) return [];
       return [`${path}=${JSON.stringify(echoed)} (asked ${JSON.stringify(sent)})`];

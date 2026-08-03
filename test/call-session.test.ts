@@ -677,13 +677,13 @@ describe('session echo read-back', () => {
     instructions?: string;
     audio?: {
       input?: { turn_detection?: Record<string, unknown>; transcription?: Record<string, unknown> };
-      output?: { voice?: string };
+      output?: { voice?: string; format?: Record<string, unknown> };
     };
   };
 
   /** Start a realtime call and hand back the engine socket plus what we sent. */
-  const started = async () => {
-    const { session } = newSession('realtime');
+  const started = async (realtime_model = '') => {
+    const { session } = newSession('realtime', { realtime_model });
     await session.fetch(upgradeRequest());
     serverSockets.at(-1)!.receive({ type: 'start' });
     await flush();
@@ -746,6 +746,32 @@ describe('session echo read-back', () => {
     // Two re-sends, then it stops and complains. An unbounded read-back is a
     // message loop with an engine that has made its position clear.
     expect(updatesSent(up)).toBe(3);
+  });
+
+  it('says nothing about a voice the tier picked for itself', async () => {
+    // gpt-realtime tiers are deliberately sent no voice ('' = tier default) and
+    // echo back the one they chose (`marin`, live on all three). Diffing that
+    // unconditionally reported a substitution on *every* native call — and a
+    // diagnostic that fires on every call is one that gets filtered out within
+    // a day, taking the real substitutions with it. "Absent counts as a
+    // mismatch" is right when the echo dropped something we asked for, and
+    // wrong when we deliberately asked for nothing.
+    const logged: string[] = [];
+    const spy = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
+      logged.push(args.join(' '));
+    });
+    try {
+      const { up, sent } = await started('gpt-realtime-2');
+      expect(sent.audio?.output?.voice, 'the tier should be sent no voice at all').toBeUndefined();
+      const s = structuredClone(sent);
+      s.audio!.output = { ...s.audio!.output, voice: 'marin' };
+      echo(up, s);
+      await flush();
+      expect(logged.filter((l) => l.includes('session echo differs'))).toEqual([]);
+      expect(updatesSent(up)).toBe(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('does not fight the gateway over the transcription model', async () => {
