@@ -2029,6 +2029,14 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
                      "ASR_ARMS": "vl-gpt41mini", "CONDITIONS": "clean"})
             return r, (res / "asr.jsonl").read_bytes()
 
+        # A duplicated clip id: the scorer rejects it as an identity violation,
+        # which --allow-incomplete cannot excuse — so it has to be caught here,
+        # before the cell is paid for and the results truncated.
+        r, kept = run([rows[0], dict(rows[0], wav="c2.wav")], ["c1.wav", "c2.wav"])
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("more than once", r.stderr)
+        self.assertEqual(kept, b'{"row": 1}\n', "the results were truncated")
+
         # One manifest entry against --n 2: a short cell the scorer refuses.
         r, kept = run(rows[:1], ["c1.wav"])
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
@@ -2051,6 +2059,35 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
         self.assertNotIn("do not exist", r.stderr)
         self.assertNotIn("not certified safe to start", r.stderr,
                          "a whole matrix was refused before it could start")
+
+    def test_the_truncation_guard_covers_only_the_selected_track(self):
+        """Codex, on 60d2d6e: TRACK=a refused over a file it never touches.
+
+        A guard that blocks a run which would destroy nothing is not caution —
+        it teaches people to reach for FORCE=1, which is the single habit this
+        guard exists to prevent.
+        """
+        for track, populated, refuse in (("a", "scenarios.jsonl", False),
+                                         ("b", "scenarios.jsonl", True),
+                                         ("b", "asr.jsonl", False),
+                                         ("a", "asr.jsonl", True)):
+            with self.subTest(track=track, populated=populated), \
+                    tempfile.TemporaryDirectory() as tmp:
+                res = Path(tmp) / "results"
+                res.mkdir()
+                (res / populated).write_text('{"row": 1}\n')
+                r = subprocess.run(
+                    ["/bin/bash", str(HERE / "run_all.sh")],
+                    capture_output=True, text=True, cwd=str(HERE),
+                    env={"PATH": "/usr/bin:/bin", "DATA": "/x", "OUT": tmp,
+                         "PY": "/usr/bin/python3", "TRACK": track,
+                         "ASR_ARMS": "vl-gpt41mini", "SC_ARMS": "vl-gpt41mini",
+                         "TRIALS": "1"})
+                refused = "refusing to truncate" in r.stderr
+                self.assertEqual(
+                    refused, refuse,
+                    f"TRACK={track} with a populated {populated}: "
+                    f"{'refused' if refused else 'allowed'}\n{r.stderr}")
 
     def test_a_broken_preflight_is_not_reported_as_a_log_collision(self):
         """"Bounded" naming the wrong bound, in a new place.
@@ -2299,6 +2336,72 @@ class TestReportsMatchTheirData(unittest.TestCase):
             self.assertEqual(code, 1, "a missing leg must not certify the row")
             self.assertTrue(any("cannot be recomputed" in x
                                 for x in out["problems"]), out["problems"])
+
+    def test_a_before_after_table_is_checked_against_both_arms(self):
+        """Codex, on 60d2d6e: two whole tables took neither branch.
+
+        Their header names an arm *pair* ("server → semantic VAD, ...") rather
+        than either arm, so `col_arms` and `row_arms` were both empty and
+        `check_tables` skipped the table entirely — including the strict
+        success figure the VAD-control argument rests on, which could be set to
+        0.999 with the run green and its coverage count unchanged. The arm axis
+        going unresolved was made loud once already; this is the same hole one
+        table shape further along.
+        """
+        for cell, arm in (("| strict success | 0.333 → 0.259 (**−0.074**) |",
+                           "vl-gpt41mini"),
+                          ("| strict success | 0.259 → 0.407 (**+0.148**) |",
+                           "vl-native-brain")):
+            with self.subTest(arm=arm), tempfile.TemporaryDirectory() as tmp:
+                docs = self._sandbox(tmp)
+                p = docs / "voice-engine-quality-2026-08.md"
+                self.assertIn(cell.strip(), p.read_text(),
+                              "the before/after table has moved")
+                p.write_text(p.read_text().replace(
+                    cell.strip(),
+                    cell.strip().replace("0.333", "0.999")
+                              .replace("0.407", "0.999")))
+                out, code = self._run(docs=docs)
+                self.assertEqual(code, 1, "an edited delta cell passed")
+                self.assertTrue(any("delta table" in x for x in out["problems"]),
+                                out["problems"])
+
+    def test_an_unmapped_delta_table_is_reported(self):
+        """Not knowing which arms a table compares is not a reason to skip it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08.md"
+            p.write_text(p.read_text().replace(
+                "| server → semantic VAD, gpt-4.1-mini on Voice Live | change |",
+                "| whatever → something else | change |"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1)
+            self.assertTrue(any("DELTA_TABLES" in x for x in out["problems"]),
+                            out["problems"])
+
+    def test_a_percentage_cell_is_read_as_a_number(self):
+        """`%` sat inside a word-boundary group and never matched.
+
+        So `parse_number("24 %")` was None and the English DNS
+        empty-transcript column — five figures, one of them the 24 % rate
+        behind "never enable Azure noise suppression" — was skipped in silence.
+        A unit the parser does not know is a cell it does not check, which is
+        the fourth dimension this same blind spot has appeared in.
+        """
+        import check_report
+        for cell, want in (("24 %", 24.0), ("0 %", 0.0), ("~15", 15.0),
+                           ("1.0 dB", 1.0), ("2077 ms", 2077.0)):
+            with self.subTest(cell=cell):
+                self.assertEqual(check_report.parse_number(cell), want)
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08.md"
+            self.assertIn("| **24 %** |", p.read_text())
+            p.write_text(p.read_text().replace("| **24 %** |", "| **99 %** |"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1, "an edited DNS percentage passed")
+            self.assertTrue(any("DNS" in x for x in out["problems"]),
+                            out["problems"])
 
     def test_an_unmapped_report_fails_rather_than_being_skipped(self):
         """A document nothing checks must not read as a document that passed."""

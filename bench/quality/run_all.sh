@@ -95,8 +95,18 @@ nodup ASR_ARMS "$ASR_ARMS"
 nodup SC_ARMS "$SC_ARMS"
 
 APPEND="${APPEND:-0}"
+# Only the files this invocation will actually truncate. The guard used to
+# check both regardless of TRACK, so TRACK=a refused to start because
+# scenarios.jsonl was populated — a file it never touches. A guard that blocks
+# a run which would destroy nothing teaches people to reach for FORCE=1, which
+# is the one habit this guard exists to prevent.
+GUARDED=""
+want_a() { [ "${TRACK:-both}" = "a" ] || [ "${TRACK:-both}" = "both" ]; }
+want_b() { [ "${TRACK:-both}" = "b" ] || [ "${TRACK:-both}" = "both" ]; }
+want_a && GUARDED="$OUT/results/asr.jsonl"
+want_b && GUARDED="$GUARDED $OUT/results/scenarios.jsonl"
 if [ "${FORCE:-0}" != "1" ] && [ "$APPEND" != "1" ]; then
-  for f in "$OUT/results/asr.jsonl" "$OUT/results/scenarios.jsonl"; do
+  for f in $GUARDED; do
     if [ -s "$f" ]; then
       echo "refusing to truncate $f ($(wc -l < "$f" | tr -d ' ') rows)." >&2
       echo "  These are the committed results the reports quote. To run a new" >&2
@@ -173,9 +183,6 @@ track_b() {  # track_b <run|pre>
     done
   done
 }
-
-want_a() { [ "${TRACK:-both}" = "a" ] || [ "${TRACK:-both}" = "both" ]; }
-want_b() { [ "${TRACK:-both}" = "b" ] || [ "${TRACK:-both}" = "both" ]; }
 
 # Preflight the raw logs BEFORE the truncation below. FORCE=1 emptied
 # $OUT/results/*.jsonl and then never forwarded a log-replacement option, so

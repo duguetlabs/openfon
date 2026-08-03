@@ -166,7 +166,11 @@ def is_cost_table(head: list[str]) -> bool:
 # That is the point: coverage changes should be visible in the diff.
 RESULTS_FOR = {
     # report: (results subdirectory, table cells it must resolve)
-    "voice-engine-quality-2026-08.md": ("main-report", 192),
+    # 192 -> 217: +20 for the two before/after tables, whose headers name an
+    # arm *pair* so neither axis resolved and both were skipped whole; +5 for
+    # the English DNS empty-transcript column, written `24 %`, which the unit
+    # pattern could not read.
+    "voice-engine-quality-2026-08.md": ("main-report", 217),
     # 61 -> 62: the `gpt-realtime-2 / 2.1` recogniser row states one figure for
     # two arms and was compared against one of them. Both arms are a claim, so
     # both are counted.
@@ -229,7 +233,15 @@ def missing_arm(doc: str, arm: str, summary: dict) -> str:
 # know is a blind spot. `~15` made a whole cost line uncheckable *and* silent,
 # and `1.0 dB` hid an unresolved arm row — the same non-match invisibility as the
 # compound row and the grouped column, in one more dimension.
-UNITS = re.compile(r"\b(ms|db|s|min|%)\b|[$,]|/min")
+#
+# `%` was inside the word-boundary group, and `%` is not a word character — so
+# `\b%\b` never matches after a space and `parse_number("24 %")` returned None.
+# The English DNS empty-transcript column is written that way, so its five
+# figures were skipped in silence and the 24 % rate backing "never enable Azure
+# noise suppression" could be edited to 99 % with the run staying green. Same
+# non-match invisibility as `~15` and `1.0 dB`, in one more dimension: a unit
+# the parser does not know is a cell it does not check.
+UNITS = re.compile(r"\b(ms|db|s|min)\b|%|[$,]|/min")
 
 
 def parse_number(cell: str) -> float | None:
@@ -1163,7 +1175,8 @@ def main() -> int:
         p, n = check_tables(md, doc, summary, per_run, seed2, scored)
         problems += p
         for fn in (check_wer_tables, check_snr50_table,
-                   check_recogniser_table, check_dns_tables_wrapper):
+                   check_recogniser_table, check_delta_tables,
+                   check_dns_tables_wrapper):
             p2, n2 = fn(md, doc, results, summary)
             problems += p2
             n += n2
@@ -1259,6 +1272,90 @@ DNS_LEGS = {
 DNS_GERMAN_ROWS = {"clean": "dns_probe_de_clean.jsonl",
                    "cafe 10 db": "dns_probe_de_cafe_snr10.jsonl",
                    "cafe 5 db": "dns_probe_de_cafe_snr5.jsonl"}
+
+
+# Before/after tables, keyed by the transition their header names. The header
+# describes a *pair* of arms rather than naming either, so neither axis resolved
+# and `check_tables` skipped the whole table — six rows in the merged report,
+# including the strict-success figure the VAD-control argument rests on, which
+# could be set to 0.999 with the run staying green and its coverage unchanged.
+# The arm order is (before, after), matching the arrow.
+DELTA_TABLES = {
+    "server → semantic vad, gpt-4.1-mini on voice live":
+        ("vl-gpt41mini", "vl-gpt41mini-semvad"),
+    "gpt-4.1-mini → gpt-realtime-2, voice live, semantic vad":
+        ("vl-gpt41mini-semvad", "vl-native-brain"),
+}
+
+
+def check_delta_tables(md: str, doc: str, results: Path,
+                       summary: dict) -> tuple[list[str], int]:
+    """`0.333 → 0.259 (−0.074)` against both arms of the declared pair.
+
+    Both endpoints are checked, not the difference: the delta is arithmetic on
+    two claims, so verifying it would only prove the subtraction. And an
+    unmapped delta table is reported rather than skipped — being unable to name
+    the arms is exactly the state in which a table goes unchecked.
+    """
+    problems: list[str] = []
+    checked = 0
+    for tbl in tables(md):
+        head = [norm_label(c) for c in tbl[0]] if tbl else []
+        if len(head) < 2 or "→" not in head[0] or head[1] != "change":
+            continue
+        pair = DELTA_TABLES.get(head[0])
+        if pair is None:
+            problems.append(f"{doc}: delta table {tbl[0][0]!r} names no arm "
+                            "pair; add it to DELTA_TABLES")
+            continue
+        if absent := [a for a in pair if a not in summary]:
+            for a in absent:
+                if (msg := missing_arm(doc, a, summary)) not in problems:
+                    problems.append(msg)
+            continue
+        for row in tbl[1:]:
+            if len(row) < 2:
+                continue
+            lab = norm_label(row[0])
+            fields = METRIC_FIELDS.get(lab)
+            if fields is None:
+                if "→" in row[1] or looks_numeric(row[1]):
+                    problems.append(
+                        f"{doc}: delta table row {row[0]!r} states figures but "
+                        "resolves to no summary.csv field. Add it to "
+                        "METRIC_FIELDS.")
+                continue
+            body = row[1].split("(")[0]      # drop the stated difference
+            segs = body.split("/") if len(fields) == 2 else [body]
+            if len(segs) != len(fields):
+                problems.append(f"{doc}: delta cell {row[1]!r} does not state "
+                                f"{len(fields)} value pair(s) for {lab!r}")
+                continue
+            for field, seg in zip(fields, segs):
+                halves = seg.split("→")
+                if len(halves) != 2:
+                    problems.append(f"{doc}: delta cell {seg.strip()!r} "
+                                    f"({lab}) is not an 'a → b' pair")
+                    continue
+                for arm, half in zip(pair, halves):
+                    parsed = parse_cell(half.strip(), 1)
+                    if parsed is None:
+                        problems.append(
+                            f"{doc}: delta cell {half.strip()!r} ({arm}/{field}) "
+                            "is not a figure this checker can read")
+                        continue
+                    got, exact = parsed
+                    want = parse_number(summary[arm].get(field, ""))
+                    checked += 1
+                    if want is None:
+                        problems.append(
+                            f"{doc}: {arm}/{field} — summary.csv holds "
+                            f"{summary[arm].get(field)!r}, not a number")
+                    elif abs(got[0] - want) > (1e-9 if exact else 0.0006):
+                        problems.append(
+                            f"{doc}: delta table {lab} for {arm} — document "
+                            f"says {got[0]:g}, summary.csv says {want:g}")
+    return problems, checked
 
 
 def check_dns_tables_wrapper(md: str, doc: str, results: Path,

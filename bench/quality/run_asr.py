@@ -278,6 +278,17 @@ async def main() -> None:
             sys.exit(f"{mpath} lists {len(manifest)} clip(s) but --n is {a.n}. "
                      "A short cell is refused by the scorer, so this run would "
                      "be billed and then rejected")
+        ids = [c["id"] for c in clips]
+        if len(set(ids)) != len(ids):
+            # score_asr.py rejects a duplicated clip id unconditionally — it is
+            # an identity violation, not a coverage gap, so --allow-incomplete
+            # cannot excuse it. Left to the scorer, that refusal arrives after
+            # the whole cell has been paid for and, under FORCE=1, after the
+            # results it replaces are gone.
+            dupes = sorted({i for i in ids if ids.count(i) > 1})
+            sys.exit(f"{mpath} lists {dupes[:5]} more than once in its first "
+                     f"{a.n} entries. Duplicate clip ids double-weight the WER "
+                     "and the scorer refuses them outright")
         if absent := [c["path"] for c in clips if not Path(c["path"]).exists()]:
             # The manifest naming a wav does not make it present, and ffmpeg
             # discovers that mid-run. "Validated" has to mean the inputs were

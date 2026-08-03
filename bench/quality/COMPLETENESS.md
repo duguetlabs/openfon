@@ -40,9 +40,24 @@ plausible-looking.
 **The parser's non-matches were invisible in one more dimension each round.**
 Rows first (the compound `TTFA p50 / p95`), then columns (the grouped headline
 labels), then arm labels on both axes, then number *formats* — `~15` made a cost
-line uncheckable and silent, `1.0 dB` hid an unresolved arm row. Each fix was
-right and each left the next dimension open, because "unrecognised" was being
-enumerated rather than defined.
+line uncheckable and silent, `1.0 dB` hid an unresolved arm row. Then whole
+*tables*: the two before/after tables, whose header names an arm **pair**
+("server → semantic VAD, …") rather than either arm, so neither axis resolved
+and `check_tables` skipped them entirely — twenty figures, including the strict
+success value the VAD-control argument rests on. And one more number format,
+`24 %`, because `%` sat inside a `\b…\b` group and `%` is not a word character,
+which silently dropped the five English DNS percentages carrying the
+noise-suppression recommendation. Each fix was right and each left the next
+dimension open, because "unrecognised" was being enumerated rather than defined.
+
+Six rounds of this, so state the generalisation rather than the list: **the
+checker only sees a figure if a table shape it already knows resolves both an
+arm and a metric for it.** Every gap so far has been a new way for one of those
+to come out empty, and the coverage count cannot see any of them — an
+unresolved cell is not counted, so the declared total still matches. The count
+proves nothing about what was skipped, only about what was found; the mutation
+sweep is the only thing that has ever found these, and it should be run against
+every table a report adds.
 
 The cheapest way to find the next one is not to read the parser: **change a
 number and see whether anything complains.** `test_every_committed_figure_is_
@@ -219,7 +234,7 @@ the intent rather than the behaviour.
 | 2a | `run_asr.py` `main()` | did every condition produce results | retries not exhausted for any condition; **exits non-zero** if any were | nothing known. Exiting zero was the bug: a full cell of error rows has every expected clip id, so the scorer scored an outage as 100% WER. Paired with #11's all-error guard. |
 | 2 | `run_asr.py` `transcribe_batch()` | is this session still coherent | each clip gets `input_audio_buffer.committed`; a timeout **raises** `CommitDesync` rather than continuing | nothing known. Continuing was the bug: a late commit was consumed as the next clip's, cascading wrong hypotheses. |
 | 16 | `engines.open_log`, `engines.preflight_logs` | may this raw log be replaced | the target is absent or empty, unless `--force-logs`. `preflight_logs` asks the same question of **every** log an invocation will write, before the first one is opened, and exits `LOG_COLLISION_EXIT` (97) so a caller can tell a collision from a preflight that could not run | nothing known. Nothing guarded `logs/` at all: the runners open with mode `"w"` before doing any work and `--logdir` defaults to the committed directory, so a stray invocation from `bench/quality` empties a log and a subsequent failure leaves it empty. That happened — `sc-vl-gpt41mini-book-de-01-t1.jsonl` was zeroed while *verifying a test*, and the run became unre-scorable while its result still claimed an `end_call`. Guarding one file at the moment it is opened was the next bug: see "destroy-then-recreate" below. |
-| 3 | `run_all.sh` | did the matrix complete | every runner invocation's exit code; collects failures and **exits non-zero**. Also **refuses to start** if `$OUT/results/*.jsonl` are non-empty, unless `APPEND=1` (adds arms, destroys nothing) or `FORCE=1` (replaces); and walks the whole matrix once with `--preflight-logs` **before** any truncation, so a raw-log collision stops the run while the results it would replace still exist | a runner that exits 0 having swallowed its errors — which is why #1 exists. The refusal was added after the README's own step 4 was found to destroy the committed study: `OUT` defaults to `$HERE`, so the documented invocation truncated the data both reports quote and replaced it with a smaller run under the old arm set. `FORCE=1` then reintroduced it from the other side — see below. |
+| 3 | `run_all.sh` | did the matrix complete | every runner invocation's exit code; collects failures and **exits non-zero**. Also **refuses to start** if the result file *this `TRACK` will truncate* is non-empty, unless `APPEND=1` (adds arms, destroys nothing) or `FORCE=1` (replaces); and walks the whole matrix once with `--preflight-logs` **before** any truncation, so a raw-log collision stops the run while the results it would replace still exist. The guard is scoped to the selected track because refusing over a file the run never touches teaches people to reach for `FORCE=1` | a runner that exits 0 having swallowed its errors — which is why #1 exists. The refusal was added after the README's own step 4 was found to destroy the committed study: `OUT` defaults to `$HERE`, so the documented invocation truncated the data both reports quote and replaced it with a smaller run under the old arm set. `FORCE=1` then reintroduced it from the other side — see below. |
 | 4 | `summarize.py` trial check | did every arm run everything | **set of trial ids** per `(arm, scenario)` equals `{1..k}`, no duplicates, no extras | nothing known. Counting rows was the bug: three copies of trial 1 satisfied `--trials 3`. Runners append to JSONL, so re-runs duplicate rather than replace. |
 | 5 | `summarize.py` judge check | was every run judged | a verdict row exists for every `(arm, trial, scenario)`; empty `--judge` file is an **error**, not "no judge" | a judge that returns verdicts for the wrong candidates — blocked in `parse_verdicts` by id membership. |
 | 5b | `summarize.py` scenario universe | which scenarios should exist | the **fixture's** scored scenario ids, against the ids present; rejects both gaps and rogues | nothing known. Inferring the set from the results was the bug, and the only one the per-scenario trial checks could not see: they verify trials *within* a scenario, this loses the scenario. |
