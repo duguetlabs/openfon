@@ -442,21 +442,33 @@ def available(ev: Evidence, subjects: list[str], *, any_pair: bool = False) -> s
 
 
 def check_manual_count(ev: Evidence, cell: str, subjects: list[str]) -> str:
-    """`k/n` and `k/n — p%`: k is the hand count, n and p are not."""
-    m = MANUAL_COUNT.search(cell)
-    if not m:
+    """`k/n` and `k/n — p%`: k is the hand count, n and p are not.
+
+    Every figure in the cell has to belong to one of those forms. A number
+    beside the count would otherwise ride along unchecked, which is the same
+    "wider than the claim" mistake that put the whole table on the allowlist.
+    """
+    matches = list(MANUAL_COUNT.finditer(cell))
+    if not matches:
         return f"expected a `k/n` count, got {cell.strip()!r}"
-    k, n = int(m.group(1)), int(m.group(2))
-    if k > n:
-        return f"{k}/{n}: numerator exceeds denominator"
-    for a in subjects:
-        if ev.n_ok(a) != n:
-            return (f"{k}/{n}: denominator is {ev.n_ok(a)} usable turns for "
-                    f"`{a}` in {','.join(ev.tags)}")
-    if m.group(3) is not None:
-        want = f"{100.0 * k / n:.1f}"
-        if m.group(3) != want:
-            return f"{m.group(3)}% is not {k}/{n} ({want}%)"
+    accounted: set[str] = set()
+    for m in matches:
+        k, n = int(m.group(1)), int(m.group(2))
+        accounted |= {m.group(1), m.group(2)}
+        if k > n:
+            return f"{k}/{n}: numerator exceeds denominator"
+        for a in subjects:
+            if ev.n_ok(a) != n:
+                return (f"{k}/{n}: denominator is {ev.n_ok(a)} usable turns for "
+                        f"`{a}` in {','.join(ev.tags)}")
+        if m.group(3) is not None:
+            accounted.add(m.group(3))
+            want = f"{100.0 * k / n:.1f}"
+            if m.group(3) != want:
+                return f"{m.group(3)}% is not {k}/{n} ({want}%)"
+    extra = {f.lstrip("+") for f in figures("| " + cell)} - accounted
+    if extra:
+        return f"figures beside the hand count, unchecked: {sorted(extra)}"
     return ""
 
 
