@@ -219,12 +219,13 @@ and counting it as a clean non-split would manufacture significance out of failu
 Tables show raw and adjusted p side by side, so a demoted result stays visible instead of
 disappearing.
 
-**A third guard, added after a median hid a tail for the third time — and then narrowed.** Every paired table
-carries the **p90 of the paired differences**, and a comparison whose p90 is both above
-`TAIL_FLOOR_MS` and more than 5× its median is reported as *"median X but p90 Y — bimodal,
-judge on the tail"* rather than by its median alone. The case that forced this: OpenAI's
-semantic VAD costs ~100 ms on four turns in five and ~3.5 s on the fifth, and a paired
-median of +106 ms was published as "no detectable difference".
+**A third guard, added after a median hid a tail for the third time — and then narrowed.**
+Every paired table carries the **p90 of the paired differences**, and a comparison whose
+p90 is both above `TAIL_FLOOR_MS` and more than 5× its median is reported as
+*"median X, p90 Y — median unrepresentative, judge on the tail"* rather than by its median
+alone (`PairedResult.tail_unrepresented`). The case that forced this: OpenAI's semantic
+VAD costs ~100 ms on four turns in five and ~3.5 s on the fifth, and a paired median of
++106 ms was published as "no detectable difference".
 
 The verdict **describes both numbers and diagnoses nothing**. An earlier version said
 "bimodal", which two quantiles cannot establish — a broad symmetric spread with median 0
