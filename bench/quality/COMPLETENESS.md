@@ -102,6 +102,21 @@ anything that fails visibly, or only under a debug flag, gets written down.**
 - **Judge non-determinism** is measured (two seeds, reported in the report) but
   not gated — a single seed's verdict is accepted.
 
+## Running this without the author's cloud setup
+
+The scoring path — everything `bench-scoring` exercises — must import and run
+with **no Azure credentials and no `az` on PATH**. That is what a CI runner
+looks like, and what anyone cloning this repo looks like. A test asserting on
+the transport timeout policy once reached `connect_kwargs`, which resolves the
+Azure key eagerly by shelling out, so inspecting a constant required a cloud
+login; `transport_kwargs()` exists to separate the two. Verify with:
+
+    env -u AZURE_AI_KEY PATH=/usr/bin:/bin python -m unittest discover \
+        -s bench/quality -p 'test_*.py'
+
+Only the runners and probes may need credentials. Nothing that computes or
+checks a number may.
+
 ## Adding a check
 
 State it in the table above *before* writing it, in the form "compares X against

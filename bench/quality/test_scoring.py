@@ -1150,12 +1150,28 @@ class TestRederiveIsDedupeOnly(unittest.TestCase):
 class TestHangsAreBounded(unittest.TestCase):
     """Every wait in the runners has a bound. Two hangs found by two routes."""
 
-    def test_connect_kwargs_bounds_the_handshake_and_keepalive(self):
+    def test_transport_bounds_are_set(self):
         import engines
-        kw = engines.connect_kwargs(engines.ARMS["vl-gpt41mini"])
+        kw = engines.transport_kwargs()
         for k in ("open_timeout", "ping_interval", "ping_timeout"):
             with self.subTest(kw=k):
-                self.assertIsNotNone(kw.get(k))
+                self.assertIsInstance(kw.get(k), (int, float))
+                self.assertGreater(kw[k], 0)
+
+    def test_inspecting_transport_bounds_needs_no_credentials(self):
+        """The timeout policy is a property of the harness, not of whoever is
+        logged in. Run in a subprocess with no Azure key and no `az` on PATH —
+        which is what a CI runner looks like, and is how this was caught."""
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("AZURE_AI_KEY", "PATH")}
+        env["PATH"] = "/nonexistent"
+        r = subprocess.run(
+            [sys.executable, "-c",
+             "import sys; sys.path.insert(0, %r); import engines; "
+             "print(sorted(engines.transport_kwargs()))" % str(HERE)],
+            capture_output=True, text=True, env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("open_timeout", r.stdout)
 
     def test_first_receive_is_bounded_not_open_ended(self):
         """`open_timeout` covers the handshake only, not the first message."""

@@ -313,12 +313,23 @@ PING_INTERVAL_S = 20
 PING_TIMEOUT_S = 20
 
 
-def connect_kwargs(arm: Arm) -> dict[str, Any]:
-    return {"additional_headers": {"api-key": azure_key()},
-            "max_size": 32 * 1024 * 1024,
+def transport_kwargs() -> dict[str, Any]:
+    """Transport bounds only — deliberately free of credentials.
+
+    Split from `connect_kwargs` because that resolves the Azure key eagerly by
+    shelling out to `az`, so merely *inspecting* the timeout policy required a
+    cloud login. That failed on a CI runner and would fail for anyone cloning
+    the repo without this Azure setup. The timeout policy is a property of the
+    harness, not of whoever is authenticated.
+    """
+    return {"max_size": 32 * 1024 * 1024,
             "open_timeout": CONNECT_TIMEOUT_S,
             "ping_interval": PING_INTERVAL_S,
             "ping_timeout": PING_TIMEOUT_S}
+
+
+def connect_kwargs(arm: Arm) -> dict[str, Any]:
+    return {"additional_headers": {"api-key": azure_key()}, **transport_kwargs()}
 
 
 def load_prompt() -> dict[str, Any]:
