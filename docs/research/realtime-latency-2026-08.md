@@ -7,6 +7,11 @@ the first is reported alongside as a replication. Harness and full method in
 
 ---
 
+> **Follow-up (2026-08-03):** `gpt-realtime-2.1` and `2.1-mini` are now on the gateway and
+> are measured in [realtime-21-2026-08.md](realtime-21-2026-08.md). Both are faster than
+> gpt-realtime-2 — the mini tier by a full second — and both still split utterances under
+> server VAD exactly as gpt-realtime-2 does.
+
 ## Answer
 
 **No. Routing through the Kataleptic gateway does not cost measurable latency, for
