@@ -822,6 +822,15 @@ describe('session echo read-back', () => {
     expect(updatesSent(up)).toBe(1);
   });
 
+  it('does not send the HD tier a vocabulary prompt it cannot apply', async () => {
+    // Azure answers `prompt is not yet supported for azure-speech`, and the
+    // latch above means it could not take effect even if it did. Sending it
+    // would buy one advisory line per HD call about a field nobody can apply.
+    const { sent } = await started('kataleptic-realtime-hd');
+    expect(sent.audio?.input?.transcription).toBeTruthy();
+    expect(sent.audio?.input?.transcription?.prompt).toBeUndefined();
+  });
+
   it('reports a divergence outside the enforced subtrees without re-sending', async () => {
     // The read-back covers the whole payload now, not a list of subtrees
     // somebody remembered to add. Measured first: on all five tiers nothing

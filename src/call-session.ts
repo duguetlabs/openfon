@@ -752,7 +752,15 @@ export class CallSession implements DurableObject {
               // intact, where Azure rejects the **entire** session.update —
               // instructions, voice and tools with it.
               model: this.realtimeModel.startsWith('gpt-realtime') ? 'whisper-1' : this.env.DEFAULT_STT_MODEL,
-              prompt: this.biz && this.settings ? sttVocab(this.biz, this.settings) : undefined,
+              // Not sent on HD, where it cannot take effect: Azure Voice Live
+              // answers `prompt is not yet supported for azure-speech`, and its
+              // transcription config is latched by the first `session.update`
+              // of the session, which the gateway spends on its own default.
+              // Sending it anyway would only produce an advisory line on every
+              // HD call about a field nobody can apply. If Kataleptic stops
+              // spending that first update, this can go back to unconditional —
+              // and `phrase_list` becomes the supported spelling of it there.
+              ...(this.realtimeModel === 'kataleptic-realtime-hd' ? {} : { prompt: this.biz && this.settings ? sttVocab(this.biz, this.settings) : undefined }),
               // On cascade tiers this is a greeting seed + STT accuracy hint,
               // not a pin: per-utterance detection overrides it once the caller
               // speaks (verified 2026-06-13 after Kataleptic's fix).
