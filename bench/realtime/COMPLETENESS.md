@@ -117,6 +117,43 @@ checked" was a claim the test had never tested. It iterates every figure now.
 That is the same shape as the checker's own history, in the checker's own test
 suite: the mechanism that verifies the mechanism needed verifying.
 
+### The verifier is a boundary, and the claim walks out of it
+
+Four rounds went into making figures inside two markdown files verifiable. The
+whole time, the same figures were being restated in places CI never reads:
+
+- the **PR title** — which advertised "much faster" after the speed claim had
+  become *not robust*;
+- the **PR body** — which still carried a recommendation the review had
+  **reversed**, `semantic_vad` as a clean default, when the finding was that it
+  trades a silent re-segmentation for a 3.5 s tail;
+- **commit messages**, which state results as of the day they were written;
+- **this file**, and `README.md`, which quote figures to explain the checks.
+
+`check_report_tables.py` reads two documents. A conclusion lives in six places.
+
+That is not another turn of the same screw — **it is the screw in the wrong
+plank**. Every previous round narrowed *what* was checked inside the boundary;
+none asked how far the boundary reached. The correction that started this one
+had to be applied four separate times by hand: the table, the sentence the
+section leads with, the footnote three hundred lines below, and the PR title.
+The verifier caught exactly one of the four, which is what it was built to do
+and is not the same as catching the claim.
+
+The rule that follows is about *retraction*, not verification, because
+retraction is where this bites: **when a figure moves, list the surfaces the
+claim is written on before fixing any of them.** A verifier will tell you about
+the surfaces it parses. It cannot tell you about the ones it does not, and the
+places a decision-maker actually reads — a title, a summary, a recommendation —
+are disproportionately in the second group.
+
+Bringing them under the checker is possible and is not obviously worth it: a PR
+body is prose, and a checker that cries wolf on prose gets switched off (the
+same reason free-prose figures are unchecked in the reports). What is worth it
+is the habit. **A retraction is not self-applying** — that sentence was already
+in this file about a superseded table row, and it turned out to be true one
+level up, about the report, and one level up again, about the PR.
+
 ### The fifth turn happened in a *generalisation*, which is where they hide
 
 Not in this harness — in `src/call-session.ts`, whose session read-back was
