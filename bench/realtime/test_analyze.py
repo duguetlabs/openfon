@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from analyze import (ALPHA, MIN_EQUIVALENCE_N, PRACTICAL_MS,  # noqa: E402
+                     paired_table,
                      TAIL_FLOOR_MS, PairedResult, usable_for,
                      bootstrap_median_ci, compute_paired, describe,
                      holm, mcnemar_exact_p, paired, pct, sign_test_p,
@@ -673,3 +674,28 @@ class TestBimodalCostIsNotReportedAsNull(unittest.TestCase):
     def test_empty_diffs_do_not_crash(self):
         r = result(0, 1.0, 1.0, diffs=[])
         self.assertFalse(r.tail_severe)
+
+
+class TestPairedTableAlwaysCarriesTheTail(unittest.TestCase):
+    """The tail guard was added after a median hid a bimodal cost, then a newly
+    written table one section away omitted the p90 column — the rule was right
+    and the enforcement did not reach the newest content. Every generated
+    paired table carries it, so a hand-written one that does not is visibly
+    out of step with its own source."""
+
+    def _rows(self):
+        turns = []
+        for i in range(12):
+            turns.append(turn(i, "native-gateway", "en", ttfa_ms=1000 + i))
+            turns.append(turn(i, "native-direct", "en", ttfa_ms=1000))
+        res = compute_paired(turns, ["ttfa_ms"])
+        return paired_table(res["ttfa_ms"])
+
+    def test_header_declares_the_p90_column(self):
+        self.assertIn("p90", self._rows()[0])
+
+    def test_every_row_has_a_p90_cell(self):
+        header, _sep, *body = self._rows()
+        n = header.count("|")
+        for row in body:
+            self.assertEqual(row.count("|"), n, f"column count differs: {row}")
