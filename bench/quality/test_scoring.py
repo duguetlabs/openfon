@@ -1590,6 +1590,27 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("no runs", r.stderr + r.stdout)
 
+    def test_a_malformed_judge_arm_list_is_not_an_absent_one(self):
+        """`--arms ','` excluded every arm and blamed the data.
+
+        The guard read `if a.arms:`, so a truthy value parsing to an empty set
+        passed the unknown-arm check with nothing to reject, filtered every run
+        away, and exited with "judge produced no verdicts at all" — a message
+        about the runs, for a defect in the flag. `--arms ""` went the other
+        way and judged everything. Same empty-is-absent confusion already fixed
+        for `--only` and `CONDITIONS`.
+        """
+        for arms in (",", " , ", ""):
+            with self.subTest(arms=arms):
+                r = subprocess.run(
+                    [sys.executable, str(HERE / "judge.py"), "--runs",
+                     str(HERE / "results" / "scenarios.jsonl"),
+                     "--out", "/dev/null", "--arms", arms],
+                    capture_output=True, text=True, cwd=str(HERE),
+                    env={"PATH": "/usr/bin:/bin", "KATALEPTIC_KEY": "x"})
+                self.assertNotEqual(r.returncode, 0)
+                self.assertIn("names no arms", r.stderr + r.stdout)
+
     def test_the_documented_seed2_arms_match_the_committed_pass(self):
         """The seed-2 rerun must reproduce its own denominator.
 

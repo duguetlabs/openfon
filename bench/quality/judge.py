@@ -171,8 +171,18 @@ def main() -> None:
     kb = json.loads(Path(a.prompt).read_text())["system_prompt"]
     runs = [json.loads(l) for l in Path(a.runs).read_text().splitlines() if l.strip()]
 
-    if a.arms:
+    if a.arms is not None:
         want_arms = {s.strip() for s in a.arms.split(",") if s.strip()}
+        if not want_arms:
+            # `--arms ','` parsed to an empty set while the guard read `if
+            # a.arms:`, so the value was truthy, the unknown-arm check had
+            # nothing to reject, and every run was filtered out. The pass then
+            # died with "produced no verdicts at all" — a message about the
+            # data, for a defect in the flag. `--arms ""` went the other way
+            # and judged everything. Third instance of empty-is-absent in this
+            # harness: a malformed selection is not a missing one.
+            sys.exit(f"--arms {a.arms!r} names no arms. Omit the flag to judge "
+                     "every arm, or give a comma-separated list.")
         # Same rule as --only in run_scenarios.py: an arm that is not in the
         # data is a mistake, not a selection, and silently judging nothing is
         # the failure mode this harness keeps producing.
