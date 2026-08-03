@@ -115,9 +115,16 @@ const SERVER_VAD: TurnDetection = { type: 'server_vad', threshold: 0.7, prefix_p
 // update.
 type SessionConfig = Record<string, unknown>;
 
-// The evidence, so it does not get re-litigated from half of it — all in
-// docs/research/realtime-latency-2026-08.md § "Follow-up: is the splitting the
-// brain or the turn detector?" and its 2.1 addendum.
+// The evidence, so it does not get re-litigated from half of it, in two
+// documents — and which one holds what matters, because the counterintuitive
+// half is not in the one you would guess:
+//   * docs/research/realtime-latency-2026-08.md § "Follow-up: is the splitting
+//     the brain or the turn detector?" — the original gpt-realtime-2 result:
+//     10/10 splits under server VAD, 0/10 under semantic, and OpenAI's
+//     end-of-turn p90 of 4512 ms.
+//   * docs/research/realtime-21-2026-08.md — everything about 2.1 and
+//     2.1-mini: the 12/12 split counts, the bimodal paired distribution, the
+//     4442 ms end-of-turn p90, and the Voice Live + Azure semantic arms.
 //
 // **The defect.** `server_vad` splits a caller's utterance at a clause pause on
 // every gpt-realtime tier: 12/12 turns on 2, 2.1 and 2.1-mini alike, against
@@ -154,10 +161,12 @@ type SessionConfig = Record<string, unknown>;
 // that gets quoted.
 //
 // **The configuration that actually solves this exists and cannot be bought.**
-// Azure's semantic VAD has no tail at all — 731 ms p50, **742 ms p90**, IQR 31 —
-// and takes gpt-realtime to 0/12 splits. It is reachable only through Voice
+// Azure's semantic VAD has no tail at all — across all three of its arms,
+// end-of-turn p50 731-732 ms and p90 738-785 ms, with an IQR as low as 10 —
+// and it takes gpt-realtime to 0/12 splits. It is reachable only through Voice
 // Live, and Kataleptic exposes no tier pairing Voice Live with a gpt-realtime
 // brain. Ask for that tier; it makes this whole table a one-row change.
+// (docs/research/realtime-21-2026-08.md § "The proposed tier, measured".)
 //
 // So every gpt-realtime row below is a **deliberate choice between two known
 // defects**, not an untested default: inaudible clause-pause splitting under
@@ -199,14 +208,27 @@ const TURN_DETECTION_BY_TIER: Record<string, TurnDetection> = {
   // genuine rather than the config race: all 12 turns config_verified with
   // `semantic_vad` echoed back, 0 rejected.
   //
-  // Hypothesis, not a finding, and recorded because it points the same way as
-  // something that was measured: this tier answered with a deflection — "I
-  // can't see our live schedule from here" — on 2/20 replies under server VAD
-  // and 6/20 under semantic, where no other brain deflected at all. n=20 and a
-  // crude regex, so treat it as a smell. The quality run reached the same place
-  // independently and properly: 0.741 groundedness against 2.1's 0.926. Two
-  // weak signals agreeing is worth a line before anyone adopts this tier on its
-  // very attractive latency alone.
+  // Separate caution, hypothesis rather than finding, because this tier's
+  // latency is attractive enough to be adopted on that alone: it **deflects**.
+  // It answered "I can't see our live schedule from here" on 2/20 replies under
+  // server VAD and 6/20 under OpenAI semantic, where no other brain in that
+  // comparison deflected at all. n=20 and a crude regex, so it is a smell.
+  //
+  // Do not read it as mini-specific, though. On the Voice Live arms of the same
+  // study every *native* brain deflects at ~10% — 2.1-mini, 2.1 and
+  // gpt-realtime-2 alike — against 2.5% for the cascade the HD tier runs, so it
+  // tracks the brain type rather than this model id, and would follow us onto
+  // any native tier.
+  //
+  // And groundedness cannot settle it: "I can't see our live schedule" invents
+  // nothing, so it scores *well* on groundedness while being useless to the
+  // caller — the metric is structurally blind to exactly this failure, in the
+  // same way a median was blind to the semantic-VAD tail. Two brains scoring
+  // identically on it is not evidence they behave the same on a call. What
+  // would settle it is re-reading the quality run's own transcripts for the
+  // same gap; that is data already collected, not a new run.
+  // See docs/research/realtime-21-2026-08.md § "Two things 'strict upgrade'
+  // would flatten".
   'gpt-realtime-2.1-mini': SERVER_VAD,
   // Does not split (0/10), and semantic VAD measured *worse* on this brain
   // (strict success 0.333 -> 0.259, pass^3 0.222 -> 0.111, TTFA p95 +133 ms;
@@ -826,8 +848,13 @@ export class CallSession implements DurableObject {
   // Every tier accepts the tool. None of them reliably calls it: measured over
   // 33 goodbye turns per engine, the agent invoked `end_call` on 23-25 of them,
   // with no meaningful spread between engines — and on one scenario it fired
-  // 1 time in 15 after capturing every detail correctly
-  // (docs/research/voice-engine-quality-2026-08.md, Track B).
+  // 1 time in 15 after capturing every detail correctly.
+  //
+  // docs/research/voice-engine-quality-2026-08.md — Track B shows 17-19 of 27
+  // because it counts only the 9 scored scenarios; the 23-25/33 figure over all
+  // goodbye turns is in the scoring-defects section, under the `end_call`
+  // double-counting entry. Named because the two numbers look like a
+  // contradiction and are not.
   //
   // So the caller-farewell heuristic and the hangup safety net below are not
   // belt-and-braces. They are the primary mechanism on roughly a quarter of
