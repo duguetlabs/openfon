@@ -156,6 +156,11 @@ def main() -> None:
     ap.add_argument("--prompt", default="fixtures/riverside-prompt.json")
     ap.add_argument("--out", required=True)
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--arms", help="comma-separated arms to judge; default all. "
+                    "The committed seed-2 pass covers seven arms, not eight — "
+                    "without this the documented rerun judges 246 rows where "
+                    "judge_seed2.csv has 219, and cannot reproduce its own "
+                    "denominator.")
     a = ap.parse_args()
 
     api_key = os.environ.get("KATALEPTIC_KEY", "").strip()
@@ -165,6 +170,17 @@ def main() -> None:
     spec = json.loads(Path(a.scenarios).read_text())
     kb = json.loads(Path(a.prompt).read_text())["system_prompt"]
     runs = [json.loads(l) for l in Path(a.runs).read_text().splitlines() if l.strip()]
+
+    if a.arms:
+        want_arms = {s.strip() for s in a.arms.split(",") if s.strip()}
+        # Same rule as --only in run_scenarios.py: an arm that is not in the
+        # data is a mistake, not a selection, and silently judging nothing is
+        # the failure mode this harness keeps producing.
+        present = {r["arm"] for r in runs}
+        if unknown := sorted(want_arms - present):
+            sys.exit(f"--arms names arm(s) with no runs in {a.runs}: "
+                     f"{', '.join(unknown)}. Present: {', '.join(sorted(present))}")
+        runs = [r for r in runs if r["arm"] in want_arms]
 
     by_scenario: dict[str, list[dict]] = defaultdict(list)
     for r in runs:

@@ -18,6 +18,7 @@ import csv
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -1340,6 +1341,21 @@ class TestFixtureHygiene(unittest.TestCase):
 class TestTrackAGapsAreVisible(unittest.TestCase):
     """`complete` must be able to be 0, and the runner must not eat the data."""
 
+    def _workflow_commands(self) -> list[str]:
+        """The README's bash block, comments and blanks stripped.
+
+        Assertions about the workflow must read the commands, not the prose
+        describing them: the surrounding comments name every step in whatever
+        order reads best, so matching against the raw block tests the writing
+        rather than the procedure.
+        """
+        import re
+        block = re.search(r"```bash\n(.*?)```",
+                          (HERE / "README.md").read_text(), re.S)
+        self.assertIsNotNone(block, "no bash block in the README")
+        return [l for l in block.group(1).splitlines()
+                if l.strip() and not l.strip().startswith("#")]
+
     def test_absent_cells_are_emitted_with_complete_zero(self):
         """The scorer iterated only the groups that existed.
 
@@ -1446,21 +1462,91 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
         Checked as a shape rather than a line: no command after OUT appears may
         name `results/` without `$OUT`.
         """
-        import re
-        block = re.search(r"```bash\n(.*?)```", (HERE / "README.md").read_text(),
-                          re.S)
-        self.assertIsNotNone(block, "no bash block in the README")
-        lines = block.group(1).splitlines()
+        lines = self._workflow_commands()
         out_at = next((i for i, l in enumerate(lines) if "OUT=" in l), None)
         self.assertIsNotNone(out_at, "the workflow never sets OUT")
         offenders = [
             l for l in lines[out_at:]
-            if not l.strip().startswith("#") and "results/" in l
-            and "$OUT/results/" not in l and "OUT=" not in l
+            if "results/" in l and "$OUT/results/" not in l
+            and "$R/" not in l and "OUT=" not in l
         ]
         self.assertEqual(offenders, [],
                          "these commands resolve against the committed "
                          "results/ directory")
+
+    def test_an_unknown_scenario_id_is_refused(self):
+        """A typo in --only used to act as a filter matching nothing.
+
+        A mixed list quietly dropped that scenario; a wholly wrong list produced
+        no runs at all while run_all.sh reported success on an empty matrix. The
+        fixture is already the declared scenario universe, so an id not in it is
+        a mistake, not a selection.
+        """
+        for only in ("book-de-01,typo-01", "nope-01"):
+            with self.subTest(only=only):
+                r = subprocess.run(
+                    [sys.executable, str(HERE / "run_scenarios.py"),
+                     "--arm", "vl-gpt41mini", "--audio", "/x",
+                     "--out", "/dev/null", "--only", only],
+                    capture_output=True, text=True, cwd=str(HERE),
+                    env={"PATH": "/usr/bin:/bin"})
+                self.assertNotEqual(r.returncode, 0, "an unknown id must refuse")
+                self.assertIn("not in", r.stderr + r.stdout)
+
+    def test_an_unknown_judge_arm_is_refused(self):
+        r = subprocess.run(
+            [sys.executable, str(HERE / "judge.py"), "--runs",
+             str(HERE / "results" / "scenarios.jsonl"), "--out", "/dev/null",
+             "--arms", "no-such-arm"],
+            capture_output=True, text=True, cwd=str(HERE),
+            env={"PATH": "/usr/bin:/bin", "KATALEPTIC_KEY": "x"})
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("no runs", r.stderr + r.stdout)
+
+    def test_the_documented_seed2_arms_match_the_committed_pass(self):
+        """The seed-2 rerun must reproduce its own denominator.
+
+        judge.py had no arm filter, so the documented command judged all 246
+        rows while judge_seed2.csv holds 219 across seven arms — a reader
+        following the instructions got a different denominator and then failed
+        check_report.py, the checker correctly rejecting a run the README told
+        them to do.
+        """
+        cmds = self._workflow_commands()
+        m = re.search(r'"((?:[\w-]+,)+[\w-]+)"', "\n".join(
+            l for l in cmds if l.startswith("score ")))
+        self.assertIsNotNone(m, "the README documents no seed-2 arm list")
+        documented = set(m.group(1).split(","))
+        with (HERE / "results" / "judge_seed2.csv").open() as f:
+            actual = {r["arm"] for r in csv.DictReader(f)}
+        self.assertEqual(documented, actual,
+                         "the documented seed-2 arms do not match the arms in "
+                         "judge_seed2.csv")
+
+    def test_the_workflow_snapshots_the_base_pass_before_appending(self):
+        """Step 7 must be runnable on a fresh $OUT.
+
+        check_report.py requires results/main-report/ for the five-arm report,
+        and a fresh run only creates it if the base pass is scored and
+        snapshotted before the extension is appended. Scoring only at the end
+        left the documented verification step unable to succeed — the step added
+        so a reader could confirm the numbers was the one that could not run.
+        """
+        cmds = self._workflow_commands()
+
+        def first(token):
+            hits = [i for i, l in enumerate(cmds) if token in l]
+            self.assertTrue(hits, f"no workflow command contains {token!r}")
+            return hits[0]
+
+        # Commands only — the prose around them mentions all three in a
+        # different order, which is what made the first version of this test
+        # fail against a correct workflow.
+        self.assertLess(first("main-report"), first("APPEND=1"),
+                        "the base pass is snapshotted after the extension is "
+                        "appended, so main-report/ would hold the combined run")
+        self.assertLess(first("APPEND=1"), first("check_report.py"),
+                        "the check runs before the extension is appended")
 
     def test_run_all_refuses_to_truncate_committed_results(self):
         """Following the README must not destroy the data the reports quote.

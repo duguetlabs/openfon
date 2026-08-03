@@ -37,6 +37,32 @@ this report a problem or fall through?** A `KeyError` is that failure at its
 loudest, a bare `continue` at its quietest, and an `any()` at its most
 plausible-looking.
 
+**A fourth, about documentation rather than code: instructions get verified
+against the repository as it stands, not against a fresh run.** Six findings on
+this harness share it, and every one passes when `results/` is already populated
+and fails when it is not — which is the only state a new reader is ever in.
+
+- Step 5 used bare relative paths, which resolve to the committed `results/`
+  because a `cd` earlier in the workflow is still in effect. Reading it from
+  this checkout, it works; from a fresh `$OUT`, it scores the wrong data and
+  overwrites the right data.
+- Scoring happened only after the extension was appended, so a fresh run never
+  created `results/main-report/` and the documented `check_report.py` step —
+  added so a reader could confirm the numbers — could not succeed at all.
+- The seed-2 judge rerun had no arm filter, so it judged 246 rows where the
+  committed pass has 219, and the reader then failed the checker for following
+  the instructions.
+- `CONDITIONS` was not overrideable; `--only` was never passed; an unknown
+  `--only` id ran nothing and exited 0.
+
+The other diagnostics ask where an expectation comes from. This one asks **what
+state is the reader in when they follow this, and have I ever been in it?** The
+answer here was "no" six times. The countermeasure is not more careful prose: it
+is asserting the instructions against the data — the tests now check that the
+documented arm, scenario and condition lists *equal* what the committed results
+contain, and that the workflow's steps are ordered so its own verification step
+can run.
+
 **A third form, and the one that keeps recurring after a fix: a tightening can
 stop one step short of the property it was reaching for.** Three found in a
 single round, each a *narrower* version of a check already tightened once:

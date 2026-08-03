@@ -95,12 +95,34 @@ OUT=$OUT DATA=$DATA PY=../../.venv/bin/python ./run_all.sh
 #    Its defaults reproduce the MERGED report only: three ASR arms x 2 langs x
 #    8 conditions x 25 clips = 1200 ASR rows, and five scenario arms x 11
 #    scenarios x 3 trials = 165 scenario runs.
-#
-#    The addendum's arms are an extension with a deliberately smaller matrix:
-#    six of the eight conditions, and only the nine *scored* scenarios (the two
-#    barge-in ones are excluded from scoring, so they were not re-run).
-#    APPEND=1 adds to the run above instead of truncating it, so the whole
-#    committed matrix lands in one directory.
+
+# 5. Score the base pass, and snapshot it as the merged report's own results.
+#    Do this BEFORE appending the extension. The 2.1 run re-judged every arm, so
+#    the merged report's figures are not reproducible from the combined pass —
+#    which is why check_report.py looks for results/main-report/. Skip this and
+#    step 7 cannot verify the five-arm report at all.
+score() {  # score <results-dir> [judge-arms]
+  local R="$1" ARMS="${2:-}"
+  python score_asr.py   --hyp $R/asr.jsonl --expect-clips 25 --allow-incomplete \
+                        --out $R/asr_scores.csv
+  python score_slots.py --runs $R/scenarios.jsonl --out $R/slots.csv
+  KATALEPTIC_KEY=... python judge.py --runs $R/scenarios.jsonl \
+                        --out $R/judge.csv --seed 1
+  KATALEPTIC_KEY=... python judge.py --runs $R/scenarios.jsonl \
+                        --out $R/judge_seed2.csv --seed 2 ${ARMS:+--arms "$ARMS"}
+  python summarize.py --slots $R/slots.csv --judge $R/judge.csv \
+    --scenarios fixtures/scenarios.json --trials 3 --out $R/summary.csv
+}
+score $OUT/results
+mkdir -p $OUT/results/main-report
+cp $OUT/results/{summary,summary_per_run,slots,judge,judge_seed2}.csv \
+   $OUT/results/asr_scores{,_summary}.csv $OUT/results/main-report/
+
+# 6. Append the addendum's arms, then re-score the combined matrix.
+#    A deliberately smaller matrix: six of the eight conditions, and only the
+#    nine *scored* scenarios (the two barge-in ones are excluded from scoring,
+#    so they were not re-run). APPEND=1 adds to the run above instead of
+#    truncating it.
 OUT=$OUT DATA=$DATA PY=../../.venv/bin/python TRACK=a APPEND=1 \
   ASR_ARMS="native-gpt-realtime-21 native-gpt-realtime-21-mini" \
   CONDITIONS="clean,cafe_snr10,cafe_snr5,cafe_snr0,tel,tel_cafe_snr10" \
@@ -112,25 +134,17 @@ OUT=$OUT DATA=$DATA PY=../../.venv/bin/python TRACK=b APPEND=1 \
   ./run_all.sh                                            # +81 scenario runs
 
 #    Totals: 1200+600 = 1800 ASR rows, 165+81 = 246 scenario runs, which is
-#    what results/ holds today.
+#    what results/ holds today. The matrix is asymmetric by design, so
+#    score_asr.py needs --allow-incomplete; absent cells are emitted with n=0
+#    and complete=0 rather than omitted, so the gaps stay visible in the CSV.
+#
+#    Seed 2 covers SEVEN arms: the second judge pass predates vl-native-brain-21
+#    and the addendum's reliability figures are computed over the 219 rows the
+#    two passes share. Without --arms it judges all 246 and cannot reproduce
+#    its own denominator.
+score $OUT/results "native-gpt-realtime-2,native-gpt-realtime-21,native-gpt-realtime-21-mini,vl-gpt41mini,vl-gpt41mini-dns,vl-gpt41mini-semvad,vl-native-brain"
 
-# 5. Score.
-# The matrix is asymmetric by design: the two 2.1 ASR arms skip cafe_snr20 and
-# tel_loss3, so eight (arm, condition) cells are absent. --allow-incomplete
-# accepts that; without it the run aborts and writes nothing. Absent cells are
-# emitted with n=0 and complete=0 rather than omitted, so the gaps are visible
-# in the CSV instead of showing up as a complete matrix with fewer rows.
-python score_asr.py   --hyp $OUT/results/asr.jsonl --expect-clips 25 --allow-incomplete \
-                      --out $OUT/results/asr_scores.csv
-python score_slots.py --runs $OUT/results/scenarios.jsonl --out $OUT/results/slots.csv
-KATALEPTIC_KEY=... python judge.py --runs $OUT/results/scenarios.jsonl \
-                      --out $OUT/results/judge.csv --seed 1
-KATALEPTIC_KEY=... python judge.py --runs $OUT/results/scenarios.jsonl \
-                      --out $OUT/results/judge_seed2.csv --seed 2
-python summarize.py --slots $OUT/results/slots.csv --judge $OUT/results/judge.csv \
-  --scenarios fixtures/scenarios.json --trials 3 --out $OUT/results/summary.csv
-
-# 6. Check the reports against the run (uses committed results/ by default).
+# 7. Check both reports against the run.
 python check_report.py --results $OUT/results
 
 # What every completeness check compares, and how it can be fooled:
