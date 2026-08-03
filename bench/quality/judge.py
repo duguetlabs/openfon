@@ -196,6 +196,28 @@ def main() -> None:
     for r in runs:
         by_scenario[r["scenario"]].append(r)
 
+    # Refuse a selection that cannot cover the fixture BEFORE spending on the
+    # part that can. A scenario with no candidates is still a failure — the
+    # loop below records it and the exit stays non-zero — but discovering it
+    # there means every other scenario has already been judged and billed, and
+    # the run then exits non-zero anyway. The commonest way to hit this is
+    # `--arms` naming only a 2.1 arm: those arms deliberately skipped the two
+    # unscored barge-in scenarios, so nine paid passes precede a failure that
+    # was knowable from the inputs.
+    #
+    # This narrows nothing: the expectation is still every scenario in the
+    # fixture. It only moves the moment of refusal to before the money.
+    if uncovered := [sc["id"] for sc in spec["scenarios"]
+                     if not by_scenario.get(sc["id"])]:
+        sys.exit(
+            f"{len(uncovered)} fixture scenario(s) have no runs to judge: "
+            f"{', '.join(uncovered)}. "
+            + (f"The --arms selection ({a.arms}) excludes every run of them; "
+               "widen it, or judge without a filter."
+               if a.arms is not None else
+               f"{a.runs} is missing those runs entirely.")
+            + " Refusing before spending on the scenarios that are covered.")
+
     rows: list[dict] = []
     failures: list[str] = []
     for sc in spec["scenarios"]:

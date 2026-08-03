@@ -400,6 +400,21 @@ Two consequences are now permanent:
   to `results/main-report/`. A future study should write to its own directory and
   add a `RESULTS_FOR` entry rather than repeating this.
 
+**A refusal that is right but late is still a defect, because the money is
+already spent.** Five findings on this harness share the shape: the verdict was
+correct and the run had been billed before it arrived. A log collision on
+condition 5 (after four were paid for); an unknown arm or missing manifest
+found by the runner rather than the preflight; a short cell or duplicate clip
+id caught by the scorer; a `--arms` selection that cannot cover the fixture,
+which judged nine scenarios and *then* reported the two it could never have
+covered. Every one was knowable from the inputs before the first call.
+
+The rule: **if a failure is derivable from the arguments and the files on disk,
+derive it there.** Not because the late check is wrong — each of these fails
+safe, and none has ever produced a wrong published number — but because a check
+that costs money to run is one people learn to skip. None of these fixes
+loosened an expectation; each moved the same expectation earlier.
+
 ## Known limitations, documented rather than fixed
 
 The line: **anything that can silently contaminate a reported number gets fixed;
@@ -477,6 +492,16 @@ anything that fails visibly, or only under a debug flag, gets written down.**
   unit regardless of which step stalled. The third layer exists because the
   first two hangs arrived by routes nobody had predicted, so the next one is
   assumed rather than enumerated.
+- **`APPEND=1` does not check for unit collisions.** It is the one path that
+  neither truncates nor verifies: if `$OUT/results/*.jsonl` already holds rows
+  for an (arm, lang, condition) or (arm, scenario, trial) the run is about to
+  produce, both are appended and the scorers reject the duplicate — check #4 by
+  trial identity, check #11 by clip identity — *after* the calls are paid for.
+  It fails safe and no published number can come from it, but it is the last
+  known instance of the late-refusal shape above. Fixing it means the runners
+  reading `--out` during preflight, which needs a way to distinguish "these
+  rows are about to be truncated" from "these rows are staying", so it is
+  written down rather than done in passing.
 - **A mid-stream `ws.send()` failure can hang the run.** The mic task can die
   without setting the `last` event the turn is awaiting, so the run stops rather
   than erroring. This is operational, not a correctness defect: it halts a run

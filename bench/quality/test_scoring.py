@@ -1660,6 +1660,49 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
                 self.assertNotEqual(r.returncode, 0)
                 self.assertIn("names no arms", r.stderr + r.stdout)
 
+    def test_an_uncoverable_judge_selection_is_refused_before_spending(self):
+        """Codex, twice: nine paid passes preceded a knowable failure.
+
+        The 2.1 arms deliberately skipped the two unscored barge-in scenarios,
+        so `--arms native-gpt-realtime-21` leaves those with no candidates. The
+        loop judged the nine it could, recorded the two as failures and exited
+        non-zero — the right verdict, reached after the money. The expectation
+        is unchanged (still every scenario in the fixture); only the moment of
+        refusal moves.
+        """
+        r = subprocess.run(
+            [sys.executable, str(HERE / "judge.py"), "--runs",
+             str(HERE / "results" / "scenarios.jsonl"), "--out", "/dev/null",
+             "--arms", "native-gpt-realtime-21"],
+            capture_output=True, text=True, cwd=str(HERE),
+            env={"PATH": "/usr/bin:/bin", "KATALEPTIC_KEY": "x"})
+        self.assertNotEqual(r.returncode, 0)
+        out = r.stderr + r.stdout
+        self.assertIn("no runs to judge", out)
+        self.assertIn("bargein-en-01", out)
+        # The covered scenarios must not be mentioned at all: the old path
+        # attempted each one and logged it ("book-en-01: judge failed …"),
+        # which is the attempt this check exists to prevent. A key that cannot
+        # authenticate makes every attempt *fail*, so asserting on the failure
+        # text would pass either way — the discriminator is whether the request
+        # was made.
+        self.assertNotIn("book-en-01", out, "it attempted the covered "
+                                            "scenarios before refusing")
+
+        # The documented seed-2 selection covers the fixture and must get past
+        # the check — a guard that refuses everything would pass the assertions
+        # above for free.
+        r = subprocess.run(
+            [sys.executable, str(HERE / "judge.py"), "--runs",
+             str(HERE / "results" / "scenarios.jsonl"), "--out", "/dev/null",
+             "--arms", "native-gpt-realtime-2,native-gpt-realtime-21,"
+             "native-gpt-realtime-21-mini,vl-gpt41mini,vl-gpt41mini-dns,"
+             "vl-gpt41mini-semvad,vl-native-brain"],
+            capture_output=True, text=True, cwd=str(HERE),
+            env={"PATH": "/usr/bin:/bin", "KATALEPTIC_KEY": "x"})
+        self.assertNotIn("no runs to judge", r.stderr + r.stdout,
+                         "the documented seed-2 pass was refused")
+
     def test_the_documented_seed2_arms_match_the_committed_pass(self):
         """The seed-2 rerun must reproduce its own denominator.
 
