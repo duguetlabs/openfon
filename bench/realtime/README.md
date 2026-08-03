@@ -317,9 +317,23 @@ follow, and each was a review finding first:
   their denominators too, and one was wrong.
 
 The declared row count per report is compared by **equality**, so a table that leaves scope
-fails rather than quietly lowering a number nobody reads. And the test suite alters every
-verified figure in both reports one at a time and requires each to be caught — a checker
-that reads nothing passes every other test. See [`COMPLETENESS.md`](COMPLETENESS.md) for
+fails rather than quietly lowering a number nobody reads. And **figures are keyed by
+`(metric, statistic)` and checked in the position their column claims** — membership in the
+comparison was not enough, because a median satisfied by its own CI bound is a false
+sentence the checker called verified.
+
+Two sweeps in the test suite are the evidence for that, and the second exists because the
+first could not see it:
+
+* **wild value** — every figure in both reports, one at a time, replaced with `98765`. Any
+  membership test rejects it, so this proves the row is *read*, not that it is understood.
+  It also only mutated the *first* figure in each row until 2026-08-03, which is usually
+  the pair count, so medians, intervals, tails and p-values had never been exercised.
+* **cross-mutation** — every figure swapped for every *other figure of the same
+  comparison*. 2704 such swaps were accepted before the keying; 28 are now, and each one
+  is the same value written differently (a magnitude in verdict prose, a sign on a positive
+  count, `0` written `0.000`). The test enumerates them by value, because a count cannot
+  tell a new hole from an old one. See [`COMPLETENESS.md`](COMPLETENESS.md) for
 the full inventory of what this harness verifies and how each check can be fooled.
 
 ### Tests
@@ -328,7 +342,7 @@ the full inventory of what this harness verifies and how each check can be foole
 python3 -m unittest discover -s bench/realtime -v
 ```
 
-200 tests, split across `test_analyze.py` (the statistics behind every published table —
+201 tests, split across `test_analyze.py` (the statistics behind every published table —
 percentiles, paired differences, the exact sign test, the bootstrap CI, the Holm
 step-down, exact McNemar, matched-cell construction, and the verdict gating) and
 `test_harness.py` (the controls that make a run trustworthy — echo verification, cache

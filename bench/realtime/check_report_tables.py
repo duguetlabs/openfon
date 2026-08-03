@@ -94,7 +94,7 @@ MANUAL_COUNT = re.compile(
 # rows while 88 more went unseen. Compared by equality, so a table that leaves
 # scope fails instead of quietly lowering the number, and a table that arrives
 # has to be accounted for in the same commit.
-REPORTS = {"realtime-latency-2026-08.md": 47, "realtime-21-2026-08.md": 60}
+REPORTS = {"realtime-latency-2026-08.md": 47, "realtime-21-2026-08.md": 66}
 
 # Prose labels for a comparison, for tables that name arms in words. Declared,
 # not inferred: the headline table is the one readers act on, and a checker that
@@ -134,17 +134,112 @@ UNCHECKABLE_ROWS = {
 # Values that come from the analyzer's own constants rather than from a run.
 CONSTANTS = [PRACTICAL_MS, TAIL_FLOOR_MS, ALPHA * 100]
 
+# Split rates are not a metric of the paired family; they get their own key.
+SPLIT = "split_rate"
 
-def fmts(v: float) -> set[str]:
-    """Every way this value could legitimately be written, signed and bare."""
-    out = set()
-    for p in (0, 1, 2, 3, 5):
-        out.add(f"{v:+.{p}f}")
-        out.add(f"{abs(v):.{p}f}")
+# What a column (or, in a column-oriented table, a row label) says its figures
+# ARE. Membership in the comparison was not enough: a median satisfied by its
+# own CI bound is a false sentence the checker called verified, and 2704 such
+# swaps were accepted before this list existed. Each entry is a pattern over
+# the normalised label, the statistics that cell may quote, and the metric
+# those statistics belong to when the label names one.
+#
+# **A label that carries figures and matches nothing here is a reported
+# problem.** That is the whole discipline: the previous three versions of this
+# checker each failed by treating what they did not recognise as nothing to do.
+LABEL_SPECS: list[tuple[str, tuple[str, ...], "str | None"]] = [
+    # — paired comparisons —
+    (r"^pairs$", ("n",), None),
+    (r"^cells$", ("cells",), SPLIT),
+    (r"^median( δ)?( ttfa)?$", ("median",), None),
+    (r"^95% ci$", ("lo", "hi"), None),
+    (r"^p10 / p90 δ$", ("p10", "p90"), None),
+    (r"^p90 δ$", ("p90",), None),
+    (r"^slower / faster$", ("slower", "faster"), None),
+    (r"^p raw / holm$", ("p_raw", "p_adj"), None),
+    (r"^p raw$", ("p_raw",), None),
+    # `p Holm` labels both families; which one is decided by the table it sits
+    # in — a split-rate table is the one with a McNemar column.
+    (r"^p holm$", ("p_adj", "mcnemar_p_adj"), None),
+    (r"^p \(holm, split family\)$", ("mcnemar_p_adj",), SPLIT),
+    (r"^mcnemar p$", ("mcnemar_p",), SPLIT),
+    (r"^discordant", ("discordant_t", "discordant_c"), SPLIT),
+    (r"^treatment splits$", ("t_split", "cells"), SPLIT),
+    (r"^control splits$", ("c_split", "cells"), SPLIT),
+    # The verdict is generated prose. It quotes the median's magnitude
+    # ("faster by 352 ms") and the analyzer's own constants ("within ±50 ms"),
+    # and nothing else — admitting the CI bounds here let "faster by 100 ms"
+    # be rewritten as "faster by 280 ms" from the interval and pass.
+    (r"^(verdict|status)$", ("verdict_median",), None),
+    (r"^run 1$", ("median",), None),
+    (r"^run 2 \(primary\)$", ("median",), None),
+    # — per-arm distributions —
+    (r"^n$", ("n",), None),
+    (r"^min$", ("min",), None),
+    (r"^p50$", ("p50",), None),
+    (r"^p90$", ("p90",), None),
+    (r"^p95$", ("p95",), None),
+    (r"^p99$", ("p99",), None),
+    (r"^iqr$", ("iqr",), None),
+    (r"^(turns )?splits?( at a clause pause)?$", ("splits", "n"), SPLIT),
+    # — labels that name their own metric —
+    (r"^ttfa p50", ("p50",), "ttfa_ms"),
+    (r"^ttfa p95", ("p95",), "ttfa_ms"),
+    (r"^end-of-turn p50$", ("p50",), "speech_stopped_ms"),
+    (r"^end-of-turn p90$", ("p90",), "speech_stopped_ms"),
+    (r"^end-of-turn$", ("p50",), "speech_stopped_ms"),
+    (r"^engine-only p50$", ("p50",), "ttfa_minus_vad_ms"),
+    (r"^engine-only p90$", ("p90",), "ttfa_minus_vad_ms"),
+    (r"^speech_stopped_ms p50", ("p50",), "speech_stopped_ms"),
+    (r"^transcript_ms p50", ("p50", "n"), "transcript_ms"),
+    (r"^connect_ms paired δ", ("median",), "connect_ms"),
+    (r"^config_ms paired δ", ("median",), "config_ms"),
+]
+LABEL_SPECS_C = [(re.compile(p), stats, metric) for p, stats, metric in LABEL_SPECS]
+
+
+def normalise_label(cell: str) -> str:
+    """Header text as the specs match it: no markup, no arm ids, lowercase."""
+    out = re.sub(r"<br>.*", "", cell)
+    out = out.replace("**", "").replace("`", "").replace("Δ", "δ")
+    out = re.sub(r"\s+", " ", out).strip().lower()
     return out
 
 
-def numbers(vals) -> set[str]:
+def spec_for(cell: str) -> "tuple[tuple[str, ...], str | None] | None":
+    label = normalise_label(cell)
+    for pat, stats, metric in LABEL_SPECS_C:
+        if pat.search(label):
+            return stats, metric
+    return None
+
+
+def fmts(v: float, *, magnitude: bool = True,
+         probability: bool = False) -> set[str]:
+    """Every way this value could legitimately be written.
+
+    `magnitude=False` drops the unsigned spelling of a *negative* value, so a
+    median of −100 ms cannot be written `100`. Verdict prose is the one place
+    that legitimately says "faster by 100 ms" about a negative median, and it
+    is the only place that asks for the magnitude.
+
+    `probability=True` drops the whole-number spelling, which is meaningless
+    for a p-value and was an accepted disguise: Holm 0.730 passed written as
+    `1`, because rounding it to no decimals says so. Two decimals stay — the
+    merged report's headline table quotes `0.87` for 0.866.
+    """
+    out = set()
+    for p in (1, 2, 3, 5) if probability else (0, 1, 2, 3, 5):
+        out.add(f"{v:+.{p}f}")
+        if magnitude or v >= 0:
+            out.add(f"{abs(v):.{p}f}")
+    return out
+
+
+PROBABILITY_STATS = {"p_raw", "p_adj", "mcnemar_p", "mcnemar_p_adj"}
+
+
+def numbers(vals, *, magnitude: bool = True, probability: bool = False) -> set[str]:
     out: set[str] = set()
     for v in vals:
         if v is None:
@@ -155,7 +250,7 @@ def numbers(vals) -> set[str]:
             continue
         if f != f:                              # NaN — not a quotable figure
             continue
-        out |= fmts(f)
+        out |= fmts(f, magnitude=magnitude, probability=probability)
     return out
 
 
@@ -163,8 +258,10 @@ def numbers(vals) -> set[str]:
 class Run:
     """The derivable figures of one run, per arm and per comparison."""
     tag: str
-    arm: dict[str, set[str]] = field(default_factory=dict)
-    pair: dict[tuple[str, str], set[str]] = field(default_factory=dict)
+    # (arm, metric) -> statistic -> the ways that value could be written
+    arm: dict[tuple[str, str], dict[str, set[str]]] = field(default_factory=dict)
+    # (treat, ctrl, metric) -> statistic -> ditto
+    pair: dict[tuple[str, str, str], dict[str, set[str]]] = field(default_factory=dict)
     n_ok: dict[str, int] = field(default_factory=dict)
 
     def derive(self, turns: list[dict]) -> "Run":
@@ -181,21 +278,37 @@ class Run:
                 and t.get("speech_stopped_ms") is not None else None)
         ok = [t for t in turns if t["ok"]]
 
-        # Directional statistics are kept apart from the rest so the reverse of
-        # a comparison can be derived by negating them. `X − Y` and `Y − X` are
-        # not the same claim, and a reader cannot tell a swapped label from a
-        # sign error by inspection.
-        directional: dict[tuple[str, str], list] = {}
-        symmetric: dict[tuple[str, str], list] = {}
-        for results in compute_paired(ok, [m for m, _ in METRICS]).values():
+        # Keyed by (metric, statistic). A flat set per comparison was the third
+        # turn of the same screw: binding by table left holes across runs,
+        # binding by run left holes across cells, and binding by cell left holes
+        # across statistics *within* a cell — a median could be satisfied by its
+        # own CI bound. 2704 such swaps were accepted before this.
+        def put(d, key, stat, value, negate=False):
+            d.setdefault(key, {}).setdefault(stat, set()).update(
+                numbers([-value if negate and value is not None else value],
+                        probability=stat in PROBABILITY_STATS))
+
+        for metric, results in compute_paired(ok, [m for m, _ in METRICS]).items():
             for r in results:
                 if r.not_comparable:
                     continue
-                directional.setdefault((r.treat, r.ctrl), []).extend(
-                    [r.median, r.lo, r.hi, pct(r.diffs, 10), pct(r.diffs, 90)])
-                symmetric.setdefault((r.treat, r.ctrl), []).extend(
-                    [r.sign_counts[0], r.sign_counts[1], r.p_raw, r.p_adj,
-                     len(r.diffs)])
+                fwd = {"median": r.median, "lo": r.lo, "hi": r.hi,
+                       "p10": pct(r.diffs, 10), "p90": pct(r.diffs, 90)}
+                sym = {"slower": r.sign_counts[0], "faster": r.sign_counts[1],
+                       "p_raw": r.p_raw, "p_adj": r.p_adj, "n": len(r.diffs)}
+                for stat, v in fwd.items():
+                    put(self.pair, (r.treat, r.ctrl, metric), stat, v)
+                for stat, v in sym.items():
+                    put(self.pair, (r.treat, r.ctrl, metric), stat, v)
+                # The reverse comparison, with the directional statistics
+                # negated. `X − Y` and `Y − X` are different claims.
+                rev = {"median": -r.median, "lo": -r.hi, "hi": -r.lo,
+                       "p10": -pct(r.diffs, 90), "p90": -pct(r.diffs, 10)}
+                for stat, v in rev.items():
+                    put(self.pair, (r.ctrl, r.treat, metric), stat, v)
+                for stat, v in {**sym, "slower": r.sign_counts[1],
+                                "faster": r.sign_counts[0]}.items():
+                    put(self.pair, (r.ctrl, r.treat, metric), stat, v)
 
         # Split rates, corrected within their own family — mirroring
         # analyze.split_rate_table, including the comparisons it hides.
@@ -211,35 +324,42 @@ class Run:
             c_ = sum(1 for a, c in cells if c and not a)
             computed.append(((treat, ctrl), cells, b, c_, mcnemar_exact_p(b, c_)))
         for ((treat, ctrl), cells, b, c_, p), p_adj in zip(
-                computed, holm([c[-1] for c in computed]) if computed else []):
-            symmetric.setdefault((treat, ctrl), []).extend(
-                [len(cells), sum(1 for a, _ in cells if a),
-                 sum(1 for _, c in cells if c), b, c_, p, p_adj])
-
-        for k in set(directional) | set(symmetric):
-            self.pair[k] = numbers(directional.get(k, []) + symmetric.get(k, []))
-        for (treat, ctrl) in list(self.pair):
-            if (ctrl, treat) in self.pair:
-                continue                      # a real comparison, not a mirror
-            self.pair[(ctrl, treat)] = numbers(
-                [-v for v in directional.get((treat, ctrl), [])]
-                + symmetric.get((treat, ctrl), []))
+                computed, holm([x[-1] for x in computed]) if computed else []):
+            t_split = sum(1 for a, _ in cells if a)
+            c_split = sum(1 for _, x in cells if x)
+            for key, stats in (((treat, ctrl, SPLIT), {
+                    "cells": len(cells), "t_split": t_split, "c_split": c_split,
+                    "discordant_t": b, "discordant_c": c_,
+                    "mcnemar_p": p, "mcnemar_p_adj": p_adj}),
+                    ((ctrl, treat, SPLIT), {
+                        "cells": len(cells), "t_split": c_split, "c_split": t_split,
+                        "discordant_t": c_, "discordant_c": b,
+                        "mcnemar_p": p, "mcnemar_p_adj": p_adj})):
+                for stat, v in stats.items():
+                    put(self.pair, key, stat, v)
 
         for a in present:
-            vals: list = []
             for metric, _ in METRICS:
                 xs = [t[metric] for t in turns
                       if t["arm"] == a and usable_for(t, metric)]
-                if xs:
-                    vals += list(describe(xs).values()) + [pct(xs, 95)]
+                if not xs:
+                    continue
+                d = dict(describe(xs))
+                d["p95"] = pct(xs, 95)
+                for stat, v in d.items():
+                    put(self.arm, (a, metric), stat, v)
             aok = [t for t in turns if t["arm"] == a and t["ok"]]
             split = [t for t in aok if t.get("false_starts")]
             self.n_ok[a] = len(aok)
             if aok:
-                vals += [len(aok), len(split), 100.0 * len(split) / len(aok),
-                         sum(1 for t in split if t.get("false_starts_audible")),
-                         sum(t.get("false_start_audio_ms") or 0 for t in split)]
-            self.arm[a] = numbers(vals)
+                for stat, v in {
+                        "n": len(aok), "splits": len(split),
+                        "split_pct": 100.0 * len(split) / len(aok),
+                        "audible": sum(1 for t in split
+                                       if t.get("false_starts_audible")),
+                        "audible_ms": sum(t.get("false_start_audio_ms") or 0
+                                          for t in split)}.items():
+                    put(self.arm, (a, SPLIT), stat, v)
         return self
 
 
@@ -273,20 +393,32 @@ class Evidence:
     tags: tuple[str, ...]
     runs: list[Run]
 
-    def arm(self, a: str) -> set[str]:
-        return set().union(*(r.arm.get(a, set()) for r in self.runs)) \
-            if self.runs else set()
-
-    def pair(self, t: str, c: str) -> set[str]:
-        return set().union(*(r.pair.get((t, c), set()) for r in self.runs)) \
-            if self.runs else set()
-
-    def pairs_with_treatment(self, t: str) -> set[str]:
-        out: set[str] = set()
+    def arm(self, a: str, metric: str) -> dict[str, set[str]]:
+        out: dict[str, set[str]] = {}
         for r in self.runs:
-            for (treat, _ctrl), v in r.pair.items():
-                if treat == t:
-                    out |= v
+            for stat, v in r.arm.get((a, metric), {}).items():
+                out.setdefault(stat, set()).update(v)
+        return out
+
+    def pair(self, t: str, c: str, metric: str) -> dict[str, set[str]]:
+        out: dict[str, set[str]] = {}
+        for r in self.runs:
+            for stat, v in r.pair.get((t, c, metric), {}).items():
+                out.setdefault(stat, set()).update(v)
+        return out
+
+    def pairs_with_treatment(self, t: str, metric: str) -> dict[str, set[str]]:
+        """A column-oriented row can quote a paired Δ without naming the
+        control — the report's convention is that each arm is compared against
+        its own baseline, and the row gives no way to know which. Naming the
+        control in the row label narrows it to the one pair."""
+        out: dict[str, set[str]] = {}
+        for r in self.runs:
+            for (treat, _ctrl, m), stats in r.pair.items():
+                if treat != t or m != metric:
+                    continue
+                for stat, v in stats.items():
+                    out.setdefault(stat, set()).update(v)
         return out
 
     def n_ok(self, a: str) -> int:
@@ -305,10 +437,11 @@ def evidence(tags: tuple[str, ...]) -> "Evidence | str":
 
 @dataclass
 class Binding:
-    """Which run each cell of a table answers to."""
+    """Which run each cell of a table answers to, and which metric it quotes."""
     default: tuple[str, ...]
     columns: list[tuple[str, tuple[str, ...]]] = field(default_factory=list)
     rows: list[tuple[str, tuple[str, ...]]] = field(default_factory=list)
+    metric: "str | None" = None
 
     def tags_for(self, row_label: str, col_header: str) -> tuple[str, ...]:
         """Row scope ∩ column scope, falling back to whichever is declared.
@@ -340,6 +473,9 @@ def parse_binding(text: str) -> "Binding | None":
     parts = [p.strip() for p in m.group(1).split(";") if p.strip()]
     b = Binding(default=())
     for i, part in enumerate(parts):
+        if part.startswith("metric:"):
+            b.metric = part.split(":", 1)[1].strip()
+            continue
         c = CLAUSE.match(part)
         if c:
             scope, label, tags = c.group(1), c.group(2), tuple(
@@ -396,18 +532,20 @@ def tables(text: str) -> list[Table]:
     return out
 
 
-def figures(row: str) -> set[str]:
-    """Signed figures a row quotes, with identifiers removed.
+def strip_identifiers(row: str) -> str:
+    """Arm ids and model names carry digits (`gw-2-server`, `gpt-4.1-mini`) and
+    are not measurements; everything inside backticks is a name, not a number.
+    Blanked rather than deleted, so figure positions survive."""
+    out = row
+    for pat in (r"<sub>.*?</sub>", r"`[^`]*`", ARM_RE, r"gpt-[\w.\-]+"):
+        out = re.sub(pat, lambda m: " " * len(m.group(0)), out)
+    return out
 
-    Arm ids and model names carry digits (`gw-2-server`, `gpt-4.1-mini`) and are
-    not measurements; everything inside backticks is a name, not a number.
-    """
-    body = re.sub(r"<sub>.*?</sub>", "", row)
-    body = re.sub(r"`[^`]*`", "", body)
-    body = ARM_RE.sub("", body)
-    body = re.sub(r"gpt-[\w.\-]+", "", body)
+
+def figures(row: str) -> set[str]:
+    """Signed figures a row quotes, with identifiers removed."""
     return {(s.replace("−", "-").replace("–", "-") or "") + n
-            for s, n in FIGURE.findall(body)}
+            for s, n in FIGURE.findall(strip_identifiers(row))}
 
 
 def row_arms(row: str) -> list[str]:
@@ -421,24 +559,6 @@ def row_arms(row: str) -> list[str]:
                 if a not in seen:
                     seen.append(a)
     return seen
-
-
-def available(ev: Evidence, subjects: list[str], *, any_pair: bool = False) -> set[str]:
-    out = set(numbers(CONSTANTS))
-    for a in subjects:
-        out |= ev.arm(a)
-    if len(subjects) >= 2:
-        # The ordered pair only. The reverse is derived at load time with its
-        # directional statistics negated, so relabelling a comparison without
-        # flipping its sign is a drift rather than a match.
-        out |= ev.pair(subjects[0], subjects[1])
-    elif any_pair and subjects:
-        # A column-oriented row can quote a paired Δ without naming the control
-        # — the report's convention is that each arm is compared against its own
-        # baseline. Admit the comparisons where this arm is the *treatment*,
-        # which is the direction every table in these reports uses.
-        out |= ev.pairs_with_treatment(subjects[0])
-    return out
 
 
 def check_manual_count(ev: Evidence, cell: str, subjects: list[str]) -> str:
@@ -472,8 +592,79 @@ def check_manual_count(ev: Evidence, cell: str, subjects: list[str]) -> str:
     return ""
 
 
+# Only prose cells may quote a magnitude for a negative value, or one of the
+# analyzer's own constants. Admitting either everywhere let `−72` be written
+# `5` — α×100 — and a −100 ms median be written `100`.
+PROSE_STATS = ("verdict_median",)
+
+
+def stat_values(ev: Evidence, subjects: list[str], stat: str,
+                metric: "str | None", table_metric: "str | None",
+                prose: bool) -> set[str]:
+    """Every way ONE statistic of this subject could legitimately be written."""
+    return cell_values(ev, subjects, (stat,), metric, table_metric, prose)
+
+
+def cell_values(ev: Evidence, subjects: list[str], stats: tuple[str, ...],
+                metric: "str | None", table_metric: "str | None",
+                prose: bool) -> set[str]:
+    """What this cell is allowed to say, given what its column claims it is."""
+    out: set[str] = set()
+    wanted = metric or table_metric
+    metrics = [wanted] if wanted else [m for m, _ in METRICS] + [SPLIT]
+    stats = tuple("median" if st == "verdict_median" else st for st in stats)
+    for m in metrics:
+        for stat in stats:
+            raw: set[str] = set()
+            if len(subjects) >= 2:
+                raw |= ev.pair(subjects[0], subjects[1], m).get(stat, set())
+            elif subjects:
+                raw |= ev.pairs_with_treatment(subjects[0], m).get(stat, set())
+            for a in subjects:
+                raw |= ev.arm(a, m).get(stat, set())
+            out |= raw if prose else {v for v in raw if not v.startswith("-") or
+                                      f"+{v[1:]}" not in raw}
+    return out
+
+
+def check_cell(ev: Evidence, cell: str, subjects: list[str],
+               spec: "tuple[tuple[str, ...], str | None]",
+               table_metric: "str | None") -> set[str]:
+    """Figures in this cell that are not what its column says they are.
+
+    A cell holding several statistics holds them **in order** — `[lo, hi]`,
+    `p10 / p90`, `slower / faster`. Accepting either figure in either position
+    let a confidence interval be written `[−15, −15]` and pass, which is the
+    same membership-not-position hole one level further down.
+    """
+    stats, metric = spec
+    prose = any(st in PROSE_STATS for st in stats)
+    if prose:
+        # `±N` is the analyzer's practical-difference threshold, quoted in a
+        # fixed phrase; every other figure is the median's magnitude. Admitting
+        # the constant anywhere let `within ±50 ms` be rewritten `within ±0 ms`
+        # — a false equivalence claim built from the row's own median.
+        text = strip_identifiers("| " + cell)
+        bad = {t for t in re.findall(r"±\s*([+-]?\d+(?:\.\d+)?)", text)
+               if abs(float(t)) != PRACTICAL_MS}
+        text = re.sub(r"±\s*[+-]?\d+(?:\.\d+)?", "", text)
+        rest = [(m.group(1).replace("−", "-").replace("–", "-") or "") + m.group(2)
+                for m in FIGURE.finditer(text)]
+        allowed = cell_values(ev, subjects, stats, metric, table_metric, True)
+        return bad | {v for v in rest if v not in allowed}
+    figs = list(FIGURE.finditer(strip_identifiers("| " + cell)))
+    values = [(m.group(1).replace("−", "-").replace("–", "-") or "") + m.group(2)
+              for m in figs]
+    if len(stats) > 1 and len(values) == len(stats):
+        return {v for v, stat in zip(values, stats)
+                if v not in stat_values(ev, subjects, stat, metric, table_metric,
+                                        prose)}
+    allowed = cell_values(ev, subjects, stats, metric, table_metric, prose)
+    return {v for v in values if v not in allowed}
+
+
 def check_row(tbl: Table, line: str, resolve) -> str:
-    """Empty string when every figure in the row is derivable, else the problem.
+    """Empty string when every figure sits where its column says it should.
 
     `resolve(row_label, column_header) -> Evidence | str` supplies the run each
     individual cell answers to, so a table quoting two runs cannot satisfy one
@@ -486,6 +677,11 @@ def check_row(tbl: Table, line: str, resolve) -> str:
     column_arms = tbl.column_arms
     problems: list[str] = []
     row_subjects = row_arms(line)
+    # A metric named in the row label (``| `connect_ms`, `a` − `b` | …``) or in
+    # the binding governs every cell that does not name one itself.
+    row_spec = spec_for(label)
+    table_metric = (tbl.binding.metric if tbl.binding else None) or (
+        row_spec[1] if row_spec else None)
 
     for i, cell in enumerate(body):
         figs = figures("| " + cell)
@@ -494,28 +690,42 @@ def check_row(tbl: Table, line: str, resolve) -> str:
         ev = resolve(label, head[i] if i < len(head) else "")
         if isinstance(ev, str):
             return ev
+        if manual and i > 0:
+            why = check_manual_count(ev, cell, row_subjects)
+            if why:
+                problems.append(why)
+            continue
         if tbl.is_column_oriented and i > 0:
             arms = column_arms[i] if i < len(column_arms) else []
             if not arms:
                 problems.append(f"column {i} names no arm, and its cell carries "
                                 f"{sorted(figs)}")
                 continue
+            if not row_spec:
+                problems.append(f"row label {label!r} carries figures but says "
+                                f"no statistic — add it to LABEL_SPECS")
+                continue
             subjects = arms + [c for c in row_arms(label) if c not in arms]
-            missing = figs - available(ev, subjects, any_pair=True)
+            missing = check_cell(ev, cell, subjects, row_spec, table_metric)
             if missing:
-                problems.append(f"{head[i]}: {sorted(missing)}")
+                problems.append(f"{normalise_label(head[i])}: {sorted(missing)} "
+                                f"is not {'/'.join(row_spec[0])}")
             continue
         if not row_subjects:
             return "row carries figures but names no arm, and no column does either"
-        if manual:
-            why = check_manual_count(ev, cell, row_subjects)
-            if why:
-                problems.append(why)
+        spec = spec_for(head[i]) if i < len(head) else None
+        if not spec:
+            problems.append(
+                f"column {normalise_label(head[i]) if i < len(head) else i!r} "
+                f"carries {sorted(figs)} but says no statistic — add it to "
+                f"LABEL_SPECS or the figure is unchecked")
             continue
-        missing = figs - available(ev, row_subjects)
+        missing = check_cell(ev, cell, row_subjects, spec, table_metric)
         if missing:
-            problems.append(f"{sorted(missing)} not derivable for "
-                            f"{' − '.join(row_subjects[:2])} in {','.join(ev.tags)}")
+            problems.append(
+                f"{normalise_label(head[i])}: {sorted(missing)} is not "
+                f"{'/'.join(spec[0])} of {' − '.join(row_subjects[:2])} "
+                f"in {','.join(ev.tags)}")
     return "; ".join(problems)
 
 

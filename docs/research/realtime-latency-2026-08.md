@@ -17,7 +17,7 @@ the first is reported alongside as a replication. Harness and full method in
 **No. Routing through the Kataleptic gateway costs no detectable latency in either
 direction, for either engine.**
 
-<!-- data: full2; column "run 1" = full -->
+<!-- data: full2; column "run 1" = full; metric: ttfa_ms -->
 | comparison | run 2 (primary) | 95% CI | **p10 / p90 Δ** | slower / faster | p raw / Holm | run 1 |
 |---|---:|---|---:|---:|---:|---:|
 | gpt-realtime-2 via gateway − direct | **+12 ms** | [−90, +141] | **−494 / +502** | **12 / 11** | 1.00 / 1.00 | −18 ms |
@@ -136,7 +136,7 @@ turn's own measurement rather than the constant.
 
 Raw (what a caller on OpenFon's current settings experiences):
 
-<!-- data: full2 -->
+<!-- data: full2; metric: ttfa_ms -->
 | arm | brain | n | min | **p50** | p90 | p99 | IQR |
 |---|---|---:|---:|---:|---:|---:|---:|
 | `native-direct` | gpt-realtime-2 | 25 | 1305 | **2205** | 2620 | 3404 | 376 |
@@ -150,7 +150,7 @@ that turn's *own measured* end-of-turn detection removed. Subtracting the nomina
 would be wrong: under server VAD the detector actually spends ~740 ms, and a semantic
 detector has no fixed hangover at all.
 
-<!-- data: full2 -->
+<!-- data: full2; metric: ttfa_minus_vad_ms -->
 | arm | brain | min | **p50** | p90 | p99 |
 |---|---|---:|---:|---:|---:|
 | `native-direct` | gpt-realtime-2 | 611 | **1512** | 1857 | 2664 |
@@ -165,7 +165,7 @@ p raw 0.043 / Holm 0.87).
 
 Paired, on identical caller audio in the same round:
 
-<!-- data: full2 -->
+<!-- data: full2; metric: ttfa_ms -->
 | comparison | pairs | median Δ | 95% CI | **p10 / p90 Δ** | slower / faster | p raw | p Holm | verdict |
 |---|---:|---:|---|---:|---:|---:|---:|---|
 | `native-gateway` − `native-direct` | 23 | **+12** | [−90, +141] | **−494 / +502** | **12 / 11** | 1.000 | 1.000 | wide both ways, not a cost |
@@ -218,7 +218,7 @@ silently substituted Azure semantic VAD or anything else). `speech_stopped_ms` t
 measures each server's *own* end-of-turn decision, from the end of caller speech to its
 `input_audio_buffer.speech_stopped`:
 
-<!-- data: full2 -->
+<!-- data: full2; metric: speech_stopped_ms -->
 | arm | brain | min | **p50** | p90 | IQR |
 |---|---|---:|---:|---:|---:|
 | `native-direct` | gpt-realtime-2 | 686 | **724** | 747 | 40 |
@@ -249,9 +249,12 @@ end-of-turn speed — see the VAD-splits caveat below.
 | metric | native-direct | native-gateway | vl-direct | vl-gateway | vl-native-brain |
 |---|---:|---:|---:|---:|---:|
 | `speech_stopped_ms` p50 (VAD end-of-turn) | 724 | 707 | 733 | 731 | 727 |
-| `transcript_ms` p50 (caller's transcript) | 1332 | *(n=3, excluded)* | 1271 | 1193 | 1292 |
+| `transcript_ms` p50 (caller's transcript) | 1332 | *(excluded)* | 1271 | 1193 | 1292 |
 | `connect_ms` paired Δ | — | **−91 ms** | — | **−121 ms** | — |
 | `config_ms` paired Δ vs `native-direct` | — | +37 ms | — | — | **+65 ms** |
+
+*`native-gateway` is excluded from the transcript row: the gateway substituted its own
+STT deployment on all but three turns, so the three that survive are not a distribution.*
 
 Every paired `ttft`, `transcript` and `response_total` comparison for the two proxy pairs
 is null (p ≥ 0.11). The reply lengths confirm the arms were doing comparable work.
@@ -546,7 +549,7 @@ degrades reply quality. The first is a barge-in study; the second is task #6.
 
 Paired on `en-short`, where nothing splits on any arm:
 
-<!-- data: vad-ttfa -->
+<!-- data: vad-ttfa; metric: ttfa_ms -->
 | comparison | median Δ ttfa | 95% CI | **p10 / p90 Δ** | slower / faster | p raw / Holm |
 |---|---:|---|---:|---:|---:|
 | `vlnat-azsemantic` − `vl-native-brain`<br><sub>Azure semantic vs server VAD, brain and stack held constant</sub> | **−72 ms** | [−600, +255] | −1025 / +489 | **5 / 5** | 1.000 / 1.000 |
@@ -566,7 +569,7 @@ best case of −78 ms. Asymmetric in both, which is why it is the one that hurts
 
 `speech_stopped_ms` shows the mechanism directly — this is the detector's own decision time:
 
-<!-- data: vad-ttfa -->
+<!-- data: vad-ttfa; metric: speech_stopped_ms -->
 | arm | detector | p50 | p90 | IQR |
 |---|---|---:|---:|---:|
 | `native-direct` | `server_vad` | 736 | 760 | 59 |

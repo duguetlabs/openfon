@@ -84,6 +84,39 @@ needed at a finer grain: **a fix that narrows a boundary should be tested at the
 new boundary, not at the old one.** Table-level binding was verified by showing a
 superseded *table* could not pass, which is true and was not the question.
 
+**And then a fourth turn of the same screw, at the boundary the third one
+created.** Binding by cell preserved *run* identity and lost *statistic*
+identity: every metric's median, interval, tail, counts and p-values flattened
+into one set per comparison, and a cell was checked for membership in it. So a
+median could be satisfied by its own CI bound. Measured rather than argued —
+swap every figure in every row for every other figure of the same comparison and
+count what passes: **2704 accepted false figures.** Figures are keyed by
+`(metric, statistic)` now and checked in the position their column claims,
+which took that to **28**, and every survivor is the same value written
+differently — a magnitude in verdict prose that legitimately says "faster by 352
+ms" about a median of −352, a sign on a positive count, `0` written `0.000`.
+A test enumerates them by value, because a count cannot tell a new hole from an
+old one.
+
+Three narrower things fell out of that measurement, each a spelling that was not
+a spelling:
+
+- **A p-value written as a whole number.** `fmts` emitted every precision from
+  0 to 5 decimals, so Holm 0.730 passed written `1`. Probabilities now start at
+  one decimal.
+- **A magnitude standing in for a signed value.** A median of −100 ms passed
+  written `100`. Only verdict prose may quote a magnitude, because only verdict
+  prose says "faster by 100 ms".
+- **An interval read as a set.** `[−280, −15]` passed as `[−15, −15]`. A cell
+  holding several statistics holds them in order.
+
+The test that was supposed to be the evidence for all of this **was mutating
+only the first figure in each row** — the pair count, usually — so medians,
+intervals, tails and p-values had never been exercised at all. "Every figure is
+checked" was a claim the test had never tested. It iterates every figure now.
+That is the same shape as the checker's own history, in the checker's own test
+suite: the mechanism that verifies the mechanism needed verifying.
+
 ## Two more shapes, both about a check that is wider than the claim
 
 **A comparison is an ordered pair, and the checker treated it as a set.**
@@ -131,7 +164,7 @@ for checking against that CSV.
 | 9 | `PairedResult.equivalent` | may equivalence be claimed | the **whole interval** inside ±`PRACTICAL_MS`, and n ≥ `MIN_EQUIVALENCE_N` | nothing known. The point estimate alone was the bug, and n=1 resampling returns `[d, d]` — the documented smoke test would have "proved" equivalence from one sample. |
 | 10 | `PairedResult.upper_tail_dominates` | is a large p90 a cost or variance | p10 against p90 — **magnitude**, plus the sign counts reported alongside | it describes; it does not diagnose. Two quantiles cannot establish bimodality, and an earlier version asserted it. It also cannot tell frequency: the cost case was faster on 35% of turns, and "almost never faster" was wrong. |
 | 11 | `verify_live.py` | does the config verifier still match reality | every **registered** arm's real echo verifies clean, **and** four mutations of that echo are each caught | a hand-maintained arm list was the bug — it printed OK while checking none of the newest arms. A fatal first echo now retries, and the **clean** echo is adopted before mutations run. |
-| 12 | `check_report_tables.py` | is every published figure current | **every figure-bearing row of every table that names an arm** — row-major or column-major, dash or `vs`, prefixed or not — against the analyzer, re-derived from the run that table declares. Coverage compared by **equality** against a count declared in the checker | free prose, deliberately: a figure not in a table beside an arm is not matched. Everything else is verified or in `UNCHECKABLE_TABLES` with a reason, and no entry may name something the analyzer computes. |
+| 12 | `check_report_tables.py` | is every published figure current, **and in the position it claims** | **every figure-bearing row of every table that names an arm** — row-major or column-major, dash or `vs`, prefixed or not — against the analyzer, re-derived from the run that table declares. Coverage compared by **equality** against a count declared in the checker | free prose, deliberately: a figure not in a table beside an arm is not matched. Everything else is verified or in `UNCHECKABLE_TABLES` with a reason, and no entry may name something the analyzer computes. |
 | 12b | `check_report_tables.py` bindings | which run may validate this **cell** | the `<!-- data: … -->` directive **in the document**, with `column "…" =` and `row "…" =` scopes intersecting; a table with no binding, one naming an absent run, a cell whose scopes do not overlap, and a run no table quotes are each reported | nothing known within a table. Two earlier versions were fooled: merging every file under `results/` let a superseded run validate its replacement's section, and binding a *table* to two runs let either satisfy any cell. |
 | 12d | `check_report_tables.py` direction | is this comparison the one it is labelled as | the ordered pair only; the reverse is derived with median, CI and p10/p90 **negated** | the split counts, which swap rather than negate and so are set-identical under reversal. |
 | 12e | `check_report_tables.py` manual counts | is a hand-counted rate self-consistent | `k/n` against the arm's usable turns in the bound runs (summed — counts add), and `p%` against `k/n` | `k` itself, which is a reading of the transcripts. Exempting the whole table was the bug: it exempted `n` and `p` too, and one `n` was wrong. |

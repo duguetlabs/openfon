@@ -620,6 +620,7 @@ class TestReportCheckerCoversEveryFigureRow(unittest.TestCase):
         """The strongest form of 'try to fool it': every row that reports as
         verified must fail when one of its figures moves. A checker that passes
         a document it never read passes this suite otherwise."""
+        missed: list[str] = []
         for r in self.reports:
             text = r.read_text()
             for tbl in self.c.tables(text):
@@ -632,15 +633,77 @@ class TestReportCheckerCoversEveryFigureRow(unittest.TestCase):
                 for n, line in tbl.body:
                     if not self.c.figures(line) or self.c.allowlisted_row(line):
                         continue
-                    fig = self.c.FIGURE.search(self.mask(line))
-                    broken = line[:fig.start()] + "98765" + line[fig.end():]
-                    lines = text.split("\n")
-                    lines[n - 1] = broken
-                    bad, out = self.run_check(
-                        self.rewritten(r, "\n".join(lines)))
-                    self.assertGreater(bad, 0,
-                                       f"{r.name}:{n} altered and not caught\n"
-                                       f"  {broken}\n{out}")
+                    # EVERY figure, one at a time. Mutating only the first
+                    # exercised whichever number happened to come first — the
+                    # pair count, usually — so medians, CI bounds, tails and
+                    # p-values were never touched, and "every figure is
+                    # checked" was a claim this test had never tested.
+                    for fig in list(self.c.FIGURE.finditer(self.mask(line))):
+                        broken = line[:fig.start()] + "98765" + line[fig.end():]
+                        lines = text.split("\n")
+                        lines[n - 1] = broken
+                        bad, out = self.run_check(
+                            self.rewritten(r, "\n".join(lines)))
+                        missed.append(f"{r.name}:{n} {fig.group(0)!r} -> 98765")
+                        if bad:
+                            missed.pop()
+        self.assertEqual(missed, [], "figures altered and not caught:\n  "
+                         + "\n  ".join(missed))
+
+    def test_a_figure_cannot_be_swapped_for_another_of_the_same_comparison(self):
+        """The sweep above uses 98765, which is derivable for nothing, so any
+        membership test rejects it — and a membership test was all there was.
+        The real hole is a figure replaced by *another figure of the same
+        comparison*: a median satisfied by its own CI bound. 2704 such swaps
+        were accepted before figures were keyed by metric and statistic and
+        checked in the position their column claims.
+
+        What survives is enumerated rather than counted, because a count cannot
+        tell a new hole from an old one."""
+        accepted = []
+        for r in self.reports:
+            text = r.read_text()
+            for tbl in self.c.tables(text):
+                # The hand-counted numerator is the declared exemption, so
+                # `6/20` -> `20/20` is expected to pass here; the denominator
+                # and percentage have their own tests.
+                if tbl.header.strip() in self.c.MANUAL_COUNT_TABLES:
+                    continue
+                for n, line in tbl.body:
+                    if not self.c.figures(line) or self.c.allowlisted_row(line):
+                        continue
+                    if not (self.c.row_arms(line) or tbl.is_column_oriented):
+                        continue
+                    spans = list(self.c.FIGURE.finditer(self.mask(line)))
+                    vals = [sp.group(0) for sp in spans]
+                    for i, sp in enumerate(spans):
+                        for j, other in enumerate(vals):
+                            if i == j or other.strip() == sp.group(0).strip():
+                                continue
+                            broken = line[:sp.start()] + other + line[sp.end():]
+                            if broken == line:
+                                continue
+                            lines = text.split("\n")
+                            lines[n - 1] = broken
+                            bad, _out = self.run_check(
+                                self.rewritten(r, "\n".join(lines)))
+                            if not bad:
+                                accepted.append(
+                                    f"{sp.group(0).strip()} -> {other.strip()}"
+                                    f"   [{r.name}:{n}]")
+        # Every survivor is the same figure written differently, not a
+        # different figure: a magnitude in verdict prose that legitimately says
+        # "faster by 352 ms" about a median of −352, a sign on a positive
+        # count, and `0` written `0.000`. None of them makes the report say
+        # something untrue. Listed by value so a genuinely wrong swap cannot
+        # hide inside the allowance.
+        from collections import Counter
+        for swap, count in Counter(accepted).items():
+            a, b = swap.split("   [")[0].split(" -> ")
+            self.assertEqual(abs(float(a.replace("−", "-").replace("–", "-"))),
+                             abs(float(b.replace("−", "-").replace("–", "-"))),
+                             f"{swap} ({count}x) changes the value, not just "
+                             f"how it is written")
 
     def test_every_row_layout_in_the_reports_is_actually_exercised(self):
         """By identity, not by count: each layout that has been dropped once
@@ -782,17 +845,20 @@ class TestReportCheckerCoversEveryFigureRow(unittest.TestCase):
         """`X − Y` and `Y − X` are not the same claim, and a reader cannot tell
         a swapped label from a sign error by inspection."""
         ev = self.c.evidence(("full2",))
-        fwd = ("| `vl-gateway` − `vl-direct` | 25 | **−100** | [−280, −15] "
-               "| **−374 / +171** | **7 / 18** | 0.043 | 0.866 |")
-        rev = ("| `vl-direct` − `vl-gateway` | 25 | **+100** | [+15, +280] "
-               "| **−171 / +374** | **18 / 7** | 0.043 | 0.866 |")
-        for row in (fwd, rev):
-            self.assertEqual(
-                self.c.figures(row) - self.c.available(ev, self.c.row_arms(row)),
-                set(), row)
-        stale = rev.replace("**+100**", "**−100**")
-        self.assertIn("-100", str(sorted(
-            self.c.figures(stale) - self.c.available(ev, self.c.row_arms(stale)))))
+        med = (("median",), "ttfa_ms")
+        self.assertEqual(self.c.check_cell(ev, "**−100**",
+                                           ["vl-gateway", "vl-direct"], med, None), set())
+        self.assertEqual(self.c.check_cell(ev, "**+100**",
+                                           ["vl-direct", "vl-gateway"], med, None), set())
+        # the reverse label with the forward sign is a drift, not a match
+        self.assertIn("-100", self.c.check_cell(ev, "**−100**",
+                                                ["vl-direct", "vl-gateway"], med, None))
+        ci = (("lo", "hi"), "ttfa_ms")
+        self.assertEqual(self.c.check_cell(ev, "[−280, −15]",
+                                           ["vl-gateway", "vl-direct"], ci, None), set())
+        # and the bounds are ordered: an interval is not a set of two numbers
+        self.assertTrue(self.c.check_cell(ev, "[−15, −280]",
+                                          ["vl-gateway", "vl-direct"], ci, None))
 
     # — allowlists no wider than the unverifiable part —
 
@@ -839,11 +905,14 @@ class TestReportCheckerCoversEveryFigureRow(unittest.TestCase):
         one = self.c.evidence(("full2",))
         both = self.c.evidence(("full2", "full"))
         self.assertNotIsInstance(both, str, both)
-        for arm in one.runs[0].arm:
-            self.assertTrue(one.arm(arm) <= both.arm(arm),
-                            "a union must not drop what one run derived alone")
-        self.assertTrue(any(both.arm(a) - one.arm(a) for a in one.runs[0].arm),
-                        "and it must add what the other run derived")
+        for arm, metric in one.runs[0].arm:
+            for stat, vals in one.arm(arm, metric).items():
+                self.assertTrue(vals <= both.arm(arm, metric).get(stat, set()),
+                                "a union must not drop what one run derived alone")
+        self.assertTrue(
+            any(both.arm(a, m).get(st, set()) - one.arm(a, m).get(st, set())
+                for a, m in one.runs[0].arm for st in one.arm(a, m)),
+            "and it must add what the other run derived")
 
     def test_a_row_that_names_no_arm_anywhere_is_reported(self):
         tbl = self.c.tables("<!-- data: full2 -->\n| x | y |\n|---|---|\n"
@@ -855,12 +924,10 @@ class TestReportCheckerCoversEveryFigureRow(unittest.TestCase):
     def test_the_sign_is_part_of_the_figure(self):
         """`+352` where the analyzer says `−352` is a drift, not a match."""
         ev = self.c.evidence(("full2",))
-        row = "| `vl-gateway` − `vl-direct` | 25 | **−100** | [−280, −15] |"
-        self.assertEqual(
-            self.c.figures(row) - self.c.available(ev, self.c.row_arms(row)), set())
-        flipped = row.replace("**−100**", "**+100**")
-        self.assertIn("+100", self.c.figures(flipped)
-                      - self.c.available(ev, self.c.row_arms(flipped)))
+        med = (("median",), "ttfa_ms")
+        arms = ["vl-gateway", "vl-direct"]
+        self.assertEqual(self.c.check_cell(ev, "**−100**", arms, med, None), set())
+        self.assertIn("+100", self.c.check_cell(ev, "**+100**", arms, med, None))
 
     def test_identifiers_are_not_figures(self):
         """`gw-2-server` and `gpt-4.1-mini` carry digits and are not values."""
