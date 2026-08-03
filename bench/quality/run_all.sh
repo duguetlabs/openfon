@@ -78,6 +78,22 @@ nonempty() {  # nonempty <var-name> <value>
 [ -n "${ASR_ARMS:-}" ]   && nonempty ASR_ARMS "$ASR_ARMS"
 [ -n "${SC_ARMS:-}" ]    && nonempty SC_ARMS "$SC_ARMS"
 
+# A repeated arm runs the same unit twice into the same raw log, so the run
+# collides with itself and the preflight below cannot see it — the second pass
+# finds the log populated and aborts after the first has been billed. Deduping
+# quietly would hide a typo that costs money; naming it does not.
+nodup() {  # nodup <var-name> <space-separated value>
+  local d
+  d="$(printf '%s\n' $2 | sort | uniq -d | tr '\n' ' ')"
+  if [ -n "${d% }" ]; then
+    echo "$1 names ${d% } more than once. Each arm writes its own raw logs," >&2
+    echo "  so a repeat would overwrite the log the first pass paid for." >&2
+    exit 2
+  fi
+}
+nodup ASR_ARMS "$ASR_ARMS"
+nodup SC_ARMS "$SC_ARMS"
+
 APPEND="${APPEND:-0}"
 if [ "${FORCE:-0}" != "1" ] && [ "$APPEND" != "1" ]; then
   for f in "$OUT/results/asr.jsonl" "$OUT/results/scenarios.jsonl"; do

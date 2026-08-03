@@ -223,6 +223,16 @@ async def main() -> None:
         # truncated asr.jsonl and went on to report the full Track A matrix as
         # successful. A malformed selection is not an empty one.
         sys.exit(f"--conditions {a.conditions!r} names no conditions")
+    if len(set(conditions)) != len(conditions):
+        # A repeated condition writes the same log twice, so the run collides
+        # with *itself* and no preflight can see it: the second pass finds the
+        # file populated and aborts after the first has been billed. Deduping
+        # silently would be the same empty-is-absent mistake in another coat —
+        # a list that names a condition twice is malformed, not a selection.
+        dupes = sorted({c for c in conditions if conditions.count(c) > 1})
+        sys.exit(f"--conditions {a.conditions!r} names {dupes} more than once; "
+                 "each condition writes one raw log, so a repeat would "
+                 "overwrite the log the first pass just paid for")
 
     # Validate every log this invocation will write before the first batch is
     # billed. `open_log` alone checks condition N's log only once conditions

@@ -1762,6 +1762,30 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
                              "the results were erased by a run that then "
                              "could not regenerate them")
 
+    def test_a_repeated_arm_is_refused_before_anything_runs(self):
+        """A run can collide with itself, and no preflight can see that.
+
+        Two identical units write the same raw log, so the second finds it
+        populated and aborts after the first has been billed — the collision the
+        preflight exists to catch, arriving from inside the matrix rather than
+        from the directory. Deduping quietly would hide a typo that costs money.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            res = Path(tmp) / "results"
+            res.mkdir()
+            (res / "asr.jsonl").write_text('{"row": 1}\n')
+            before = (res / "asr.jsonl").read_bytes()
+            r = subprocess.run(
+                ["/bin/bash", str(HERE / "run_all.sh")],
+                capture_output=True, text=True, cwd=str(HERE),
+                env={"PATH": "/usr/bin:/bin", "DATA": "/x", "OUT": tmp,
+                     "APPEND": "1", "TRACK": "a",
+                     "ASR_ARMS": "vl-gpt41mini native-gpt-realtime-2 vl-gpt41mini"})
+            self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+            self.assertIn("more than once", r.stderr)
+            self.assertIn("vl-gpt41mini", r.stderr)
+            self.assertEqual((res / "asr.jsonl").read_bytes(), before)
+
     def test_a_broken_preflight_is_not_reported_as_a_log_collision(self):
         """"Bounded" naming the wrong bound, in a new place.
 
