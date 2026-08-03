@@ -1730,6 +1730,64 @@ class TestReportsMatchTheirData(unittest.TestCase):
             self.assertTrue(any("summary_per_run.csv" in x and "missing" in x
                                 for x in out["problems"]), out["problems"])
 
+    def test_track_a_wer_is_checked_against_asr_scores(self):
+        """The DNS recommendation rests on these numbers.
+
+        "Never enable Azure noise suppression" is carried by 4.83 -> 47.76 and
+        the empty-transcript counts. They were declared unchecked while
+        everything around them was verified — and asr_scores.csv existing is a
+        second source to check against, not a reason to skip.
+        """
+        cases = [
+            ("| clean | 4.83 | 47.76 (8e) | **4.47** |",
+             "| clean | 4.83 | 37.76 (8e) | **4.47** |", "WER"),
+            ("| cafe 20 dB | 5.01 | 55.99 (10e) | **4.47** |",
+             "| cafe 20 dB | 5.01 | 55.99 (2e) | **4.47** |", "empty transcripts"),
+            # A de_DE row: proves the language section header is tracked, not
+            # that every row is attributed to the first section.
+            ("| clean | 3.70 | 3.90 | **3.31** |",
+             "| clean | 3.70 | 3.90 (2e) | **3.31** |", "de_de"),
+        ]
+        for original, mutated, expect in cases:
+            with self.subTest(expect=expect), tempfile.TemporaryDirectory() as tmp:
+                docs = self._sandbox(tmp)
+                p = docs / "voice-engine-quality-2026-08.md"
+                self.assertIn(original, p.read_text())
+                p.write_text(p.read_text().replace(original, mutated))
+                out, code = self._run(docs=docs)
+                self.assertEqual(code, 1, f"{expect} change must not pass")
+                self.assertTrue(any(expect in x for x in out["problems"]),
+                                out["problems"])
+
+    def test_snr50_is_checked_including_the_degenerate_value(self):
+        """`<0 (degenerate)` is stored literally and must still compare."""
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08.md"
+            p.write_text(p.read_text().replace(
+                "| vl-gpt41mini-dns | <0 (degenerate) | 9.6 dB |",
+                "| vl-gpt41mini-dns | 1.5 dB | 9.6 dB |"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1)
+            self.assertTrue(any("SNR50" in x for x in out["problems"]),
+                            out["problems"])
+
+    def test_no_report_figure_is_left_declared_unchecked(self):
+        """UNCHECKED_METRICS must not become a hiding place.
+
+        Anything listed there has to be genuinely not a checkable measurement —
+        a cost, a configuration, a judge-free recomputation — not a figure that
+        was inconvenient to wire up. Track A WER sat here for one commit; this
+        keeps the next one honest.
+        """
+        import check_report
+        for label, reason in check_report.UNCHECKED_METRICS.items():
+            with self.subTest(label=label):
+                self.assertNotIn(
+                    "not yet checked", reason.lower(),
+                    f"{label!r} is a report figure with no verification; either "
+                    "check it against its source or say why it cannot be")
+
     def test_the_headline_spend_is_checked_against_the_cost_table(self):
         """The guard must catch the defect it was written for.
 

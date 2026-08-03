@@ -102,10 +102,24 @@ a newly-mapped metric forces the number up in the same commit. Closing the gap
 took the counts from 25/40 to 50/51 — **36 figures that were never being
 compared**, including every latency value in the tier recommendation.
 
-*Declared gap, not yet closed:* Track A word-error rates and SNR₅₀ live in
-`asr_scores_summary.csv`, not `summary.csv`, and are listed in
-`UNCHECKED_METRICS`. They are visible as unchecked rather than silently skipped,
-which is the difference that matters, but they are still unchecked.
+**A declared allowlist is a hiding place unless entries earn their place.**
+Track A WER and SNR₅₀ went into `UNCHECKED_METRICS` because they live in
+`asr_scores.csv` rather than `summary.csv` — which is a reason they need a
+*different source*, not a reason to skip them. They carried the DNS
+recommendation ("never enable Azure noise suppression", 4.83 → 47.76 WER and the
+empty-transcript counts), so the study's most actionable numbers were the ones
+nothing verified, inside the file built to stop exactly that.
+
+They are checked now: `check_wer_tables` against `asr_scores.csv` — WER **and**
+the `(8e)` empty-transcript annotations, with the table's language *section rows*
+tracked so a `de_DE` figure is not compared against `en_US` — and
+`check_snr50_table` against `asr_scores_summary.csv`, including the literal `<0
+(degenerate)`. That took the merged report from 50 checked cells to 152.
+
+The rule now has a test: no entry in `UNCHECKED_METRICS` may give "not yet
+checked" as its reason. Everything listed has to be genuinely not a measurement
+— a cost, a configuration, a judge-free recomputation — rather than a figure it
+was inconvenient to wire up.
 
 **Why the floor is per report.** It was first written as one global minimum, and
 that is the same bug in the check that exists to catch the bug: with 25 cells

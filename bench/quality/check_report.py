@@ -74,18 +74,19 @@ METRIC_FIELDS: dict[str, tuple[str, ...]] = {
 # count certified the document as fully compared. An unlisted numeric row is now
 # a problem, so adding a metric to a report forces a decision here.
 UNCHECKED_METRICS = {
-    # Track A word-error rates: these live in asr_scores_summary.csv, not
-    # summary.csv. NOT currently verified by this checker — a real gap, named.
-    "clean": "Track A WER (asr_scores_summary.csv) — not yet checked",
-    "cafe 20 db": "Track A WER — not yet checked",
-    "cafe 10 db": "Track A WER — not yet checked",
-    "cafe 5 db": "Track A WER — not yet checked",
-    "cafe 0 db": "Track A WER — not yet checked",
-    "g.711 telephony": "Track A WER — not yet checked",
-    "telephony + cafe 10 db": "Track A WER — not yet checked",
-    "telephony + 3 % loss": "Track A WER — not yet checked",
-    "en_us": "SNR50, derived in score_asr.py — not yet checked",
-    "de_de": "SNR50, derived in score_asr.py — not yet checked",
+    # Track A: not summary.csv fields, but NOT unchecked — check_wer_tables and
+    # check_snr50_table compare them against asr_scores.csv and
+    # asr_scores_summary.csv. Listed here only so check_tables leaves them alone.
+    "clean": "Track A WER — checked against asr_scores.csv",
+    "cafe 20 db": "Track A WER — checked against asr_scores.csv",
+    "cafe 10 db": "Track A WER — checked against asr_scores.csv",
+    "cafe 5 db": "Track A WER — checked against asr_scores.csv",
+    "cafe 0 db": "Track A WER — checked against asr_scores.csv",
+    "g.711 telephony": "Track A WER — checked against asr_scores.csv",
+    "telephony + cafe 10 db": "Track A WER — checked against asr_scores.csv",
+    "telephony + 3 % loss": "Track A WER — checked against asr_scores.csv",
+    "en_us": "SNR50 — checked against asr_scores_summary.csv",
+    "de_de": "SNR50 — checked against asr_scores_summary.csv",
     # Judge-free recomputations: deliberately different quantities from the
     # summary fields they resemble. `slots all heard` is the per-run conjunction
     # (0.778), not `slot_heard` (0.893); `deterministic success` excludes the
@@ -132,7 +133,7 @@ UNCHECKED_METRICS = {
 # That is the point: coverage changes should be visible in the diff.
 RESULTS_FOR = {
     # report: (results subdirectory, table cells it must resolve)
-    "voice-engine-quality-2026-08.md": ("main-report", 50),
+    "voice-engine-quality-2026-08.md": ("main-report", 152),
     "voice-engine-quality-2026-08-gpt-realtime-2-1.md": (".", 51),
 }
 
@@ -295,6 +296,154 @@ def check_tables(md: str, doc: str, summary: dict[str, dict[str, str]]) -> tuple
                 for i, c in enumerate(head):
                     if i and i < len(tbl[r]):
                         compare(c, arm, [tbl[r][i]])
+    return problems, checked
+
+
+CONDITION_LABELS = {
+    "clean": "clean", "cafe 20 db": "cafe_snr20", "cafe 10 db": "cafe_snr10",
+    "cafe 5 db": "cafe_snr5", "cafe 0 db": "cafe_snr0",
+    "g.711 telephony": "tel", "telephony + cafe 10 db": "tel_cafe_snr10",
+    "telephony + 3 % loss": "tel_loss3",
+}
+LANGS = ("en_us", "de_de")
+# "47.76 (8e)" -> WER 47.76 with 8 empty transcripts.
+WER_CELL = re.compile(r"^(\d+(?:\.\d+)?)(?:\s*\((\d+)e\))?$")
+
+
+def load_asr(results: Path, name: str) -> list[dict] | None:
+    p = results / name
+    if not p.exists():
+        return None
+    with p.open() as f:
+        return list(csv.DictReader(f))
+
+
+def check_wer_tables(md: str, doc: str, results: Path,
+                     summary: dict) -> tuple[list[str], int]:
+    """Track A WER, against asr_scores.csv.
+
+    These carry the DNS recommendation — "never enable Azure noise suppression"
+    rests on 4.83 -> 47.76 and the empty-transcript counts — so they are exactly
+    the figures that must not be taken on trust. They were declared unchecked
+    while the checker verified everything around them; a declared allowlist is a
+    hiding place if things go into it for convenience rather than because they
+    genuinely cannot be checked. asr_scores.csv existing is a second source to
+    check against, not a reason to skip.
+
+    The table has language section rows (`| **en_US** | | | |`) rather than a
+    language column, so the current section is tracked while walking down.
+    """
+    rows = load_asr(results, "asr_scores.csv")
+    problems: list[str] = []
+    checked = 0
+    arms = set(summary)
+
+    for tbl in tables(md):
+        head = tbl[0]
+        if not head or norm_label(head[0]) != "condition":
+            continue
+        cols = {i: a for i, c in enumerate(head)
+                if i and (a := resolve_arm(c, arms))}
+        if len(cols) < 2:
+            continue
+        if rows is None:
+            problems.append(f"{doc}: has a Track A WER table but {results}/"
+                            "asr_scores.csv is missing, so it cannot be checked")
+            continue
+        idx = {(r["arm"], r["lang"], r["condition"]): r for r in rows}
+        lang = None
+        for row in tbl[1:]:
+            if not row:
+                continue
+            lab = norm_label(row[0])
+            if lab in LANGS and not any(c.strip() for c in row[1:]):
+                lang = lab
+                continue
+            cond = CONDITION_LABELS.get(lab)
+            if cond is None:
+                continue
+            if lang is None:
+                problems.append(f"{doc}: WER row {row[0]!r} appears before any "
+                                "language section header, so its language is "
+                                "undetermined")
+                continue
+            for i, arm in cols.items():
+                if i >= len(row) or not row[i].strip():
+                    continue
+                m = WER_CELL.match(norm_label(row[i]))
+                if not m:
+                    problems.append(f"{doc}: WER cell {row[i]!r} "
+                                    f"({arm}/{lang}/{cond}) is not a figure this "
+                                    "checker can compare")
+                    continue
+                src = idx.get((arm, lang, cond))
+                if src is None:
+                    problems.append(f"{doc}: states a WER for {arm}/{lang}/{cond}, "
+                                    "which has no row in asr_scores.csv")
+                    continue
+                checked += 1
+                want = parse_number(src["wer"])
+                got = float(m.group(1))
+                if want is None or abs(got - want) > 1e-9:
+                    problems.append(f"{doc}: {arm}/{lang}/{cond} WER — document "
+                                    f"says {got:g}, asr_scores.csv says "
+                                    f"{src['wer']!r}")
+                # The "(8e)" annotation is empty_hyp; absent means zero.
+                checked += 1
+                shown = int(m.group(2)) if m.group(2) else 0
+                if str(shown) != (src["empty_hyp"] or "0"):
+                    problems.append(f"{doc}: {arm}/{lang}/{cond} empty "
+                                    f"transcripts — document shows {shown}, "
+                                    f"asr_scores.csv says {src['empty_hyp']!r}")
+    return problems, checked
+
+
+def check_snr50_table(md: str, doc: str, results: Path,
+                      summary: dict) -> tuple[list[str], int]:
+    """SNR50 per (arm, language), against asr_scores_summary.csv."""
+    rows = load_asr(results, "asr_scores_summary.csv")
+    problems: list[str] = []
+    checked = 0
+    arms = set(summary)
+
+    for tbl in tables(md):
+        head = tbl[0]
+        if not head or norm_label(head[0]) != "arm":
+            continue
+        cols = {i: norm_label(c) for i, c in enumerate(head)
+                if i and norm_label(c) in LANGS}
+        if not cols:
+            continue
+        if rows is None:
+            problems.append(f"{doc}: has an SNR50 table but {results}/"
+                            "asr_scores_summary.csv is missing")
+            continue
+        idx = {(r["arm"], r["lang"]): r for r in rows}
+        for row in tbl[1:]:
+            arm = resolve_arm(row[0], arms) if row else None
+            if arm is None:
+                continue
+            for i, lang in cols.items():
+                if i >= len(row) or not row[i].strip():
+                    continue
+                src = idx.get((arm, lang))
+                if src is None:
+                    problems.append(f"{doc}: states SNR50 for {arm}/{lang}, which "
+                                    "has no row in asr_scores_summary.csv")
+                    continue
+                checked += 1
+                # "<0 (degenerate)" and ">20" are stored literally; a plain
+                # number is stored as a number.
+                cell = norm_label(row[i]).replace("db", "").strip()
+                want = (src["snr50_db"] or "").strip()
+                got = parse_number(cell)
+                ok = (abs(got - w) <= 1e-9
+                      if got is not None and (w := parse_number(want)) is not None
+                      else cell.split("(")[0].strip() == want)
+                if not ok:
+                    problems.append(f"{doc}: {arm}/{lang} SNR50 — document says "
+                                    f"{row[i]!r}, asr_scores_summary.csv says "
+                                    f"{want!r}")
     return problems, checked
 
 
@@ -686,6 +835,10 @@ def main() -> int:
             summary = {r["arm"]: r for r in csv.DictReader(f)}
         p, n = check_tables(md, doc, summary)
         problems += p
+        for fn in (check_wer_tables, check_snr50_table):
+            p2, n2 = fn(md, doc, results, summary)
+            problems += p2
+            n += n2
         per_doc[doc] = n
         # Per report, not in aggregate: a document whose tables stopped resolving
         # must fail on its own account, not be carried by the other one.

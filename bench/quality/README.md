@@ -143,7 +143,10 @@ python3 check_report.py        # exits non-zero and lists every disagreement
 ```
 
 Every figure in `docs/research/voice-engine-quality-*.md` is compared against the
-CSVs it was written from. Three review rounds found the same defect — a sentence
+CSVs it was written from — Track B metrics against `summary.csv`, Track A WER and
+empty-transcript counts against `asr_scores.csv`, SNR₅₀ against
+`asr_scores_summary.csv`, judge agreement recomputed from both judge passes, and
+the headline spend against the cost table. Three review rounds found the same defect — a sentence
 correct when written and stale after the study was extended — and prose does not
 fail CI on its own. This makes it fail: `test_scoring.py` runs it.
 
