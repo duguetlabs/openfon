@@ -34,7 +34,16 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 
 # A report table cell is checked only if both its arm and its metric resolve.
-# Anything unresolved is counted and reported, never silently dropped.
+# An arm label that resolves to an arm absent from summary.csv is reported; a
+# metric label that resolves to nothing is reported if the row carries figures,
+# unless it is declared in UNCHECKED_METRICS below.
+#
+# That wording is deliberately specific, because the earlier version of this
+# comment — "anything unresolved is counted and reported, never silently
+# dropped" — was true of the arm path and false of the metric path, and the gap
+# it papered over was six unchecked latency figures. A comment describing an
+# invariant the code half-implements is more convincing than the code, since it
+# states the intent rather than the behaviour.
 ARM_LABELS = {
     "vl + gpt-4.1-mini": "vl-gpt41mini",
     "vl + 2.1": "vl-native-brain-21",

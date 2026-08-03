@@ -37,6 +37,29 @@ this report a problem or fall through?** A `KeyError` is that failure at its
 loudest, a bare `continue` at its quietest, and an `any()` at its most
 plausible-looking.
 
+**The other half, and the one you can answer by inspection: what sentence was
+this check written for, and is that sentence inside what it reads?** The rule
+above is about where the *expectation* comes from; this is about whether the
+check is even pointed at the claim. `check_cost_table` was written because a
+report's headline `Actual spend` had never equalled its line items — and it read
+only the table. The headline lives in the opening paragraph, so restoring the
+original bug in either report left the run green. The guard covered everything
+except its own motivating case.
+
+That check was the only instance in the file, and the reason is worth stating,
+because it is the test for the next one: **every other check compares a document
+claim against generated data; that one compared a document claim against a
+neighbouring part of the same document.** A check that reads only the document is
+checking a story for internal consistency, which a wrong story can have.
+
+The same applies to prose about code. The header comment here once said
+unresolved cells are "counted and reported, never silently dropped" while only
+the arm-label path did that and the metric path still fell through — which is why
+CI stayed green on a table nobody was checking. **A comment describing an
+invariant the code half-implements is this class in documentation form:** it too
+degrades toward "fine", and it is more convincing than the code because it states
+the intent rather than the behaviour.
+
 ---
 
 ## The checks
@@ -71,19 +94,10 @@ matrix; a cited CSV that does not exist, an empty CSV, a missing
 `summary_per_run.csv`, an unparseable total cell, a total with no line items, and
 a non-numeric count all fell through silently. Each now reports.
 
-**A guard can miss its own motivating case.** `check_cost_table` was written
-because a report's headline `Actual spend` had never equalled its line items —
-and it validated only the table's *internal* arithmetic. The headline lives in
-the opening paragraph, so reverting it to the exact original bug, in either
-report, left the run green. The guard covered everything except the thing it
-existed for.
-
-The general shape: **a check that validates an artifact's internal consistency
-while the claim people actually quote lives somewhere else in the document.**
-Worth asking of any new check — what sentence was this written for, and is that
-sentence inside what it reads? Swept the rest of `check_report.py` for it; this
-was the only instance, because every other check compares a document claim
-against generated data rather than against a neighbouring part of the document.
+**A guard can miss its own motivating case** — `check_cost_table` did, and the
+diagnostic that finds that shape is at the top of this file. `check_cost_table`
+now reads the headline `Actual spend` as well as the table, in both directions:
+a table with no headline, and a headline with no table, are each reported.
 
 **A coverage number counted from current behaviour certifies current behaviour,
 including its blind spots.** The per-report counts were first read off whatever
