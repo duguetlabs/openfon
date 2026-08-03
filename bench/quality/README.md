@@ -85,18 +85,27 @@ DATA=/path/to/data
 cd bench/quality
 OUT=/tmp/mybench DATA=$DATA PY=../../.venv/bin/python ./run_all.sh
 
-#    Its defaults reproduce the MERGED report only: three ASR arms, five
-#    scenario arms, all eight conditions. The addendum's three arms are an
-#    extension, with a deliberately smaller condition set:
-OUT=/tmp/mybench DATA=$DATA PY=../../.venv/bin/python TRACK=a \
+#    Its defaults reproduce the MERGED report only: three ASR arms x 2 langs x
+#    8 conditions x 25 clips = 1200 ASR rows, and five scenario arms x 11
+#    scenarios x 3 trials = 165 scenario runs.
+#
+#    The addendum's arms are an extension with a deliberately smaller matrix:
+#    six of the eight conditions, and only the nine *scored* scenarios (the two
+#    barge-in ones are excluded from scoring, so they were not re-run).
+#    APPEND=1 adds to the run above instead of truncating it, so the whole
+#    committed matrix lands in one directory.
+OUT=/tmp/mybench DATA=$DATA PY=../../.venv/bin/python TRACK=a APPEND=1 \
   ASR_ARMS="native-gpt-realtime-21 native-gpt-realtime-21-mini" \
-  CONDITIONS="clean,cafe_snr10,cafe_snr5,cafe_snr0,tel,tel_cafe_snr10" ./run_all.sh
-OUT=/tmp/mybench DATA=$DATA PY=../../.venv/bin/python TRACK=b \
-  SC_ARMS="native-gpt-realtime-21 native-gpt-realtime-21-mini vl-native-brain-21" ./run_all.sh
+  CONDITIONS="clean,cafe_snr10,cafe_snr5,cafe_snr0,tel,tel_cafe_snr10" \
+  ./run_all.sh                                            # +600 ASR rows
 
-#    Those two blocks append, so the full committed matrix is the merged-report
-#    run followed by both. Together they give 1800 ASR rows and 246 scenario
-#    runs — the numbers in results/ today.
+OUT=/tmp/mybench DATA=$DATA PY=../../.venv/bin/python TRACK=b APPEND=1 \
+  SC_ARMS="native-gpt-realtime-21 native-gpt-realtime-21-mini vl-native-brain-21" \
+  ONLY="book-de-01,book-en-01,codeswitch-01,emergency-de-01,holiday-de-01,hours-de-01,hours-en-01,message-de-01,reschedule-en-01" \
+  ./run_all.sh                                            # +81 scenario runs
+
+#    Totals: 1200+600 = 1800 ASR rows, 165+81 = 246 scenario runs, which is
+#    what results/ holds today.
 
 # 5. Score.
 # The matrix is asymmetric by design: the two 2.1 ASR arms skip cafe_snr20 and

@@ -1343,6 +1343,70 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
         self.assertIn("complete=0", readme)
         self.assertIn("--allow-incomplete", readme)
 
+    def _fake_run_all(self, tmp, **env):
+        """Run run_all.sh with a stub interpreter, capturing the invocations."""
+        log = Path(tmp) / "calls.txt"
+        py = Path(tmp) / "fakepy"
+        py.write_text('#!/bin/bash\necho "INVOKED: $*" >> "%s"\n' % log)
+        py.chmod(0o755)
+        base = {"PATH": "/usr/bin:/bin", "DATA": "/x", "OUT": tmp,
+                "PY": str(py), "APPEND": "1"}
+        base.update(env)
+        subprocess.run(["/bin/bash", str(HERE / "run_all.sh")],
+                       capture_output=True, text=True, cwd=str(HERE), env=base)
+        return log.read_text() if log.exists() else ""
+
+    def test_conditions_and_scenario_filter_are_overrideable(self):
+        """The documented extension commands must reach the runners.
+
+        CONDITIONS was a bare assignment, so the documented override was ignored
+        and the extension ran all eight conditions — 800 ASR rows where the
+        reports describe 600, at the service's expense, and unable to reproduce
+        the committed matrix. There was no scenario filter at all, so the three
+        new arms would run 11 scenarios each (99 runs) rather than the 9 scored
+        ones (81).
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            out = self._fake_run_all(
+                tmp, TRACK="a", ASR_ARMS="native-gpt-realtime-21",
+                CONDITIONS="clean,cafe_snr10,cafe_snr5,cafe_snr0,tel,tel_cafe_snr10")
+            self.assertIn("--conditions clean,cafe_snr10,cafe_snr5,cafe_snr0,"
+                          "tel,tel_cafe_snr10", out)
+            self.assertNotIn("cafe_snr20", out)
+            self.assertNotIn("tel_loss3", out)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = self._fake_run_all(
+                tmp, TRACK="b", TRIALS="1", SC_ARMS="native-gpt-realtime-21",
+                ONLY="book-de-01,hours-en-01")
+            self.assertIn("--only book-de-01,hours-en-01", out)
+        with tempfile.TemporaryDirectory() as tmp:
+            # No ONLY means no filter, not an empty one.
+            out = self._fake_run_all(tmp, TRACK="b", TRIALS="1",
+                                     SC_ARMS="vl-gpt41mini")
+            self.assertNotIn("--only", out)
+
+    def test_the_readme_extension_reproduces_the_committed_matrix(self):
+        """The documented arms and scenarios must match what results/ holds."""
+        import re
+        readme = (HERE / "README.md").read_text()
+        with (HERE / "results" / "scenarios.jsonl").open() as f:
+            runs = [json.loads(l) for l in f]
+        new = {"native-gpt-realtime-21", "native-gpt-realtime-21-mini",
+               "vl-native-brain-21"}
+        scenarios = {r["scenario"] for r in runs if r["arm"] in new}
+        m = re.search(r'ONLY="([^"]+)"', readme)
+        self.assertIsNotNone(m, "the README states no scenario filter")
+        self.assertEqual(set(m.group(1).split(",")), scenarios,
+                         "the documented ONLY list does not match the scenarios "
+                         "the new arms actually ran")
+        conds = {r["condition"] for r in
+                 (json.loads(l) for l in
+                  (HERE / "results" / "asr.jsonl").read_text().splitlines())
+                 if r["arm"] == "native-gpt-realtime-21"}
+        m = re.search(r'CONDITIONS="([^"]+)"', readme)
+        self.assertIsNotNone(m)
+        self.assertEqual(set(m.group(1).split(",")), conds)
+
     def test_run_all_refuses_to_truncate_committed_results(self):
         """Following the README must not destroy the data the reports quote.
 
@@ -1690,6 +1754,28 @@ class TestReportsMatchTheirData(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertTrue(any("resolves to no summary.csv field" in x
                                 for x in out["problems"]), out["problems"])
+
+    def test_a_surplus_of_resolved_cells_also_fails(self):
+        """Equality in the checker, not only in the test.
+
+        `check_report.py` used `<` while the test asserted equality, so the
+        invariant held on one path and was documented as holding generally.
+        A floor certifies "at least this much was checked"; equality certifies
+        "exactly what we declared, and nothing moved". The surplus direction is
+        the more interesting one — the document grew figures and nobody updated
+        the declaration — and a floor cannot see it at all.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08-gpt-realtime-2-1.md"
+            row = "| Slots heard | **0.960** | 0.893 | 0.893 | 0.893 |"
+            self.assertIn(row, p.read_text())
+            p.write_text(p.read_text().replace(
+                row, row + "\n| pass^3 | 0.333 | 0.444 | 0.222 | 0.111 |"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1, "a surplus must fail, not pass a floor")
+            self.assertTrue(any("grown figures" in x for x in out["problems"]),
+                            out["problems"])
 
     def test_declared_coverage_matches_what_the_documents_contain(self):
         """The count must equal the resolvable cells, not merely be below them.

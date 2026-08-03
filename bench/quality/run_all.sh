@@ -16,7 +16,16 @@ DATA="${DATA:?set DATA to the conditions/scenarios data root}"
 N="${N:-25}"
 TRIALS="${TRIALS:-3}"
 
-CONDITIONS="clean,cafe_snr20,cafe_snr10,cafe_snr5,cafe_snr0,tel,tel_cafe_snr10,tel_loss3"
+# Overrideable like the arm lists. It was a bare assignment, which silently
+# ignored the documented CONDITIONS= override and ran all eight conditions for
+# the 2.1 extension — 800 ASR rows where the reports describe 600, at the
+# service's expense, and unable to reproduce the committed asymmetric matrix.
+CONDITIONS="${CONDITIONS:-clean,cafe_snr20,cafe_snr10,cafe_snr5,cafe_snr0,tel,tel_cafe_snr10,tel_loss3}"
+# Scenario subset for Track B, passed to run_scenarios.py --only. Empty means
+# every scenario in the fixture. The 2.1 arms ran the nine *scored* scenarios
+# and skipped the two barge-in ones, which is why they have 27 runs against the
+# incumbents' 33; without this the extension produces 99 runs, not 81.
+ONLY="${ONLY:-}"
 # Track A arms only. vl-native-brain is excluded on purpose: Voice Live rejects
 # manual-commit transcription on the gpt-realtime-2 brain ("turn_detection must
 # be of type AzureSemanticVAD"), so it cannot be put on the same footing as the
@@ -42,13 +51,21 @@ mkdir -p "$OUT/results" "$OUT/logs"
 # unreproducible, except reached by following the documented procedure.
 #
 # A re-run is fine; it just has to say where it is going. Set OUT to a new
-# directory, or FORCE=1 if you really mean to replace what is there.
-if [ "${FORCE:-0}" != "1" ]; then
+# directory, APPEND=1 to add arms to a run already there, or FORCE=1 if you
+# really mean to replace what is there.
+#
+# APPEND exists because the committed matrix is a base pass plus an extension:
+# without it, reproducing it means running each block to its own directory and
+# concatenating the jsonl files by hand, which is exactly the kind of step that
+# gets done wrong. Appending destroys nothing, so it does not need the guard.
+APPEND="${APPEND:-0}"
+if [ "${FORCE:-0}" != "1" ] && [ "$APPEND" != "1" ]; then
   for f in "$OUT/results/asr.jsonl" "$OUT/results/scenarios.jsonl"; do
     if [ -s "$f" ]; then
       echo "refusing to truncate $f ($(wc -l < "$f" | tr -d ' ') rows)." >&2
       echo "  These are the committed results the reports quote. To run a new" >&2
-      echo "  study:   OUT=/tmp/mybench DATA=\$DATA ./run_all.sh" >&2
+      echo "  study:      OUT=/tmp/mybench DATA=\$DATA ./run_all.sh" >&2
+      echo "  To add arms to that run:   APPEND=1 OUT=/tmp/mybench ..." >&2
       echo "  To deliberately replace them:   FORCE=1 ..." >&2
       exit 2
     fi
@@ -65,7 +82,7 @@ run() {  # run <label> <cmd...>
 }
 
 if [ "${TRACK:-both}" = "a" ] || [ "${TRACK:-both}" = "both" ]; then
-  : > $OUT/results/asr.jsonl
+  [ "$APPEND" = "1" ] || : > $OUT/results/asr.jsonl
   for arm in $ASR_ARMS; do
     for lang in en_us de_de; do
       echo "=== ASR $arm $lang"
@@ -77,12 +94,13 @@ if [ "${TRACK:-both}" = "a" ] || [ "${TRACK:-both}" = "both" ]; then
 fi
 
 if [ "${TRACK:-both}" = "b" ] || [ "${TRACK:-both}" = "both" ]; then
-  : > $OUT/results/scenarios.jsonl
+  [ "$APPEND" = "1" ] || : > $OUT/results/scenarios.jsonl
   for trial in $(seq 1 "$TRIALS"); do
     for arm in $SC_ARMS; do
       echo "=== SCENARIOS $arm trial $trial"
       run "scenarios/$arm/t$trial" "$PY" run_scenarios.py --arm "$arm" \
         --trial "$trial" --audio "$DATA/scenarios" \
+        ${ONLY:+--only "$ONLY"} \
         --out $OUT/results/scenarios.jsonl --logdir "$OUT/logs"
     done
   done

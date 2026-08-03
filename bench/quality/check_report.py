@@ -851,12 +851,27 @@ def main() -> int:
         per_doc[doc] = n
         # Per report, not in aggregate: a document whose tables stopped resolving
         # must fail on its own account, not be carried by the other one.
-        if n < want_cells:
+        #
+        # Exact, not a floor. A floor certifies "at least this much was checked";
+        # equality certifies "exactly what we declared was checked, and nothing
+        # moved". The surplus direction is the more interesting of the two — it
+        # means the document grew figures and nobody updated the declaration —
+        # and a floor cannot see it. This ran as `<` here while the test asserted
+        # equality, so the invariant held on one path and was documented as
+        # holding generally: the same half-implemented-invariant shape as the
+        # header comment above.
+        if n != want_cells:
+            direction = ("only %d" % n) if n < want_cells else ("%d" % n)
+            why = ("Its numeric tables are no longer being checked — this is not "
+                   "evidence the report is correct. If a table was removed on "
+                   "purpose, lower the count"
+                   if n < want_cells else
+                   "The document has grown figures the declaration does not "
+                   "account for. Confirm the new cells check what you think, "
+                   "then raise the count")
             problems.append(
-                f"{doc}: only {n} table cells resolved, expected {want_cells}. "
-                "Its numeric tables are no longer being checked — this is not "
-                "evidence the report is correct. If a table was removed on "
-                "purpose, lower the count for this report in RESULTS_FOR.")
+                f"{doc}: {direction} table cells resolved, expected exactly "
+                f"{want_cells}. {why} for this report in RESULTS_FOR.")
         problems += check_judge_agreement(md, doc, results)
         problems += check_cost_table(md, doc)
         problems += check_run_counts(md, doc, results)

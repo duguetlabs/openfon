@@ -69,7 +69,7 @@ the intent rather than the behaviour.
 | 1 | `run_scenarios.py` `main()` | did this arm/trial complete | every scenario ran without raising **and** produced at least one agent turn; **exits non-zero** if any failed | nothing known. A silently-empty scenario used to reach the scorer as a valid row. |
 | 2a | `run_asr.py` `main()` | did every condition produce results | retries not exhausted for any condition; **exits non-zero** if any were | nothing known. Exiting zero was the bug: a full cell of error rows has every expected clip id, so the scorer scored an outage as 100% WER. Paired with #11's all-error guard. |
 | 2 | `run_asr.py` `transcribe_batch()` | is this session still coherent | each clip gets `input_audio_buffer.committed`; a timeout **raises** `CommitDesync` rather than continuing | nothing known. Continuing was the bug: a late commit was consumed as the next clip's, cascading wrong hypotheses. |
-| 3 | `run_all.sh` | did the matrix complete | every runner invocation's exit code; collects failures and **exits non-zero**. Also **refuses to start** if `$OUT/results/*.jsonl` are non-empty, unless `FORCE=1` | a runner that exits 0 having swallowed its errors — which is why #1 exists. The refusal was added after the README's own step 4 was found to destroy the committed study: `OUT` defaults to `$HERE`, so the documented invocation truncated the data both reports quote and replaced it with a smaller run under the old arm set. |
+| 3 | `run_all.sh` | did the matrix complete | every runner invocation's exit code; collects failures and **exits non-zero**. Also **refuses to start** if `$OUT/results/*.jsonl` are non-empty, unless `APPEND=1` (adds arms, destroys nothing) or `FORCE=1` (replaces) | a runner that exits 0 having swallowed its errors — which is why #1 exists. The refusal was added after the README's own step 4 was found to destroy the committed study: `OUT` defaults to `$HERE`, so the documented invocation truncated the data both reports quote and replaced it with a smaller run under the old arm set. |
 | 4 | `summarize.py` trial check | did every arm run everything | **set of trial ids** per `(arm, scenario)` equals `{1..k}`, no duplicates, no extras | nothing known. Counting rows was the bug: three copies of trial 1 satisfied `--trials 3`. Runners append to JSONL, so re-runs duplicate rather than replace. |
 | 5 | `summarize.py` judge check | was every run judged | a verdict row exists for every `(arm, trial, scenario)`; empty `--judge` file is an **error**, not "no judge" | a judge that returns verdicts for the wrong candidates — blocked in `parse_verdicts` by id membership. |
 | 5b | `summarize.py` scenario universe | which scenarios should exist | the **fixture's** scored scenario ids, against the ids present; rejects both gaps and rogues | nothing known. Inferring the set from the results was the bug, and the only one the per-scenario trial checks could not see: they verify trials *within* a scenario, this loses the scenario. |
@@ -83,6 +83,18 @@ the intent rather than the behaviour.
 | 15 | `score_asr.py` output rows | which cells exist | rows are emitted for the **expected cross-product** of (arm, lang, condition), absent ones with `n=0`, `complete=0`, empty WER | nothing known. Iterating only the groups that existed was the bug: an absent cell produced no row, so all 72 rows read `complete=1` and the field could never be 0 — a consumer trusting the documented signal saw a complete matrix because the gaps were invisible, not because they were filled. |
 | 12 | `judge.py` `parse_verdicts` | is this verdict usable | one verdict per expected candidate id, scores literally `int` in range | nothing known. `bool` passing as `int` was the bug: `true` became `0.0` downstream. |
 | 14 | `check_report.py` | do the reports still quote their own data | every resolvable table cell, judge-agreement figure, cost total, run count, Track A condition list, and any count written beside a named CSV or results directory, against the tree that report was written from (`RESULTS_FOR`) | **free prose**, deliberately: a count not tied to a named artifact is not matched. Each report must resolve its **declared** cell count, enforced per report; an unmapped report is an error, not a skip; an empty judge intersection is reported, not raised. |
+
+**The runner was written for the original matrix; the documented invocations
+describe a study it could not produce.** Five reproducibility findings landed on
+this shape. `CONDITIONS` was a bare assignment, so the documented override was
+ignored and the extension would run all eight conditions — 800 ASR rows against
+the 600 the reports describe, billed to the service, and unable to reproduce the
+committed asymmetry. There was no scenario filter at all, so the three new arms
+would run 11 scenarios each (99 runs) rather than the nine scored ones (81).
+Both are now overrideable, `APPEND=1` lets the extension land in the same
+directory as the base pass, and a test asserts the documented `ONLY` and
+`CONDITIONS` lists **equal** the scenarios and conditions the committed data
+actually contains — so the instructions cannot drift from the study again.
 
 **Every branch in `check_report.py` was swept against the question above**, after
 three findings in one round were all fall-throughs inside it. Nine places were
@@ -110,9 +122,17 @@ The declared expectation has to come from the document's *structure* — how man
 numeric cells it contains beside an arm — not from how many the parser managed to
 resolve. Two changes make those the same number: an unrecognised label carrying
 figures is now a problem (`UNCHECKED_METRICS` is the declared list of rows that
-genuinely are not summary figures, each with its reason), and the test requires
-the resolved count to **equal** the declared one rather than merely clear it. So
-a newly-mapped metric forces the number up in the same commit. Closing the gap
+genuinely are not summary figures, each with its reason), and the count must
+**equal** the declaration rather than merely clear it. So a newly-mapped metric
+forces the number up in the same commit.
+
+Equality is enforced **in the checker**, not only in its test. It ran as `<`
+while the test asserted `==`, which is the half-implemented-invariant shape
+again: true on one path, documented as true generally, and a stale declaration
+would pass a direct `check_report.py` run while failing CI. A floor certifies
+"at least this much was checked"; equality certifies "exactly what we declared,
+and nothing moved". **The surplus direction is the more useful of the two** — it
+means the document grew figures nobody accounted for — and a floor cannot see it. Closing the gap
 took the counts from 25/40 to 50/51 — **36 figures that were never being
 compared**, including every latency value in the tier recommendation.
 
