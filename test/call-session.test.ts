@@ -786,6 +786,44 @@ describe('session echo read-back', () => {
     expect(updatesSent(up)).toBe(1);
   });
 
+  it('keeps a superseded socket off the replacement connection', async () => {
+    // Third instance of the same bug in this file: two sockets are alive during
+    // a rotation, and per-connection state was being held per call. A late echo
+    // from the outgoing socket was compared against the *replacement's* config,
+    // spent the replacement's retry budget, and pushed a re-send at a socket
+    // about to close.
+    vi.useFakeTimers();
+    const { up, sent } = await started();
+
+    up.receive({ type: 'session.expiring' });
+    await flush();
+    const newUp = upstreamSockets.at(-1)!;
+
+    // The handover itself: the replacement has just been configured, and the
+    // outgoing socket has not been closed yet. Deliberately no flush here —
+    // that window is the whole point, and letting the rotation finish would
+    // close the outgoing socket and test nothing.
+    newUp.emit('open', {});
+    expect(updatesSent(newUp)).toBe(1);
+    expect(up.readyState).toBe(1); // still open, still serving the caller
+
+    // A late, substituted echo from the connection being rotated out. It is
+    // still serving the caller for the rest of the window, so it is answered —
+    // on its own socket, out of its own budget.
+    echo(up, substituted(sent));
+    await flush();
+    expect(updatesSent(up)).toBe(2); // answered where it came from
+    expect(updatesSent(newUp)).toBe(1); // and nothing pushed at the replacement
+
+    // The replacement's budget is untouched: it still has both its re-sends.
+    const resumed = newUp.messages().find((m) => m.type === 'session.update')!.session as Sess;
+    echo(newUp, substituted(resumed));
+    await flush();
+    echo(newUp, substituted(resumed));
+    await flush();
+    expect(updatesSent(newUp)).toBe(3);
+  });
+
   it('re-asserts on the replacement connection after a rotation', async () => {
     // A rotation sends a fresh configuration, so it gets its own budget and
     // becomes what later echoes are compared against — and the re-send has to

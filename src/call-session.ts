@@ -519,6 +519,15 @@ export class CallSession implements DurableObject {
   // still mid-response and has to stay both readable and writable until its
   // replacement is actually open, or rotating — which exists so a call does not
   // drop mid-sentence — would itself swallow seconds of speech.
+  //
+  // **Ask of anything new that touches upstream state: what does this do while
+  // two sockets are alive?** That window has now produced the same bug three
+  // times — the receive guard keyed on "is this the write target" (dropping the
+  // working connection's audio), the reconnect counter shared across an episode
+  // (hanging up on the second drop), and the session read-back holding one
+  // `sent`/`resends` pair per call (a superseded socket's echo spending the
+  // replacement's budget). Every one was a per-connection fact stored per call.
+  // State that belongs to a connection is keyed by the connection.
   private readableUpstreams = new Set<WebSocket>();
 
   private sendUpstream(obj: unknown, target: WebSocket | null = this.upstream): void {
@@ -563,8 +572,15 @@ export class CallSession implements DurableObject {
   // The benchmark harness rejects those sessions. Production cannot reject
   // anything, so it re-asserts instead: compare the echo against what we sent
   // and, if something that matters differs, send the whole payload again.
-  private sentSession: SessionConfig | null = null;
-  private sessionResends = 0;
+  //
+  // Keyed by socket, because `session.updated` arrives per connection and during
+  // a rotation two connections are alive at once (see `readableUpstreams`). Held
+  // as one field per call, the outgoing socket's echo would have been compared
+  // against the replacement's config, spent the replacement's retry budget, and
+  // re-sent to a socket that is about to close. A WeakMap rather than bookkeeping
+  // we have to remember to clean up: a socket nobody references is a session
+  // nobody can echo.
+  private sessionState = new WeakMap<WebSocket, { sent: SessionConfig; resends: number }>();
   private static readonly MAX_SESSION_RESENDS = 2;
 
   // Subtrees whose silent substitution changes what the caller experiences, so
@@ -612,8 +628,13 @@ export class CallSession implements DurableObject {
   }
 
   private checkSessionEcho(echoed: unknown, from: WebSocket): void {
-    const sent = this.sentSession;
-    if (!sent || !echoed || typeof echoed !== 'object') return;
+    // This connection's own configuration and its own budget. A late echo from
+    // a socket being rotated out is therefore checked against what *that* socket
+    // was told, and can neither spend the live connection's retries nor push a
+    // re-send at it.
+    const state = this.sessionState.get(from);
+    if (!state || !echoed || typeof echoed !== 'object') return;
+    const sent = state.sent;
     // The gateway's own injected update produces an echo too, and it arrives
     // first. Only the echo carrying our instructions is a report on what we
     // asked for — and it is still the right discriminator when the race is
@@ -628,28 +649,28 @@ export class CallSession implements DurableObject {
     const enforced = diff(CallSession.ENFORCED_SESSION_PATHS);
     if (!enforced.length) return;
 
-    if (this.sessionResends >= CallSession.MAX_SESSION_RESENDS) {
+    if (state.resends >= CallSession.MAX_SESSION_RESENDS) {
       // Out of attempts. Say so loudly rather than silently: the call carries
       // on, and the owner's log is the only place this can surface.
-      console.error(`call ${this.callId}: session config not applied after ${this.sessionResends} re-sends: ${enforced.join('; ')}`);
+      console.error(`call ${this.callId}: session config not applied after ${state.resends} re-sends: ${enforced.join('; ')}`);
       return;
     }
-    this.sessionResends++;
-    console.warn(`call ${this.callId}: session config was substituted, re-sending (${this.sessionResends}): ${enforced.join('; ')}`);
+    state.resends++;
+    console.warn(`call ${this.callId}: session config was substituted, re-sending (${state.resends}): ${enforced.join('; ')}`);
     // Byte-identical to what we sent, and aimed at the socket that answered —
     // during a rotation that is not necessarily the current write target.
     this.sendUpstream({ type: 'session.update', session: sent }, from);
   }
 
-  // Every session.update goes through here so `sentSession` cannot drift from
+  // Every session.update goes through here so what we recorded cannot drift from
   // what actually went on the wire, and so a fresh configuration gets a fresh
-  // re-send budget. The re-send path deliberately does not come back through
-  // this method — resetting the budget from inside a retry is how a retry
-  // becomes a loop.
+  // re-send budget — on the connection it was sent to, and only that one. The
+  // re-send path deliberately does not come back through this method: resetting
+  // the budget from inside a retry is how a retry becomes a loop.
   private sendSessionUpdate(voice: string, instructions: string, target: WebSocket | null = this.upstream): void {
+    if (!target) return;
     const payload = this.realtimeSessionPayload(voice, instructions);
-    this.sentSession = payload.session;
-    this.sessionResends = 0;
+    this.sessionState.set(target, { sent: payload.session, resends: 0 });
     this.sendUpstream(payload, target);
   }
 
