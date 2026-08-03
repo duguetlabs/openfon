@@ -31,7 +31,7 @@ from pathlib import Path
 import websockets
 
 from engines import ARMS, connect_kwargs, load_prompt
-from events import function_call, redact, response_cancelled
+from events import function_call, redact, response_cancelled, scenario_filter
 
 FRAME_MS = 40                       # 40 ms frames ~= a realistic RTP cadence
 LANG_CODE = {"en_US": "en", "de_DE": "de"}
@@ -356,20 +356,12 @@ async def main() -> None:
 
     failed: list[str] = []
     spec = json.loads(Path(a.scenarios).read_text())
-    want = {s.strip() for s in a.only.split(",")} if a.only else None
-    if want:
-        # Validate every requested id against the fixture before spending
-        # anything. An unknown id used to act as a filter that matches nothing:
-        # a typo in a list quietly dropped that scenario, and a wholly wrong
-        # list produced no runs at all while run_all.sh reported success on an
-        # empty matrix. The fixture is already the declared source for the
-        # scenario universe (summarize.py reads it for the same reason), so an
-        # id that is not in it is a mistake, not a selection.
-        known = {sc["id"] for sc in spec["scenarios"]}
-        if unknown := sorted(want - known):
-            sys.exit(f"--only names {len(unknown)} scenario id(s) not in "
-                     f"{a.scenarios}: {', '.join(unknown)}. "
-                     f"Known ids: {', '.join(sorted(known))}")
+    # Validated before anything is spent; see events.scenario_filter for why an
+    # unknown id is an error rather than a filter, and why it lives there.
+    try:
+        want = scenario_filter(a.only, {sc["id"] for sc in spec["scenarios"]})
+    except ValueError as e:
+        sys.exit(str(e).replace("the fixture", a.scenarios))
     Path(a.logdir).mkdir(parents=True, exist_ok=True)
 
     for sc in spec["scenarios"]:

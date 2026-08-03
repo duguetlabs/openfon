@@ -57,3 +57,28 @@ def response_cancelled(ev: dict) -> bool:
     if ev.get("type") != "response.done":
         return False
     return ((ev.get("response") or {}).get("status")) in ("cancelled", "canceled")
+
+
+def scenario_filter(only: str | None, known: set[str]) -> set[str] | None:
+    """Parse and validate a `--only` list against the fixture's scenario ids.
+
+    Raises ValueError naming every unknown id. An unknown id used to act as a
+    filter that matches nothing: a typo in a list quietly dropped that scenario,
+    and a wholly wrong list produced no runs at all while `run_all.sh` reported
+    success on an empty matrix. The fixture is the declared scenario universe
+    (`summarize.py` reads it for the same reason), so an id absent from it is a
+    mistake, not a selection.
+
+    Lives here rather than in `run_scenarios.py` so it can be tested without
+    importing `websockets` — the runner's transport is not installed on the CI
+    image, and a test that shells out to the runner to check a pure validation
+    fails for a reason unrelated to what it is testing.
+    """
+    if not only:
+        return None
+    want = {s.strip() for s in only.split(",") if s.strip()}
+    if unknown := sorted(want - known):
+        raise ValueError(
+            f"--only names {len(unknown)} scenario id(s) not in the fixture: "
+            f"{', '.join(unknown)}. Known ids: {', '.join(sorted(known))}")
+    return want

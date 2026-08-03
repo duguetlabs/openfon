@@ -30,7 +30,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "prepare"))
 
 from judge import JudgeParseError, parse_verdicts  # noqa: E402
-from events import function_call, response_cancelled  # noqa: E402
+from events import function_call, response_cancelled, scenario_filter  # noqa: E402
 from score_slots import (  # noqa: E402
     detect_lang, fact_present, score_run, slot_present, time_matches,
     times_mentioned,
@@ -1052,11 +1052,45 @@ class TestScoringImportsAreTransportFree(unittest.TestCase):
         runner = "from " + "run_scenarios" + " import"
         for mod in ("score_slots.py", "score_asr.py", "summarize.py",
                     "judge.py", "events.py", "test_scoring.py",
-                    "rederive_tools.py"):
+                    "rederive_tools.py", "check_report.py"):
             with self.subTest(module=mod):
                 src = (HERE / mod).read_text()
                 self.assertNotIn(ws, src)
                 self.assertNotIn(runner, src)
+
+    def test_no_test_shells_out_to_a_transport_importing_module(self):
+        """Importing the runner is not the only way to depend on its transport.
+
+        A test that invokes `run_scenarios.py` as a subprocess to exercise a
+        pure validation fails on CI with ModuleNotFoundError — which is how the
+        `--only` validation test first broke the build. It passed locally only
+        because the developer's venv happens to have `websockets` installed;
+        the check above could not see it, because the dependency was in an
+        argument list rather than an import.
+        """
+        import ast
+        transport = {"run_scenarios.py", "run_asr.py", "probe_session.py",
+                     "probe_dns.py"}
+        tree = ast.parse((HERE / "test_scoring.py").read_text())
+        offenders = []
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "run"
+                    and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "subprocess"):
+                continue
+            # Reading one of these files as *text* is fine — several tests do,
+            # to assert on their source. Executing one is not.
+            for c in ast.walk(node):
+                if (isinstance(c, ast.Constant) and isinstance(c.value, str)
+                        and c.value in transport):
+                    offenders.append((c.value, node.lineno))
+        self.assertEqual(
+            offenders, [],
+            "these tests execute a module that imports the websocket client CI "
+            "does not install. Extract the pure part into events.py and test "
+            "that instead.")
 
 
 class TestUnscoredScenariosAreExcluded(unittest.TestCase):
@@ -1481,17 +1515,24 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
         no runs at all while run_all.sh reported success on an empty matrix. The
         fixture is already the declared scenario universe, so an id not in it is
         a mistake, not a selection.
+
+        Tests `events.scenario_filter` rather than shelling out to the runner:
+        the first version of this test invoked `run_scenarios.py`, which imports
+        `websockets`, and failed on CI for a reason unrelated to what it checks —
+        the transport entanglement `events.py` was extracted to prevent.
         """
+        known = {sc["id"] for sc in
+                 json.loads((HERE / "fixtures" / "scenarios.json").read_text())
+                 ["scenarios"]}
         for only in ("book-de-01,typo-01", "nope-01"):
             with self.subTest(only=only):
-                r = subprocess.run(
-                    [sys.executable, str(HERE / "run_scenarios.py"),
-                     "--arm", "vl-gpt41mini", "--audio", "/x",
-                     "--out", "/dev/null", "--only", only],
-                    capture_output=True, text=True, cwd=str(HERE),
-                    env={"PATH": "/usr/bin:/bin"})
-                self.assertNotEqual(r.returncode, 0, "an unknown id must refuse")
-                self.assertIn("not in", r.stderr + r.stdout)
+                with self.assertRaises(ValueError) as cm:
+                    scenario_filter(only, known)
+                self.assertIn("not in the fixture", str(cm.exception))
+        # A valid list still selects, and an absent one still means "all".
+        self.assertEqual(scenario_filter("book-de-01", known), {"book-de-01"})
+        self.assertIsNone(scenario_filter(None, known))
+        self.assertIsNone(scenario_filter("", known))
 
     def test_an_unknown_judge_arm_is_refused(self):
         r = subprocess.run(
