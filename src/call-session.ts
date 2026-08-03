@@ -115,16 +115,20 @@ const SERVER_VAD: TurnDetection = { type: 'server_vad', threshold: 0.7, prefix_p
 // update.
 type SessionConfig = Record<string, unknown>;
 
-// The evidence, so it does not get re-litigated from half of it, in two
-// documents — and which one holds what matters, because the counterintuitive
-// half is not in the one you would guess:
+// The evidence, so it does not get re-litigated from half of it. It is spread
+// across three documents and the counterintuitive parts are not in the one you
+// would guess, so this says which holds what:
 //   * docs/research/realtime-latency-2026-08.md § "Follow-up: is the splitting
 //     the brain or the turn detector?" — the original gpt-realtime-2 result:
 //     10/10 splits under server VAD, 0/10 under semantic, and OpenAI's
 //     end-of-turn p90 of 4512 ms.
-//   * docs/research/realtime-21-2026-08.md — everything about 2.1 and
+//   * docs/research/realtime-21-2026-08.md — the turn-taking side of 2.1 and
 //     2.1-mini: the 12/12 split counts, the bimodal paired distribution, the
 //     4442 ms end-of-turn p90, and the Voice Live + Azure semantic arms.
+//   * docs/research/voice-engine-quality-2026-08-gpt-realtime-2-1.md — the
+//     brain-quality side of the same two tiers: groundedness, slot capture and
+//     strict success. Nothing about detectors lives here, and nothing about
+//     judgement lives in the other two.
 //
 // **The defect.** `server_vad` splits a caller's utterance at a clause pause on
 // every gpt-realtime tier: 12/12 turns on 2, 2.1 and 2.1-mini alike, against
@@ -208,27 +212,39 @@ const TURN_DETECTION_BY_TIER: Record<string, TurnDetection> = {
   // genuine rather than the config race: all 12 turns config_verified with
   // `semantic_vad` echoed back, 0 rejected.
   //
-  // Separate caution, hypothesis rather than finding, because this tier's
-  // latency is attractive enough to be adopted on that alone: it **deflects**.
-  // It answered "I can't see our live schedule from here" on 2/20 replies under
-  // server VAD and 6/20 under OpenAI semantic, where no other brain in that
-  // comparison deflected at all. n=20 and a crude regex, so it is a smell.
+  // Separate caution, because this tier is fast enough to be adopted on that
+  // alone — 1194 ms TTFA p50, faster than the HD tier, at half 2.1's cost. Do
+  // not. It buys that speed by giving up the property the expensive tiers exist
+  // for.
   //
-  // Do not read it as mini-specific, though. On the Voice Live arms of the same
-  // study every *native* brain deflects at ~10% — 2.1-mini, 2.1 and
-  // gpt-realtime-2 alike — against 2.5% for the cascade the HD tier runs, so it
-  // tracks the brain type rather than this model id, and would follow us onto
-  // any native tier.
+  // Measured (docs/research/voice-engine-quality-2026-08-gpt-realtime-2-1.md,
+  // added by the 2.1 quality benchmark in PR #9): groundedness **0.741**,
+  // against 0.926 for both
+  // gpt-realtime-2 and 2.1. The bands are clean and hold under reseeding —
+  // every gpt-realtime arm 0.91-0.97, every gpt-4.1-mini arm *and 2.1-mini*
+  // 0.73-0.82. It scores in the cheap tier's band while being priced and sold
+  // as a native one. Its strict success, 0.148, is the lowest of any arm tested.
   //
-  // And groundedness cannot settle it: "I can't see our live schedule" invents
-  // nothing, so it scores *well* on groundedness while being useless to the
-  // caller — the metric is structurally blind to exactly this failure, in the
-  // same way a median was blind to the semantic-VAD tail. Two brains scoring
-  // identically on it is not evidence they behave the same on a call. What
-  // would settle it is re-reading the quality run's own transcripts for the
-  // same gap; that is data already collected, not a new run.
-  // See docs/research/realtime-21-2026-08.md § "Two things 'strict upgrade'
-  // would flatten".
+  // Observed, and weaker than it first looks
+  // (docs/research/realtime-21-2026-08.md § "Two things 'strict upgrade' would
+  // flatten"): it **deflects** — "I can't see our live schedule from here" — on
+  // 2/20 replies under server VAD and 6/20 under OpenAI semantic, where no
+  // other brain in that comparison did at all. But on the Voice Live arms every
+  // *native* brain deflects at ~10%, 2.1-mini and 2.1 and gpt-realtime-2 alike,
+  // against 2.5% for the cascade the HD tier runs. So it tracks the brain type,
+  // not this model id, and would follow us onto any native tier. n=20 and a
+  // crude regex: a smell, not a result.
+  //
+  // The two do not corroborate each other, and it matters which way round they
+  // sit. Groundedness is **structurally blind** to deflection: "I can't see our
+  // live schedule" invents nothing, so it scores *well* while being useless to
+  // the caller — blind in the same way a median was blind to the semantic-VAD
+  // tail. 2.1-mini's 0.741 is identical to gpt-4.1-mini's, and that identity is
+  // exactly what the addendum uses to argue equal scores are not equal
+  // behaviour. So the groundedness gap is a real signal that likely
+  // *understates* the problem, not a second measurement of the deflection. What
+  // would settle it is re-reading the quality run's existing transcripts for the
+  // same gap — data already collected, not a new run.
   'gpt-realtime-2.1-mini': SERVER_VAD,
   // Does not split (0/10), and semantic VAD measured *worse* on this brain
   // (strict success 0.333 -> 0.259, pass^3 0.222 -> 0.111, TTFA p95 +133 ms;
