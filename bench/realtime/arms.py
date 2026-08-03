@@ -435,7 +435,44 @@ REALTIME_21_ARMS: list[Arm] = [
         tags=("vl", "gateway", "incumbent")),
 ]
 
-ARMS_BY_ID = {a.id: a for a in ARMS + VAD_ARMS + REALTIME_21_ARMS}
+# ── The proposed Kataleptic tier: Voice Live serving a gpt-realtime brain ──
+# Azure's multilingual semantic detector eliminated clause-pause splitting on
+# gpt-realtime-2 at NO latency cost, where OpenAI's semantic detector cost half
+# a second with a multi-second tail. That combination — native speech-to-speech
+# brain, Azure detector — is reachable only through Voice Live, and Kataleptic
+# exposes no tier for it. These arms measure what such a tier would be worth.
+#
+# Direct to Azure, because the gateway cannot reach this combination today. The
+# merged report bounds the proxy's own cost well below the differences here.
+# Voice defaults to the model's own `marin`: Voice Live ACCEPTS an Azure neural
+# voice on a native brain, which would silently convert the tier into a cascade
+# and throw away the prosody that is the reason to want it.
+VOICE_LIVE_TIER_ARMS: list[Arm] = [
+    Arm(id="vl21-azsem",
+        label="Voice Live serving gpt-realtime-2.1, Azure semantic VAD",
+        dialect="vl", creds="azure",
+        voice="marin", voice_type="openai", transcription=WHISPER,
+        brain="gpt-realtime-2.1",
+        _url=(f"wss://{AZURE_HOST}/voice-live/realtime"
+              f"?api-version={VOICE_LIVE_API_VERSION}&model=gpt-realtime-2.1"),
+        turn_detection=AZURE_SEMANTIC_VAD,
+        notes="The candidate best tier: newest brain, free detector.",
+        tags=("native", "direct", "voicelive-stack", "semantic", "v21")),
+    Arm(id="vl21mini-azsem",
+        label="Voice Live serving gpt-realtime-2.1-mini, Azure semantic VAD",
+        dialect="vl", creds="azure",
+        voice="marin", voice_type="openai", transcription=WHISPER,
+        brain="gpt-realtime-2.1-mini",
+        _url=(f"wss://{AZURE_HOST}/voice-live/realtime"
+              f"?api-version={VOICE_LIVE_API_VERSION}&model=gpt-realtime-2.1-mini"),
+        turn_detection=AZURE_SEMANTIC_VAD,
+        notes=("Whether Azure's detector fixes the splitting that OpenAI's only "
+               "mitigated on this brain — 4/12 through the gateway."),
+        tags=("native", "direct", "voicelive-stack", "semantic", "v21mini")),
+]
+
+ARMS_BY_ID = {a.id: a for a in ARMS + VAD_ARMS + REALTIME_21_ARMS
+              + VOICE_LIVE_TIER_ARMS}
 
 # Paired comparisons: (treatment, control, question). analyze.py reports only
 # the ones whose two arms both appear in the dataset, so the main run and the
@@ -466,6 +503,17 @@ PAIRS = [
      "gpt-realtime-2.1-mini vs Voice Live gpt-4.1-mini"),
     ("gw-21-server", "gw-hd-server",
      "gpt-realtime-2.1 vs Voice Live gpt-4.1-mini"),
+    # the proposed tier, against what it would replace
+    ("vl21-azsem", "vlnat-azsemantic",
+     "gpt-realtime-2.1 vs 2 on the Voice-Live-served tier"),
+    ("vl21-azsem", "gw-hd-server",
+     "proposed tier vs the current HD tier"),
+    ("vl21-azsem", "gw-2-server",
+     "proposed tier vs the current gpt-realtime-2 tier"),
+    ("vl21mini-azsem", "vl21-azsem",
+     "mini vs full brain on the proposed tier"),
+    ("vl21mini-azsem", "gw-hd-server",
+     "proposed mini tier vs the current HD tier"),
 ]
 
 
