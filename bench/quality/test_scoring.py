@@ -1420,6 +1420,53 @@ class TestDecliningWorkReachesTheExitStatus(unittest.TestCase):
         # A --wav that round-trips nothing is the case the flag exists for.
         self.assertIn("no transcript came back", src)
 
+    def test_the_preflight_probes_each_arm_with_a_payload_it_accepts(self):
+        """A false alarm is not a safer failure than a silent pass.
+
+        Making the pre-flight exit non-zero was right; sending every arm the
+        ASR payload was not. README step 3 runs without `--arms`, so it probed
+        `vl-native-brain` and `vl-native-brain-21` with `session_asr` — a
+        combination Voice Live is *documented* to reject, and which the study
+        never uses on those arms. The expected refusal was then recorded as a
+        failed arm, so the documented pre-flight failed deterministically on
+        valid arms. A check that cries wolf is the one that gets switched off.
+
+        The capability is declared on the arm rather than discovered by sending
+        a payload known to be rejected.
+        """
+        from engines import ARMS
+        for name in ("vl-native-brain", "vl-native-brain-21"):
+            with self.subTest(arm=name):
+                self.assertFalse(ARMS[name].asr_manual_commit)
+        # Everything run_all.sh puts in ASR_ARMS must still be probed as ASR.
+        run_all = (HERE / "run_all.sh").read_text()
+        declared = re.search(r'ASR_ARMS="\$\{ASR_ARMS:-([^}]*)\}"', run_all)
+        self.assertIsNotNone(declared, "run_all.sh declares no ASR_ARMS")
+        for name in declared.group(1).split():
+            with self.subTest(arm=name):
+                self.assertTrue(
+                    ARMS[name].asr_manual_commit,
+                    f"{name} is in ASR_ARMS but declared unable to do Track A")
+        src = (HERE / "probe_session.py").read_text()
+        self.assertIn("if arm.asr_manual_commit", src)
+        self.assertIn("arm.session_dialog(MARKER", src)
+
+    def test_the_preflight_fails_a_session_that_was_never_accepted(self):
+        """`accepted: false` with no exception and no error events.
+
+        A bare timeout waiting for `session.updated` produces exactly that, and
+        it matched none of the failure branches — so a session that was never
+        established passed the pre-flight. Found in the file the sweep for this
+        very class had just edited, which is why it is in COMPLETENESS.md.
+        """
+        src = (HERE / "probe_session.py").read_text()
+        self.assertIn('elif not res.get("accepted"):', src)
+        self.assertIn("never accepted", src)
+        # The transcript branch must come after it, or an unaccepted session
+        # would be reported as a missing transcript instead.
+        self.assertLess(src.index('elif not res.get("accepted"):'),
+                        src.index("no transcript came back"))
+
     def test_probe_dns_separates_an_outage_from_the_finding(self):
         """Its empty-transcript rate IS the published result, so a lost session
         and the effect it measures produce the same row. Only the recorded
@@ -2845,6 +2892,89 @@ class TestReportsMatchTheirData(unittest.TestCase):
             self.assertEqual(code, 1, "a missing leg must not certify the row")
             self.assertTrue(any("cannot be recomputed" in x
                                 for x in out["problems"]), out["problems"])
+
+    def test_duplicating_every_dns_row_does_not_still_certify(self):
+        """Codex, on a357d94: n was the one figure nothing verified.
+
+        The loader took whatever rows it found. Duplicating every row in
+        `dns_probe_en.jsonl` doubles n from 50 to 100 while leaving every WER
+        and every percentage identical — ratios are invariant under
+        duplication — so the checker certified that all figures agreed with a
+        file describing twice the study it claims. Both reports write `n=50`
+        beside these tables, and that is a published figure like any other.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            res = self._results_copy(tmp)
+            for f in (HERE / "results" / "main-report").glob("dns_probe_*.jsonl"):
+                (res / "main-report" / f.name).write_text(f.read_text())
+            target = res / "main-report" / "dns_probe_en.jsonl"
+            lines = [l for l in target.read_text().splitlines() if l.strip()]
+            target.write_text("\n".join(lines + lines) + "\n")
+            out, code = self._run(docs=docs, results=res)
+            self.assertEqual(code, 1, "a doubled probe file still certified")
+            self.assertTrue(any("repeats clip" in x for x in out["problems"]),
+                            out["problems"])
+
+    def test_an_errored_dns_row_is_not_counted_as_a_measurement(self):
+        """`probe_dns.py` marks a clip that produced no transcription event.
+
+        Such a row is empty because the session failed, and this table's whole
+        subject is how often the engine returns an empty transcript — so an
+        outage would be published as the effect being measured.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            res = self._results_copy(tmp)
+            for f in (HERE / "results" / "main-report").glob("dns_probe_*.jsonl"):
+                (res / "main-report" / f.name).write_text(f.read_text())
+            target = res / "main-report" / "dns_probe_en.jsonl"
+            rows = [json.loads(l) for l in target.read_text().splitlines() if l.strip()]
+            rows[0]["error"] = "no transcription event for this clip within 60 s"
+            rows[0]["hypothesis"] = ""
+            target.write_text("".join(json.dumps(r) + "\n" for r in rows))
+            out, code = self._run(docs=docs, results=res)
+            self.assertEqual(code, 1, "an outage was scored as a measurement")
+            self.assertTrue(any("outages, not" in x for x in out["problems"]),
+                            out["problems"])
+
+    def test_a_short_dns_leg_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            res = self._results_copy(tmp)
+            for f in (HERE / "results" / "main-report").glob("dns_probe_*.jsonl"):
+                (res / "main-report" / f.name).write_text(f.read_text())
+            target = res / "main-report" / "dns_probe_en.jsonl"
+            rows = [json.loads(l) for l in target.read_text().splitlines() if l.strip()]
+            # Drop one clip from the `deep` leg only: the id sets diverge and
+            # the leg falls short of the declared count.
+            dropped = next(r for r in rows if r["leg"] == "deep")
+            rows.remove(dropped)
+            target.write_text("".join(json.dumps(r) + "\n" for r in rows))
+            out, code = self._run(docs=docs, results=res)
+            self.assertEqual(code, 1)
+            self.assertTrue(
+                any("distinct clip" in x or "different clips" in x
+                    for x in out["problems"]), out["problems"])
+
+    def test_the_reports_declare_the_dns_clip_count(self):
+        """`DNS_CLIPS` is the declared expectation; the prose must agree.
+
+        A declaration nobody checks drifts, and a stale declaration is the
+        defect wearing the fix's clothes — the same reasoning that pins the
+        documented arm and condition lists against the committed data.
+        """
+        import check_report
+        src = HERE / ".." / ".." / "docs" / "research"
+        for name in check_report.RESULTS_FOR:
+            md = (src / name).read_text()
+            if "| leg |" not in md and "no noise reduction" not in md:
+                continue          # this report has no DNS table
+            with self.subTest(report=name):
+                declared = set(re.findall(r"n=(\d+)", md))
+                self.assertIn(str(check_report.DNS_CLIPS), declared,
+                              f"{name} states n={declared} beside its DNS "
+                              f"tables; DNS_CLIPS is {check_report.DNS_CLIPS}")
 
     def test_a_before_after_table_is_checked_against_both_arms(self):
         """Codex, on 60d2d6e: two whole tables took neither branch.

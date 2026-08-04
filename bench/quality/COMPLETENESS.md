@@ -316,6 +316,7 @@ the intent rather than the behaviour.
 | 15 | `score_asr.py` declared matrix | which cells should exist | the cross-product of the **declared** axes (`--expect-arms`, `--expect-langs`, `--expect-conditions`, all required), against the rows present. Absent cells are emitted with `n=0`, `complete=0`, empty WER; a declared axis value with no rows *anywhere*, or a row on an axis value never declared, is an integrity failure that `--allow-incomplete` cannot relax | nothing known. Two bugs, one fix apart. Iterating only the groups that existed meant an absent cell produced no row, so all 72 rows read `complete=1`. Deriving the cross-product from the rows then meant an entirely-absent arm, language or condition never entered it at all — the same invisibility one level up, and the reason the axes are declared rather than discovered. |
 | 17 | `events.scenario_ids` | is the scenario fixture well-formed | every `id` in `fixtures/scenarios.json` appears exactly once, checked by the runner, the judge, `summarize.py` and `score_slots.py` before each keys the fixture by id | nothing known. The uniqueness was assumed at four sites and checked at none: a repeat was one scenario to the runner's log map (so `--preflight-logs` cleared a run that would overwrite its own log), two paid passes to the judge, and two entries in the denominator of every rate in `summarize.py`. |
 | 12 | `judge.py` `parse_verdicts` | is this verdict usable | one verdict per expected candidate id, scores literally `int` in range | nothing known. `bool` passing as `int` was the bug: `true` became `0.0` downstream. |
+| 18 | `check_report.py` DNS loader | is this probe file the study it claims | per leg: no errored rows, one row per clip id, `DNS_CLIPS` distinct ids, and the **same** id set in every leg | nothing known. It accepted whatever rows it found, which left `n` the one published figure nothing verified: duplicating every row in `dns_probe_en.jsonl` doubles n from 50 to 100 and leaves every WER and percentage identical — ratios are invariant under duplication — so the checker certified a file describing twice the study. The declared-matrix rule on a different input. |
 | 14 | `check_report.py` | do the reports still quote their own data | every resolvable table cell, judge-agreement figure, cost total, run count, Track A condition list, and any count written beside a named CSV or results directory, against the tree that report was written from (`RESULTS_FOR`). A row or column standing for several arms is compared against **every** arm it covers — `ARM_GROUPS` against the group's min and max, `RECOGNISER_ROWS` against each arm's `slot_heard` — and each arm counts as a cell | **free prose**, deliberately: a count not tied to a named artifact is not matched. Each report must resolve its **declared** cell count, enforced per report; an unmapped report is an error, not a skip; an empty judge intersection is reported, not raised. |
 
 **The runner was written for the original matrix; the documented invocations
@@ -712,6 +713,44 @@ backstop: any module that appends to a failure list and never reaches
 `sys.exit` has collected those failures for nobody. It catches the shape every
 instance so far has had, and not the tool that never noticed the failure at
 all — which is what the rest of this file is for.
+
+### The sweep missed an instance in a file it had open
+
+The strongest example in this document, so it is worth stating plainly. The
+sweep above edited `probe_session.py` to add three failure branches — and left
+a fourth collection matching none of them. `probe()` records
+`accepted: false` when `session.updated` never arrives; on a bare timeout there
+is no `exception` and `errors` is empty, so that result fell past
+`if exception / elif errors / elif no transcript` and the pre-flight passed a
+session that was never established. **A sweep for "work that can be skipped and
+still exit 0" produced an instance of it, in the file it was editing, in the
+same commit.**
+
+That is four sweeps now that missed instances of the class they were sweeping
+for, which this file opens by naming as the failure mode rather than bad luck.
+The lesson is not "look harder": it is that enumerating the failure branches you
+thought of leaves the ones you did not, so the branches must **partition** the
+result rather than list its known-bad shapes. Ask of the last `elif`: *what is
+left over, and is it a pass?* Here the leftover was "connected, said nothing,
+no error" — the quietest possible failure, and the only one with no evidence
+attached to name it by.
+
+### And the complement of the rule, learned the same round
+
+Turning silence into a non-zero exit is only correct when the thing being
+reported is a failure. The same commit made `probe_session.py` probe **every**
+arm with `session_asr`, including the two Voice-Live gpt-realtime arms that the
+service is *documented* to reject that payload for and that `run_all.sh`
+deliberately keeps out of `ASR_ARMS`. The documented pre-flight — README step 3,
+run without `--arms` — therefore failed deterministically on arms that are
+perfectly valid for Track B.
+
+**A false alarm in a pre-flight is not a safer failure than a silent pass; it is
+the failure that gets the check disabled.** "Say it in the exit status" needs its
+complement: *say it only when it is true.* The fix is the declared-expectation
+rule again — `Arm.asr_manual_commit` states which arms can run Track A, so the
+probe sends each arm a payload it is meant to accept instead of discovering a
+documented refusal by provoking it.
 
 ## Adding a check
 

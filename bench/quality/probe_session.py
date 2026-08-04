@@ -39,12 +39,22 @@ def load_pcm24k(path: Path) -> bytes:
 
 async def probe(arm_name: str, wav: Path | None) -> dict:
     arm = ARMS[arm_name]
-    res: dict = {"arm": arm_name, "url": arm.url.split("?")[0], "model": arm.model}
+    # Validate each arm with the payload the study actually sends it. Probing
+    # every arm with `session_asr` meant the two Voice-Live gpt-realtime arms
+    # were sent a combination the service is documented to reject — they run
+    # Track B only, and `run_all.sh` keeps them out of ASR_ARMS for that reason.
+    # Recording that expected refusal as a failed arm makes the documented
+    # pre-flight fail deterministically on arms that are perfectly valid, and a
+    # pre-flight that cries wolf is one people learn to skip. Saying it in the
+    # exit status is only right when the thing being said is true.
+    payload = (arm.session_asr("en", MARKER) if arm.asr_manual_commit
+               else arm.session_dialog(MARKER, "en"))
+    res: dict = {"arm": arm_name, "url": arm.url.split("?")[0], "model": arm.model,
+                 "payload": "asr" if arm.asr_manual_commit else "dialog"}
     loop = asyncio.get_event_loop()
     try:
         async with websockets.connect(arm.url, **connect_kwargs(arm)) as ws:
-            await ws.send(json.dumps(
-                {"type": "session.update", "session": arm.session_asr("en", MARKER)}))
+            await ws.send(json.dumps({"type": "session.update", "session": payload}))
 
             created = updated = None
             errors: list = []
@@ -77,7 +87,14 @@ async def probe(arm_name: str, wav: Path | None) -> dict:
                 res["noise_reduction_after"] = updated.get("input_audio_noise_reduction")
                 res["echo_cancellation_after"] = updated.get("input_audio_echo_cancellation")
 
-            if wav and updated is not None:
+            # Manual commit only. On a dialog-payload arm the VAD owns the
+            # buffer, so committing by hand would both misbehave and provoke a
+            # billed response from a pre-flight.
+            if wav and updated is not None and not arm.asr_manual_commit:
+                res["transcript_skipped"] = (
+                    "dialog payload: this arm does not accept manual commit, "
+                    "so a clip round-trip is not part of its pre-flight")
+            if wav and updated is not None and arm.asr_manual_commit:
                 pcm = load_pcm24k(wav)
                 for i in range(0, len(pcm), 9600):  # 200 ms frames
                     await ws.send(json.dumps({
@@ -147,7 +164,20 @@ async def main() -> None:
             failed.append(f"{name}: {res['exception']}")
         elif res.get("errors"):
             failed.append(f"{name}: service errors {res['errors']}")
-        elif wav is not None and not res.get("transcript"):
+        elif not res.get("accepted"):
+            # The check this file is named for, and the one the first version of
+            # this guard left out: `probe` records `accepted: false` when
+            # `session.updated` never arrives, with no exception and no error
+            # events to show for it — a bare timeout. That collection matched
+            # none of the branches above, so a session that was never
+            # established passed the pre-flight. The sweep for "work that can be
+            # skipped and still exit 0" had this very file open and missed an
+            # instance of it; see COMPLETENESS.md.
+            failed.append(f"{name}: the session was never accepted — no "
+                          "session.updated within 15 s, and no error event "
+                          "saying why")
+        elif (wav is not None and res.get("transcript_skipped") is None
+                and not res.get("transcript")):
             # The whole point of --wav is proving a clip round-trips. Printing
             # `"transcript": null` and exiting 0 is this harness's signature
             # defect in its own pre-flight: absence reading as a pass.

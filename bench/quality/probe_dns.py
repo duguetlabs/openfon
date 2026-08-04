@@ -121,21 +121,7 @@ async def run_leg(leg: str, lang: str, clips: list[dict]) -> list[dict]:
                 ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=30))
                 if ev.get("type") == "conversation.item.input_audio_transcription.completed":
                     offer(ev.get("item_id") or "", ev.get("transcript") or "")
-            # An empty hypothesis has two causes and they mean opposite things.
-            # The service returning an empty transcript IS the finding this
-            # probe exists to measure — deep noise suppression drops
-            # utterances. Never getting a transcription event at all is an
-            # outage, and it produces a byte-identical row. Recording which
-            # one happened is the only way `check_report.py` (and a reader) can
-            # tell "the engine dropped this utterance" from "we lost the
-            # session", and the second must never be published as the first.
-            if item_id is None:
-                err = "no input_audio_buffer.committed within 60 s"
-            elif item_id not in seen:
-                err = "no transcription event for this clip within 60 s"
-            else:
-                err = None
-            order.append((clip, item_id, err))
+            order.append((clip, item_id))
 
         end = loop.time() + 8
         while loop.time() < end:
@@ -146,7 +132,26 @@ async def run_leg(leg: str, lang: str, clips: list[dict]) -> list[dict]:
             if ev.get("type") == "conversation.item.input_audio_transcription.completed":
                 offer(ev.get("item_id") or "", ev.get("transcript") or "")
 
-    for clip, item_id, err in order:
+    # AFTER the drain, not inside the per-clip loop. An empty hypothesis has two
+    # causes and they mean opposite things: the service returning an empty
+    # transcript IS the finding this probe exists to measure — deep noise
+    # suppression drops utterances — while never getting a transcription event
+    # at all is an outage, and the two produce a byte-identical row. Recording
+    # which one happened is the only way `check_report.py` (and a reader) can
+    # tell them apart, and the second must never be published as the first.
+    #
+    # Deciding it before the drain was the same false-alarm defect this probe's
+    # own guard was written to avoid: the drain exists precisely because a
+    # completion can arrive late, so a clip resolved there would have been
+    # written with a valid hypothesis *and* an error, and would have aborted a
+    # probe that in fact succeeded. `seen` is final only once draining is done.
+    for clip, item_id in order:
+        if item_id is None:
+            err = "no input_audio_buffer.committed within 60 s"
+        elif item_id not in seen:
+            err = "no transcription event for this clip, including the drain"
+        else:
+            err = None
         out.append({"leg": leg, "lang": lang, "id": clip["id"],
                     "reference": clip["reference"],
                     "hypothesis": pending.get(item_id or "", ""),

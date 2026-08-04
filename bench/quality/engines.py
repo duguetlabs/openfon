@@ -82,6 +82,17 @@ class Arm:
     # production-faithful setting. Varying it per arm makes the confound
     # explicit and lets us hold it constant where it matters.
     vad_type: str = "server_vad"
+    # Can this arm run Track A at all? `session_asr` disables turn detection so
+    # each clip is committed by hand, and Voice Live refuses that on the
+    # gpt-realtime brains for the reason quoted above — the same message, from
+    # the other direction: it will not accept `turn_detection: None` beside
+    # azure-speech transcription. That refusal is a documented property of the
+    # arm, not a fault, so it is declared here rather than discovered by sending
+    # a payload the service is known to reject. `run_all.sh` excludes these arms
+    # from ASR_ARMS for exactly this reason; `probe_session.py` reads this flag
+    # to decide which payload to validate an arm with, so its pre-flight cannot
+    # fail an arm over a combination the study never uses.
+    asr_manual_commit: bool = True
     usd_per_min: float = 0.0
     notes: str = ""
 
@@ -244,6 +255,7 @@ ARMS: dict[str, Arm] = {
         brain="gpt-realtime-2", stack="voice-live", voice=VOICE_AZURE,
         noise_reduction=None, echo_cancellation=False,
         vad_type="azure_semantic_vad_multilingual",
+        asr_manual_commit=False,
         usd_per_min=0.07,
         notes="Voice Live serving the native brain, front-end off to match "
               "vl-gpt41mini. Separates 'better brain' from 'better serving stack'. "
@@ -267,6 +279,7 @@ ARMS: dict[str, Arm] = {
         brain="gpt-realtime-2.1", stack="voice-live", voice=VOICE_AZURE,
         noise_reduction=None, echo_cancellation=False,
         vad_type="azure_semantic_vad_multilingual",
+        asr_manual_commit=False,
         usd_per_min=0.07,
         notes="Voice Live serving gpt-realtime-2.1 (reported as "
               "gpt-realtime-2.1-global-standard). The candidate single tier: "

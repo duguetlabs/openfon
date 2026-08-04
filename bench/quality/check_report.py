@@ -1278,6 +1278,12 @@ DNS_LEGS = {
 DNS_GERMAN_ROWS = {"clean": "dns_probe_de_clean.jsonl",
                    "cafe 10 db": "dns_probe_de_cafe_snr10.jsonl",
                    "cafe 5 db": "dns_probe_de_cafe_snr5.jsonl"}
+# Clips per noise-suppression leg, DECLARED here rather than counted from the
+# probe files, because "how many clips is this measured over" is a published
+# figure — both reports write `n=50` beside these tables — and counting it from
+# the file it describes is the defect this harness is named after.
+# `test_the_reports_declare_the_dns_clip_count` holds this against that prose.
+DNS_CLIPS = 50
 
 
 # Before/after tables, keyed by the transition their header names. The header
@@ -1587,12 +1593,62 @@ def check_dns_tables(md: str, doc: str, results: Path) -> tuple[list[str], int]:
     from score_asr import wer_cer
 
     def legs(path: Path) -> dict[str, list[dict]]:
+        """Load a probe file, refusing one whose shape makes it unscoreable.
+
+        The verifier used to accept whatever rows it found. That leaves `n` as
+        the one figure nothing checks, and n is a figure like any other: the
+        documents state `n=50` beside these tables. Duplicating every row in
+        `dns_probe_en.jsonl` doubles n to 100 while leaving every WER and every
+        percentage identical — ratios are invariant under duplication — so the
+        checker certified that all figures agreed with a file describing twice
+        the study. The declared-matrix lesson on a different input: a verifier
+        that trusts the shape of the data it is checking is checking the data
+        against itself.
+
+        Four properties, all of them about identity rather than count:
+        error-free rows only, one row per clip id, the same clip ids in every
+        leg (the legs are compared *to each other*, so a differing id set means
+        they are not the same experiment), and that id count equal to the
+        declared `DNS_CLIPS`.
+        """
         out: dict[str, list[dict]] = {}
         if not path.exists():
             return out
         for line in path.read_text().splitlines():
-            r = json.loads(line)
-            out.setdefault(r["leg"], []).append(r)
+            if line.strip():
+                r = json.loads(line)
+                out.setdefault(r["leg"], []).append(r)
+
+        for leg, rows in sorted(out.items()):
+            ids = [r["id"] for r in rows]
+            # `probe_dns.py` records an error when a clip produced no
+            # transcription event at all. Such a row is empty because the
+            # session failed, not because the engine dropped the utterance —
+            # and this table's whole subject is how often it drops utterances.
+            if bad := [r["id"] for r in rows if r.get("error")]:
+                problems.append(
+                    f"{doc}: {path.name} leg {leg!r} has {len(bad)} errored "
+                    f"row(s) ({', '.join(bad[:3])}); those are outages, not "
+                    "measurements, and must not enter an empty-transcript rate")
+            if dupes := sorted({i for i in ids if ids.count(i) > 1}):
+                problems.append(
+                    f"{doc}: {path.name} leg {leg!r} repeats clip "
+                    f"{', '.join(dupes[:3])}; duplicates leave every rate "
+                    f"unchanged while inflating n to {len(ids)}")
+            if len(set(ids)) != DNS_CLIPS:
+                problems.append(
+                    f"{doc}: {path.name} leg {leg!r} covers {len(set(ids))} "
+                    f"distinct clip(s), not the declared {DNS_CLIPS}")
+        sets = {leg: frozenset(r["id"] for r in rows) for leg, rows in out.items()}
+        if len({s for s in sets.values() if s}) > 1:
+            ref = max(sets.values(), key=len)
+            for leg, s in sorted(sets.items()):
+                if s and s != ref:
+                    problems.append(
+                        f"{doc}: {path.name} leg {leg!r} is scored on different "
+                        f"clips from the other legs (missing "
+                        f"{sorted(ref - s)[:3]}, extra {sorted(s - ref)[:3]}), "
+                        "so the legs are not comparable")
         return out
 
     for tbl in tables(md):
