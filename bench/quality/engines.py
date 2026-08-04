@@ -375,6 +375,23 @@ def preflight_logs(paths, force: bool = False) -> None:
     Every colliding target is listed, not just the first: discovering them one
     aborted run at a time is the same wasted-work loop in slow motion.
     """
+    # One target per unit of work. A caller that maps two units onto the same
+    # path has a run that collides with *itself*, and this preflight cannot see
+    # it by looking at the filesystem: the file is checked once, found free, and
+    # the second unit then overwrites what the first paid for. Callers that
+    # deduplicate before calling (a dict keyed by unit) hide the collision here,
+    # so the input is required to enumerate units, not files.
+    paths = list(paths)
+    names = [os.path.abspath(os.fspath(p)) for p in paths]
+    if repeated := sorted({n for n in names if names.count(n) > 1}):
+        print(f"refusing to start: {len(repeated)} raw log path(s) are the "
+              "target of more than one unit of this run:\n  "
+              + "\n  ".join(repeated) +
+              "\nThe run would overwrite its own output, and checking the "
+              "filesystem cannot detect that — each path is free exactly once. "
+              "Two units named the same thing; fix the selection.",
+              file=sys.stderr)
+        raise SystemExit(LOG_COLLISION_EXIT)
     bad = [str(p) for p in paths if not force and log_is_populated(p)]
     if bad:
         print(f"refusing to start: {len(bad)} raw log(s) this run would replace "

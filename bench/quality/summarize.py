@@ -31,6 +31,8 @@ import sys
 from pathlib import Path
 from collections import defaultdict
 
+from events import declared_axis, scenario_ids
+
 
 def sibling(out_path: str, suffix: str) -> str:
     """`results/x.csv` + "_per_run" -> `results/x_per_run.csv`.
@@ -89,6 +91,8 @@ def main() -> None:
     ap.add_argument("--scenarios", default="fixtures/scenarios.json",
                     help="fixture defining the expected scenario set")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--expect-arms", required=True,
+                    help="comma-separated arms this run was supposed to cover")
     ap.add_argument("--trials", type=int, default=3,
                     help="expected trials per (arm, scenario); pass^k uses this k")
     ap.add_argument("--allow-incomplete", action="store_true",
@@ -129,7 +133,22 @@ def main() -> None:
     for j in judge:
         jmap[(j["arm"], j["trial"], j["scenario"])].append(j)
 
-    arms = sorted({s["arm"] for s in slots})
+    # The arm axis is DECLARED, for the reason the scenario universe below is:
+    # an arm read off the rows cannot be missing from them. Every run of one arm
+    # failing — a bad key, a retired deployment, a typo in SC_ARMS — removed it
+    # from `arms`, and with it every completeness check that would have fired, so
+    # a matrix short by a whole arm summarised cleanly. It is check #5b's bug on
+    # the other axis, and it survived that fix because only the scenario axis was
+    # being looked at. `check_report.py` catches it for arms a report names; it
+    # never caught it here.
+    try:
+        arms = sorted(declared_axis("--expect-arms", a.expect_arms))
+    except ValueError as e:
+        sys.exit(str(e))
+    if rogue := sorted({s["arm"] for s in slots} - set(arms)):
+        sys.exit(f"{a.slots} contains arm(s) not declared by --expect-arms: "
+                 f"{', '.join(rogue)}. Declared: {', '.join(arms)}. The file "
+                 "being summarised is not the run that was described.")
 
     # The scenario universe comes from the FIXTURE, never from the results.
     #
@@ -146,6 +165,13 @@ def main() -> None:
                  f"set must come from the fixture; inferring it from the results "
                  f"lets a globally missing scenario pass unnoticed. Pass --scenarios.")
     spec = json.loads(spec_path.read_text())
+    # A repeated id is one scenario to every consumer of this fixture and two
+    # entries here: it would inflate `expected_runs`, which is the denominator
+    # of every rate below, while the second copy can never have rows of its own.
+    try:
+        scenario_ids(spec["scenarios"], a.scenarios)
+    except ValueError as e:
+        sys.exit(str(e))
     scenarios = sorted(s["id"] for s in spec["scenarios"] if s.get("scored", True) is not False)
     if not scenarios:
         sys.exit(f"{a.scenarios} declares no scored scenarios")

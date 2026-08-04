@@ -31,13 +31,25 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "prepare"))
 
 from judge import JudgeParseError, parse_verdicts  # noqa: E402
-from events import function_call, response_cancelled, scenario_filter  # noqa: E402
+from events import (  # noqa: E402
+    function_call, response_cancelled, scenario_filter, scenario_ids,
+)
 from score_slots import (  # noqa: E402
     detect_lang, fact_present, score_run, slot_present, time_matches,
     times_mentioned,
 )
 from score_wer import normalize  # noqa: E402
 from summarize import pct, sibling  # noqa: E402
+
+# The Track A matrix as the study declares it. Written out rather than derived
+# from `results/asr.jsonl`, because an expectation read off the file it checks
+# degrades with the file — the defect the `--expect-*` flags exist to close.
+# `test_the_documented_asr_axes_match_the_committed_matrix` holds these, the
+# README's declarations and the committed data to each other.
+ASR_ARMS_ALL = ("native-gpt-realtime-2,native-gpt-realtime-21,"
+                "native-gpt-realtime-21-mini,vl-gpt41mini,vl-gpt41mini-dns")
+ASR_CONDITIONS = ("cafe_snr0,cafe_snr10,cafe_snr20,cafe_snr5,clean,tel,"
+                  "tel_cafe_snr10,tel_loss3")
 
 
 class TestNormalize(unittest.TestCase):
@@ -447,11 +459,21 @@ class TestAbsentDataNeverPasses(unittest.TestCase):
         p.write_text(json.dumps({"scenarios": [{"id": i} for i in sorted(set(ids))]}))
         return p
 
-    def summarize(self, tmp, slot_rows, judge_rows=None, extra=()):
+    def declared_arms(self, slot_rows):
+        """The arm axis these rows are meant to cover.
+
+        Tests that are not about the arm axis declare exactly what they wrote,
+        so the declaration is a no-op for them; the ones that *are* about it
+        pass `arms=` and declare an arm the rows do not contain.
+        """
+        return ",".join(sorted({str(r["arm"]) for r in slot_rows}))
+
+    def summarize(self, tmp, slot_rows, judge_rows=None, extra=(), arms=None):
         slots = self.write(tmp, "slots.csv", self.SLOTS_HEADER, slot_rows)
         spec = self.scenario_fixture(tmp, [r["scenario"] for r in slot_rows])
         cmd = [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
-               "--scenarios", str(spec),
+               "--scenarios", str(spec), "--expect-arms",
+               arms if arms is not None else self.declared_arms(slot_rows),
                "--out", str(Path(tmp) / "out.csv"), "--trials", "1", *extra]
         if judge_rows is not None:
             jh = "scenario,arm,trial,lang,seed,groundedness,resolution,tone,groundedness_evidence,note"
@@ -504,6 +526,7 @@ class TestAbsentDataNeverPasses(unittest.TestCase):
             r = subprocess.run(
                 [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
                  "--judge", str(j), "--trials", "3", "--scenarios", str(spec),
+                 "--expect-arms", "a",
                  "--out", str(Path(tmp) / "out.csv")], capture_output=True, text=True)
             self.assertNotEqual(r.returncode, 0)
             self.assertIn("do not have exactly one row per trial 1..3", r.stderr)
@@ -625,7 +648,7 @@ class TestAggregatesKnowTheirDenominator(unittest.TestCase):
             r = subprocess.run(
                 [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
                  "--judge", str(j), "--trials", "3", "--allow-incomplete",
-                 "--scenarios", str(spec),
+                 "--scenarios", str(spec), "--expect-arms", "a",
                  "--out", str(Path(tmp) / "out.csv")], capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stderr)
             with open(Path(tmp) / "out.csv") as fh:
@@ -647,7 +670,7 @@ class TestAggregatesKnowTheirDenominator(unittest.TestCase):
             r = subprocess.run(
                 [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
                  "--judge", str(j), "--trials", "2", "--allow-incomplete",
-                 "--scenarios", str(spec),
+                 "--scenarios", str(spec), "--expect-arms", "a",
                  "--out", str(Path(tmp) / "out.csv")], capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stderr)
             with open(Path(tmp) / "out.csv") as fh:
@@ -700,6 +723,8 @@ class TestAggregatesKnowTheirDenominator(unittest.TestCase):
                                  "audio_seconds": 1.0, "latency_s": 0.1})
             hyp.write_text("".join(json.dumps(r) + "\n" for r in rows))
             cmd = [sys.executable, str(HERE / "score_asr.py"), "--hyp", str(hyp),
+                   "--expect-arms", "a", "--expect-langs", "en_us",
+                   "--expect-conditions", "clean,tel", "--expect-clips", "3",
                    "--out", str(Path(tmp) / "out.csv")]
             r = subprocess.run(cmd, capture_output=True, text=True)
             self.assertNotEqual(r.returncode, 0)
@@ -725,6 +750,8 @@ class TestAggregatesKnowTheirDenominator(unittest.TestCase):
             hyp.write_text("".join(json.dumps(r) + "\n" for r in rows))
             r = subprocess.run(
                 [sys.executable, str(HERE / "score_asr.py"), "--hyp", str(hyp),
+                 "--expect-arms", "a", "--expect-langs", "en_us",
+                 "--expect-conditions", "clean",
                  "--expect-clips", "3", "--out", str(Path(tmp) / "out.csv")],
                 capture_output=True, text=True)
             self.assertNotEqual(r.returncode, 0)
@@ -743,6 +770,8 @@ class TestAggregatesKnowTheirDenominator(unittest.TestCase):
             hyp.write_text("".join(json.dumps(r) + "\n" for r in rows))
             r = subprocess.run(
                 [sys.executable, str(HERE / "score_asr.py"), "--hyp", str(hyp),
+                 "--expect-arms", "a,b", "--expect-langs", "en_us",
+                 "--expect-conditions", "clean",
                  "--expect-clips", "2", "--out", str(Path(tmp) / "out.csv")],
                 capture_output=True, text=True)
             self.assertNotEqual(r.returncode, 0)
@@ -760,6 +789,8 @@ class TestAggregatesKnowTheirDenominator(unittest.TestCase):
             out = Path(tmp) / "out.csv"
             r = subprocess.run(
                 [sys.executable, str(HERE / "score_asr.py"), "--hyp", str(hyp),
+                 "--expect-arms", "a", "--expect-langs", "en_us",
+                 "--expect-conditions", "tel",
                  "--expect-clips", "2", "--out", str(out)],
                 capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stderr)
@@ -774,7 +805,7 @@ class TestCompletenessByIdentity(unittest.TestCase):
     def setUp(self):
         self.h = TestAbsentDataNeverPasses()
 
-    def summarize(self, tmp, slot_rows, trials, extra=()):
+    def summarize(self, tmp, slot_rows, trials, extra=(), arms=None):
         slots = self.h.write(tmp, "slots.csv", self.h.SLOTS_HEADER, slot_rows)
         jh = ("scenario,arm,trial,lang,seed,groundedness,resolution,tone,"
               "groundedness_evidence,note")
@@ -785,6 +816,8 @@ class TestCompletenessByIdentity(unittest.TestCase):
         return subprocess.run(
             [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
              "--judge", str(j), "--trials", str(trials), "--scenarios", str(spec),
+             "--expect-arms",
+             arms if arms is not None else self.h.declared_arms(slot_rows),
              "--out", str(Path(tmp) / "out.csv"), *extra],
             capture_output=True, text=True)
 
@@ -823,19 +856,38 @@ class TestCompletenessByIdentity(unittest.TestCase):
             self.assertNotEqual(r.returncode, 0)
             self.assertIn("b/s2", r.stderr)
 
-    def test_missing_arm_entirely_is_simply_absent(self):
-        """An arm with no rows cannot be detected here — documented in COMPLETENESS.md.
+    def test_missing_arm_entirely_is_caught(self):
+        """The arm axis is declared, so an arm with no rows at all is a failure.
 
-        Arms are discovered from the data, so an arm that never ran produces no
-        rows and no arm entry. Nothing in a results file can reveal it; the run
-        script's exit code (check #3) is what catches that.
+        It used to be discovered from the data: an arm that never ran produced
+        no rows, therefore no arm entry, therefore no check that could fire —
+        the same shape as a globally missing scenario, on the axis check #5b did
+        not cover. Declaring the axis is what makes the absence visible.
         """
         with tempfile.TemporaryDirectory() as tmp:
             rows = [self.h.slot_row(arm="a", trial=t) for t in (1, 2)]
-            r = self.summarize(tmp, rows, trials=2)
+            r = self.summarize(tmp, rows, trials=2, arms="a,b")
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("b/s1", r.stderr)
+
+    def test_a_declared_arm_with_no_rows_stays_in_the_denominator(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = [self.h.slot_row(arm="a", trial=t) for t in (1, 2)]
+            r = self.summarize(tmp, rows, trials=2, arms="a,b",
+                               extra=("--allow-incomplete",))
             self.assertEqual(r.returncode, 0, r.stderr)
             with open(Path(tmp) / "out.csv") as fh:
-                self.assertEqual([x["arm"] for x in csv.DictReader(fh)], ["a"])
+                out = {x["arm"]: x for x in csv.DictReader(fh)}
+            self.assertEqual(sorted(out), ["a", "b"])
+            self.assertEqual(float(out["b"]["success_mean"]), 0.0)
+            self.assertEqual(int(out["b"]["missing_runs"]), 2)
+
+    def test_results_cannot_introduce_an_arm_the_declaration_lacks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = [self.h.slot_row(arm=arm, trial=1) for arm in ("a", "rogue")]
+            r = self.summarize(tmp, rows, trials=1, arms="a")
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("rogue", r.stderr)
 
     def test_a_globally_missing_scenario_is_caught(self):
         """The one gap the per-scenario trial checks cannot see.
@@ -851,7 +903,7 @@ class TestCompletenessByIdentity(unittest.TestCase):
             spec = self.h.scenario_fixture(tmp, ["s1", "s2"])
             r = subprocess.run(
                 [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
-                 "--trials", "2", "--scenarios", str(spec),
+                 "--trials", "2", "--scenarios", str(spec), "--expect-arms", "a,b",
                  "--out", str(Path(tmp) / "out.csv")], capture_output=True, text=True)
             self.assertNotEqual(r.returncode, 0)
             self.assertIn("no rows at all: s2", r.stderr)
@@ -864,6 +916,7 @@ class TestCompletenessByIdentity(unittest.TestCase):
             r = subprocess.run(
                 [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
                  "--trials", "2", "--scenarios", str(spec), "--allow-incomplete",
+                 "--expect-arms", "a",
                  "--out", str(Path(tmp) / "out.csv")], capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stderr)
             with open(Path(tmp) / "out.csv") as fh:
@@ -879,7 +932,7 @@ class TestCompletenessByIdentity(unittest.TestCase):
             spec = self.h.scenario_fixture(tmp, ["s1"])
             r = subprocess.run(
                 [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
-                 "--trials", "1", "--scenarios", str(spec),
+                 "--trials", "1", "--scenarios", str(spec), "--expect-arms", "a",
                  "--out", str(Path(tmp) / "out.csv")], capture_output=True, text=True)
             self.assertNotEqual(r.returncode, 0)
             self.assertIn("rogue", r.stderr)
@@ -1010,6 +1063,8 @@ class TestOutageIsNotAMeasurement(unittest.TestCase):
             hyp.write_text("".join(json.dumps(r) + "\n" for r in rows))
             r = subprocess.run(
                 [sys.executable, str(HERE / "score_asr.py"), "--hyp", str(hyp),
+                 "--expect-arms", "a", "--expect-langs", "en_us",
+                 "--expect-conditions", "clean",
                  "--expect-clips", "3", "--out", str(Path(tmp) / "out.csv")],
                 capture_output=True, text=True)
             self.assertNotEqual(r.returncode, 0)
@@ -1026,6 +1081,8 @@ class TestOutageIsNotAMeasurement(unittest.TestCase):
             hyp.write_text("".join(json.dumps(r) + "\n" for r in rows))
             r = subprocess.run(
                 [sys.executable, str(HERE / "score_asr.py"), "--hyp", str(hyp),
+                 "--expect-arms", "a", "--expect-langs", "en_us",
+                 "--expect-conditions", "clean",
                  "--expect-clips", "3", "--out", str(Path(tmp) / "out.csv")],
                 capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stderr)
@@ -1045,7 +1102,7 @@ class TestCompanionFilePaths(unittest.TestCase):
             spec = h.scenario_fixture(tmp, [r["scenario"] for r in rows])
             r = subprocess.run(
                 [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
-                 "--trials", "1", "--scenarios", str(spec),
+                 "--trials", "1", "--scenarios", str(spec), "--expect-arms", "a",
                  "--out", str(Path(tmp) / "noext")],
                 capture_output=True, text=True)
             self.assertNotEqual(r.returncode, 0)
@@ -1123,6 +1180,7 @@ class TestUnscoredScenariosAreExcluded(unittest.TestCase):
             r = subprocess.run(
                 [sys.executable, str(HERE / "summarize.py"), "--slots", str(slots),
                  "--judge", str(j), "--trials", "1", "--scenarios", str(spec),
+                 "--expect-arms", "a",
                  "--out", str(Path(tmp) / "out.csv")], capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertIn("excluded 1 unscored scenario", r.stderr)
@@ -1216,6 +1274,70 @@ class TestRederiveIsDedupeOnly(unittest.TestCase):
                 {"s": ["end_call", "invented"]})
             self.assertEqual(out[0]["tool_calls"], ["end_call"])
             self.assertIn("extra=['invented']", r.stderr)
+
+    def test_a_log_inventing_a_SECOND_call_of_a_known_name_is_refused(self):
+        """Codex on 70bfd10: re-derivation could add an `end_call`.
+
+        Two distinct call ids carrying the same function name rebuild as
+        ["end_call", "end_call"], whose distinct-names-in-order is identical to
+        ["end_call"]'s — so the guard saw no difference and wrote the longer
+        sequence back. That is not deduplication, it is fabrication, and it
+        fabricates the exact event whose reliability this study reports on.
+
+        Every guard tried here so far compared *names*; this difference is only
+        in the count, which is why `is_deduplication` requires the rewrite to be
+        a subsequence of what the run recorded.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            logdir = Path(tmp) / "logs"
+            logdir.mkdir()
+            with open(logdir / "sc-a-s-t1.jsonl", "w") as f:
+                for cid in ("call_1", "call_2"):   # one name, two invocations
+                    f.write(json.dumps({"t": 0, "ev": {
+                        "type": "response.function_call_arguments.done",
+                        "call_id": cid, "name": "end_call"}}) + "\n")
+            rp = Path(tmp) / "runs.jsonl"
+            rp.write_text(json.dumps({"arm": "a", "scenario": "s", "trial": 1,
+                                      "tool_calls": ["end_call"]}) + "\n")
+            r = subprocess.run(
+                [sys.executable, str(HERE / "rederive_tools.py"), "--runs",
+                 str(rp), "--logdir", str(logdir)], capture_output=True, text=True)
+            out = [json.loads(l) for l in open(rp)]
+            self.assertEqual(out[0]["tool_calls"], ["end_call"],
+                             "re-derivation invented a second end_call")
+            self.assertIn("inflated=['end_call 1->2']", r.stderr)
+
+    def test_a_genuine_second_call_survives_a_dedupe_of_another_tool(self):
+        """The refusal must not be "any repeat is suspicious"."""
+        with tempfile.TemporaryDirectory() as tmp:
+            logdir = Path(tmp) / "logs"
+            logdir.mkdir()
+            with open(logdir / "sc-a-s-t1.jsonl", "w") as f:
+                for cid, name in (("c1", "lookup"), ("c2", "lookup"),
+                                  ("c3", "end_call")):
+                    f.write(json.dumps({"t": 0, "ev": {
+                        "type": "response.function_call_arguments.done",
+                        "call_id": cid, "name": name}}) + "\n")
+            rp = Path(tmp) / "runs.jsonl"
+            rp.write_text(json.dumps(
+                {"arm": "a", "scenario": "s", "trial": 1,
+                 # The runner logged each of the three invocations twice.
+                 "tool_calls": ["lookup", "lookup", "lookup", "lookup",
+                                "end_call", "end_call"]}) + "\n")
+            r = subprocess.run(
+                [sys.executable, str(HERE / "rederive_tools.py"), "--runs",
+                 str(rp), "--logdir", str(logdir)], capture_output=True, text=True)
+            out = [json.loads(l) for l in open(rp)]
+            self.assertEqual(out[0]["tool_calls"],
+                             ["lookup", "lookup", "end_call"], r.stderr)
+
+    def test_dropping_the_first_of_two_is_refused(self):
+        """A set-preserving subsequence can still reorder by deleting."""
+        from rederive_tools import is_deduplication
+        self.assertFalse(is_deduplication(["a", "b", "a"], ["b", "a"]))
+        self.assertTrue(is_deduplication(["a", "b", "a"], ["a", "b"]))
+        self.assertFalse(is_deduplication(["end_call"], ["end_call", "end_call"]))
+        self.assertTrue(is_deduplication(["end_call", "end_call"], ["end_call"]))
 
 
 class TestHangsAreBounded(unittest.TestCase):
@@ -1391,12 +1513,18 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
         describing them: the surrounding comments name every step in whatever
         order reads best, so matching against the raw block tests the writing
         rather than the procedure.
+
+        Backslash continuations are joined for the same reason. A command split
+        across lines is one command, and a test that reads it line-by-line is
+        reading the formatting: rewrapping an invocation would silently move an
+        argument out of view of whatever was searching for it.
         """
         import re
         block = re.search(r"```bash\n(.*?)```",
                           (HERE / "README.md").read_text(), re.S)
         self.assertIsNotNone(block, "no bash block in the README")
-        return [l for l in block.group(1).splitlines()
+        joined = re.sub(r"\\\n\s*", " ", block.group(1))
+        return [l for l in joined.splitlines()
                 if l.strip() and not l.strip().startswith("#")]
 
     def test_absent_cells_are_emitted_with_complete_zero(self):
@@ -1422,6 +1550,92 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
         for r in incomplete:
             self.assertEqual(r["n"], "0")
             self.assertEqual(r["wer"], "", "an absent cell must have no WER")
+
+    def test_an_entirely_absent_axis_is_not_a_complete_matrix(self):
+        """Codex on 70bfd10: the checker's own expectation came from its input.
+
+        The cross-product was built from the arms, languages and conditions
+        *present in the rows*, so a value missing from every row never entered
+        it. Delete every `tel_loss3` row — one condition failing before it could
+        write anything — and no cell was expected for it, nothing was reported,
+        and `--allow-incomplete` exited 0 with every visible cell marked
+        complete. The signature defect of this harness, inside the completeness
+        checker: a checker that derives its expectations from the data cannot
+        detect missing data.
+
+        Both directions, because a declaration is only as good as its coupling
+        to the file: a condition in the data that the declaration never named is
+        equally a disagreement about what study this is.
+        """
+        rows = [json.loads(l) for l in
+                (HERE / "results" / "asr.jsonl").read_text().splitlines() if l.strip()]
+
+        def score(rs, conditions=ASR_CONDITIONS):
+            with tempfile.TemporaryDirectory() as tmp:
+                hyp = Path(tmp) / "asr.jsonl"
+                hyp.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n"
+                                       for r in rs))
+                return subprocess.run(
+                    [sys.executable, str(HERE / "score_asr.py"), "--hyp", str(hyp),
+                     "--expect-clips", "25", "--allow-incomplete",
+                     "--expect-arms", ASR_ARMS_ALL, "--expect-langs", "en_us,de_de",
+                     "--expect-conditions", conditions,
+                     "--out", str(Path(tmp) / "out.csv")],
+                    capture_output=True, text=True, cwd=str(HERE),
+                    env={"PATH": "/usr/bin:/bin"})
+
+        self.assertEqual(score(rows).returncode, 0, "the committed run no longer scores")
+
+        # A whole condition that never produced a row.
+        thinned = [r for r in rows if r["condition"] != "tel_loss3"]
+        self.assertTrue(len(thinned) < len(rows), "the fixture lost its premise")
+        r = score(thinned)
+        self.assertNotEqual(r.returncode, 0,
+                            "a condition absent from every row was certified complete")
+        self.assertIn("tel_loss3", r.stderr)
+
+        # And the same for an arm.
+        r = score([r for r in rows if r["arm"] != "vl-gpt41mini-dns"])
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("vl-gpt41mini-dns", r.stderr)
+
+        # The other direction: data the declaration does not name.
+        r = score(rows, conditions="clean,tel")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("not declared", r.stderr)
+
+    def test_a_declared_axis_may_not_repeat_or_be_empty(self):
+        """The fix must not reproduce the class it is fixing.
+
+        A repeated name inflates the declared matrix while covering nothing
+        extra; an empty list makes the expected cross-product empty, so no cell
+        can be missing and every cell is a rogue. Malformed is not absent — the
+        confusion this harness has now produced in `--only`, `--arms`,
+        `CONDITIONS` and `--conditions`.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            hyp = Path(tmp) / "asr.jsonl"
+            hyp.write_text(json.dumps(
+                {"arm": "a", "lang": "en_us", "condition": "clean", "id": "c0",
+                 "reference": "hello", "hypothesis": "hello", "error": None,
+                 "audio_seconds": 1.0, "latency_s": 0.1}) + "\n")
+
+            def score(**over):
+                args = {"--expect-arms": "a", "--expect-langs": "en_us",
+                        "--expect-conditions": "clean", **over}
+                return subprocess.run(
+                    [sys.executable, str(HERE / "score_asr.py"), "--hyp", str(hyp),
+                     "--expect-clips", "1", "--out", str(Path(tmp) / "out.csv")]
+                    + [x for kv in args.items() for x in kv],
+                    capture_output=True, text=True)
+
+            self.assertEqual(score().returncode, 0, score().stderr)
+            r = score(**{"--expect-conditions": "clean,clean"})
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("more than once", r.stderr)
+            r = score(**{"--expect-arms": ","})
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("names nothing", r.stderr)
 
     def test_allow_incomplete_does_not_excuse_an_outage(self):
         """Codex, on 2f4abfc: one flag suppressed two different things.
@@ -1450,6 +1664,14 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
                 return subprocess.run(
                     [sys.executable, str(HERE / "score_asr.py"), "--hyp",
                      str(hyp), "--expect-clips", "25", "--allow-incomplete",
+                     # Literal, not read off `rows`: an axis taken from the data
+                     # under test is the defect this declaration exists to fix,
+                     # and it would follow the mutation instead of catching it.
+                     # test_the_documented_asr_axes_match_the_committed_matrix
+                     # pins these against the README and the committed file.
+                     "--expect-arms", ASR_ARMS_ALL,
+                     "--expect-langs", "en_us,de_de",
+                     "--expect-conditions", ASR_CONDITIONS,
                      "--out", str(Path(tmp) / "out.csv")],
                     capture_output=True, text=True, cwd=str(HERE),
                     env={"PATH": "/usr/bin:/bin"})
@@ -1607,6 +1829,55 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
         self.assertIsNone(scenario_filter(None, {"a"}))
         self.assertIsNone(scenario_filter("", {"a"}))
 
+    def test_a_repeated_fixture_id_is_refused(self):
+        """Codex on 70bfd10: a duplicate scenario id collapsed into one.
+
+        The runner maps ids to raw log paths, so two entries sharing an id gave
+        one path: `--preflight-logs` saw one file, found it free and exited 0,
+        and the real run then billed the first scenario before `open_log`
+        refused the second — or, with `--force-logs`, truncated the log the
+        first had just paid for. A preflight that passes because two things look
+        like one, which is the `FORCE=1` shape again.
+
+        Every other consumer keys the same fixture by id too, so the check is
+        one function and all four call it.
+        """
+        with self.assertRaises(ValueError) as cm:
+            scenario_ids([{"id": "a"}, {"id": "b"}, {"id": "a"}], "fixture.json")
+        self.assertIn("more than once", str(cm.exception))
+        self.assertIn("a", str(cm.exception))
+        # The real fixture is well-formed, and order is preserved for callers
+        # that walk the scenarios in file order.
+        spec = json.loads((HERE / "fixtures" / "scenarios.json").read_text())
+        self.assertEqual(scenario_ids(spec["scenarios"], "f"),
+                         [sc["id"] for sc in spec["scenarios"]])
+
+    def test_a_preflight_cannot_certify_a_run_that_collides_with_itself(self):
+        """Two units, one log path: checking the filesystem cannot see it.
+
+        Each path is free exactly once, so a filesystem check clears the run and
+        the second unit overwrites what the first paid for. Callers that
+        deduplicate before calling — a dict keyed by unit — hide it here, which
+        is how the duplicate scenario id reached the run.
+        """
+        import contextlib
+        import io
+        from engines import LOG_COLLISION_EXIT, preflight_logs
+        with tempfile.TemporaryDirectory() as tmp:
+            one, two = (Path(tmp) / n for n in ("a.jsonl", "b.jsonl"))
+            preflight_logs([one, two])                    # distinct: fine
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                with self.assertRaises(SystemExit) as cm:
+                    preflight_logs([one, two, one])
+            self.assertEqual(cm.exception.code, LOG_COLLISION_EXIT)
+            self.assertIn("more than one unit", err.getvalue())
+            # --force-logs is about replacing OTHER runs' logs; it cannot make a
+            # run that overwrites its own output safe.
+            with contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    preflight_logs([one, one], force=True)
+
     def test_a_malformed_condition_list_does_not_clear_the_data(self):
         """`CONDITIONS=','` truncated asr.jsonl and reported success.
 
@@ -1722,6 +1993,68 @@ class TestTrackAGapsAreVisible(unittest.TestCase):
         self.assertEqual(documented, actual,
                          "the documented seed-2 arms do not match the arms in "
                          "judge_seed2.csv")
+
+    def test_the_documented_asr_axes_match_the_committed_matrix(self):
+        """A declared expectation is only worth what pins it to the study.
+
+        `--expect-arms/-langs/-conditions` moved the Track A matrix out of the
+        data and onto the command line, which is the whole point: an axis read
+        off the rows cannot be missing from them. But a declaration nobody
+        checks drifts, and a *stale* declaration is the same defect wearing the
+        fix's clothes. So the README's declarations, the constants this file
+        scores with, and the committed `asr.jsonl` are held to each other — the
+        treatment `ONLY` and `CONDITIONS` already get.
+
+        If an arm or condition ever legitimately leaves the study, this fails
+        until the declaration is updated in the same commit, which is where a
+        coverage change belongs: in the diff, not in nothing.
+        """
+        lines = self._workflow_commands()
+        cmds = "\n".join(lines)
+        assigned = dict(re.findall(r"^(\w+)=(\S+)$", cmds, re.M))
+        self.assertTrue(assigned, "the workflow assigns no axis variables")
+
+        def value(name):
+            """The workflow's own value for `NAME`, `$VAR` references resolved."""
+            self.assertIn(name, assigned, f"the workflow never sets {name}")
+            text = assigned[name]
+            for _ in range(5):
+                if not (m := re.search(r"\$(\w+)", text)):
+                    return set(text.split(","))
+                self.assertIn(m.group(1), assigned,
+                              f"the workflow never sets ${m.group(1)}")
+                text = text.replace(m.group(0), assigned[m.group(1)])
+            self.fail(f"could not resolve the variables in {assigned[name]!r}")
+
+        def col(path, field):
+            text = (HERE / "results" / path).read_text()
+            if path.endswith(".jsonl"):
+                return {json.loads(l)[field] for l in text.splitlines() if l.strip()}
+            return {r[field] for r in csv.DictReader(text.splitlines())}
+
+        # The declared axes equal the study, per pass: the base pass is the
+        # merged report's own snapshot, the combined pass is what results/ holds.
+        self.assertEqual(value("ASR_ALL"), col("asr.jsonl", "arm"))
+        self.assertEqual(value("SC_ALL"), col("slots.csv", "arm"))
+        self.assertEqual(value("ASR_BASE"), col("main-report/asr_scores.csv", "arm"))
+        self.assertEqual(value("SC_BASE"), col("main-report/summary.csv", "arm"))
+        self.assertEqual(value("CONDS"), col("asr.jsonl", "condition"))
+
+        # ...and those variables are what actually reaches the scorers. A
+        # declaration the invocation does not use is prose.
+        self.assertIn('--expect-arms "$AARMS"', cmds)
+        self.assertIn('--expect-conditions "$CONDS"', cmds)
+        self.assertIn('--expect-langs en_us,de_de', cmds)
+        self.assertEqual(col("asr.jsonl", "lang"), {"en_us", "de_de"})
+        self.assertIn('--expect-arms "$SARMS"', cmds)
+        for call in ('score $OUT/results "$ASR_BASE" "$SC_BASE"',
+                     'score $OUT/results "$ASR_ALL" "$SC_ALL"'):
+            self.assertIn(call, cmds, "the workflow does not pass its own "
+                                      "declared axes to the scorers")
+
+        # And the constants this file scores the committed matrix with.
+        self.assertEqual(set(ASR_ARMS_ALL.split(",")), col("asr.jsonl", "arm"))
+        self.assertEqual(set(ASR_CONDITIONS.split(",")), col("asr.jsonl", "condition"))
 
     def test_the_snapshot_carries_everything_the_checker_reads(self):
         """Codex, on 2f4abfc: step 7 could not succeed on a fresh $OUT.

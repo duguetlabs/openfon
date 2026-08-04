@@ -31,7 +31,8 @@ from pathlib import Path
 import websockets
 
 from engines import ARMS, connect_kwargs, load_prompt, open_log, preflight_logs
-from events import function_call, redact, response_cancelled, scenario_filter
+from events import (function_call, redact, response_cancelled, scenario_filter,
+                    scenario_ids)
 
 FRAME_MS = 40                       # 40 ms frames ~= a realistic RTP cadence
 LANG_CODE = {"en_US": "en", "de_DE": "de"}
@@ -362,8 +363,14 @@ async def main() -> None:
     spec = json.loads(Path(a.scenarios).read_text())
     # Validated before anything is spent; see events.scenario_filter for why an
     # unknown id is an error rather than a filter, and why it lives there.
+    # `scenario_ids` first, because `--only` is validated against a *set* of the
+    # fixture's ids and a set is where a repeated id stops being visible.
     try:
-        want = scenario_filter(a.only, {sc["id"] for sc in spec["scenarios"]})
+        known = scenario_ids(spec["scenarios"], a.scenarios)
+    except ValueError as e:
+        sys.exit(str(e))
+    try:
+        want = scenario_filter(a.only, set(known))
     except ValueError as e:
         sys.exit(str(e).replace("the fixture", a.scenarios))
     Path(a.logdir).mkdir(parents=True, exist_ok=True)
@@ -394,9 +401,15 @@ async def main() -> None:
     # engines.preflight_logs: a collision on scenario 7 aborts after six have
     # been billed, and run_all.sh truncates the result file before any runner
     # starts.
-    logs = {sc["id"]: Path(a.logdir) / f"sc-{a.arm}-{sc['id']}-t{a.trial}.jsonl"
-            for sc in spec["scenarios"] if not want or sc["id"] in want}
-    preflight_logs(logs.values(), a.force_logs)
+    # One entry per scenario this invocation will run, not per distinct log
+    # path: `dict.values()` collapses a collision before the preflight can see
+    # it, which is how a repeated fixture id used to reach the run. The ids are
+    # unique by `scenario_ids` above; passing the selection rather than the map
+    # keeps that true for any future caller too.
+    selected = [sid for sid in known if not want or sid in want]
+    logs = {sid: Path(a.logdir) / f"sc-{a.arm}-{sid}-t{a.trial}.jsonl"
+            for sid in selected}
+    preflight_logs([logs[sid] for sid in selected], a.force_logs)
     if a.preflight_logs:
         return
 

@@ -148,13 +148,45 @@ async def main() -> None:
     ap.add_argument("--out", default="results/dns_probe.jsonl")
     a = ap.parse_args()
 
+    # Same validation as run_asr.py, and for the same reason: this probe's
+    # output is not a diagnostic, it is the source `check_report.py` recomputes
+    # the merged report's noise-suppression tables from — the numbers carrying
+    # "never enable Azure noise suppression". A duplicated clip id would
+    # double-weight that WER, and both legs are paid for before anything reads
+    # the file. The manifests are shared with run_asr.py, which validates them;
+    # validating on one path and not the other is a uniqueness assumption held
+    # in one place and trusted in two.
+    legs = [x.strip() for x in a.legs.split(",") if x.strip()]
+    if not legs:
+        sys.exit(f"--legs {a.legs!r} names no legs")
+    if dupes := sorted({x for x in legs if legs.count(x) > 1}):
+        sys.exit(f"--legs {a.legs!r} names {', '.join(dupes)} more than once; "
+                 "the repeat is a second paid pass whose rows are indistinguishable "
+                 "from the first's in the output")
+    if unknown := sorted(set(legs) - set(LEGS)):
+        # `LEGS[leg]` raised KeyError after the earlier legs had been billed.
+        sys.exit(f"--legs names {', '.join(unknown)}, which are not legs. "
+                 f"Known: {', '.join(LEGS)}")
+
     d = Path(a.data) / a.condition / a.lang
-    manifest = [json.loads(l) for l in (d / "manifest.jsonl").read_text().splitlines()]
+    mpath = d / "manifest.jsonl"
+    if not mpath.exists():
+        sys.exit(f"no clip manifest at {mpath}")
+    manifest = [json.loads(l) for l in mpath.read_text().splitlines() if l.strip()]
     clips = [{"id": m["id"], "path": str(d / m["wav"]), "reference": m["reference"]}
              for m in manifest[: a.n]]
+    if len(clips) < a.n:
+        sys.exit(f"{mpath} lists {len(manifest)} clip(s) but --n is {a.n}")
+    ids = [c["id"] for c in clips]
+    if dupes := sorted({i for i in ids if ids.count(i) > 1}):
+        sys.exit(f"{mpath} lists {', '.join(dupes[:5])} more than once in its "
+                 f"first {a.n} entries; duplicate ids double-weight the WER")
+    if absent := [c["path"] for c in clips if not Path(c["path"]).exists()]:
+        sys.exit(f"{len(absent)} clip(s) named by {mpath} do not exist:\n  "
+                 + "\n  ".join(absent[:10]))
 
     rows: list[dict] = []
-    for leg in [x.strip() for x in a.legs.split(",") if x.strip()]:
+    for leg in legs:
         print(f"[{leg}] {len(clips)} clips", file=sys.stderr)
         rows += await run_leg(leg, a.lang, clips)
         await asyncio.sleep(1)           # serialise session opens

@@ -10,7 +10,15 @@ Robustness summaries
             in dB, directly comparable across arms. Higher = more fragile.
             Reported as ">20" / "<0" when the curve never crosses in range.
 
-  python score_asr.py --hyp results/asr.jsonl --out results/asr_scores.csv
+The matrix this scores is DECLARED, not discovered. Every axis — arms,
+languages, conditions, clips per cell — is named on the command line, because a
+checker that reads its expectation off the rows it is checking cannot report
+that a row is missing. See COMPLETENESS.md, checks #11 and #15.
+
+  python score_asr.py --hyp results/asr.jsonl \
+      --expect-arms vl-gpt41mini,native-gpt-realtime-2 \
+      --expect-langs en_us,de_de --expect-conditions clean,tel \
+      --expect-clips 25 --out results/asr_scores.csv
 """
 from __future__ import annotations
 
@@ -26,6 +34,8 @@ import jiwer
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "prepare"))
 from score_wer import normalize  # noqa: E402
+
+from events import declared_axis  # noqa: E402
 
 SNR_RE = re.compile(r"_snr(-?\d+)$")
 
@@ -63,6 +73,18 @@ def wer_cer(rows: list[dict], lang: str) -> tuple[float, float, int, int]:
             len(refs), len(rows))
 
 
+def declared(flag: str, raw: str) -> list[str]:
+    """`events.declared_axis`, sorted, with a ValueError turned into an exit.
+
+    Sorted so the CSV's row order does not depend on how the caller happened to
+    write the list; the validation still sees it as given.
+    """
+    try:
+        return sorted(declared_axis(flag, raw))
+    except ValueError as e:
+        sys.exit(str(e))
+
+
 def snr50(curve: dict[int, float], clean: float) -> str:
     """Interpolate the SNR where WER first reaches 2x clean."""
     target = 2.0 * clean
@@ -81,31 +103,61 @@ def main() -> None:
     ap.add_argument("--hyp", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--summary", help="write the robustness summary CSV here")
-    ap.add_argument("--expect-clips", type=int,
+    ap.add_argument("--expect-clips", type=int, required=True,
                     help="clips expected per (arm, lang, condition); mismatches abort")
+    ap.add_argument("--expect-arms", required=True,
+                    help="comma-separated arms this run was supposed to cover")
+    ap.add_argument("--expect-langs", required=True,
+                    help="comma-separated languages this run was supposed to cover")
+    ap.add_argument("--expect-conditions", required=True,
+                    help="comma-separated conditions this run was supposed to cover")
     ap.add_argument("--allow-incomplete", action="store_true",
                     help="report incomplete cells instead of aborting")
     a = ap.parse_args()
 
+    # The declared matrix. Every axis is named on the command line and NONE is
+    # read off the rows, because an axis derived from the data cannot contain a
+    # value the data lacks: if every `tel_loss3` invocation failed before
+    # writing a row, `tel_loss3` never entered the condition list, no cell was
+    # expected for it, and the file certified a complete matrix with a whole
+    # condition missing from it. The same for an arm and for a language. That is
+    # this harness's signature defect — absent data reading as a pass — sitting
+    # inside the completeness check itself, where the checker's own expectation
+    # degrades in step with its input. The declaration is the fix everywhere
+    # else in this harness (the scenario fixture in `summarize.py`, the arm list
+    # in `check_report.py`) and it is the fix here.
+    #
+    # `--expect-clips` is declared for the same reason, and was the last axis
+    # still inferred: it defaulted to the size of the largest cell, so a run
+    # where *every* cell came up short — the exact signature of a truncated
+    # manifest — had its own shortfall define what "complete" meant.
+    arms = declared("--expect-arms", a.expect_arms)
+    langs = declared("--expect-langs", a.expect_langs)
+    conds = declared("--expect-conditions", a.expect_conditions)
+    expect = a.expect_clips
+
     rows = [json.loads(l) for l in Path(a.hyp).read_text().splitlines() if l.strip()]
+    if not rows:
+        # Nothing to score is not an empty matrix, it is a missing one — and
+        # every check below would pass over it vacuously.
+        sys.exit(f"{a.hyp} contains no rows. The declared matrix is "
+                 f"{len(arms)} arm(s) x {len(langs)} language(s) x "
+                 f"{len(conds)} condition(s); none of it is present.")
     groups: dict[tuple, list[dict]] = defaultdict(list)
     for r in rows:
         groups[(r["arm"], r["lang"], r["condition"])].append(r)
 
-    # Every cell must be present and the same size. Track A previously had no
-    # completeness check at all: a condition that failed mid-run simply produced
-    # a smaller cell, and a WER computed over 8 of 25 clips is reported in the
-    # same column, in the same units, as one computed over all 25.
-    arms = sorted({r["arm"] for r in rows})
-    langs = sorted({r["lang"] for r in rows})
-    conds = sorted({r["condition"] for r in rows})
+    # Every declared cell must be present and the same size. Track A previously
+    # had no completeness check at all: a condition that failed mid-run simply
+    # produced a smaller cell, and a WER computed over 8 of 25 clips is reported
+    # in the same column, in the same units, as one computed over all 25.
     #
     # By clip IDENTITY, not by count. A duplicated id alongside a missing one
     # still totals the right number, marks the cell complete, and
     # double-weights the duplicate in the WER — silently moving the headline
     # number. Corresponding cells must also contain the *same* clips, or the
     # arms are being compared on different audio.
-    expect = a.expect_clips or max(len(v) for v in groups.values())
+    #
     # Two lists, not one. `--allow-incomplete` exists because the committed
     # matrix is asymmetric *by design* — some cells were never meant to be run —
     # and the documented workflow therefore always passes it. Putting outages
@@ -121,6 +173,36 @@ def main() -> None:
     # able to excuse each other.
     gaps: list[str] = []
     integrity: list[str] = []
+
+    # Both directions, as `summarize.py` does for the scenario universe: the
+    # declared matrix must not be missing from the data (below), and the data
+    # must not hold cells the declaration never named (here). A rogue value is
+    # not a coverage gap — it means the file being scored is not the study the
+    # caller described, so no cell in it can be trusted to be the cell it claims
+    # to be — and `--allow-incomplete` therefore does not reach it.
+    for axis, want, got in (("arm", set(arms), {r["arm"] for r in rows}),
+                            ("lang", set(langs), {r["lang"] for r in rows}),
+                            ("condition", set(conds), {r["condition"] for r in rows})):
+        if rogue := sorted(got - want):
+            integrity.append(
+                f"{a.hyp} contains {axis}(s) not declared: {', '.join(rogue)} "
+                f"(declared: {', '.join(sorted(want))})")
+        # A declared axis value with NO rows anywhere is not a gap in coverage,
+        # and `--allow-incomplete` must not reach it. The asymmetry that flag
+        # exists for is per-cell — some arms deliberately skipped some
+        # conditions — and it never removes a whole arm, language or condition
+        # from the study. So "this cell is short" is a coverage statement the
+        # flag may relax, while "this condition produced nothing at all" is the
+        # runner having failed everywhere, which is a statement about whether
+        # the matrix was run. Without this the declaration would emit the
+        # complete=0 rows and the documented invocation, which always passes
+        # --allow-incomplete, would still exit 0 over them.
+        if absent := sorted(want - got):
+            integrity.append(
+                f"{len(absent)} declared {axis}(s) have no rows anywhere: "
+                f"{', '.join(absent)} — not a gap in one cell but the whole "
+                f"{axis} missing from the run")
+
     for arm in arms:
         for lang in langs:
             for cond in conds:

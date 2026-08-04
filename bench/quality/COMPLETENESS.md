@@ -134,6 +134,49 @@ still passes?** If the answer is a case you would call a bug, the fix landed
 short. Each of these was found by someone asking that; none was found by the
 person who had just tightened the check.
 
+**And three more, one per class, which is why the classes are written down
+rather than the instances.** Each is a previously-fixed check found short of
+the same property a second time:
+
+- **The completeness checker took its expectation from the data it was
+  checking.** `score_asr.py` built the expected cross-product from the arms,
+  languages and conditions *present in the rows*, so a value missing from every
+  row never entered it: if every `tel_loss3` invocation failed before writing
+  anything, no cell was expected for it, nothing was reported, and
+  `--allow-incomplete` exited 0 with every visible cell marked complete. The
+  signature defect of this file, inside the file's own check #15 — which had
+  been fixed once already, for absent *cells*, by iterating the cross-product
+  the data defined. All four axes are declared on the command line now
+  (`--expect-arms/-langs/-conditions/-clips`, all required), and a declared
+  value with **no rows anywhere** is an integrity failure rather than a
+  coverage gap, because otherwise the documented invocation — which always
+  passes `--allow-incomplete` — would emit the `complete=0` rows and still exit
+  0 over them. The declared asymmetry is per-cell; it never removes a whole arm,
+  language or condition. `summarize.py`'s arm axis was the same bug on the same
+  day: declared now too, by `--expect-arms`.
+- **An equality guard that ignored multiplicity.** `rederive_tools.py` compared
+  distinct names in order of first appearance — itself the fix for a set
+  comparison that had missed reordering — and two distinct call ids sharing a
+  function name rebuild as `["end_call", "end_call"]`, whose distinct names in
+  order are identical to `["end_call"]`'s. So the guard permitted a rewrite that
+  **added** an invocation of the one tool whose reliability this study reports
+  on. The rewrite must now be a set-preserving subsequence of the original with
+  first appearance intact; the subsequence is what carries multiplicity, and
+  every guard tried before it compared names.
+- **A uniqueness assumption that was never validated.** A `--scenarios` fixture
+  with a repeated id mapped both entries to one raw log path, so
+  `--preflight-logs` saw one file, found it free and exited 0, and the run then
+  billed the first scenario before `open_log` refused the second — or, under
+  `--force-logs`, truncated the log the first had just paid for. A preflight
+  that passes because two things look like one is the `FORCE=1` shape again.
+  The id was assumed unique by the runner, the judge, `summarize.py` and
+  `score_slots.py` and checked by none of them; `events.scenario_ids` checks it
+  once for all four. `preflight_logs` also refuses two units that name one path,
+  because a caller that deduplicates into a dict before calling hides the
+  collision from it — which is how this one arrived.
+
+The sweep for further instances of each is at the end of this file.
+
 **Verifying a fix is itself a run, and it destroyed data.** The guard on
 `results/` was added, then a raw log was emptied anyway — by the act of checking
 that a new test failed against the old behaviour, which ran the real runner
@@ -240,7 +283,7 @@ the intent rather than the behaviour.
 | 1 | `run_scenarios.py` `main()` | did this arm/trial complete | every scenario ran without raising **and** produced at least one agent turn; **exits non-zero** if any failed | nothing known. A silently-empty scenario used to reach the scorer as a valid row. |
 | 2a | `run_asr.py` `main()` | did every condition produce results | retries not exhausted for any condition; **exits non-zero** if any were | nothing known. Exiting zero was the bug: a full cell of error rows has every expected clip id, so the scorer scored an outage as 100% WER. Paired with #11's all-error guard. |
 | 2 | `run_asr.py` `transcribe_batch()` | is this session still coherent | each clip gets `input_audio_buffer.committed`; a timeout **raises** `CommitDesync` rather than continuing | nothing known. Continuing was the bug: a late commit was consumed as the next clip's, cascading wrong hypotheses. |
-| 16 | `engines.open_log`, `engines.preflight_logs` | may this raw log be replaced | the target is absent or empty, unless `--force-logs`. `preflight_logs` asks the same question of **every** log an invocation will write, before the first one is opened, and exits `LOG_COLLISION_EXIT` (97) so a caller can tell a collision from a preflight that could not run | nothing known. Nothing guarded `logs/` at all: the runners open with mode `"w"` before doing any work and `--logdir` defaults to the committed directory, so a stray invocation from `bench/quality` empties a log and a subsequent failure leaves it empty. That happened — `sc-vl-gpt41mini-book-de-01-t1.jsonl` was zeroed while *verifying a test*, and the run became unre-scorable while its result still claimed an `end_call`. Guarding one file at the moment it is opened was the next bug: see "destroy-then-recreate" below. |
+| 16 | `engines.open_log`, `engines.preflight_logs` | may this raw log be replaced | the target is absent or empty, unless `--force-logs`. `preflight_logs` asks the same question of **every** log an invocation will write, before the first one is opened, and exits `LOG_COLLISION_EXIT` (97) so a caller can tell a collision from a preflight that could not run. It also refuses two *units* naming one path — a collision no filesystem check can see, because such a path is free exactly once — which `--force-logs` does not override, since replacing another run's log is a different decision from overwriting your own output mid-run | nothing known. Nothing guarded `logs/` at all: the runners open with mode `"w"` before doing any work and `--logdir` defaults to the committed directory, so a stray invocation from `bench/quality` empties a log and a subsequent failure leaves it empty. That happened — `sc-vl-gpt41mini-book-de-01-t1.jsonl` was zeroed while *verifying a test*, and the run became unre-scorable while its result still claimed an `end_call`. Guarding one file at the moment it is opened was the next bug: see "destroy-then-recreate" below. |
 | 3 | `run_all.sh` | did the matrix complete | every runner invocation's exit code; collects failures and **exits non-zero**. Also **refuses to start** if the result file *this `TRACK` will truncate* is non-empty, unless `APPEND=1` (adds arms, destroys nothing) or `FORCE=1` (replaces); and walks the whole matrix once with `--preflight-logs` **before** any truncation, so a raw-log collision stops the run while the results it would replace still exist. The guard is scoped to the selected track because refusing over a file the run never touches teaches people to reach for `FORCE=1` | a runner that exits 0 having swallowed its errors — which is why #1 exists. The refusal was added after the README's own step 4 was found to destroy the committed study: `OUT` defaults to `$HERE`, so the documented invocation truncated the data both reports quote and replaced it with a smaller run under the old arm set. `FORCE=1` then reintroduced it from the other side — see below. |
 | 4 | `summarize.py` trial check | did every arm run everything | **set of trial ids** per `(arm, scenario)` equals `{1..k}`, no duplicates, no extras | nothing known. Counting rows was the bug: three copies of trial 1 satisfied `--trials 3`. Runners append to JSONL, so re-runs duplicate rather than replace. |
 | 5 | `summarize.py` judge check | was every run judged | a verdict row exists for every `(arm, trial, scenario)`; empty `--judge` file is an **error**, not "no judge" | a judge that returns verdicts for the wrong candidates — blocked in `parse_verdicts` by id membership. |
@@ -250,9 +293,10 @@ the intent rather than the behaviour.
 | 8 | `summarize.py` `pass_k` | did it pass every trial | trial ids `{1..k}` each present exactly once **and** all succeeded; denominator is every scenario | nothing known. |
 | 9 | `summarize.py` descriptives | `slot_heard`, `judge_*` | carries its own n, flagged `(of n/expected)` when short | these cannot be imputed, only reported. A short n is visible, not corrected. |
 | 10 | `summarize.py` TTFA | latency percentiles | **nothing** — deliberately | a turn only yields a latency if the agent replied, and the closing turn usually gets none by design, so there is no a-priori denominator. Run-level completeness (#4, #7) carries it. This is the one check that cannot be tightened. |
-| 11 | `score_asr.py` cell check | is every ASR cell whole | **set of clip ids** per `(arm, lang, condition)`: no duplicates, size equals `--expect-clips`, and identical across arms for the same `(lang, condition)` | clips present but with empty references — surfaced separately as `unscorable_refs`. Counting rows was the bug: a duplicated id beside a missing one totals correctly and double-weights the duplicate in the WER. |
+| 11 | `score_asr.py` cell check | is every ASR cell whole | **set of clip ids** per `(arm, lang, condition)`: no duplicates, size equals `--expect-clips`, and identical across arms for the same `(lang, condition)`. The cells iterated are the **declared** cross-product (check #15) | clips present but with empty references — surfaced separately as `unscorable_refs`. Counting rows was the bug: a duplicated id beside a missing one totals correctly and double-weights the duplicate in the WER. `--expect-clips` used to default to the largest cell present, so a run where every cell came up short had its own shortfall define "complete". |
 | 13 | `score_asr.py` robustness rows | can dWER/SNR50 be computed | a `clean` baseline exists per `(arm, lang)`; **emits nothing and says so** if not | nothing known. `summary[0]` used to raise `IndexError` after the detailed CSV had been written. Absent cells are excluded from the index by type, so an empty WER cannot pass the `clean is None` guard and then fail on the subtraction. |
-| 15 | `score_asr.py` output rows | which cells exist | rows are emitted for the **expected cross-product** of (arm, lang, condition), absent ones with `n=0`, `complete=0`, empty WER | nothing known. Iterating only the groups that existed was the bug: an absent cell produced no row, so all 72 rows read `complete=1` and the field could never be 0 — a consumer trusting the documented signal saw a complete matrix because the gaps were invisible, not because they were filled. |
+| 15 | `score_asr.py` declared matrix | which cells should exist | the cross-product of the **declared** axes (`--expect-arms`, `--expect-langs`, `--expect-conditions`, all required), against the rows present. Absent cells are emitted with `n=0`, `complete=0`, empty WER; a declared axis value with no rows *anywhere*, or a row on an axis value never declared, is an integrity failure that `--allow-incomplete` cannot relax | nothing known. Two bugs, one fix apart. Iterating only the groups that existed meant an absent cell produced no row, so all 72 rows read `complete=1`. Deriving the cross-product from the rows then meant an entirely-absent arm, language or condition never entered it at all — the same invisibility one level up, and the reason the axes are declared rather than discovered. |
+| 17 | `events.scenario_ids` | is the scenario fixture well-formed | every `id` in `fixtures/scenarios.json` appears exactly once, checked by the runner, the judge, `summarize.py` and `score_slots.py` before each keys the fixture by id | nothing known. The uniqueness was assumed at four sites and checked at none: a repeat was one scenario to the runner's log map (so `--preflight-logs` cleared a run that would overwrite its own log), two paid passes to the judge, and two entries in the denominator of every rate in `summarize.py`. |
 | 12 | `judge.py` `parse_verdicts` | is this verdict usable | one verdict per expected candidate id, scores literally `int` in range | nothing known. `bool` passing as `int` was the bug: `true` became `0.0` downstream. |
 | 14 | `check_report.py` | do the reports still quote their own data | every resolvable table cell, judge-agreement figure, cost total, run count, Track A condition list, and any count written beside a named CSV or results directory, against the tree that report was written from (`RESULTS_FOR`). A row or column standing for several arms is compared against **every** arm it covers — `ARM_GROUPS` against the group's min and max, `RECOGNISER_ROWS` against each arm's `slot_heard` — and each arm counts as a cell | **free prose**, deliberately: a count not tied to a named artifact is not matched. Each report must resolve its **declared** cell count, enforced per report; an unmapped report is an error, not a skip; an empty judge intersection is reported, not raised. |
 
@@ -456,10 +500,16 @@ anything that fails visibly, or only under a debug flag, gets written down.**
   allowed to relax; an outage is a statement about whether the numbers mean
   anything, which nothing may. Two lists now, and only the first is
   suppressible.
-- **`--allow-incomplete` omits entirely-missing ASR cells.** A cell with zero
-  rows is absent from the output rather than present with `complete=0`, because
-  arms and conditions are discovered from the data. Same reasoning: the default
-  path aborts instead.
+- **Was: "`--allow-incomplete` omits entirely-missing ASR cells".** Fixed, and
+  the second sentence of this entry was wrong in the way this file keeps warning
+  about. It read: "a cell with zero rows is absent from the output rather than
+  present with `complete=0`, because arms and conditions are discovered from the
+  data. Same reasoning: the default path aborts instead." The default path did
+  **not** abort — with the axes discovered from the data there was no
+  expectation left to violate, so a condition absent from every row was not
+  merely omitted from the CSV, it was invisible to every check. A limitation
+  written down instead of fixed still has to be true; this one described the
+  behaviour of a check that did not exist. The axes are declared now (#15).
 - **`response.done` with `status == "failed"` reads as a normal finish.**
   `run_scenarios.py` only special-cases `cancelled`; a response the service marks
   failed, with no separate `error` event, sets `done` like any other. A partially
@@ -549,6 +599,57 @@ login; `transport_kwargs()` exists to separate the two. Verify with:
 
 Only the runners and probes may need credentials. Nothing that computes or
 checks a number may.
+
+## The sweep for the three classes, including what it did not find
+
+Three fixes landed together and each was an instance of a class, so the whole of
+`bench/quality/` was read against each class rather than each line. Recorded
+because a sweep that reports only its hits is indistinguishable from one that
+looked in the wrong place — the failure this file opens by naming.
+
+**Class 1 — an expectation derived from the data it checks.** Two more found,
+both fixed above: `score_asr.py`'s `--expect-clips` defaulting to the largest
+cell present, and `summarize.py`'s arm axis. The rest of the harness holds:
+`summarize.py` takes trials from `--trials` and scenarios from the fixture,
+`check_report.py` takes its per-report cell counts from `RESULTS_FOR` and its
+metric list from `UNCHECKED_METRICS`, and `judge.py` measures coverage against
+the fixture. One knowing exception remains, and it is display rather than
+verification: `probe_dns.py`'s console summary iterates the legs present in its
+own rows, so a leg that produced nothing prints nothing. The published numbers
+do not come from that print: `check_report.check_dns_tables` recomputes them,
+naming the required German legs explicitly, and an English leg the probe file
+lacks drops out of the coverage count that must *equal* the report's declared
+one. The console summary is the one place a missing leg is invisible, and
+nothing reads it.
+
+**Class 2 — an identity guard blind to multiplicity.** No further instances.
+The three other places that compare collections all carry multiplicity already:
+`summarize.py` counts trial ids with `.count()`, `judge.parse_verdicts` rejects
+duplicates with `len(set(seen)) != len(seen)`, and `run_asr.py` does the same
+for manifest clip ids. `score_asr.py`'s cross-arm comparison genuinely uses
+`frozenset` and genuinely ignores multiplicity — but the per-cell duplicate
+check runs first over the same rows and both feed one `integrity` list, so a
+duplicate cannot reach it unreported. `score_slots.py`'s `tool_ok` compares sets
+by intent: calling a tool twice is not a scoring failure, only never calling it
+is. One residual, written down rather than fixed: `summarize.py` *averages*
+multiple judge verdicts for one `(arm, trial, scenario)`, so duplicate verdict
+rows are absorbed silently rather than reported. Nothing in the workflow
+produces them now that the fixture ids are unique and `parse_verdicts` rejects a
+repeat within one reply; it would take hand-concatenated judge files.
+
+**Class 3 — a uniqueness assumption never validated.** Two more found and
+fixed: `probe_dns.py` validated neither its `--legs` list (empty, repeated, or
+unknown — the last raising `KeyError` after the earlier legs were billed) nor
+its manifest's clip ids, though it reads the *same* manifests `run_asr.py`
+validates and feeds the WER behind "never enable Azure noise suppression". A
+uniqueness assumption checked on one path and trusted on another is the same
+gap as one checked nowhere. Elsewhere the assumption is now validated at every
+site that makes it: fixture scenario ids (`events.scenario_ids`, four callers),
+`--conditions` and manifest clip ids (`run_asr.py`), `ASR_ARMS`/`SC_ARMS`
+(`run_all.sh` `nodup`), the declared axes (`events.declared_axis`, used by both scorers),
+`summarize.py`), and raw-log targets (`engines.preflight_logs`, which now
+refuses two units naming one path instead of trusting callers to have
+deduplicated).
 
 ## Adding a check
 

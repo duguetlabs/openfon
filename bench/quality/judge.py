@@ -29,6 +29,8 @@ import urllib.request
 from collections import defaultdict
 from pathlib import Path
 
+from events import scenario_ids
+
 MODEL = os.environ.get("JUDGE_MODEL", "gpt-5.5")
 BASE = os.environ.get("JUDGE_BASE_URL", "https://api.kataleptic.com/v1")
 
@@ -168,6 +170,12 @@ def main() -> None:
         sys.exit("set KATALEPTIC_KEY")
 
     spec = json.loads(Path(a.scenarios).read_text())
+    # Before the money: a repeated fixture id is judged twice, at full price,
+    # and lands as two verdict rows for one (arm, trial, scenario).
+    try:
+        scenario_ids(spec["scenarios"], a.scenarios)
+    except ValueError as e:
+        sys.exit(str(e))
     kb = json.loads(Path(a.prompt).read_text())["system_prompt"]
     runs = [json.loads(l) for l in Path(a.runs).read_text().splitlines() if l.strip()]
 

@@ -101,19 +101,32 @@ OUT=$OUT DATA=$DATA PY=../../.venv/bin/python ./run_all.sh
 #    the merged report's figures are not reproducible from the combined pass —
 #    which is why check_report.py looks for results/main-report/. Skip this and
 #    step 7 cannot verify the five-arm report at all.
-score() {  # score <results-dir> [judge-arms]
-  local R="$1" ARMS="${2:-}"
+#
+#    The scorers take their expected matrix from these arguments, never from the
+#    rows they are scoring: an axis inferred from the data cannot be missing
+#    from it, so a whole arm or condition that never produced a row would be
+#    certified complete. Declare them, and a gap is a gap.
+CONDS=clean,cafe_snr20,cafe_snr10,cafe_snr5,cafe_snr0,tel,tel_cafe_snr10,tel_loss3
+ASR_BASE=vl-gpt41mini,vl-gpt41mini-dns,native-gpt-realtime-2
+ASR_ALL=$ASR_BASE,native-gpt-realtime-21,native-gpt-realtime-21-mini
+SC_BASE=vl-gpt41mini,vl-gpt41mini-dns,vl-gpt41mini-semvad,vl-native-brain,native-gpt-realtime-2
+SC_ALL=$SC_BASE,native-gpt-realtime-21,native-gpt-realtime-21-mini,vl-native-brain-21
+
+score() {  # score <results-dir> <asr-arms> <scenario-arms> [judge-arms]
+  local R="$1" AARMS="$2" SARMS="$3" ARMS="${4:-}"
   python score_asr.py   --hyp $R/asr.jsonl --expect-clips 25 --allow-incomplete \
-                        --out $R/asr_scores.csv
+                        --expect-arms "$AARMS" --expect-langs en_us,de_de \
+                        --expect-conditions "$CONDS" --out $R/asr_scores.csv
   python score_slots.py --runs $R/scenarios.jsonl --out $R/slots.csv
   KATALEPTIC_KEY=... python judge.py --runs $R/scenarios.jsonl \
                         --out $R/judge.csv --seed 1
   KATALEPTIC_KEY=... python judge.py --runs $R/scenarios.jsonl \
                         --out $R/judge_seed2.csv --seed 2 ${ARMS:+--arms "$ARMS"}
   python summarize.py --slots $R/slots.csv --judge $R/judge.csv \
-    --scenarios fixtures/scenarios.json --trials 3 --out $R/summary.csv
+    --scenarios fixtures/scenarios.json --trials 3 --expect-arms "$SARMS" \
+    --out $R/summary.csv
 }
-score $OUT/results
+score $OUT/results "$ASR_BASE" "$SC_BASE"
 
 #    The noise-suppression probes. run_all.sh does not run these — they are a
 #    separate experiment, not part of the matrix — but the merged report's DNS
@@ -156,7 +169,8 @@ OUT=$OUT DATA=$DATA PY=../../.venv/bin/python TRACK=b APPEND=1 \
 #    and the addendum's reliability figures are computed over the 219 rows the
 #    two passes share. Without --arms it judges all 246 and cannot reproduce
 #    its own denominator.
-score $OUT/results "native-gpt-realtime-2,native-gpt-realtime-21,native-gpt-realtime-21-mini,vl-gpt41mini,vl-gpt41mini-dns,vl-gpt41mini-semvad,vl-native-brain"
+score $OUT/results "$ASR_ALL" "$SC_ALL" \
+  "native-gpt-realtime-2,native-gpt-realtime-21,native-gpt-realtime-21-mini,vl-gpt41mini,vl-gpt41mini-dns,vl-gpt41mini-semvad,vl-native-brain"
 
 # 7. Check both reports against the run.
 python check_report.py --results $OUT/results

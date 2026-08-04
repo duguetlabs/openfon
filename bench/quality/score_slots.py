@@ -28,6 +28,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent / "prepare"))
 from score_wer import NUM_LANG, normalize  # noqa: E402
 
+from events import scenario_ids  # noqa: E402
+
 from num2words import num2words  # noqa: E402
 
 DIGITS = re.compile(r"\D+")
@@ -367,6 +369,13 @@ def main() -> None:
     a = ap.parse_args()
 
     spec = json.loads(Path(a.scenarios).read_text())
+    # `score_run` resolves a run's scenario with `next(...)`, which takes the
+    # first entry and cannot report that there was a second: a duplicated id
+    # would score every run of that scenario against whichever spec came first.
+    try:
+        scenario_ids(spec["scenarios"], a.scenarios)
+    except ValueError as e:
+        sys.exit(str(e))
     runs = [json.loads(l) for l in Path(a.runs).read_text().splitlines() if l.strip()]
     rows = [score_run(r, spec) for r in runs]
 
