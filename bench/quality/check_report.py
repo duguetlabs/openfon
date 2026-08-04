@@ -1101,6 +1101,218 @@ def check_cost_table(md: str, doc: str) -> list[str]:
     return problems
 
 
+# A result-shaped figure written outside any table: `2560 ms`, `24 %`, `0.963`,
+# `9.6 dB`, `$8.85`. Three decimals for a bare rate, so model versions ("2.1")
+# and counts are not mistaken for one.
+PROSE_FIG = re.compile(
+    r"(?<![\w.])(\d+(?:\.\d+)?)\s*(ms|%|dB)(?![\w])"
+    r"|\$(\d+\.\d{2})(?![\w])"
+    r"|(?<![\w.])(\d\.\d{3})(?![\w])")
+
+# Prose figures that cannot be reconstructed from this repository's generated
+# data, each with the reason. A named exemption is fine; an invisible one is
+# not — which is the whole point of the check below, so the list is exact and a
+# stale entry is an error.
+PROSE_EXEMPT = {
+    "voice-engine-quality-2026-08-gpt-realtime-2-1.md": {
+        "76.3 %": "quoted as a SUPERSEDED figure — the sentence is about an "
+                  "earlier draft that read the pre-extension judge file, so it "
+                  "must NOT match the current data",
+        "$3.06": "the cost of this study's own extension, stated in prose; the "
+                 "per-line costs are checked by check_cost_table",
+    },
+    "voice-engine-quality-2026-08.md": {
+        "69 ms": "quoted as a SUPERSEDED figure — the sentence describes what "
+                 "an earlier draft claimed, so it must NOT match the data",
+        "98.8 %": "judge presentation-order agreement, verified against "
+                  "judge.csv by check_judge_agreement rather than summary.csv",
+        "99.4 %": "judge presentation-order agreement, verified against "
+                  "judge.csv by check_judge_agreement rather than summary.csv",
+        "$23.19": "cumulative spend across both studies, including the latency "
+                  "benchmark whose results are not in this repository",
+        "$22.82": "this report's own total, checked by check_cost_table",
+        "1654 ms": "bench/realtime latency benchmark (task #13), not Track B",
+        "3812 ms": "bench/realtime latency benchmark (task #13), not Track B",
+        "1748 ms": "bench/realtime latency benchmark (task #13), not Track B",
+        "3048 ms": "bench/realtime latency benchmark (task #13), not Track B",
+        "4.01 %": "a DNS-probe WER, checked by check_dns_tables against "
+                  "dns_probe_en.jsonl rather than against summary.csv",
+        "1.4 dB": "an SNR50 delta between two arms, both of whose SNR50 values "
+                  "check_snr50_table verifies",
+    },
+}
+
+
+def check_prose_figures(md: str, doc: str, results: Path,
+                        summary: dict[str, dict[str, str]]) -> list[str]:
+    """Result figures written outside a table, against the generated data.
+
+    The tables are checked to three decimals; every figure repeated in prose was
+    not checked at all. Changing `p95 falls 3325 -> 2560 ms` to `-> 9999 ms`
+    left every table untouched and the run green at full declared coverage —
+    and that sentence is the headline of the report's recommendation. We
+    hardened the tables and the claims walked into the prose. A checker's
+    coverage is a claim like any other: "297 cells checked" reads as
+    thoroughness while the sentence a reader acts on is exempt.
+
+    What binds: a figure must be *reconstructible* from the generated data —
+    equal to a value the data takes, to the absolute difference of two such
+    values (the reports quote deltas constantly), or to one as a percentage of
+    another. Anything else must be named in `PROSE_EXEMPT` with its reason.
+
+    **What this does not do, stated rather than implied:** it is a membership
+    test, not an identity one. It proves a figure is *some* value the study
+    produced; it cannot prove it is the value for the arm the sentence names,
+    because free prose gives nothing reliable to resolve an arm against — the
+    same limitation `check_run_counts` documents for counts. It catches an
+    invented number, a stale number, and a number that moved when the data was
+    re-run. It would not catch a figure swapped between two arms. That gap is
+    real and is why the table checks, which do resolve an arm, remain the
+    primary defence.
+    """
+    problems: list[str] = []
+    rate_fields = ("success_mean", "pass_k", "tool_ok", "grounded_ok",
+                   "slot_heard", "slot_echoed", "judge_grounded",
+                   "judge_resolution", "judge_tone")
+    ms_fields = ("ttfa_p50_ms", "ttfa_p95_ms", "bargein_stop_p50_ms")
+    rates = {round(v, 3) for r in summary.values() for f in rate_fields
+             if (v := parse_number(r.get(f, ""))) is not None}
+    mss = {v for r in summary.values() for f in ms_fields
+           if (v := parse_number(r.get(f, ""))) is not None}
+    wers: set[float] = set()
+    for name in ("asr_scores.csv", "asr_scores_summary.csv"):
+        p = results / name
+        if p.exists():
+            with p.open() as f:
+                for r in csv.DictReader(f):
+                    for k, c in r.items():
+                        if ("wer" in k or "snr50" in k) and \
+                                (v := parse_number(c)) is not None:
+                            wers.add(round(v, 2))
+    # Dollar figures live in the cost tables, whose arithmetic is checked
+    # separately; prose may restate any of them.
+    money = {round(v, 2) for line in md.splitlines()
+             if line.lstrip().startswith("|")
+             for c in re.findall(r"\d+\.\d{2}", line)
+             if (v := parse_number(c)) is not None}
+
+    def near(x: float, pool, tol: float) -> bool:
+        return any(abs(x - p) <= tol for p in pool)
+
+    def derived(x: float, pool, tol: float) -> bool:
+        """A difference between two figures, or one as a percent of another."""
+        vals = sorted(pool)
+        return (any(abs(x - abs(a - b)) <= tol for a in vals for b in vals)
+                or any(a and abs(x - 100 * abs(a - b) / max(a, b)) <= tol
+                       for a in vals for b in vals))
+
+    exempt = PROSE_EXEMPT.get(doc, {})
+    used: set[str] = set()
+    prose = "\n".join(l for l in re.sub(r"```.*?```", "", md, flags=re.S).splitlines()
+                      if not l.lstrip().startswith("|"))
+    for m in PROSE_FIG.finditer(prose):
+        literal = " ".join(m.group(0).split())
+        if m.group(2):
+            value, unit = float(m.group(1)), m.group(2)
+        elif m.group(3):
+            value, unit = float(m.group(3)), "$"
+        else:
+            value, unit = float(m.group(4)), "rate"
+        if literal in exempt:
+            used.add(literal)
+            continue
+        # "~210 ms" is a stated approximation; the reports round these to the
+        # nearest ten, so the tolerance has to admit that and nothing looser.
+        approx = "~" in prose[max(0, m.start() - 2):m.start() + 1]
+        if unit == "ms":
+            # The reports round a stated delta to the nearest ten ("770 ms" for
+            # 2087 - 1315 = 772), and mark a looser estimate with "~".
+            ok = near(value, mss, 0.5) or derived(value, mss, 5.5 if approx else 2.5)
+        elif unit == "rate":
+            ok = near(value, rates, 0.0005) or derived(value, rates, 0.0015)
+        elif unit == "%":
+            ok = (near(value / 100, rates, 0.0005) or near(value, wers, 0.011)
+                  or derived(value, mss, 0.55) or derived(value, rates, 0.55)
+                  or near(value, {100 * r for r in rates}, 0.55))
+        elif unit == "dB":
+            ok = near(value, wers, 0.011) or value in (0, 5, 10, 20)
+        else:
+            ok = near(value, money, 0.011)
+        if not ok:
+            line = prose[:m.start()].count("\n") + 1
+            problems.append(
+                f"{doc}: prose figure {literal!r} (prose line {line}) cannot be "
+                f"reconstructed from {results}. If it is a real result, it "
+                f"moved or was mistyped; if it is not, add it to PROSE_EXEMPT "
+                f"with the reason.")
+    if stale := sorted(set(exempt) - used):
+        problems.append(
+            f"{doc}: PROSE_EXEMPT lists {', '.join(stale)}, which no longer "
+            "appear in the document. Remove them — an allowlist nobody prunes "
+            "is a place for figures to hide.")
+    return problems
+
+
+def check_cost_inputs(md: str, doc: str, results: Path) -> list[str]:
+    """The minutes a cost line multiplies, against the run that produced them.
+
+    `check_cost_table` verifies the arithmetic — minutes x rate = dollars, line
+    items sum to the total, total equals the headline. Every one of those inputs
+    comes out of the same Markdown row, so the whole check is internally
+    consistent and externally unmoored: a *coherent* edit passes. Take Track A
+    from 52.5 to 62.5, the line from 4.62 to 5.32, and the total and headline
+    from 8.85 to 9.55, and the arithmetic still closes while `asr_scores.csv`
+    says 52.5. An arithmetic check over numbers that all came from the document
+    verifies only that the author can add up.
+
+    So the Track A minutes are bound to the generated data: `audio_min` in
+    `asr_scores.csv` is exactly the audio this arm streamed and was billed for.
+    That is the column the demonstration moved, and it now moves nothing.
+
+    **Track B minutes are deliberately NOT bound, and the reason is the point.**
+    The obvious candidate, `session_min` in `summary.csv`, is computed over the
+    *scored* runs only — `summarize.py` drops the two unscored barge-in
+    scenarios from every aggregate — so it is 15.8 where the merged report bills
+    20.4, and binding to it would have been a confident comparison against the
+    wrong quantity. The billed figure includes unscored scenarios, retries and
+    discarded runs, and is not reproducible from either snapshot: the
+    `main-report/` tree holds no `scenarios.jsonl`. An exemption named here is
+    worth more than a check against a number that means something else.
+    """
+    problems: list[str] = []
+    audio: dict[str, float] = {}
+    p = results / "asr_scores.csv"
+    if p.exists():
+        with p.open() as f:
+            for r in csv.DictReader(f):
+                if (v := parse_number(r.get("audio_min", ""))) is not None:
+                    audio[r["arm"]] = audio.get(r["arm"], 0.0) + v
+    if not audio:
+        return problems
+
+    for tbl in tables(md):
+        head = [norm_label(c) for c in tbl[0]] if tbl else []
+        col = next((i for i, lab in enumerate(head) if lab == "track a min"), None)
+        if col is None:
+            continue
+        for row in tbl[1:]:
+            arm = resolve_arm(row[0], set(audio))
+            if arm is None or col >= len(row) or is_absent(row[col]):
+                continue          # judge passes and the lost run name no arm
+            stated = parse_number(row[col])
+            if stated is None or "~" in row[col]:
+                # Unreadable cells are check_cost_table's job; a stated estimate
+                # approximates runs that were never scored.
+                continue
+            got = audio[arm]
+            if abs(stated - got) > 0.051:
+                problems.append(
+                    f"{doc}: cost line {norm_label(row[0])!r} bills Track A "
+                    f"{stated:g} min, but {arm} streamed {got:g} audio-min in "
+                    f"{results}/asr_scores.csv")
+    return problems
+
+
 def check_run_counts(md: str, doc: str, results: Path) -> list[str]:
     """'N of the M new runs …' — both halves move when the study is extended."""
     # Look for the claim first: a missing data file only matters if something
@@ -1212,6 +1424,8 @@ def main() -> int:
                 f"{want_cells}. {why} for this report in RESULTS_FOR.")
         problems += check_judge_agreement(md, doc, results)
         problems += check_cost_table(md, doc)
+        problems += check_cost_inputs(md, doc, results)
+        problems += check_prose_figures(md, doc, results, summary)
         problems += check_run_counts(md, doc, results)
         problems += check_arm_counts(md, doc, results, root)
         problems += check_conditions(md, doc, results, root)

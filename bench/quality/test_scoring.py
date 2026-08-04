@@ -3071,6 +3071,71 @@ class TestReportsMatchTheirData(unittest.TestCase):
                               f"{name} states n={declared} beside its DNS "
                               f"tables; DNS_CLIPS is {check_report.DNS_CLIPS}")
 
+    def test_a_prose_result_figure_is_checked(self):
+        """Codex on 6b759bc: the tables were hardened and the claims walked
+        into the prose.
+
+        `p95 falls 3325 -> 2560 ms` is the headline of the report's
+        recommendation, and it lived in the one part of the document nothing
+        verified while 297 table cells around it were checked to three
+        decimals. A checker's coverage is a claim like any other.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08-gpt-realtime-2-1.md"
+            p.write_text(p.read_text().replace("3325 → 2560 ms",
+                                               "3325 → 9999 ms"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1, "an invented prose figure still passed")
+            self.assertTrue(any("9999" in x for x in out["problems"]),
+                            out["problems"])
+
+    def test_a_coherent_cost_edit_does_not_pass(self):
+        """The arithmetic was internally consistent and externally unmoored.
+
+        `want` came entirely from the same Markdown row, so moving the minutes,
+        the line cost, the total and the headline together kept every sum
+        closing while `asr_scores.csv` said otherwise. An arithmetic check over
+        numbers that all came from the document verifies only that the author
+        can add up.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08-gpt-realtime-2-1.md"
+            p.write_text(p.read_text()
+                         .replace("| `gpt-realtime-2.1` | 52.5 | 13.5 | 0.070 | 4.62 |",
+                                  "| `gpt-realtime-2.1` | 62.5 | 13.5 | 0.070 | 5.32 |")
+                         .replace("| **total** | | | | **8.85** |",
+                                  "| **total** | | | | **9.55** |")
+                         .replace("Spend **$8.85**", "Spend **$9.55**"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1, "a coherent false cost edit passed")
+            self.assertTrue(any("audio-min" in x for x in out["problems"]),
+                            out["problems"])
+
+    def test_a_stale_prose_exemption_is_reported(self):
+        """An allowlist nobody prunes is a place for figures to hide."""
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = self._sandbox(tmp)
+            p = docs / "voice-engine-quality-2026-08-gpt-realtime-2-1.md"
+            # `76.3 %` is exempt because it is quoted as a superseded figure.
+            # Remove the sentence and the exemption must be reported as stale.
+            p.write_text(p.read_text().replace("76.3 %", "an earlier number"))
+            out, code = self._run(docs=docs)
+            self.assertEqual(code, 1)
+            self.assertTrue(any("PROSE_EXEMPT" in x and "76.3" in x
+                                for x in out["problems"]), out["problems"])
+
+    def test_every_prose_exemption_names_a_reason(self):
+        import check_report
+        for doc, entries in check_report.PROSE_EXEMPT.items():
+            for literal, reason in entries.items():
+                with self.subTest(doc=doc, figure=literal):
+                    self.assertGreater(
+                        len(reason), 30,
+                        f"{literal} is exempt without a stated reason")
+                    self.assertNotIn("not yet", reason.lower())
+
     def test_a_before_after_table_is_checked_against_both_arms(self):
         """Codex, on 60d2d6e: two whole tables took neither branch.
 

@@ -316,6 +316,8 @@ the intent rather than the behaviour.
 | 15 | `score_asr.py` declared matrix | which cells should exist | the cross-product of the **declared** axes (`--expect-arms`, `--expect-langs`, `--expect-conditions`, all required), against the rows present. Absent cells are emitted with `n=0`, `complete=0`, empty WER; a declared axis value with no rows *anywhere*, or a row on an axis value never declared, is an integrity failure that `--allow-incomplete` cannot relax | nothing known. Two bugs, one fix apart. Iterating only the groups that existed meant an absent cell produced no row, so all 72 rows read `complete=1`. Deriving the cross-product from the rows then meant an entirely-absent arm, language or condition never entered it at all — the same invisibility one level up, and the reason the axes are declared rather than discovered. |
 | 17 | `events.scenario_ids` | is the scenario fixture well-formed | every `id` in `fixtures/scenarios.json` appears exactly once, checked by the runner, the judge, `summarize.py` and `score_slots.py` before each keys the fixture by id | nothing known. The uniqueness was assumed at four sites and checked at none: a repeat was one scenario to the runner's log map (so `--preflight-logs` cleared a run that would overwrite its own log), two paid passes to the judge, and two entries in the denominator of every rate in `summarize.py`. |
 | 12 | `judge.py` `parse_verdicts` | is this verdict usable | one verdict per expected candidate id, scores literally `int` in range | nothing known. `bool` passing as `int` was the bug: `true` became `0.0` downstream. |
+| 19 | `check_report.check_prose_figures` | is a figure written outside a table a real result | every result-shaped figure in prose must be reconstructible from the generated data — a value it takes, a difference of two, or one as a percentage of another — or be named in `PROSE_EXEMPT` with a reason; a stale exemption is an error | **an arm swap**, deliberately: this is membership, not identity, because prose gives nothing reliable to resolve an arm against. 111 figures found, 98 bound, 13 exempt. The tables were hardened and the claims walked into the prose: `3325 → 9999 ms` passed at full declared coverage. |
+| 20 | `check_report.check_cost_inputs` | did the cost table's minutes come from the run | Track A minutes against `audio_min` in `asr_scores.csv` | Track B minutes, named as exempt: `session_min` counts *scored* runs only (15.8 against a billed 20.4), and the billed figure is not reproducible from either snapshot. `check_cost_table`'s arithmetic read every input from the same Markdown row, so a coherent edit of minutes, line, total and headline together passed. |
 | 18 | `check_report.py` DNS loader | is this probe file the study it claims | per leg: no errored rows, one row per clip id, `DNS_CLIPS` distinct ids, and the **same** id set in every leg | nothing known. It accepted whatever rows it found, which left `n` the one published figure nothing verified: duplicating every row in `dns_probe_en.jsonl` doubles n from 50 to 100 and leaves every WER and percentage identical — ratios are invariant under duplication — so the checker certified a file describing twice the study. The declared-matrix rule on a different input. |
 | 14 | `check_report.py` | do the reports still quote their own data | every resolvable table cell, judge-agreement figure, cost total, run count, Track A condition list, and any count written beside a named CSV or results directory, against the tree that report was written from (`RESULTS_FOR`). A row or column standing for several arms is compared against **every** arm it covers — `ARM_GROUPS` against the group's min and max, `RECOGNISER_ROWS` against each arm's `slot_heard` — and each arm counts as a cell | **free prose**, deliberately: a count not tied to a named artifact is not matched. Each report must resolve its **declared** cell count, enforced per report; an unmapped report is an error, not a skip; an empty judge intersection is reported, not raised. |
 
@@ -456,6 +458,65 @@ off, so counts are only checked where they sit beside the artifact they describe
 write it in free prose and nothing will catch it going stale.** That is a real
 gap, stated rather than papered over — it is how "all seven arms" reached the
 merged report one commit after this checker landed.
+
+### The tables were hardened and the claims walked into the prose
+
+Sixteen rounds of work went into making every table cell resolve against
+generated data. Every figure *repeated outside* a table was checked by a
+handful of special cases and otherwise not at all. Changing `p95 falls
+3325 → 2560 ms` to `3325 → 9999 ms` left every table untouched and the run
+green, reporting 297 cells checked — and that sentence is the headline of the
+report's recommendation, the one a reader acts on.
+
+**A checker's coverage is a claim like any other.** "297 cells checked" reads
+as thoroughness precisely where the document is weakest, which is the coverage
+count certifying its own blind spot one more time. The boundary moved and the
+new boundary went unchecked; the claims went where the checking was not.
+
+`check_prose_figures` now scans every result-shaped figure outside a table —
+`2560 ms`, `24 %`, `0.963`, `9.6 dB`, `$8.85` — and requires each to be
+**reconstructible** from the generated data: equal to a value the data takes,
+to the difference of two of them (these reports quote deltas constantly), or to
+one as a percentage of another. The sweep found **111** such figures across the
+two reports and binds **98**; the remaining **13** are named in `PROSE_EXEMPT`
+with a reason each, and a stale entry is an error, because an allowlist nobody
+prunes is where figures hide.
+
+Two of those exemptions are the interesting ones, and they are exempt for
+opposite reasons from the rest: `76.3 %` and `−69 ms` are quoted *as
+superseded* — sentences describing what an earlier draft claimed — so they must
+**not** match the current data. A checker that bound them would be demanding
+that a report's account of its own corrections be false.
+
+**What this check does not do, stated rather than implied.** It is a membership
+test, not an identity one: it proves a figure is *some* value the study
+produced, not that it is the value for the arm the sentence names, because free
+prose gives nothing reliable to resolve an arm against — the same limit
+`check_run_counts` already documents for counts. It catches an invented figure,
+a stale one, and one that moved when the data was re-run. It would not catch a
+figure swapped between two arms. The table checks, which do resolve an arm,
+remain the primary defence; this closes the gap around them.
+
+### An arithmetic check over the document's own numbers
+
+`check_cost_table` verified minutes × rate = dollars, that the line items sum
+to the total, and that the total equals the headline — with every input read
+out of the same Markdown row. So the whole check was internally consistent and
+externally unmoored, and a *coherent* edit passed: Track A 52.5 → 62.5, the
+line 4.62 → 5.32, total and headline 8.85 → 9.55, all green, while
+`asr_scores.csv` said 52.5. **An arithmetic check over numbers that all came
+from the artifact under test verifies only that the author can add up.**
+
+Track A minutes are bound to `audio_min` now. Track B minutes are **not**, and
+that decision is worth recording because the obvious binding was wrong: the
+candidate column, `session_min` in `summary.csv`, is computed over *scored* runs
+only — `summarize.py` drops the two unscored barge-in scenarios from every
+aggregate — so it reads 15.8 where the merged report bills 20.4. Binding to it
+would have been a confident comparison against a different quantity, which is
+worse than the gap it closed. The billed figure includes unscored scenarios,
+retries and discarded runs and is not reproducible from either snapshot;
+`main-report/` holds no `scenarios.jsonl`. **A named exemption beats a check
+against a number that means something else.**
 
 ### Why #14 exists: the prose variant of the same class
 
