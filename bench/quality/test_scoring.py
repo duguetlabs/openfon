@@ -1275,6 +1275,55 @@ class TestRederiveIsDedupeOnly(unittest.TestCase):
             self.assertEqual(out[0]["tool_calls"], ["end_call"])
             self.assertIn("extra=['invented']", r.stderr)
 
+    def test_a_refusal_reaches_the_exit_status(self):
+        """A refused row must not report success. The guard's own shadow.
+
+        Refusing the rewrite was the fix; the refusal being invisible to
+        automation is the same class one step further out. The tool printed
+        `rewrote N runs` and exited 0, so a caller chaining
+        `rederive_tools.py && summarize.py` scored a partial repair as a
+        complete one — and a refused row is byte-identical to a row that needed
+        no repair, so nothing downstream could tell.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            # One row that deduplicates cleanly, one the log contradicts.
+            r, out = self.run_tool(
+                tmp, [{"arm": "a", "scenario": "ok", "trial": 1,
+                       "tool_calls": ["end_call", "end_call"]},
+                      {"arm": "a", "scenario": "bad", "trial": 1,
+                       "tool_calls": ["end_call"]}],
+                {"ok": ["end_call"], "bad": ["end_call", "invented"]})
+            self.assertNotEqual(r.returncode, 0,
+                                "a partial re-derivation exited 0")
+            self.assertIn("were NOT re-derived", r.stderr)
+            self.assertIn("a/bad/t1", r.stderr)
+            # The good row is still repaired and the refused one untouched:
+            # partial repair is safe, silent partial repair is not.
+            self.assertEqual(out[0]["tool_calls"], ["end_call"])
+            self.assertEqual(out[1]["tool_calls"], ["end_call"])
+            # ...and the count must not overclaim.
+            self.assertIn("rewrote 1 of 2 runs", r.stdout)
+
+    def test_a_missing_log_also_reaches_the_exit_status(self):
+        """"I could not check this row" is not "this row was fine"."""
+        with tempfile.TemporaryDirectory() as tmp:
+            r, out = self.run_tool(
+                tmp, [{"arm": "a", "scenario": "absent", "trial": 1,
+                       "tool_calls": ["end_call"]}], {})
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("no log at", r.stderr)
+            self.assertEqual(out[0]["tool_calls"], ["end_call"])
+
+    def test_a_complete_rederivation_still_exits_zero(self):
+        """The refusal must be the signal, not the mere act of running."""
+        with tempfile.TemporaryDirectory() as tmp:
+            r, out = self.run_tool(
+                tmp, [{"arm": "a", "scenario": "s", "trial": 1,
+                       "tool_calls": ["end_call", "end_call"]}],
+                {"s": ["end_call"]})
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(out[0]["tool_calls"], ["end_call"])
+
     def test_a_log_inventing_a_SECOND_call_of_a_known_name_is_refused(self):
         """Codex on 70bfd10: re-derivation could add an `end_call`.
 
@@ -1338,6 +1387,90 @@ class TestRederiveIsDedupeOnly(unittest.TestCase):
         self.assertTrue(is_deduplication(["a", "b", "a"], ["a", "b"]))
         self.assertFalse(is_deduplication(["end_call"], ["end_call", "end_call"]))
         self.assertTrue(is_deduplication(["end_call", "end_call"], ["end_call"]))
+
+
+class TestDecliningWorkReachesTheExitStatus(unittest.TestCase):
+    """A tool that skips, refuses or partly completes must say so in `$?`.
+
+    `rederive_tools.py` refused to apply a bad log and then printed
+    `rewrote N runs` and exited 0 — a silent failure wearing a safety fix's
+    clothes. That is exercised directly in `TestRederiveIsDedupeOnly`; this
+    class sweeps the rest of the CLIs for the same shape.
+
+    The three transport-importing ones cannot be executed here (see
+    `test_no_test_shells_out_to_a_transport_importing_module`), so they are
+    pinned against their source, which is the same convention
+    `test_run_asr_never_records_a_falsy_error` uses. Weaker than running them,
+    and stated as such — the point is that removing the guard has to show up in
+    a diff rather than in nothing.
+    """
+
+    def test_probe_session_fails_when_an_arm_does_not_pass(self):
+        """README step 3 gates a paid run; it used to exit 0 whatever it found.
+
+        `probe(...)` reports failures inside its JSON rather than raising, so
+        every arm could come back unreachable and `probe_session.py && ./run_all.sh`
+        would still spend on the matrix.
+        """
+        src = (HERE / "probe_session.py").read_text()
+        self.assertIn('if res.get("exception"):', src)
+        self.assertIn('elif res.get("errors"):', src)
+        self.assertIn("did not pass the ", src)
+        self.assertIn("failed.append(", src)
+        # A --wav that round-trips nothing is the case the flag exists for.
+        self.assertIn("no transcript came back", src)
+
+    def test_probe_dns_separates_an_outage_from_the_finding(self):
+        """Its empty-transcript rate IS the published result, so a lost session
+        and the effect it measures produce the same row. Only the recorded
+        error, and the exit status, tell them apart."""
+        src = (HERE / "probe_dns.py").read_text()
+        self.assertIn('"error": err', src)
+        self.assertIn("no transcription event for this clip", src)
+        self.assertIn("if errored :=", src)
+        self.assertIn("not because the engine ", src)
+
+    def test_prepare_fleurs_refuses_a_short_corpus(self):
+        src = (HERE / "prepare" / "prepare_fleurs.py").read_text()
+        self.assertIn("if n < args.n:", src)
+        self.assertIn("is SHORT", src)
+
+    def test_every_cli_that_collects_failures_exits_on_them(self):
+        """Mechanical backstop: a module that builds a list of failures and
+        never reaches `sys.exit` has collected them for nobody.
+
+        Only catches the shape where failures are accumulated in a named list —
+        which is every instance found so far, including the one that prompted
+        this class — and is honest about that reach: it would not catch a tool
+        that never noticed the failure at all.
+        """
+        import ast
+        names = {"failed", "failures", "declined", "problems", "gaps",
+                 "integrity", "exhausted", "errored", "missing_legs"}
+        for mod in sorted(p.name for p in HERE.glob("*.py")
+                          if p.name != "test_scoring.py"):
+            src = (HERE / mod).read_text()
+            tree = ast.parse(src)
+            appended = {
+                n.func.value.id
+                for n in ast.walk(tree)
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and n.func.attr == "append" and isinstance(n.func.value, ast.Name)
+                and n.func.value.id in names
+            }
+            if not appended:
+                continue
+            with self.subTest(module=mod, collects=sorted(appended)):
+                exits = [n for n in ast.walk(tree)
+                         if isinstance(n, ast.Call) and (
+                             (isinstance(n.func, ast.Attribute)
+                              and n.func.attr == "exit")
+                             or (isinstance(n.func, ast.Name)
+                                 and n.func.id == "SystemExit"))]
+                self.assertTrue(
+                    exits,
+                    f"{mod} accumulates {sorted(appended)} and never exits "
+                    "non-zero, so whatever it collected reaches nobody")
 
 
 class TestHangsAreBounded(unittest.TestCase):

@@ -127,12 +127,41 @@ async def main() -> None:
     ap.add_argument("--wav", help="a clean 16 kHz WAV to round-trip")
     a = ap.parse_args()
 
+    names = [n.strip() for n in a.arms.split(",") if n.strip()]
+    if not names:
+        sys.exit(f"--arms {a.arms!r} names no arms")
+    if unknown := sorted(set(names) - set(ARMS)):
+        sys.exit(f"--arms names {', '.join(unknown)}, which are not arms. "
+                 f"Known: {', '.join(sorted(ARMS))}")
+
     wav = Path(a.wav) if a.wav else None
-    for name in a.arms.split(","):
+    failed: list[str] = []
+    for name in names:
         # Serialised on purpose: parallel handshakes inflated connect time to 3.6 s.
-        print(json.dumps(await probe(name.strip(), wav), ensure_ascii=False, indent=2))
+        res = await probe(name, wav)
+        print(json.dumps(res, ensure_ascii=False, indent=2))
         sys.stdout.flush()
+        # `probe` reports failures in its result rather than raising, so the
+        # exit code is the only place left to say the pre-flight did not pass.
+        if res.get("exception"):
+            failed.append(f"{name}: {res['exception']}")
+        elif res.get("errors"):
+            failed.append(f"{name}: service errors {res['errors']}")
+        elif wav is not None and not res.get("transcript"):
+            # The whole point of --wav is proving a clip round-trips. Printing
+            # `"transcript": null` and exiting 0 is this harness's signature
+            # defect in its own pre-flight: absence reading as a pass.
+            failed.append(f"{name}: no transcript came back for {wav}")
         await asyncio.sleep(1)
+
+    # This is README step 3, the gate in front of a paid run. A pre-flight that
+    # reports every arm broken and still exits 0 cannot gate anything: a caller
+    # chaining `probe_session.py && run_all.sh` would spend on a matrix whose
+    # arms it has just proved unreachable.
+    if failed:
+        sys.exit(f"\n{len(failed)} of {len(names)} arm(s) did not pass the "
+                 "pre-flight:\n  " + "\n  ".join(failed) +
+                 "\nDo not start a paid run until these are resolved.")
 
 
 if __name__ == "__main__":

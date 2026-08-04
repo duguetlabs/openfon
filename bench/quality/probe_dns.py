@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import collections
 import json
 import subprocess
 import sys
@@ -120,7 +121,21 @@ async def run_leg(leg: str, lang: str, clips: list[dict]) -> list[dict]:
                 ev = json.loads(await asyncio.wait_for(ws.recv(), timeout=30))
                 if ev.get("type") == "conversation.item.input_audio_transcription.completed":
                     offer(ev.get("item_id") or "", ev.get("transcript") or "")
-            order.append((clip, item_id))
+            # An empty hypothesis has two causes and they mean opposite things.
+            # The service returning an empty transcript IS the finding this
+            # probe exists to measure — deep noise suppression drops
+            # utterances. Never getting a transcription event at all is an
+            # outage, and it produces a byte-identical row. Recording which
+            # one happened is the only way `check_report.py` (and a reader) can
+            # tell "the engine dropped this utterance" from "we lost the
+            # session", and the second must never be published as the first.
+            if item_id is None:
+                err = "no input_audio_buffer.committed within 60 s"
+            elif item_id not in seen:
+                err = "no transcription event for this clip within 60 s"
+            else:
+                err = None
+            order.append((clip, item_id, err))
 
         end = loop.time() + 8
         while loop.time() < end:
@@ -131,10 +146,11 @@ async def run_leg(leg: str, lang: str, clips: list[dict]) -> list[dict]:
             if ev.get("type") == "conversation.item.input_audio_transcription.completed":
                 offer(ev.get("item_id") or "", ev.get("transcript") or "")
 
-    for clip, item_id in order:
+    for clip, item_id, err in order:
         out.append({"leg": leg, "lang": lang, "id": clip["id"],
                     "reference": clip["reference"],
-                    "hypothesis": pending.get(item_id or "", "")})
+                    "hypothesis": pending.get(item_id or "", ""),
+                    "error": err})
     return out
 
 
@@ -206,6 +222,26 @@ async def main() -> None:
               if ne else float("nan"))
         print(f"{leg:12s}{len(rs):4d}{len(rs)-len(ne):7d}"
               f"{100*(len(rs)-len(ne))/len(rs):7.1f}%{wa:9.2f}{wn:14.2f}")
+
+    # The table above is the whole output, and it cannot show what did not
+    # happen: a leg that lost its session prints a high empty rate and a high
+    # WER, which is exactly the shape of the result this probe reports. So the
+    # exit status carries it. Same rule as score_asr.py check #2a — an outage is
+    # not a measurement — and it matters more here, because these files are what
+    # check_report.py recomputes the "never enable Azure noise suppression"
+    # figures from.
+    if errored := [r for r in rows if r.get("error")]:
+        by_leg = collections.Counter(r["leg"] for r in errored)
+        sys.exit(f"\n{len(errored)} of {len(rows)} clip(s) produced no "
+                 f"transcription event at all ({dict(by_leg)}). Those rows are "
+                 f"empty because the session failed, not because the engine "
+                 f"dropped the utterance, and the two are indistinguishable in "
+                 f"{a.out}. Re-run the affected leg(s) before publishing any "
+                 "figure from this file.")
+    missing_legs = [l for l in legs if not any(r["leg"] == l for r in rows)]
+    if missing_legs:
+        sys.exit(f"\nno rows for leg(s) {', '.join(missing_legs)}; "
+                 f"{a.out} does not contain the comparison it was asked for")
 
 
 if __name__ == "__main__":

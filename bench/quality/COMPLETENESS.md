@@ -177,6 +177,24 @@ the same property a second time:
 
 The sweep for further instances of each is at the end of this file.
 
+**And the fix's own shadow, which is the fourth time this has happened inside a
+remedy.** The dedupe guard above now refuses a log that would invent a call —
+and then printed `rewrote N runs` and **exited 0**. A refused row is
+byte-identical to a row that needed no repair, so nothing downstream could tell
+a complete re-derivation from a partial refusal: `rederive_tools.py &&
+summarize.py` scored the second as the first. Before the fix the tool did the
+wrong thing loudly enough for review to catch; after it, it did nothing quietly
+and reported success.
+
+**A tool that declines to do what it was asked must say so in its exit status,
+not only in its stdout.** State it as a rule because the boundary keeps moving
+and the new boundary keeps going unchecked: absent data reading as a pass, then
+an absent code path reading as a pass, now an absent *repair* reading as a pass.
+The file is still written — the accepted rows are correctly deduplicated and the
+refused ones are unchanged, so a partial repair is safe — but the exit says it
+was partial, and the count says how many rows actually moved rather than how
+many were in the file.
+
 **Verifying a fix is itself a run, and it destroyed data.** The guard on
 `results/` was added, then a raw log was emptied anyway — by the act of checking
 that a new test failed against the old behaviour, which ran the real runner
@@ -650,6 +668,50 @@ site that makes it: fixture scenario ids (`events.scenario_ids`, four callers),
 `summarize.py`), and raw-log targets (`engines.preflight_logs`, which now
 refuses two units naming one path instead of trusting callers to have
 deduplicated).
+
+## The sweep for silent partial completion
+
+Prompted by `rederive_tools.py` refusing a rewrite and exiting 0. The question
+asked of every CLI in `bench/quality/`: **can this skip, refuse, or partly
+complete its work and still exit 0?** Three more found, all fixed.
+
+- **`probe_session.py` — the documented pre-flight could not fail.** `probe()`
+  deliberately reports failures inside its JSON rather than raising ("a probe
+  reports failures, never raises"), and `main` printed each result and exited 0.
+  So README step 3 — the gate in front of a paid run — reported every arm
+  unreachable and still let `probe_session.py && ./run_all.sh` proceed. It now
+  exits non-zero on an exception, on service errors, and on a `--wav` that
+  round-trips no transcript, which is the case that flag exists to prove.
+- **`probe_dns.py` — an outage was indistinguishable from the finding.** A clip
+  that never bound an item id, or never got a transcription event, was written
+  as an empty hypothesis — the same row the service produces when deep noise
+  suppression *drops* an utterance, which is precisely what this probe measures
+  and what "never enable Azure noise suppression" rests on. A lost session
+  therefore prints a high empty rate and a high WER: the shape of the published
+  result. Rows now carry `error`, and any clip with one aborts, on the same rule
+  as check #2a. A leg with no rows at all aborts too.
+- **`prepare/prepare_fleurs.py` — a short corpus was written silently.** The
+  loop ends at `--n` *or* when the split runs out, and two `continue`s skip
+  examples on their way (undecodable audio, duration out of range), so a filter
+  slightly too tight yields a quietly smaller manifest and exit 0. Every
+  downstream cell inherits that size. `run_asr.py` does refuse a short cell —
+  after the calls are paid for, which is the late-refusal shape this file keeps
+  moving earlier.
+
+Clean, with the reason each is already covered: `judge.py` (exits on
+`failures`), `summarize.py` and `score_asr.py` (gaps/integrity lists, with
+`--allow-incomplete` the *declared* escape hatch), `run_asr.py` (#2a),
+`run_scenarios.py` (#1), `run_all.sh` (#3), `check_report.py` (problems list),
+`score_slots.py` (no skip path — an unknown scenario raises),
+`prepare/make_conditions.py` (copies the clean manifest verbatim, so the
+conditioned set cannot come out short) and `prepare/render_scenarios.py` (TTS
+failures raise).
+
+`test_every_cli_that_collects_failures_exits_on_them` is the mechanical
+backstop: any module that appends to a failure list and never reaches
+`sys.exit` has collected those failures for nobody. It catches the shape every
+instance so far has had, and not the tool that never noticed the failure at
+all — which is what the rest of this file is for.
 
 ## Adding a check
 

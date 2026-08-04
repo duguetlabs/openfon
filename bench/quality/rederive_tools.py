@@ -9,6 +9,10 @@ misleading to read.
 Deduplicating on call_id is a pure re-read of data we already paid for, so this
 corrects the record without re-running a single call.
 
+Exits non-zero if any row was left unrepaired — see the end of `main`. A repair
+tool that declines part of its job and reports success is indistinguishable from
+one that had nothing to do.
+
   python rederive_tools.py --runs results/scenarios.jsonl --logdir logs
 """
 from __future__ import annotations
@@ -103,11 +107,20 @@ def main() -> None:
 
     runs = [json.loads(l) for l in Path(a.runs).read_text().splitlines() if l.strip()]
     stats = collections.Counter()
+    # Every row this run declined to repair, by identity. A count in stdout is
+    # not a report: see the exit below.
+    declined: list[str] = []
     for r in runs:
+        unit = f"{r['arm']}/{r['scenario']}/t{r['trial']}"
         log = Path(a.logdir) / f"sc-{r['arm']}-{r['scenario']}-t{r['trial']}.jsonl"
         rebuilt = calls_from_log(log)
         if not log.exists():
+            # Also a declined repair, not a no-op: this row's `tool_calls` were
+            # never checked against anything, so "I verified every row" and "I
+            # could not find the evidence for this one" would otherwise be the
+            # same exit code.
             stats["log missing"] += 1
+            declined.append(f"{unit}: no log at {log}")
             continue
         before, after = list(r.get("tool_calls") or []), rebuilt
         # Deduplication may only remove REPEATS of a name already present. Any
@@ -134,14 +147,14 @@ def main() -> None:
             inflated = sorted(f"{n} {cb[n]}->{ca[n]}" for n in ca
                               if n in cb and ca[n] > cb[n])
             reordered = not missing and not extra and not inflated
+            why = (f"log={after} run={before}"
+                   f"{f' missing={missing}' if missing else ''}"
+                   f"{f' extra={extra}' if extra else ''}"
+                   f"{f' inflated={inflated}' if inflated else ''}"
+                   f"{' reordered (same calls, different order)' if reordered else ''}")
             stats["REFUSED: log and run disagree"] += 1
-            print(f"  {r['arm']}/{r['scenario']}/t{r['trial']}: "
-                  f"log={after} run={before}"
-                  f"{f' missing={missing}' if missing else ''}"
-                  f"{f' extra={extra}' if extra else ''}"
-                  f"{f' inflated={inflated}' if inflated else ''}"
-                  f"{' reordered (same calls, different order)' if reordered else ''}"
-                  f" — left unchanged", file=sys.stderr)
+            declined.append(f"{unit}: {why}")
+            print(f"  {unit}: {why} — left unchanged", file=sys.stderr)
             continue
         stats["unchanged" if before == after else "rewritten"] += 1
         r["tool_calls"] = rebuilt
@@ -151,7 +164,30 @@ def main() -> None:
     if not a.dry_run:
         Path(a.runs).write_text(
             "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in runs))
-        print(f"rewrote {len(runs)} runs -> {a.runs}")
+        # Not `len(runs)`: the refused rows were written back unchanged, and
+        # saying they were rewritten is the same overclaim as the exit code.
+        print(f"rewrote {stats['rewritten']} of {len(runs)} runs -> {a.runs}")
+
+    # A refusal has to reach the exit status. This tool repairs benchmark data
+    # that backs published findings, so "I declined to repair these rows" and
+    # "I repaired everything" must not be the same exit code: a caller chaining
+    # `rederive_tools.py && summarize.py` would score a partial repair as a
+    # complete one, and nothing downstream can tell the difference — the refused
+    # rows look exactly like rows that needed no repair.
+    #
+    # This is the guard's own shadow. Refusing the rewrite was the fix; the
+    # refusal being invisible to automation is the same class one step further
+    # out, which is the shape this harness keeps producing (COMPLETENESS.md).
+    # The file is still written, because the accepted rows are correctly
+    # deduplicated and the refused ones are byte-identical to their input —
+    # partial repair is safe, silent partial repair is not.
+    if declined:
+        sys.exit(f"{len(declined)} run(s) were NOT re-derived:\n  "
+                 + "\n  ".join(declined[:10])
+                 + ("\n  ..." if len(declined) > 10 else "")
+                 + f"\n{a.runs} holds a PARTIAL re-derivation: the rows above "
+                 "are unchanged from their input, the rest are deduplicated. "
+                 "Investigate the logs before treating this file as repaired.")
 
 
 if __name__ == "__main__":
