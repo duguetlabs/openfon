@@ -331,10 +331,14 @@ first could not see it:
   It also only mutated the *first* figure in each row until 2026-08-03, which is usually
   the pair count, so medians, intervals, tails and p-values had never been exercised.
 * **cross-mutation** — every figure swapped for every *other figure of the same
-  comparison*. 2704 such swaps were accepted before the keying; 28 are now, and each one
-  is the same value written differently (a magnitude in verdict prose, a sign on a positive
-  count, `0` written `0.000`). The test enumerates them by value, because a count cannot
-  tell a new hole from an old one. See [`COMPLETENESS.md`](COMPLETENESS.md) for
+  comparison*. 2704 such swaps were accepted before the keying, 28 after it, and **13**
+  once the sign filter was corrected; each survivor is the same value written differently
+  (a magnitude in verdict prose, a sign on a positive count, `0` written `0.000`). The test
+  enumerates them by value, because a count cannot tell a new hole from an old one.
+* **sign sweep** — every negative figure in both reports rewritten as its unsigned
+  magnitude, which must be caught outside verdict prose. Added because it was not: the
+  filter meant to withdraw the magnitude dropped the *signed* spelling instead, so every
+  negative statistic in both reports passed unsigned. See [`COMPLETENESS.md`](COMPLETENESS.md) for
 the full inventory of what this harness verifies and how each check can be fooled.
 
 ### Tests

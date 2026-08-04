@@ -611,6 +611,29 @@ def check_manual_count(ev: Evidence, cell: str, subjects: list[str]) -> str:
 PROSE_STATS = ("verdict_median",)
 
 
+def signed_only(raw: set[str]) -> set[str]:
+    """Drop the unsigned spelling of a negative value.
+
+    `fmts` emits both spellings of everything, because verdict prose needs the
+    magnitude — it says "faster by 100 ms" about a median of −100. Everywhere
+    else the sign is part of the figure, and a table cell reading `100` where
+    the analyzer says `−100` states the opposite result.
+
+    Which spellings belong to a negative value is recoverable from the set: an
+    unsigned token `t` is the magnitude of a negative when `-t` is present and
+    `+t` is not. When both are present the cell is checked against a union that
+    genuinely contains ±t, and `t` is a legitimate spelling of the positive one.
+
+    This replaces a filter that had the test inverted — it dropped `-t` when
+    `+t` was present, which discards a *signed* spelling and leaves every
+    magnitude in place. Every negative statistic in both reports could be
+    written unsigned and pass: medians, CI bounds, p10, paired extremes and the
+    `connect_ms` deltas were all checked and all accepted.
+    """
+    return {v for v in raw if v.startswith(("+", "-"))
+            or f"+{v}" in raw or f"-{v}" not in raw}
+
+
 def stat_values(ev: Evidence, subjects: list[str], stat: str,
                 metric: "str | None", table_metric: "str | None",
                 prose: bool) -> set[str]:
@@ -635,8 +658,7 @@ def cell_values(ev: Evidence, subjects: list[str], stats: tuple[str, ...],
                 raw |= ev.pairs_with_treatment(subjects[0], m).get(stat, set())
             for a in subjects:
                 raw |= ev.arm(a, m).get(stat, set())
-            out |= raw if prose else {v for v in raw if not v.startswith("-") or
-                                      f"+{v[1:]}" not in raw}
+            out |= raw if prose else signed_only(raw)
     return out
 
 

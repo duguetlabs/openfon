@@ -826,6 +826,66 @@ class TestReportCheckerCoversEveryFigureRow(unittest.TestCase):
                     bad, 0, f"column {i} accepted column {j}'s run median:"
                             f"\n{mutated[n]}")
 
+    def test_a_negative_figure_cannot_be_written_unsigned(self):
+        """Outside verdict prose the sign is part of the figure.
+
+        `fmts` emits both spellings of every value because prose legitimately
+        says "faster by 100 ms" about a median of −100. The filter that was
+        meant to withdraw the magnitude everywhere else had its test inverted:
+        it dropped `-t` when `+t` was present, which discards a *signed*
+        spelling and leaves every magnitude in place. So **every** negative
+        statistic in both reports could be written unsigned and pass — a cell
+        reading `100` where the analyzer says `−100` states the opposite
+        result, which is precisely the ambiguity the sign counts exist to
+        remove.
+
+        Swept rather than spot-checked. The inverted filter had a docstring
+        describing the correct behaviour and a `COMPLETENESS.md` entry claiming
+        it was fixed; what it never had was a test that tried it.
+        """
+        missed = []
+        for r in self.reports:
+            text = r.read_text()
+            lines = text.split("\n")
+            for tbl in self.c.tables(text):
+                if tbl.header.strip() in self.c.MANUAL_COUNT_TABLES:
+                    continue
+                head = tbl.head_cells
+                for n, line in tbl.body:
+                    if not self.c.figures(line) or self.c.allowlisted_row(line):
+                        continue
+                    if not (self.c.row_arms(line) or tbl.is_column_oriented):
+                        continue
+                    row_spec = self.c.spec_for(self.c.cells_of(line)[0])
+                    # Offsets of each `|`-delimited cell, so a figure can be
+                    # attributed to the column that says what it is; index i
+                    # here is `cells_of` index i-1.
+                    pos, bounds = 0, []
+                    for part in line.split("|"):
+                        bounds.append((pos, pos + len(part)))
+                        pos += len(part) + 1
+                    for fig in self.c.FIGURE.finditer(self.mask(line)):
+                        if fig.group(1) not in ("−", "–", "-"):
+                            continue
+                        ci = next(i for i, (s, e) in enumerate(bounds)
+                                  if s <= fig.start() < e)
+                        spec = (row_spec if tbl.is_column_oriented
+                                else (self.c.spec_for(head[ci - 1])
+                                      if 0 < ci <= len(head) else None))
+                        if spec and any(s in self.c.PROSE_STATS
+                                        for s in spec[0]):
+                            continue
+                        mutated = list(lines)
+                        mutated[n - 1] = (line[:fig.start()] + fig.group(2)
+                                          + line[fig.end():])
+                        bad, _out = self.run_check(
+                            self.rewritten(r, "\n".join(mutated)))
+                        if not bad:
+                            missed.append(f"{r.name}:{n} {fig.group(0).strip()}"
+                                          f" -> {fig.group(2)}")
+        self.assertEqual(missed, [], "negative figures accepted unsigned:\n  "
+                         + "\n  ".join(missed))
+
     def test_a_paired_extreme_is_not_an_arm_extreme(self):
         """`min` and `max` name two different things, so they are keyed apart.
 

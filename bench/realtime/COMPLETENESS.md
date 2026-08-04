@@ -92,11 +92,11 @@ median could be satisfied by its own CI bound. Measured rather than argued —
 swap every figure in every row for every other figure of the same comparison and
 count what passes: **2704 accepted false figures.** Figures are keyed by
 `(metric, statistic)` now and checked in the position their column claims,
-which took that to **28**, and every survivor is the same value written
-differently — a magnitude in verdict prose that legitimately says "faster by 352
-ms" about a median of −352, a sign on a positive count, `0` written `0.000`.
-A test enumerates them by value, because a count cannot tell a new hole from an
-old one.
+which took that to **28**, and then to **13** once the sign filter below was
+corrected. Every survivor is the same value written differently — a magnitude
+in verdict prose that legitimately says "faster by 352 ms" about a median of
+−352, a sign on a positive count, `0` written `0.000`. A test enumerates them
+by value, because a count cannot tell a new hole from an old one.
 
 Three narrower things fell out of that measurement, each a spelling that was not
 a spelling:
@@ -106,7 +106,9 @@ a spelling:
   one decimal.
 - **A magnitude standing in for a signed value.** A median of −100 ms passed
   written `100`. Only verdict prose may quote a magnitude, because only verdict
-  prose says "faster by 100 ms".
+  prose says "faster by 100 ms". **This was written as fixed and was not** — see
+  the sign filter below; the entry stood for six review rounds describing
+  behaviour the code did not have.
 - **An interval read as a set.** `[−280, −15]` passed as `[−15, −15]`. A cell
   holding several statistics holds them in order.
 
@@ -228,7 +230,7 @@ prediction defended is prose. **When a caveat's resolution is a measurement you
 can afford, the caveat is a purchase order rather than a finding**, and the
 tell is a paragraph that has to be re-read carefully every review round.
 
-Three narrower things fell out of writing it up:
+Four narrower things fell out of writing it up:
 
 - **A third run column is a new boundary, and the test for the old one did not
   reach it.** `test_a_column_answers_to_its_own_run` mutated exactly one cell —
@@ -242,6 +244,22 @@ Three narrower things fell out of writing it up:
   outlying pair be satisfied by the slowest single turn of either arm, and an
   arm's slowest turn by a paired extreme — the membership hole, one statistic
   later. Keyed apart as `diff_min` / `diff_max`, and tested in both directions.
+- **The sign filter had its test inverted, and a docstring hid it.** Outside
+  verdict prose the sign is part of the figure, and `cell_values` withdrew the
+  wrong spelling: it dropped `-t` when `+t` was present — discarding a *signed*
+  spelling — instead of dropping the unsigned `t` when the value is negative.
+  So **every negative statistic in both reports could be written unsigned and
+  pass**: medians, CI bounds, p10, the paired extremes and the `connect_ms`
+  deltas were all tried and all accepted, and a cell reading `100` where the
+  analyzer says `−100` states the opposite result. The bug shipped with a
+  docstring describing the correct behaviour, an entry in this file claiming it
+  fixed, and a swap test whose allowance (`abs(a) == abs(b)`) could not tell a
+  prose magnitude from a non-prose one. It was found by a review agent reading
+  the predicate — the same way the three dropped row layouts were found, and
+  again not by the test suite. **Prose that describes a check is not evidence
+  about the check**, which is the fourth time that sentence has been earned
+  here; a sweep now tries every negative figure in both reports unsigned. Swap
+  count 28 → 13.
 - **Runs that disagree must not be pooled.** Averaging three medians whose signs
   alternate yields a signed number the data says does not exist; combining three
   intervals yields one narrower than any of them. Both would describe
