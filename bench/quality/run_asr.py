@@ -237,6 +237,25 @@ async def main() -> None:
     if a.arm not in ARMS:
         sys.exit(f"--arm {a.arm!r} is not a known arm. Known: "
                  f"{', '.join(sorted(ARMS))}")
+    if not ARMS[a.arm].asr_manual_commit:
+        # The capability is declared on the arm, and this is the component whose
+        # mistake costs money — so this is where it has to be consulted. It was
+        # declared for `probe_session.py` and not read here, which left the
+        # preflight approving a run this runner is deterministically rejected
+        # for: `transcribe_batch` sends `session_asr()`, Voice Live refuses
+        # `turn_detection: None` on a gpt-realtime brain, and by then
+        # `run_all.sh` may already have truncated the results being replaced.
+        #
+        # A fact declared in one place and not consulted where it is acted on.
+        # A preflight that approves a run the runner will refuse is worse than
+        # no preflight, because failing before the money is its whole purpose.
+        sys.exit(f"--arm {a.arm!r} cannot run Track A: Voice Live rejects "
+                 "manual-commit transcription on a gpt-realtime brain "
+                 "(turn_detection must be AzureSemanticVAD), which is what "
+                 "this runner sends. It is a Track B arm — see "
+                 "Arm.asr_manual_commit and run_all.sh's ASR_ARMS. Track A "
+                 "arms: "
+                 f"{', '.join(sorted(n for n, x in ARMS.items() if x.asr_manual_commit))}")
 
     # Everything that can be checked without the network is checked here, so
     # `--preflight-logs` means "this invocation is safe to start" rather than

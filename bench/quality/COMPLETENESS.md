@@ -752,6 +752,32 @@ rule again — `Arm.asr_manual_commit` states which arms can run Track A, so the
 probe sends each arm a payload it is meant to accept instead of discovering a
 documented refusal by provoking it.
 
+### And a new shape: declared in one place, not consulted where it acts
+
+That declaration was added for `probe_session.py` and not read by `run_asr.py` —
+the one component whose mistake costs money. `--arm vl-native-brain-21`, given
+directly or through an `ASR_ARMS` override, therefore cleared
+`--preflight-logs` and was then rejected by Voice Live during the **paid** run,
+possibly after `run_all.sh` had truncated the results it was replacing.
+
+Every earlier entry in this file is about a check comparing the wrong things.
+This one is about a fact that was **correct, and simply not asked**: the
+declaration was right, the probe honoured it, and the runner never looked. So:
+**a capability declared on a model is only as good as the number of places that
+consult it, and the place that matters is the one that spends.** A pre-flight
+that approves a run the runner will refuse is worse than no pre-flight, because
+failing before the money is its entire purpose.
+
+The sweep for other instances came back clean, and the reason is worth keeping:
+every other field on `Arm` is *applied* rather than consulted — `dialect`,
+`vad_type`, `noise_reduction` and `echo_cancellation` all go into the session
+payload the builders emit, so they cannot be declared and ignored. `stack`,
+`brain` and `notes` gate no behaviour at all. `asr_manual_commit` is the only
+field that gates behaviour without being applied, which is exactly the property
+that let it drift. `test_every_sender_of_session_asr_consults_the_capability`
+is the mechanical form: any module that sends the payload must read the flag
+saying who accepts it.
+
 ## Adding a check
 
 State it in the table above *before* writing it, in the form "compares X against

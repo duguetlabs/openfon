@@ -1451,6 +1451,101 @@ class TestDecliningWorkReachesTheExitStatus(unittest.TestCase):
         self.assertIn("if arm.asr_manual_commit", src)
         self.assertIn("arm.session_dialog(MARKER", src)
 
+    def test_every_sender_of_session_asr_consults_the_capability(self):
+        """A fact declared in one place and not consulted where it is acted on.
+
+        `asr_manual_commit` was added for `probe_session.py` and not read by
+        `run_asr.py` — the one component whose mistake costs money. So
+        `--arm vl-native-brain-21`, directly or via an `ASR_ARMS` override,
+        cleared `--preflight-logs` and was then deterministically rejected by
+        Voice Live during the paid run, possibly after `run_all.sh` had already
+        truncated the results it was replacing. A preflight that approves a run
+        the runner will refuse is worse than no preflight: failing before the
+        money is its entire purpose.
+
+        Mechanical rather than a spot check, because the declaration will
+        outlive the memory of why it exists: any module that sends the payload
+        must also read the flag saying who accepts it.
+        """
+        import ast
+        for mod in sorted(p.name for p in HERE.glob("*.py")
+                          if p.name != "test_scoring.py"):
+            tree = ast.parse((HERE / mod).read_text())
+            sends = any(isinstance(n, ast.Attribute) and n.attr == "session_asr"
+                        for n in ast.walk(tree))
+            if not sends:
+                continue
+            reads = any(isinstance(n, ast.Attribute)
+                        and n.attr == "asr_manual_commit" for n in ast.walk(tree))
+            with self.subTest(module=mod):
+                self.assertTrue(
+                    reads,
+                    f"{mod} sends session_asr() but never reads "
+                    "asr_manual_commit, so it will send that payload to an arm "
+                    "the service is documented to reject it for")
+
+    def test_an_snr50_bound_never_claims_more_range_than_was_measured(self):
+        """Codex on ff32e01: `>20` was hard-coded against the original matrix.
+
+        `CONDITIONS` is overrideable and the documented 2.1 extension uses a
+        reduced list that drops `cafe_snr20`, so those arms' curves stop at
+        10 dB. Reporting `>20` there claims the curve stayed clean through a
+        range that was never run. A bound is a claim about where you looked.
+
+        Latent, not a published error: no committed summary row says `>20`, and
+        the one `<0` belongs to an arm measured down to 0 dB.
+        """
+        from score_asr import snr50
+        # Already past 2x clean at the *best* SNR measured: SNR50 lies above the
+        # range, and the bound has to say which range that was.
+        fragile = {20: 5.0, 10: 6.0, 5: 7.0, 0: 8.0}
+        self.assertEqual(snr50(fragile, 2.0), ">20")
+        self.assertEqual(snr50({k: v for k, v in fragile.items() if k != 20}, 2.0),
+                         ">10")
+        # Never reaches 2x clean anywhere: SNR50 lies below the lowest SNR run.
+        robust = {20: 5.0, 10: 6.0, 5: 7.0, 0: 8.0}
+        self.assertEqual(snr50(robust, 5.0), "<0")
+        self.assertEqual(snr50({k: v for k, v in robust.items() if k != 0}, 5.0),
+                         "<5")
+        # An interpolated answer is unaffected either way.
+        self.assertEqual(snr50({20: 4.0, 10: 6.0, 5: 12.0, 0: 30.0}, 4.0), "8.3")
+
+    def test_the_committed_snr50_bounds_match_their_measured_range(self):
+        """The committed summary must survive the stricter rule unchanged."""
+        import re as _re
+        snr_re = _re.compile(r"_snr(-?\d+)$")
+        measured = {}
+        with (HERE / "results" / "asr_scores.csv").open() as f:
+            for r in csv.DictReader(f):
+                if (m := snr_re.search(r["condition"])) and \
+                        r["condition"].startswith("cafe") and r["wer"]:
+                    measured.setdefault((r["arm"], r["lang"]), []).append(
+                        int(m.group(1)))
+        with (HERE / "results" / "asr_scores_summary.csv").open() as f:
+            for r in csv.DictReader(f):
+                v, pts = r["snr50_db"], measured.get((r["arm"], r["lang"]), [])
+                if not v or not pts or v[0] not in "<>":
+                    continue
+                with self.subTest(arm=r["arm"], lang=r["lang"]):
+                    want = max(pts) if v[0] == ">" else min(pts)
+                    self.assertEqual(
+                        int(v[1:]), want,
+                        f"{v} claims a bound outside the measured {sorted(pts)}")
+
+    def test_run_asr_refuses_a_track_b_only_arm_before_spending(self):
+        """The refusal must land in argument validation, ahead of the preflight.
+
+        Checked against source rather than by running the module: it imports
+        the websocket client, which CI does not install (see
+        `test_no_test_shells_out_to_a_transport_importing_module`).
+        """
+        src = (HERE / "run_asr.py").read_text()
+        self.assertIn("if not ARMS[a.arm].asr_manual_commit:", src)
+        self.assertIn("cannot run Track A", src)
+        # Before the log preflight returns, or the refusal is not a preflight.
+        self.assertLess(src.index("asr_manual_commit"),
+                        src.index("preflight_logs(logs.values()"))
+
     def test_the_preflight_fails_a_session_that_was_never_accepted(self):
         """`accepted: false` with no exception and no error events.
 

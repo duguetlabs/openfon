@@ -86,16 +86,27 @@ def declared(flag: str, raw: str) -> list[str]:
 
 
 def snr50(curve: dict[int, float], clean: float) -> str:
-    """Interpolate the SNR where WER first reaches 2x clean."""
+    """Interpolate the SNR where WER first reaches 2x clean.
+
+    When the curve never crosses, the answer is a bound rather than a number,
+    and the bound names the range that was actually **measured**: `>10` if the
+    highest cafe condition run was 10 dB, not `>20`. Those two literals used to
+    be hard-coded against the original eight-condition matrix, so a reduced
+    `CONDITIONS` — which the documented 2.1 extension uses, dropping
+    `cafe_snr20` — would have reported a curve as clean beyond 20 dB on
+    evidence that stopped at 10. A bound is a claim about where you looked.
+    """
     target = 2.0 * clean
-    pts = sorted(curve.items(), reverse=True)          # 20, 10, 5, 0 dB
+    pts = sorted(curve.items(), reverse=True)          # e.g. 20, 10, 5, 0 dB
     for (s_hi, w_hi), (s_lo, w_lo) in zip(pts, pts[1:]):
         if w_hi < target <= w_lo:
             if w_lo == w_hi:
                 return f"{s_lo}"
             f = (target - w_hi) / (w_lo - w_hi)
             return f"{s_hi + f * (s_lo - s_hi):.1f}"
-    return ">20" if pts and pts[0][1] >= target else "<0"
+    if not pts:
+        return ""
+    return f">{pts[0][0]}" if pts[0][1] >= target else f"<{pts[-1][0]}"
 
 
 def main() -> None:
