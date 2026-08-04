@@ -300,11 +300,12 @@ follow, and each was a review finding first:
   **superseded** run validate a current section — the pre-marker `vltier-ttfa` block and
   its replacement `vltier2-ttfa` contain the same arms, so a retracted figure still passed,
   and one had, in the recommendation table.
-* **A cell is what gets bound, not a table.** A table quoting two runs says which column or
-  row came from which — `<!-- data: full2; column "run 1" = full -->` — and row and column
-  scopes intersect. Unioning two runs and accepting a figure from either is the same hole
-  one level down: it let the headline table's primary-run delta be replaced by the other
-  run's.
+* **A cell is what gets bound, not a table.** A table quoting several runs says which
+  column or row came from which —
+  `<!-- data: full3; column "run 1" = full; column "run 2" = full2 -->`, the latency
+  report's headline table, whose three medians are three runs — and row and column scopes
+  intersect. Unioning runs and accepting a figure from any of them is the same hole one
+  level down: it let the headline table's anchor-run delta be replaced by another run's.
 * **`published/` is the published study and is committed**; `results/` is scratch and is
   ignored. A re-run is not evidence until it is promoted, which is a deliberate `cp` and a
   visible diff. A run no table quotes fails too — it is either evidence or it is gone.

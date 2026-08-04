@@ -94,7 +94,7 @@ MANUAL_COUNT = re.compile(
 # rows while 88 more went unseen. Compared by equality, so a table that leaves
 # scope fails instead of quietly lowering the number, and a table that arrives
 # has to be accounted for in the same commit.
-REPORTS = {"realtime-latency-2026-08.md": 47, "realtime-21-2026-08.md": 66}
+REPORTS = {"realtime-latency-2026-08.md": 55, "realtime-21-2026-08.md": 66}
 
 # Prose labels for a comparison, for tables that name arms in words. Declared,
 # not inferred: the headline table is the one readers act on, and a checker that
@@ -155,6 +155,11 @@ LABEL_SPECS: list[tuple[str, tuple[str, ...], "str | None"]] = [
     (r"^95% ci$", ("lo", "hi"), None),
     (r"^p10 / p90 δ$", ("p10", "p90"), None),
     (r"^p90 δ$", ("p90",), None),
+    # The extremes of the paired differences, deliberately named apart from an
+    # arm's own `min`/`max`: a single outlying *pair* is a claim about one cell
+    # of one run, and letting it be satisfied by an arm's slowest turn would be
+    # the same membership hole the `(metric, statistic)` keying closed.
+    (r"^min / max δ$", ("diff_min", "diff_max"), None),
     (r"^slower / faster$", ("slower", "faster"), None),
     (r"^p raw / holm$", ("p_raw", "p_adj"), None),
     (r"^p raw$", ("p_raw",), None),
@@ -171,11 +176,14 @@ LABEL_SPECS: list[tuple[str, tuple[str, ...], "str | None"]] = [
     # and nothing else — admitting the CI bounds here let "faster by 100 ms"
     # be rewritten as "faster by 280 ms" from the interval and pass.
     (r"^(verdict|status)$", ("verdict_median",), None),
-    (r"^run 1$", ("median",), None),
-    (r"^run 2 \(primary\)$", ("median",), None),
+    # One column per run, each bound to its own run by a `column` clause. The
+    # headline table quotes three medians of the same comparison side by side,
+    # because the disagreement between them is the finding.
+    (r"^run [123]$", ("median",), None),
     # — per-arm distributions —
     (r"^n$", ("n",), None),
     (r"^min$", ("min",), None),
+    (r"^max$", ("max",), None),
     (r"^p50$", ("p50",), None),
     (r"^p90$", ("p90",), None),
     (r"^p95$", ("p95",), None),
@@ -194,6 +202,7 @@ LABEL_SPECS: list[tuple[str, tuple[str, ...], "str | None"]] = [
     (r"^transcript_ms p50", ("p50", "n"), "transcript_ms"),
     (r"^connect_ms paired δ", ("median",), "connect_ms"),
     (r"^config_ms paired δ", ("median",), "config_ms"),
+    (r"^session_ready_ms paired δ", ("median",), "session_ready_ms"),
 ]
 LABEL_SPECS_C = [(re.compile(p), stats, metric) for p, stats, metric in LABEL_SPECS]
 
@@ -293,7 +302,9 @@ class Run:
                 if r.not_comparable:
                     continue
                 fwd = {"median": r.median, "lo": r.lo, "hi": r.hi,
-                       "p10": pct(r.diffs, 10), "p90": pct(r.diffs, 90)}
+                       "p10": pct(r.diffs, 10), "p90": pct(r.diffs, 90),
+                       "diff_min": min(r.diffs) if r.diffs else None,
+                       "diff_max": max(r.diffs) if r.diffs else None}
                 sym = {"slower": r.sign_counts[0], "faster": r.sign_counts[1],
                        "p_raw": r.p_raw, "p_adj": r.p_adj, "n": len(r.diffs)}
                 for stat, v in fwd.items():
@@ -303,7 +314,9 @@ class Run:
                 # The reverse comparison, with the directional statistics
                 # negated. `X − Y` and `Y − X` are different claims.
                 rev = {"median": -r.median, "lo": -r.hi, "hi": -r.lo,
-                       "p10": -pct(r.diffs, 90), "p90": -pct(r.diffs, 10)}
+                       "p10": -pct(r.diffs, 90), "p90": -pct(r.diffs, 10),
+                       "diff_min": -max(r.diffs) if r.diffs else None,
+                       "diff_max": -min(r.diffs) if r.diffs else None}
                 for stat, v in rev.items():
                     put(self.pair, (r.ctrl, r.treat, metric), stat, v)
                 for stat, v in {**sym, "slower": r.sign_counts[1],

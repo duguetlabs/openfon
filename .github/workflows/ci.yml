@@ -37,7 +37,7 @@ jobs:
       - run: python -m unittest discover -s bench/quality -p 'test_*.py' -v
 
   # The latency reports quote figures computed by bench/realtime/analyze.py from
-  # the runs committed in bench/realtime/data/. Six review rounds found rows that
+  # the runs committed in bench/realtime/published/. Six review rounds found rows that
   # had drifted from the analyzer, so the reports are re-derived here rather than
   # trusted. The checker is stdlib-only and needs no credential and no network;
   # `websockets` is only for the harness modules the tests import.

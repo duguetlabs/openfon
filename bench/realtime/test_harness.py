@@ -788,16 +788,65 @@ class TestReportCheckerCoversEveryFigureRow(unittest.TestCase):
     def test_a_column_answers_to_its_own_run(self):
         """`full2,full` unioned both runs and dropped which produced what, so the
         headline table's primary-run delta could be replaced by the *other*
-        run's and still pass. That is the superseded-data hole one level down."""
+        run's and still pass. That is the superseded-data hole one level down.
+
+        The headline table carries **three** run columns now, so the swap is
+        exercised at the boundary the third one created rather than at the one
+        that motivated the clause: every ordered pair of run columns, both
+        directions. Testing only the original pair would be checking the fix
+        where it was already known to hold — the recurring defect this harness
+        keeps rediscovering.
+        """
         r = self.docs / "realtime-latency-2026-08.md"
         text = r.read_text()
-        self.assertIn('column "run 1" = full', text,
-                      "the run-1 column must name its own run")
-        bad, out = self.run_check(self.rewritten(r, text.replace(
-            "| gpt-realtime-2 via gateway − direct | **+12 ms** |",
-            "| gpt-realtime-2 via gateway − direct | **−18 ms** |", 1)))
-        self.assertGreater(bad, 0, "run 1's figure passed in run 2's column")
-        self.assertIn("-18", out)
+        for clause in ('column "run 1" = full', 'column "run 2" = full2'):
+            self.assertIn(clause, text, f"missing binding: {clause}")
+        lines = text.split("\n")
+        n = next(i for i, l in enumerate(lines)
+                 if l.startswith("| gpt-realtime-2 via gateway − direct |"))
+        cells = lines[n].split("|")
+        # cells[1] is the row label; cells[2:5] are run 1, run 2 and run 3,
+        # each bound to its own run and each holding a different median.
+        cols = [2, 3, 4]
+        self.assertEqual(len({self.c.figures("|" + cells[i]).pop() for i in cols}),
+                         len(cols), "the three run medians must differ, or this "
+                         "test cannot tell a bound column from an unbound one")
+        for i in cols:
+            for j in cols:
+                if i == j:
+                    continue
+                broken = list(cells)
+                broken[i] = cells[j]
+                mutated = list(lines)
+                mutated[n] = "|".join(broken)
+                self.assertNotEqual(mutated[n], lines[n])
+                bad, _out = self.run_check(
+                    self.rewritten(r, "\n".join(mutated)))
+                self.assertGreater(
+                    bad, 0, f"column {i} accepted column {j}'s run median:"
+                            f"\n{mutated[n]}")
+
+    def test_a_paired_extreme_is_not_an_arm_extreme(self):
+        """`min` and `max` name two different things, so they are keyed apart.
+
+        An arm's `min`/`max` are the ends of its own distribution; a pair's are
+        the ends of the paired differences. Sharing one key would let the
+        outlying *pair* the report dissects — one cell, −1365 ms — be satisfied
+        by the slowest single turn of either arm, and let an arm's slowest turn
+        be satisfied by a paired extreme. That is the membership hole the
+        `(metric, statistic)` keying closed, and a new statistic is exactly
+        where it would reopen, so it is tested in both directions.
+        """
+        r = self.docs / "realtime-latency-2026-08.md"
+        text = r.read_text()
+        for before, after, why in (
+                ("**−1365 / +472**", "**1687 / +472**",
+                 "a paired min accepted `native-direct`'s own min"),
+                ("| 2570 | 3538 | 409 |", "| 2570 | 1365 | 409 |",
+                 "an arm max accepted the paired comparison's extreme")):
+            self.assertIn(before, text)
+            bad, _out = self.run_check(self.rewritten(r, text.replace(before, after)))
+            self.assertGreater(bad, 0, why)
 
     def test_every_figure_cell_resolves_to_one_run(self):
         """The invariant the clauses exist to hold. A cell that could have come

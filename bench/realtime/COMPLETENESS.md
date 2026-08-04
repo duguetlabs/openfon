@@ -212,6 +212,45 @@ entry that *is* doing real work hides. The other harness reached this from the
 opposite direction, when "lives in a different CSV" turned out to be an argument
 for checking against that CSV.
 
+## A sixth turn, and the cheapest one: measure instead of arguing
+
+The merged report carried a caveat above its Answer for two review rounds — both
+runs predate the per-cell marker fix — followed by a paragraph arguing that the
+confound could not have manufactured the null: the marker is drawn independently
+of the arm, so it adds within-cell variance and nothing directional, and noise
+makes a null *easier* to reach. The argument is sound. It was also load-bearing,
+unfalsifiable from the data in hand, and standing in for a **$1.60** run.
+
+`full3` — the two proxy pairs, four arms, 100 turns, post-fix — replaced it. The
+medians moved (−31 / +31 against run 2's +12 / −100); the answer did not, which
+is what the argument predicted. But a prediction confirmed is evidence and a
+prediction defended is prose. **When a caveat's resolution is a measurement you
+can afford, the caveat is a purchase order rather than a finding**, and the
+tell is a paragraph that has to be re-read carefully every review round.
+
+Three narrower things fell out of writing it up:
+
+- **A third run column is a new boundary, and the test for the old one did not
+  reach it.** `test_a_column_answers_to_its_own_run` mutated exactly one cell —
+  run 2's median replaced by run 1's — which is where the clause was first
+  needed and is no longer where it can break. It sweeps every ordered pair of
+  the three run columns now. The same shape as every other entry here: the fix
+  was being verified where it was already known to hold.
+- **A new statistic is where `(metric, statistic)` keying reopens.** The outlier
+  the report dissects is the *pair's* minimum, −1365 ms, and `min` was already
+  taken by an arm's own distribution. Sharing one key would have let the
+  outlying pair be satisfied by the slowest single turn of either arm, and an
+  arm's slowest turn by a paired extreme — the membership hole, one statistic
+  later. Keyed apart as `diff_min` / `diff_max`, and tested in both directions.
+- **Runs that disagree must not be pooled.** Averaging three medians whose signs
+  alternate yields a signed number the data says does not exist; combining three
+  intervals yields one narrower than any of them. Both would describe
+  run-to-run variation as measurement precision, when that variation *is* the
+  finding. The report prints all three and quotes the **loosest** interval as
+  its bound — run 3's native interval reaches +306 ms where run 2's reached
+  +141, and picking the tightest after seeing all three is picking the run that
+  flatters the claim.
+
 ---
 
 ## The checks
@@ -248,6 +287,11 @@ for checking against that CSV.
   rerun for this reason; the `v21` blocks were not, and are marked where they
   appear. Split rates are unaffected — the marker is in the system prompt and
   splitting is the detector acting on byte-identical caller audio.
+  **The merged report's two proxy pairs are no longer in this list**: `full3`
+  re-measured them post-fix and is what its headline is anchored on. The
+  argument that the confound could not manufacture a null was correct, and
+  replacing it with a measurement cost $1.60 — cheaper than continuing to
+  defend it.
 - **The Voice Live model→tier price mapping is unverified.** Meters are named by
   service tier, not by model, so the proposed tier costs $0.020/min if Std and
   $0.062 if Pro. Both are published; neither is asserted.
