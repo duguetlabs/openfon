@@ -283,17 +283,20 @@ having a fast one.**
   above, against that arm's own p50 of 2187 and p90 of 2570. The gateway's turn in the same
   cell was unremarkable, within 30 ms of its arm's median.
 - **It is not a slow dial.** Connect, config and `speech_stopped` on that turn all sit at
-  their arm's medians; the entire 1365 ms sits downstream of the turn ending, in inference
-  and synthesis. The same cell's engine-only difference is −1363 ms, so subtracting each
-  turn's own detection time does not touch it.
+  their arm's medians, and the two arms' end-of-turn decisions are 1.4 ms apart. All but
+  those 1.4 ms sit downstream of the turn ending, in inference and synthesis: the same
+  cell's engine-only difference is −1363 ms, so subtracting each turn's own detection time
+  does not touch it.
 - **It is not the utterance splitting either.** Both arms split on that cell — splits in
   this run are exactly symmetric, 6/25 on each native arm, all of them `de-short`, zero
   discordant cells, McNemar p = 1.00 — so segmentation is not what distinguishes the two
   turns.
 
 **The median does not depend on it.** Dropping the cell entirely moves the pair median from
-−31 ms to −23 ms, leaves the sign counts unchanged at 10 slower / 15 faster, and does not
-approach the 50 ms practical floor from either side. Since the excursion is on the *direct*
+−31 ms to −23 ms over the remaining 24 pairs, and leaves the count of turns on which the
+gateway was *slower* at 10 — the cell is one of the 15 faster ones, so removing it takes
+that side to 14 and changes nothing about the balance. Neither median approaches the 50 ms
+practical floor from either side. Since the excursion is on the *direct*
 arm it flatters the gateway, so removing it moves the estimate toward the gateway being
 slower — the conservative direction for the claim being made. Read as what it is: one slow
 inference on a 25-pair sample, which is also why the median rather than the mean is the
