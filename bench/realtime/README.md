@@ -219,13 +219,135 @@ and counting it as a clean non-split would manufacture significance out of failu
 Tables show raw and adjusted p side by side, so a demoted result stays visible instead of
 disappearing.
 
+**A third guard, added after a median hid a tail for the third time — and then narrowed.**
+Every paired table carries the **p90 of the paired differences**, and a comparison whose
+p90 is both above `TAIL_FLOOR_MS` and more than 5× its median is reported as
+*"median X, p90 Y — median unrepresentative, judge on the tail"* rather than by its median
+alone (`PairedResult.tail_unrepresented`). The case that forced this: OpenAI's semantic
+VAD costs ~100 ms on four turns in five and ~3.5 s on the fifth, and a paired median of
++106 ms was published as "no detectable difference".
+
+It also reports the **p10** and the **sign counts** beside the p90, because a large p90
+alone cannot tell a cost from variance — and getting that wrong was the next mistake after
+the first one.
+
+The distinction is **magnitude, not frequency**, and conflating the two was a third
+mistake worth stating plainly. OpenAI's semantic VAD was slower on 13 of 20 turns and
+*faster on 7* — 35% of the time, nowhere near "almost never". What makes it a cost is that
+its slow turns cost up to **+3864 ms** while its fast ones saved at most **457 ms**: an
+order of magnitude apart, and a caller notices four seconds of silence but never notices
+300 ms. The proxy comparisons are symmetric in both respects — 12 slower / 11 faster on the
+native pair, worst slow +688 against best fast −1123 — so there is nothing for a caller to
+notice in either direction.
+
+The verdict says *"losses dwarf gains (13 slower / 7 faster), judge on the tail"* or
+*"wide both ways (12 slower / 11 faster), not a cost"* accordingly, and every paired row
+carries the counts so the frequency question can never be inferred from the magnitude one
+again — `PairedResult.upper_tail_dominates` and `.sign_counts`.
+
+The verdict **describes the numbers and diagnoses no modes**. An earlier version said
+"bimodal", which two quantiles cannot establish — a broad symmetric spread with median 0
+and p90 800 trips the same rule as a genuine second mode. That wording was itself added to
+fix an over-claim and became one. Whether a case really is bimodal is a question for the
+actual differences, shown in prose where a reader can check it. Describing what you
+measured is always defensible; inferring a distribution's shape from two quantiles is not.
+
+### Treat a new checker as unverified code
+
+Every verification mechanism in this harness has itself needed verifying, and the
+second-order bug was usually subtler than the one the mechanism was built to catch:
+
+| the checker | what it was built to catch | what was wrong with *it* |
+|---|---|---|
+| echo read-back | the endpoint ignoring a requested setting | absent read as valid — a missing field passed |
+| `verify_echo` audio contract | a silent codec substitution | checked the rate, never the codec type |
+| completeness checks | measuring a failed turn | failed turns counted as clean non-splits |
+| the tail guard | a median hiding a bimodal cost | asserted "bimodal" from two quantiles, which cannot establish it |
+| `verify_live` | a checker that has drifted from reality | iterated a hand-maintained list, so it skipped half the arms |
+| `verify_live` retry | blaming the checker for an endpoint's intermittent substitution | kept the bad echo, so every later mutation "passed" against an already-invalid baseline |
+
+The pattern is consistent enough to plan for: **a new checker is unverified code until
+something has tried to fool it.** Concretely — give it a known-bad input and confirm it
+fails, not just a known-good one and confirm it passes; and check that a "pass" cannot be
+produced by absent data, a stale baseline, or a subset of the things it claims to cover.
+`verify_live.py` exists because that reasoning applied to `verify_echo`; the last row of
+that table is what happened when it was not applied to `verify_live.py` itself.
+
+### Reports are checked against the analyzer, not trusted
+
+```bash
+python3 check_report_tables.py          # no arguments, no venv, no credentials
+```
+
+Six review rounds found report rows that had drifted from the analyzer — including
+hand-entered **sign counts**, which exist precisely to remove an ambiguity and so are the
+worst thing to get wrong by typing. "Regenerate, don't edit" kept being advice; this makes
+it a check. It runs on a fresh clone: the analysis path is stdlib-only and the datasets are
+committed, so it is in CI.
+
+**Its contract is "the full declared dataset", not "whatever is present".** Three things
+follow, and each was a review finding first:
+
+* **The unit is the table, not the row.** A table is in scope if anything in it names an
+  arm — in a row, in the header, or through a declared prose alias — and then *every*
+  figure-bearing row in it must be verified or listed in `UNCHECKABLE_TABLES` with a
+  reason. Three layouts were dropped silently, one per round: a metric prefix before the
+  pair, a split-rate row joined by `vs` rather than a dash, and a column-oriented table
+  naming its arms in the header. Coverage went from 19 rows to 107 when the parser stopped
+  recognising layouts and started accounting for rows.
+* **Each table names its data, in the document**, `<!-- data: v21-ttfa -->` directly above
+  it. A table in scope without one fails. Merging every file under `results/` had let a
+  **superseded** run validate a current section — the pre-marker `vltier-ttfa` block and
+  its replacement `vltier2-ttfa` contain the same arms, so a retracted figure still passed,
+  and one had, in the recommendation table.
+* **A cell is what gets bound, not a table.** A table quoting several runs says which
+  column or row came from which —
+  `<!-- data: full3; column "run 1" = full; column "run 2" = full2 -->`, the latency
+  report's headline table, whose three medians are three runs — and row and column scopes
+  intersect. Unioning runs and accepting a figure from any of them is the same hole one
+  level down: it let the headline table's anchor-run delta be replaced by another run's.
+* **`published/` is the published study and is committed**; `results/` is scratch and is
+  ignored. A re-run is not evidence until it is promoted, which is a deliberate `cp` and a
+  visible diff. A run no table quotes fails too — it is either evidence or it is gone.
+* **A comparison is an ordered pair.** `X − Y` and `Y − X` are different claims and a
+  reader cannot tell a swapped label from a sign error by looking. The reverse of every
+  comparison is derived with its directional statistics negated, so relabelling without
+  flipping the sign is a drift.
+* **An allowlist entry is no wider than the part that is unverifiable.** The deflection
+  tables are hand counts — but only their *numerators* are. Exempting the tables exempted
+  their denominators too, and one was wrong.
+
+The declared row count per report is compared by **equality**, so a table that leaves scope
+fails rather than quietly lowering a number nobody reads. And **figures are keyed by
+`(metric, statistic)` and checked in the position their column claims** — membership in the
+comparison was not enough, because a median satisfied by its own CI bound is a false
+sentence the checker called verified.
+
+Two sweeps in the test suite are the evidence for that, and the second exists because the
+first could not see it:
+
+* **wild value** — every figure in both reports, one at a time, replaced with `98765`. Any
+  membership test rejects it, so this proves the row is *read*, not that it is understood.
+  It also only mutated the *first* figure in each row until 2026-08-03, which is usually
+  the pair count, so medians, intervals, tails and p-values had never been exercised.
+* **cross-mutation** — every figure swapped for every *other figure of the same
+  comparison*. 2704 such swaps were accepted before the keying, 28 after it, and **13**
+  once the sign filter was corrected; each survivor is the same value written differently
+  (a magnitude in verdict prose, a sign on a positive count, `0` written `0.000`). The test
+  enumerates them by value, because a count cannot tell a new hole from an old one.
+* **sign sweep** — every negative figure in both reports rewritten as its unsigned
+  magnitude, which must be caught outside verdict prose. Added because it was not: the
+  filter meant to withdraw the magnitude dropped the *signed* spelling instead, so every
+  negative statistic in both reports passed unsigned. See [`COMPLETENESS.md`](COMPLETENESS.md) for
+the full inventory of what this harness verifies and how each check can be fooled.
+
 ### Tests
 
 ```bash
 python3 -m unittest discover -s bench/realtime -v
 ```
 
-86 tests, split across `test_analyze.py` (the statistics behind every published table —
+201 tests, split across `test_analyze.py` (the statistics behind every published table —
 percentiles, paired differences, the exact sign test, the bootstrap CI, the Holm
 step-down, exact McNemar, matched-cell construction, and the verdict gating) and
 `test_harness.py` (the controls that make a run trustworthy — echo verification, cache
@@ -249,7 +371,9 @@ added later whose author forgot to redact is still caught on the way to disk.
 **Use `safe_print`, never bare `print`, in anything under `bench/realtime/`.**
 
 `cache/` and `results/` are gitignored regardless — the caller WAVs regenerate from
-`utterances.json` on first run.
+`utterances.json` on first run. `published/` is **not** ignored: it holds the runs the published
+reports quote, scrubbed by `scrub_record` on the way to disk, and the checker above reads
+only from there.
 
 ## Cost and caps
 
@@ -274,3 +398,5 @@ turns on the shortest utterance, scaling with utterance length). Before a bigger
 | `utterances.json` | the fixed caller utterances (EN + DE, short + long) |
 | `verify_live.py` | checks `verify_echo` against the live endpoints, both directions |
 | `safety.py` | credential scrubbing at the process boundary (`safe_print`, `scrub_record`) |
+| `check_report_tables.py` | every figure the reports quote, re-derived from `published/` |
+| `published/` | the runs the published reports quote — committed; `results/` is scratch |

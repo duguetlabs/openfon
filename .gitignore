@@ -11,5 +11,9 @@ dist/
 # Benchmark audio corpora — regenerate with bench/quality/prepare/ recipes
 # (see docs/research/voice-eval-datasets.md). Never commit the audio itself.
 bench/**/data/
+# Deliberately NOT ignored: bench/realtime/published/ — the ~1 MB of scrubbed
+# JSONL the latency reports quote. check_report_tables.py re-derives every
+# published figure from it, in CI and on a clean checkout, so it has to be here.
+# Do not widen the rule above to cover it.
 __pycache__/
 *.pyc

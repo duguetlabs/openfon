@@ -163,11 +163,21 @@ def discard_fragment(t: "Turn", resp_audio_bytes: int) -> int:
 
 
 async def run_turn(arm: Arm, utt: Utterance, rnd: int, *, azure_key: str,
-                   kataleptic_key: str, reply_timeout: float) -> Turn:
+                   kataleptic_key: str, reply_timeout: float,
+                   marker: str) -> Turn:
+    """One measured turn.
+
+    `marker` is supplied by the caller and is shared by every arm in the same
+    (round, utterance) cell. It was originally generated per turn, which put a
+    different random token in each arm's system prompt — so treatment and
+    control were answering slightly different prompts, whose tokenization can
+    differ, inside the very cell the pairing exists to hold identical. The
+    marker was added to *verify* configuration and had quietly become a source
+    of the variance it was meant to help control.
+    """
     t = Turn(round=rnd, arm=arm.id, brain=arm.brain, utterance=utt.id, lang=utt.lang,
              utterance_s=round(utt.duration_s, 3),
              ts=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
-    marker = f"MK{secrets.token_hex(4)}"
     url = arm.url(azure_key, kataleptic_key)
     headers = arm.headers(azure_key, kataleptic_key)
 
@@ -393,7 +403,10 @@ async def main() -> int:
     ap.add_argument("--rounds", type=int, default=25,
                     help="turns per arm (default 25)")
     ap.add_argument("--arms", default="",
-                    help="comma-separated arm ids (default: all five)")
+                    help="comma-separated arm ids. Default is ARMS — the original "
+                         "five-arm proxy design, NOT every registered arm; later "
+                         "arms answer different questions and are selected "
+                         "explicitly. `--arms all` runs everything registered.")
     ap.add_argument("--out", default=str(HERE / "results"))
     ap.add_argument("--reply-timeout", type=float, default=20.0,
                     help="seconds of silence streamed while waiting for the reply")
@@ -406,8 +419,12 @@ async def main() -> int:
                          "(e.g. --utterances de-short for clause-pause splitting)")
     args = ap.parse_args()
 
-    selected = ([ARMS_BY_ID[a.strip()] for a in args.arms.split(",") if a.strip()]
-                if args.arms else list(ARMS))
+    if args.arms == "all":
+        selected = list(ARMS_BY_ID.values())
+    elif args.arms:
+        selected = [ARMS_BY_ID[a.strip()] for a in args.arms.split(",") if a.strip()]
+    else:
+        selected = list(ARMS)
     azure_key = os.environ.get("AZURE_REALTIME_KEY", "")
     if not azure_key and any(a.creds == "azure" for a in selected):
         raise SystemExit("set AZURE_REALTIME_KEY (see README)")
@@ -437,12 +454,17 @@ async def main() -> int:
     with jsonl_path.open("w") as fh:
         for rnd in range(args.rounds):
             utt = utterances[rnd % len(utterances)]
+            # One marker for the whole cell: every arm in this (round, utterance)
+            # gets a byte-identical system prompt, which is what the pairing
+            # assumes. Still unique per cell, so a stale echo cannot pass.
+            cell_marker = f"MK{secrets.token_hex(4)}"
             # rotate the arm order every round so no arm always goes first
             order = selected[rnd % len(selected):] + selected[:rnd % len(selected)]
             for arm in order:
                 turn = await run_turn(arm, utt, rnd, azure_key=azure_key,
                                       kataleptic_key=kataleptic_key,
-                                      reply_timeout=args.reply_timeout)
+                                      reply_timeout=args.reply_timeout,
+                                      marker=cell_marker)
                 turns.append(turn)
                 fh.write(json.dumps(scrub_record(asdict(turn))) + "\n")
                 fh.flush()

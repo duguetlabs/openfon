@@ -383,7 +383,113 @@ VAD_ARMS: list[Arm] = [
     ),
 ]
 
-ARMS_BY_ID = {a.id: a for a in ARMS + VAD_ARMS}
+# ── gpt-realtime-2.1 tiers ───────────────────────────────────────────
+# Added 2026-08-03, when the newer brains appeared on the gateway (Azure
+# deployments dated 2026-07-07 on duguet-labs-eu). All reached through the
+# Kataleptic gateway, because the question is what OpenFon's tiers should
+# default to and OpenFon talks to the gateway.
+#
+# Two questions: whether 2.1 is faster than gpt-realtime-2, and whether it
+# inherits gpt-realtime-2's habit of splitting an utterance at a clause pause
+# under server VAD. The second is not assumed either way — a brain that does
+# not split needs no semantic detector, and that is a real possible outcome.
+GW = GATEWAY_URL
+
+
+def _gw_arm(arm_id, model, td, label, notes, tags):
+    return Arm(
+        id=arm_id, label=label, dialect="ga", creds="kataleptic",
+        voice="marin", voice_type="openai", transcription=WHISPER,
+        brain=model, _url=f"{GW}?model={model}", turn_detection=td,
+        notes=notes, tags=tags)
+
+
+REALTIME_21_ARMS: list[Arm] = [
+    _gw_arm("gw-2-server", "gpt-realtime-2", dict(TURN_DETECTION),
+            "gpt-realtime-2 via gateway, server VAD",
+            "Incumbent and positive control: known to split 10/10 on de-short.",
+            ("native", "gateway", "incumbent")),
+    _gw_arm("gw-21-server", "gpt-realtime-2.1", dict(TURN_DETECTION),
+            "gpt-realtime-2.1 via gateway, server VAD",
+            "Does the newer brain inherit the clause-pause split?",
+            ("native", "gateway", "v21")),
+    _gw_arm("gw-21-semantic", "gpt-realtime-2.1", SEMANTIC_VAD,
+            "gpt-realtime-2.1 via gateway, semantic VAD",
+            "What semantic detection costs on 2.1, and whether it is needed.",
+            ("native", "gateway", "v21", "semantic")),
+    _gw_arm("gw-21mini-server", "gpt-realtime-2.1-mini", dict(TURN_DETECTION),
+            "gpt-realtime-2.1-mini via gateway, server VAD",
+            "The candidate single default: gpt-realtime groundedness at cascade latency?",
+            ("native", "gateway", "v21mini")),
+    _gw_arm("gw-21mini-semantic", "gpt-realtime-2.1-mini", SEMANTIC_VAD,
+            "gpt-realtime-2.1-mini via gateway, semantic VAD",
+            "Same question for the mini tier.",
+            ("native", "gateway", "v21mini", "semantic")),
+    Arm(id="gw-hd-server", label="Voice Live gpt-4.1-mini via gateway HD tier",
+        dialect="ga", creds="kataleptic",
+        voice="en-US-AvaMultilingualNeural", voice_type="azure-standard",
+        transcription=AZURE_SPEECH, brain="gpt-4.1-mini",
+        _url=f"{GW}?model=kataleptic-realtime-hd",
+        turn_detection=dict(TURN_DETECTION),
+        notes="The other incumbent: fastest to first audio in the merged report.",
+        tags=("vl", "gateway", "incumbent")),
+]
+
+# ── The proposed Kataleptic tier: Voice Live serving a gpt-realtime brain ──
+# Azure's multilingual semantic detector eliminated clause-pause splitting on
+# gpt-realtime-2 at NO latency cost, where OpenAI's semantic detector cost half
+# a second with a multi-second tail. That combination — native speech-to-speech
+# brain, Azure detector — is reachable only through Voice Live, and Kataleptic
+# exposes no tier for it. These arms measure what such a tier would be worth.
+#
+# Direct to Azure, because the gateway cannot reach this combination today. The
+# merged report bounds the proxy's own cost well below the differences here.
+# Voice defaults to the model's own `marin`: Voice Live ACCEPTS an Azure neural
+# voice on a native brain, which would silently convert the tier into a cascade
+# and throw away the prosody that is the reason to want it.
+VOICE_LIVE_TIER_ARMS: list[Arm] = [
+    Arm(id="vl21-azsem",
+        label="Voice Live serving gpt-realtime-2.1, Azure semantic VAD",
+        dialect="vl", creds="azure",
+        voice="marin", voice_type="openai", transcription=WHISPER,
+        brain="gpt-realtime-2.1",
+        _url=(f"wss://{AZURE_HOST}/voice-live/realtime"
+              f"?api-version={VOICE_LIVE_API_VERSION}&model=gpt-realtime-2.1"),
+        turn_detection=AZURE_SEMANTIC_VAD,
+        notes="The candidate best tier: newest brain, free detector.",
+        tags=("native", "direct", "voicelive-stack", "semantic", "v21")),
+    Arm(id="vl21mini-azsem",
+        label="Voice Live serving gpt-realtime-2.1-mini, Azure semantic VAD",
+        dialect="vl", creds="azure",
+        voice="marin", voice_type="openai", transcription=WHISPER,
+        brain="gpt-realtime-2.1-mini",
+        _url=(f"wss://{AZURE_HOST}/voice-live/realtime"
+              f"?api-version={VOICE_LIVE_API_VERSION}&model=gpt-realtime-2.1-mini"),
+        turn_detection=AZURE_SEMANTIC_VAD,
+        notes=("Whether Azure's detector fixes the splitting that OpenAI's only "
+               "mitigated on this brain — 4/12 through the gateway."),
+        tags=("native", "direct", "voicelive-stack", "semantic", "v21mini")),
+]
+
+# The matched control the tier claim needs: same brain, same stack, only the
+# detector differs. Without it, comparing the proposed tier's 731 ms end-of-turn
+# against a gateway server-VAD arm varies brain, serving path and detector at
+# once, and cannot attribute the result to the detector.
+VOICE_LIVE_CONTROL_ARMS: list[Arm] = [
+    Arm(id="vl21mini-server",
+        label="Voice Live serving gpt-realtime-2.1-mini, server VAD",
+        dialect="vl", creds="azure",
+        voice="marin", voice_type="openai", transcription=WHISPER,
+        brain="gpt-realtime-2.1-mini",
+        _url=(f"wss://{AZURE_HOST}/voice-live/realtime"
+              f"?api-version={VOICE_LIVE_API_VERSION}&model=gpt-realtime-2.1-mini"),
+        turn_detection=dict(TURN_DETECTION),
+        notes="Isolates the detector on the proposed tier's own stack.",
+        tags=("native", "direct", "voicelive-stack", "v21mini", "control")),
+]
+
+ARMS_BY_ID = {a.id: a for a in ARMS + VAD_ARMS + REALTIME_21_ARMS
+              + VOICE_LIVE_TIER_ARMS + VOICE_LIVE_CONTROL_ARMS}
 
 # Paired comparisons: (treatment, control, question). analyze.py reports only
 # the ones whose two arms both appear in the dataset, so the main run and the
@@ -401,6 +507,32 @@ PAIRS = [
      "Azure semantic vs server VAD, brain gpt-realtime-2, stack held constant"),
     ("vlmini-azsemantic", "vl-direct",
      "Azure semantic vs server VAD, brain gpt-4.1-mini"),
+    # gpt-realtime-2.1: does the detector matter, and is the brain faster?
+    ("gw-21-semantic", "gw-21-server",
+     "semantic vs server VAD, brain gpt-realtime-2.1"),
+    ("gw-21mini-semantic", "gw-21mini-server",
+     "semantic vs server VAD, brain gpt-realtime-2.1-mini"),
+    ("gw-21-server", "gw-2-server",
+     "gpt-realtime-2.1 vs gpt-realtime-2, server VAD"),
+    ("gw-21mini-server", "gw-2-server",
+     "gpt-realtime-2.1-mini vs gpt-realtime-2, server VAD"),
+    ("gw-21mini-server", "gw-hd-server",
+     "gpt-realtime-2.1-mini vs Voice Live gpt-4.1-mini"),
+    ("gw-21-server", "gw-hd-server",
+     "gpt-realtime-2.1 vs Voice Live gpt-4.1-mini"),
+    # the proposed tier, against what it would replace
+    ("vl21-azsem", "vlnat-azsemantic",
+     "gpt-realtime-2.1 vs 2 on the Voice-Live-served tier"),
+    ("vl21-azsem", "gw-hd-server",
+     "proposed tier vs the current HD tier"),
+    ("vl21-azsem", "gw-2-server",
+     "proposed tier vs the current gpt-realtime-2 tier"),
+    ("vl21mini-azsem", "vl21-azsem",
+     "mini vs full brain on the proposed tier"),
+    ("vl21mini-azsem", "gw-hd-server",
+     "proposed mini tier vs the current HD tier"),
+    ("vl21mini-azsem", "vl21mini-server",
+     "Azure semantic vs server VAD, brain AND stack held constant"),
 ]
 
 

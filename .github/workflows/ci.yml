@@ -36,6 +36,24 @@ jobs:
       - run: pip install jiwer num2words
       - run: python -m unittest discover -s bench/quality -p 'test_*.py' -v
 
+  # The latency reports quote figures computed by bench/realtime/analyze.py from
+  # the runs committed in bench/realtime/published/. Six review rounds found rows that
+  # had drifted from the analyzer, so the reports are re-derived here rather than
+  # trusted. The checker is stdlib-only and needs no credential and no network;
+  # `websockets` is only for the harness modules the tests import.
+  bench-realtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install 'websockets>=14,<18'
+      - run: python -m unittest discover -s bench/realtime -p 'test_*.py' -v
+      # Also on its own, from a clean checkout: the documented command has to
+      # work for a reader, and it only proves that when nothing else is set up.
+      - run: python bench/realtime/check_report_tables.py
+
   # Deploys on push to main when Cloudflare credentials are configured. Two repo
   # secrets, and both are needed:
   #

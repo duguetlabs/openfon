@@ -5,9 +5,13 @@ rather than the things that summarise it.
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
+import re
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -431,3 +435,626 @@ class TestMalformedRateIsRecordedNotRaised(unittest.TestCase):
 
     def test_numeric_string_rate_is_accepted(self):
         self.assertEqual(VL_ARM.verify_echo(vl_echo(rate="24000"))[0], [])
+
+
+class TestMarkerIsPerCellNotPerArm(unittest.TestCase):
+    """The marker goes into the system prompt. Generating a fresh one per arm
+    put a different random token in treatment and control within the same
+    (round, utterance) cell — variance introduced by the very check meant to
+    remove uncertainty. It must be an argument, supplied once per cell."""
+
+    def test_run_turn_requires_a_marker_from_the_caller(self):
+        import inspect
+        from bench import run_turn
+        sig = inspect.signature(run_turn)
+        self.assertIn("marker", sig.parameters)
+        self.assertEqual(sig.parameters["marker"].kind,
+                         inspect.Parameter.KEYWORD_ONLY)
+
+    def test_run_turn_does_not_mint_its_own_marker(self):
+        import inspect
+        from bench import run_turn
+        src = inspect.getsource(run_turn)
+        self.assertNotIn("token_hex", src,
+                         "run_turn must not generate a marker; the cell owns it")
+
+    def test_the_same_marker_reaches_every_arm_in_a_cell(self):
+        """Two arms handed the same marker must produce byte-identical
+        instructions, which is what the pairing assumes."""
+        a, b = ARMS_BY_ID["native-direct"], ARMS_BY_ID["native-gateway"]
+        pa = a.session_payload("MKCELL01")
+        pb = b.session_payload("MKCELL01")
+        self.assertEqual(pa["instructions"], pb["instructions"])
+
+    def test_different_cells_still_get_different_markers(self):
+        a = ARMS_BY_ID["native-direct"]
+        self.assertNotEqual(a.session_payload("MKCELL01")["instructions"],
+                            a.session_payload("MKCELL02")["instructions"])
+
+
+class TestVerifierCoversEveryRegisteredArm(unittest.TestCase):
+    """verify_live iterated a hand-maintained subset and printed OK while
+    checking none of the newest combinations — "absent reads as a pass", in the
+    tool built to catch exactly that."""
+
+    def test_verifier_enumerates_the_registry(self):
+        import inspect, verify_live
+        src = inspect.getsource(verify_live.main)
+        self.assertIn("ARMS_BY_ID.values()", src)
+        self.assertNotIn("ARMS + VAD_ARMS", src)
+
+    def test_no_registered_arm_is_unreachable_from_the_cli(self):
+        """Every arm must be selectable, so a registered arm cannot be dead."""
+        import bench, inspect
+        self.assertIn('args.arms == "all"', inspect.getsource(bench.main))
+        self.assertTrue(len(ARMS_BY_ID) >= 17)
+
+
+class TestMutationChecksNeedAVerifiedBaseline(unittest.TestCase):
+    """A mutation check asks "would the checker notice this substitution?".
+    Against an echo that is ALREADY invalid the answer is yes regardless, so
+    every mutation reports "detected" for the wrong reason. verify_live kept
+    the bad echo after a clean retry and ran mutations against it — a false
+    pass in the tool built to catch false passes."""
+
+    def _bad_echo(self):
+        echo = ga_echo()
+        echo["audio"]["input"]["turn_detection"]["threshold"] = 0.5   # substituted
+        return echo
+
+    def test_an_invalid_baseline_makes_every_mutation_look_detected(self):
+        """The property that makes the bug silent: the check passes anyway."""
+        bad = self._bad_echo()
+        self.assertTrue(GA_ARM.verify_echo(bad)[0], "baseline must be invalid")
+        for kind in ("codec", "rate"):
+            mutated = dict(bad)
+            fatal, _ = GA_ARM.verify_echo(mutated)
+            self.assertTrue(fatal, "an unmutated bad echo already reports fatal — "
+                                   "so a mutation against it proves nothing")
+
+    def test_a_clean_baseline_makes_the_check_meaningful(self):
+        clean = ga_echo()
+        self.assertEqual(GA_ARM.verify_echo(clean)[0], [])
+        broken = ga_echo()
+        broken["audio"]["output"]["format"] = {"type": "audio/pcmu"}
+        self.assertTrue(GA_ARM.verify_echo(broken)[0])
+
+    def test_verifier_skips_mutations_when_the_echo_did_not_verify(self):
+        import inspect, verify_live
+        src = inspect.getsource(verify_live.main)
+        self.assertIn("mutations not run", src)
+
+    def test_verifier_adopts_the_retry_echo(self):
+        """State must not survive the retry boundary: the clean echo replaces
+        the bad one, and advisory is re-derived from it."""
+        import inspect, verify_live
+        src = inspect.getsource(verify_live.main)
+        self.assertIn("sess, fatal, advisory = again, refatal, readvisory", src)
+
+
+class TestVerifierNeverDropsAnAdvisory(unittest.TestCase):
+    """Three findings in verify_live this round, all the retry path swallowing
+    information: the wrong echo, then the wrong advisory. An advisory is
+    appended to whatever note already exists, never gated on it being empty."""
+
+    def test_advisory_is_appended_not_conditional(self):
+        import inspect, verify_live
+        src = inspect.getsource(verify_live.main)
+        self.assertIn('note += f"  (advisory:', src)
+        self.assertNotIn("if advisory and not note:", src)
+
+    def test_a_clean_retry_can_still_carry_an_advisory(self):
+        """The real shape: gateway substitutes turn_detection (fatal, races),
+        retry is clean on that but still substitutes the STT model."""
+        echo = ga_echo(stt="whisper")            # advisory-only divergence
+        fatal, advisory = GA_ARM.verify_echo(echo)
+        self.assertEqual(fatal, [])
+        self.assertTrue(advisory, "retry echo must still surface its advisory")
+
+
+class TestReportCheckerCoversEveryFigureRow(unittest.TestCase):
+    """Three review rounds, three row layouts the checker silently dropped.
+
+    A metric prefix before the pair; a split-rate row joined by `vs` rather than
+    a dash; a column-oriented table naming its arms in the header. Each was
+    invisible, each reported success for rows nobody looked at, and each was
+    found by someone reading the parser rather than by the parser failing. So
+    the tests here are about the *shape* — that every figure-bearing row in a
+    table that names an arm is accounted for, and that a pass cannot be produced
+    by data that is absent, unbound or altered.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import check_report_tables as c
+        cls.c = c
+        cls.docs = Path(__file__).resolve().parent.parent.parent / "docs" / "research"
+        cls.reports = [cls.docs / r for r in c.REPORTS]
+
+    def run_check(self, path):
+        """The checker's own verdict on a document, without its output."""
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            bad = self.c.check(path)
+        return bad, buf.getvalue()
+
+    def mask(self, line):
+        """Blank out what the checker treats as an identifier, keeping offsets.
+
+        Mutating `gpt-realtime-2` into `gpt-realtime-98765` is not a drifted
+        figure, and a test that did it would be asserting the checker catches
+        something it is right to ignore.
+        """
+        out = line
+        for pat in (r"<sub>.*?</sub>", r"`[^`]*`", self.c.ARM_RE,
+                    r"gpt-[\w.\-]+"):
+            out = re.sub(pat, lambda m: " " * len(m.group(0)), out)
+        return out
+
+    def rewritten(self, report, text):
+        """Same file name — bindings and declared counts are keyed on it."""
+        d = tempfile.mkdtemp()
+        p = Path(d) / report.name
+        p.write_text(text)
+        return p
+
+    def test_the_declared_reports_verify_against_the_committed_data(self):
+        for r in self.reports:
+            bad, out = self.run_check(r)
+            self.assertEqual(bad, 0, f"{r.name}\n{out}")
+
+    def test_every_row_is_verified_allowlisted_or_reported(self):
+        """Coverage by identity: the three buckets must exhaust the rows, and
+        the total must equal the count declared outside the parser."""
+        for r in self.reports:
+            _bad, out = self.run_check(r)
+            m = re.search(r"(\d+) figure-bearing rows in arm tables — (\d+) "
+                          r"verified, (\d+) allowlisted, (\d+) unresolved", out)
+            self.assertIsNotNone(m, out)
+            total, ok, alw, un = (int(g) for g in m.groups())
+            self.assertEqual(ok + alw + un, total, out)
+            self.assertEqual(total, self.c.REPORTS[r.name],
+                             "declared row count must equal what was found")
+
+    def test_altering_any_verified_figure_is_caught(self):
+        """The strongest form of 'try to fool it': every row that reports as
+        verified must fail when one of its figures moves. A checker that passes
+        a document it never read passes this suite otherwise."""
+        missed: list[str] = []
+        for r in self.reports:
+            text = r.read_text()
+            for tbl in self.c.tables(text):
+                if tbl.header.strip() in self.c.UNCHECKABLE_TABLES:
+                    continue
+                header_arms = self.c.row_arms(tbl.header)
+                if not header_arms and not any(self.c.row_arms(l)
+                                               for _, l in tbl.body):
+                    continue
+                for n, line in tbl.body:
+                    if not self.c.figures(line) or self.c.allowlisted_row(line):
+                        continue
+                    # EVERY figure, one at a time. Mutating only the first
+                    # exercised whichever number happened to come first — the
+                    # pair count, usually — so medians, CI bounds, tails and
+                    # p-values were never touched, and "every figure is
+                    # checked" was a claim this test had never tested.
+                    for fig in list(self.c.FIGURE.finditer(self.mask(line))):
+                        broken = line[:fig.start()] + "98765" + line[fig.end():]
+                        lines = text.split("\n")
+                        lines[n - 1] = broken
+                        bad, out = self.run_check(
+                            self.rewritten(r, "\n".join(lines)))
+                        missed.append(f"{r.name}:{n} {fig.group(0)!r} -> 98765")
+                        if bad:
+                            missed.pop()
+        self.assertEqual(missed, [], "figures altered and not caught:\n  "
+                         + "\n  ".join(missed))
+
+    def test_a_figure_cannot_be_swapped_for_another_of_the_same_comparison(self):
+        """The sweep above uses 98765, which is derivable for nothing, so any
+        membership test rejects it — and a membership test was all there was.
+        The real hole is a figure replaced by *another figure of the same
+        comparison*: a median satisfied by its own CI bound. 2704 such swaps
+        were accepted before figures were keyed by metric and statistic and
+        checked in the position their column claims.
+
+        What survives is enumerated rather than counted, because a count cannot
+        tell a new hole from an old one."""
+        accepted = []
+        for r in self.reports:
+            text = r.read_text()
+            for tbl in self.c.tables(text):
+                # The hand-counted numerator is the declared exemption, so
+                # `6/20` -> `20/20` is expected to pass here; the denominator
+                # and percentage have their own tests.
+                if tbl.header.strip() in self.c.MANUAL_COUNT_TABLES:
+                    continue
+                for n, line in tbl.body:
+                    if not self.c.figures(line) or self.c.allowlisted_row(line):
+                        continue
+                    if not (self.c.row_arms(line) or tbl.is_column_oriented):
+                        continue
+                    spans = list(self.c.FIGURE.finditer(self.mask(line)))
+                    vals = [sp.group(0) for sp in spans]
+                    for i, sp in enumerate(spans):
+                        for j, other in enumerate(vals):
+                            if i == j or other.strip() == sp.group(0).strip():
+                                continue
+                            broken = line[:sp.start()] + other + line[sp.end():]
+                            if broken == line:
+                                continue
+                            lines = text.split("\n")
+                            lines[n - 1] = broken
+                            bad, _out = self.run_check(
+                                self.rewritten(r, "\n".join(lines)))
+                            if not bad:
+                                accepted.append(
+                                    f"{sp.group(0).strip()} -> {other.strip()}"
+                                    f"   [{r.name}:{n}]")
+        # Every survivor is the same figure written differently, not a
+        # different figure: a magnitude in verdict prose that legitimately says
+        # "faster by 352 ms" about a median of −352, a sign on a positive
+        # count, and `0` written `0.000`. None of them makes the report say
+        # something untrue. Listed by value so a genuinely wrong swap cannot
+        # hide inside the allowance.
+        from collections import Counter
+        for swap, count in Counter(accepted).items():
+            a, b = swap.split("   [")[0].split(" -> ")
+            self.assertEqual(abs(float(a.replace("−", "-").replace("–", "-"))),
+                             abs(float(b.replace("−", "-").replace("–", "-"))),
+                             f"{swap} ({count}x) changes the value, not just "
+                             f"how it is written")
+
+    def test_every_row_layout_in_the_reports_is_actually_exercised(self):
+        """By identity, not by count: each layout that has been dropped once
+        must be present among the rows the checker verifies. Coverage that only
+        counts rows cannot tell that a whole shape has gone missing."""
+        seen = set()
+        for r in self.reports:
+            for tbl in self.c.tables(r.read_text()):
+                if tbl.header.strip() in self.c.UNCHECKABLE_TABLES:
+                    continue
+                header_arms = self.c.row_arms(tbl.header)
+                for _n, line in tbl.body:
+                    if not self.c.figures(line):
+                        continue
+                    if len(header_arms) >= 2:
+                        seen.add("column-oriented")
+                    elif " vs " in line and len(self.c.row_arms(line)) >= 2:
+                        seen.add("vs pair")
+                    elif re.match(r"\|\s*`[\w_]+`\s*,", line):
+                        seen.add("metric-prefixed pair")
+                    elif len(self.c.row_arms(line)) >= 2:
+                        seen.add("dash pair")
+                    elif len(self.c.row_arms(line)) == 1:
+                        seen.add("single arm")
+                    if any(lbl in line for lbl in self.c.PROSE_PAIRS):
+                        seen.add("prose pair")
+        self.assertEqual(seen, {"column-oriented", "vs pair", "dash pair",
+                                "metric-prefixed pair", "single arm",
+                                "prose pair"})
+
+    def test_a_table_without_a_binding_is_a_problem(self):
+        """Absence is never a pass: an unbound table cannot be checked, so it
+        must be reported rather than skipped."""
+        r = self.reports[0]
+        text = r.read_text().replace("<!-- data: full2 -->", "", 1)
+        bad, out = self.run_check(self.rewritten(r, text))
+        self.assertGreater(bad, 0)
+        self.assertIn("UNBOUND", out)
+
+    def test_a_binding_naming_a_dataset_that_is_not_there_is_a_problem(self):
+        r = self.reports[0]
+        text = r.read_text().replace("<!-- data: full2 -->",
+                                     "<!-- data: no-such-run -->", 1)
+        bad, out = self.run_check(self.rewritten(r, text))
+        self.assertGreater(bad, 0)
+        self.assertIn("MISSING DATA", out)
+
+    def test_a_binding_must_sit_directly_above_its_table(self):
+        """Otherwise a directive earlier in the document would silently bind a
+        table someone added later, against a run it has nothing to do with."""
+        tbl = self.c.tables("<!-- data: full2 -->\n\n| arm |\n|---|\n| `vl-direct` | 1 |")
+        self.assertEqual(tbl[0].binding.all_tags, ("full2",))
+        tbl = self.c.tables("<!-- data: full2 -->\n\nprose\n\n| arm |\n|---|\n| `vl-direct` | 1 |")
+        self.assertIsNone(tbl[0].binding)
+
+    def test_a_superseded_run_cannot_validate_a_current_section(self):
+        """The reason bindings exist. `vltier-ttfa` predates the per-cell marker
+        fix and was replaced by `vltier2-ttfa`; it is not in `published/`, and
+        naming it is an error rather than a second opinion."""
+        self.assertEqual(list(self.c.DATA.glob("*vltier-ttfa.jsonl")), [])
+        for report in self.reports:
+            for tbl in self.c.tables(report.read_text()):
+                self.assertNotIn("vltier-ttfa",
+                                 tbl.binding.all_tags if tbl.binding else ())
+
+    def test_no_run_sits_in_the_evidence_directory_unquoted(self):
+        """The other direction of the same rule. A superseded run left beside its
+        replacement is how a retracted figure stayed verifiable; nothing reading
+        it today is not a reason to keep it."""
+        self.assertEqual(self.c.orphans(self.reports), [])
+
+    def test_every_binding_names_a_committed_run(self):
+        for report in self.reports:
+            for tbl in self.c.tables(report.read_text()):
+                for tag in (tbl.binding.all_tags if tbl.binding else ()):
+                    self.assertEqual(
+                        len(list(self.c.DATA.glob(f"turns-*-{tag}.jsonl"))), 1,
+                        f"{report.name}: binding `{tag}` resolves to no single run")
+
+    # — the hole a table-level binding still left open —
+
+    def test_a_column_answers_to_its_own_run(self):
+        """`full2,full` unioned both runs and dropped which produced what, so the
+        headline table's primary-run delta could be replaced by the *other*
+        run's and still pass. That is the superseded-data hole one level down.
+
+        The headline table carries **three** run columns now, so the swap is
+        exercised at the boundary the third one created rather than at the one
+        that motivated the clause: every ordered pair of run columns, both
+        directions. Testing only the original pair would be checking the fix
+        where it was already known to hold — the recurring defect this harness
+        keeps rediscovering.
+        """
+        r = self.docs / "realtime-latency-2026-08.md"
+        text = r.read_text()
+        for clause in ('column "run 1" = full', 'column "run 2" = full2'):
+            self.assertIn(clause, text, f"missing binding: {clause}")
+        lines = text.split("\n")
+        n = next(i for i, l in enumerate(lines)
+                 if l.startswith("| gpt-realtime-2 via gateway − direct |"))
+        cells = lines[n].split("|")
+        # cells[1] is the row label; cells[2:5] are run 1, run 2 and run 3,
+        # each bound to its own run and each holding a different median.
+        cols = [2, 3, 4]
+        self.assertEqual(len({self.c.figures("|" + cells[i]).pop() for i in cols}),
+                         len(cols), "the three run medians must differ, or this "
+                         "test cannot tell a bound column from an unbound one")
+        for i in cols:
+            for j in cols:
+                if i == j:
+                    continue
+                broken = list(cells)
+                broken[i] = cells[j]
+                mutated = list(lines)
+                mutated[n] = "|".join(broken)
+                self.assertNotEqual(mutated[n], lines[n])
+                bad, _out = self.run_check(
+                    self.rewritten(r, "\n".join(mutated)))
+                self.assertGreater(
+                    bad, 0, f"column {i} accepted column {j}'s run median:"
+                            f"\n{mutated[n]}")
+
+    def test_a_negative_figure_cannot_be_written_unsigned(self):
+        """Outside verdict prose the sign is part of the figure.
+
+        `fmts` emits both spellings of every value because prose legitimately
+        says "faster by 100 ms" about a median of −100. The filter that was
+        meant to withdraw the magnitude everywhere else had its test inverted:
+        it dropped `-t` when `+t` was present, which discards a *signed*
+        spelling and leaves every magnitude in place. So **every** negative
+        statistic in both reports could be written unsigned and pass — a cell
+        reading `100` where the analyzer says `−100` states the opposite
+        result, which is precisely the ambiguity the sign counts exist to
+        remove.
+
+        Swept rather than spot-checked. The inverted filter had a docstring
+        describing the correct behaviour and a `COMPLETENESS.md` entry claiming
+        it was fixed; what it never had was a test that tried it.
+        """
+        missed = []
+        for r in self.reports:
+            text = r.read_text()
+            lines = text.split("\n")
+            for tbl in self.c.tables(text):
+                if tbl.header.strip() in self.c.MANUAL_COUNT_TABLES:
+                    continue
+                head = tbl.head_cells
+                for n, line in tbl.body:
+                    if not self.c.figures(line) or self.c.allowlisted_row(line):
+                        continue
+                    if not (self.c.row_arms(line) or tbl.is_column_oriented):
+                        continue
+                    row_spec = self.c.spec_for(self.c.cells_of(line)[0])
+                    # Offsets of each `|`-delimited cell, so a figure can be
+                    # attributed to the column that says what it is; index i
+                    # here is `cells_of` index i-1.
+                    pos, bounds = 0, []
+                    for part in line.split("|"):
+                        bounds.append((pos, pos + len(part)))
+                        pos += len(part) + 1
+                    for fig in self.c.FIGURE.finditer(self.mask(line)):
+                        if fig.group(1) not in ("−", "–", "-"):
+                            continue
+                        ci = next(i for i, (s, e) in enumerate(bounds)
+                                  if s <= fig.start() < e)
+                        spec = (row_spec if tbl.is_column_oriented
+                                else (self.c.spec_for(head[ci - 1])
+                                      if 0 < ci <= len(head) else None))
+                        if spec and any(s in self.c.PROSE_STATS
+                                        for s in spec[0]):
+                            continue
+                        mutated = list(lines)
+                        mutated[n - 1] = (line[:fig.start()] + fig.group(2)
+                                          + line[fig.end():])
+                        bad, _out = self.run_check(
+                            self.rewritten(r, "\n".join(mutated)))
+                        if not bad:
+                            missed.append(f"{r.name}:{n} {fig.group(0).strip()}"
+                                          f" -> {fig.group(2)}")
+        self.assertEqual(missed, [], "negative figures accepted unsigned:\n  "
+                         + "\n  ".join(missed))
+
+    def test_a_paired_extreme_is_not_an_arm_extreme(self):
+        """`min` and `max` name two different things, so they are keyed apart.
+
+        An arm's `min`/`max` are the ends of its own distribution; a pair's are
+        the ends of the paired differences. Sharing one key would let the
+        outlying *pair* the report dissects — one cell, −1365 ms — be satisfied
+        by the slowest single turn of either arm, and let an arm's slowest turn
+        be satisfied by a paired extreme. That is the membership hole the
+        `(metric, statistic)` keying closed, and a new statistic is exactly
+        where it would reopen, so it is tested in both directions.
+        """
+        r = self.docs / "realtime-latency-2026-08.md"
+        text = r.read_text()
+        for before, after, why in (
+                ("**−1365 / +472**", "**1687 / +472**",
+                 "a paired min accepted `native-direct`'s own min"),
+                ("| 2570 | 3538 | 409 |", "| 2570 | 1365 | 409 |",
+                 "an arm max accepted the paired comparison's extreme")):
+            self.assertIn(before, text)
+            bad, _out = self.run_check(self.rewritten(r, text.replace(before, after)))
+            self.assertGreater(bad, 0, why)
+
+    def test_every_figure_cell_resolves_to_one_run(self):
+        """The invariant the clauses exist to hold. A cell that could have come
+        from either of two runs has not been checked against the one it claims —
+        which is the merge bug, and it is a property of the *bindings*, not of
+        the checker, so it has to be asserted against the documents."""
+        multi = []
+        for report in self.reports:
+            for tbl in self.c.tables(report.read_text()):
+                if not tbl.binding:
+                    continue
+                head = tbl.head_cells
+                for n, line in tbl.body:
+                    if not self.c.figures(line) or self.c.allowlisted_row(line):
+                        continue
+                    cells = self.c.cells_of(line)
+                    for i, cell in enumerate(cells):
+                        if not self.c.figures("| " + cell):
+                            continue
+                        tags = tbl.binding.tags_for(
+                            cells[0], head[i] if i < len(head) else "")
+                        if len(tags) > 1:
+                            multi.append((report.name, n, tags, cell.strip()))
+        # The one exception is additive by nature: `gw-hd-server` appears in two
+        # blocks and its deflection denominator is the sum. Counts add across
+        # runs; no percentile ever does, which is why this list is enumerated
+        # rather than tolerated.
+        self.assertEqual([(r, c) for r, _n, _t, c in multi],
+                         [("realtime-21-2026-08.md", "**1/40 — 2.5%**")],
+                         f"cells bound to more than one run: {multi}")
+
+    def test_a_cell_bound_to_nothing_is_reported(self):
+        """An empty row ∩ column intersection means the directive contradicts
+        itself. Falling back to the default would be absence reading as a pass."""
+        b = self.c.parse_binding(
+            '<!-- data: full2; column "x" = full; row "y" = full2 -->')
+        self.assertEqual(b.tags_for("y row", "x column"), ())
+        self.assertEqual(b.tags_for("other", "x column"), ("full",))
+        self.assertEqual(b.tags_for("y row", "other"), ("full2",))
+        self.assertEqual(b.tags_for("other", "other"), ("full2",))
+
+    # — direction —
+
+    def test_reversing_a_comparison_reverses_its_statistics(self):
+        """`X − Y` and `Y − X` are not the same claim, and a reader cannot tell
+        a swapped label from a sign error by inspection."""
+        ev = self.c.evidence(("full2",))
+        med = (("median",), "ttfa_ms")
+        self.assertEqual(self.c.check_cell(ev, "**−100**",
+                                           ["vl-gateway", "vl-direct"], med, None), set())
+        self.assertEqual(self.c.check_cell(ev, "**+100**",
+                                           ["vl-direct", "vl-gateway"], med, None), set())
+        # the reverse label with the forward sign is a drift, not a match
+        self.assertIn("-100", self.c.check_cell(ev, "**−100**",
+                                                ["vl-direct", "vl-gateway"], med, None))
+        ci = (("lo", "hi"), "ttfa_ms")
+        self.assertEqual(self.c.check_cell(ev, "[−280, −15]",
+                                           ["vl-gateway", "vl-direct"], ci, None), set())
+        # and the bounds are ordered: an interval is not a set of two numbers
+        self.assertTrue(self.c.check_cell(ev, "[−15, −280]",
+                                          ["vl-gateway", "vl-direct"], ci, None))
+
+    # — allowlists no wider than the unverifiable part —
+
+    def test_a_manual_count_still_checks_its_denominator(self):
+        """Exempting the deflection tables wholesale exempted `20` and `10.0%`
+        along with the hand-counted `2`, so `2/19` passed against a run of 20."""
+        ev = self.c.evidence(("vltier2-ttfa",))
+        self.assertEqual(
+            self.c.check_manual_count(ev, "**2/20 — 10.0%**", ["vl21mini-azsem"]), "")
+        self.assertIn("denominator", self.c.check_manual_count(
+            ev, "**2/19 — 10.5%**", ["vl21mini-azsem"]))
+        self.assertIn("not 2/20", self.c.check_manual_count(
+            ev, "**2/20 — 40.0%**", ["vl21mini-azsem"]))
+        self.assertIn("exceeds", self.c.check_manual_count(
+            ev, "**21/20**", ["vl21mini-azsem"]))
+        self.assertIn("expected a `k/n`", self.c.check_manual_count(
+            ev, "**about a fifth**", ["vl21mini-azsem"]))
+
+    def test_a_manual_count_denominator_adds_across_the_bound_runs(self):
+        """Counts add; distributions do not. `gw-hd-server` appears in two
+        blocks, so its denominator is 40 and no percentile ever crosses runs."""
+        ev = self.c.evidence(("vltier2-ttfa", "v21-ttfa"))
+        self.assertEqual(ev.n_ok("gw-hd-server"),
+                         self.c.evidence(("vltier2-ttfa",)).n_ok("gw-hd-server")
+                         + self.c.evidence(("v21-ttfa",)).n_ok("gw-hd-server"))
+        self.assertEqual(
+            self.c.check_manual_count(ev, "**1/40 — 2.5%**", ["gw-hd-server"]), "")
+
+    def test_no_allowlist_entry_is_wider_than_it_needs_to_be(self):
+        """`UNCHECKABLE_TABLES` is empty because every entry it once held was
+        either exempting a derivable denominator or exempting a table with no
+        figures at all. An entry has to name the part that is unverifiable."""
+        self.assertEqual(self.c.UNCHECKABLE_TABLES, {})
+        for allow in (self.c.MANUAL_COUNT_TABLES, self.c.UNCHECKABLE_ROWS):
+            for key, reason in allow.items():
+                self.assertTrue(reason.strip(),
+                                f"{key} allowlisted without a reason")
+                self.assertNotIn("not yet", reason.lower(),
+                                 f"{key}: 'not yet checked' is a plan, not a reason")
+
+    def test_a_multi_run_binding_unions_derivations_not_turns(self):
+        """Rounds are numbered from 1 in every run, so concatenating two would
+        collide in the `(round, utterance)` cell key and lose half the pairs."""
+        one = self.c.evidence(("full2",))
+        both = self.c.evidence(("full2", "full"))
+        self.assertNotIsInstance(both, str, both)
+        for arm, metric in one.runs[0].arm:
+            for stat, vals in one.arm(arm, metric).items():
+                self.assertTrue(vals <= both.arm(arm, metric).get(stat, set()),
+                                "a union must not drop what one run derived alone")
+        self.assertTrue(
+            any(both.arm(a, m).get(st, set()) - one.arm(a, m).get(st, set())
+                for a, m in one.runs[0].arm for st in one.arm(a, m)),
+            "and it must add what the other run derived")
+
+    def test_a_row_that_names_no_arm_anywhere_is_reported(self):
+        tbl = self.c.tables("<!-- data: full2 -->\n| x | y |\n|---|---|\n"
+                            "| something | 123 |")[0]
+        why = self.c.check_row(tbl, "| something | 123 |",
+                               lambda _r, _c: self.c.evidence(("full2",)))
+        self.assertIn("names no arm", why)
+
+    def test_the_sign_is_part_of_the_figure(self):
+        """`+352` where the analyzer says `−352` is a drift, not a match."""
+        ev = self.c.evidence(("full2",))
+        med = (("median",), "ttfa_ms")
+        arms = ["vl-gateway", "vl-direct"]
+        self.assertEqual(self.c.check_cell(ev, "**−100**", arms, med, None), set())
+        self.assertIn("+100", self.c.check_cell(ev, "**+100**", arms, med, None))
+
+    def test_identifiers_are_not_figures(self):
+        """`gw-2-server` and `gpt-4.1-mini` carry digits and are not values."""
+        self.assertEqual(
+            self.c.figures("| `gw-2-server` | gpt-4.1-mini | vl21mini-azsem |"),
+            set())
+
+    def test_the_allowlist_is_the_only_way_to_not_check_a_table(self):
+        for allow in (self.c.UNCHECKABLE_TABLES, self.c.UNCHECKABLE_ROWS):
+            for key, reason in allow.items():
+                self.assertTrue(reason.strip(),
+                                f"{key} allowlisted without a reason")
+                self.assertNotIn("not yet", reason.lower(),
+                                 f"{key}: 'not yet checked' is a plan, not a reason")
+
+    def test_the_checker_refuses_reports_it_does_not_own(self):
+        """The quality study uses the same arm names against different data;
+        globbing `docs/research/*.md` would check it against this harness's runs."""
+        other = self.docs / "voice-engine-quality-2026-08.md"
+        if other.exists():
+            self.assertNotIn(other.name, self.c.REPORTS)

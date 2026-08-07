@@ -29,7 +29,7 @@ import websockets
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from arms import ARMS, VAD_ARMS, Arm  # noqa: E402
+from arms import ARMS_BY_ID, Arm  # noqa: E402
 from bench import load_kataleptic_key  # noqa: E402
 from safety import safe_print  # noqa: E402
 
@@ -101,7 +101,11 @@ async def main() -> int:
         raise SystemExit("set AZURE_REALTIME_KEY (see README)")
 
     failures = 0
-    for arm in ARMS + VAD_ARMS:
+    # Every REGISTERED arm, not a hand-maintained list. Iterating a subset
+    # printed OK while checking none of the newest model/detector
+    # combinations — 'absent reads as a pass', in the tool built to catch
+    # exactly that.
+    for arm in ARMS_BY_ID.values():
         try:
             sess = await capture(arm, azure_key, kat_key)
         except Exception as e:                                # noqa: BLE001
@@ -116,11 +120,42 @@ async def main() -> int:
         fatal, advisory = arm.verify_echo(sess)
         note = ""
         if fatal:
-            note = f"  FALSE ABORT: {fatal}"
-            failures += 1
-        elif advisory:
-            note = f"  (advisory: {advisory})"
+            # A fatal on a REAL echo is either the checker being wrong or the
+            # endpoint genuinely substituting config. The gateway's known
+            # session-update injection race does the latter intermittently, so
+            # retry once to tell them apart rather than blaming the checker.
+            try:
+                again = await capture(arm, azure_key, kat_key)
+            except Exception:                                 # noqa: BLE001
+                again = None
+            refatal, readvisory = (arm.verify_echo(again) if again
+                                   else (fatal, advisory))
+            if refatal:
+                note = f"  CHECKER OR ENDPOINT WRONG (twice): {fatal}"
+                failures += 1
+            else:
+                note = (f"  intermittent divergence, clean on retry — the known "
+                        f"injection race: {fatal}")
+                # Adopt the CLEAN echo for everything downstream. Keeping the
+                # bad one would run every mutation check against an already
+                # invalid session, so each mutation would look "detected"
+                # because of the pre-existing mismatch — a false pass in the
+                # tool built to catch false passes. `advisory` is re-derived
+                # for the same reason: it described the discarded echo.
+                sess, fatal, advisory = again, refatal, readvisory
+        if advisory:
+            # Append, never replace. Requiring an empty note meant a clean
+            # retry that still carried a voice or STT mismatch reported as
+            # fully clean, because the intermittent-race message already
+            # occupied the slot — the retry path swallowing information again.
+            note += f"  (advisory: {advisory})"
 
+        # Mutations are only meaningful against an echo that verified clean:
+        # if the baseline is already fatal, every mutation "passes" for the
+        # wrong reason.
+        if fatal:
+            safe_print(f"  {arm.id:<18} echo did NOT verify; mutations not run{note}")
+            continue
         missed = [k for k in MUTATIONS if not arm.verify_echo(mutate(sess, arm, k))[0]]
         failures += len(missed)
         status = "all caught" if not missed else f"MISSED {missed}"

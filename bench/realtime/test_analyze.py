@@ -15,7 +15,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from analyze import (ALPHA, MIN_EQUIVALENCE_N, PRACTICAL_MS,  # noqa: E402
-                     PairedResult, usable_for,
+                     paired_table,
+                     TAIL_FLOOR_MS, PairedResult, usable_for,
                      bootstrap_median_ci, compute_paired, describe,
                      holm, mcnemar_exact_p, paired, pct, sign_test_p,
                      split_cells, split_rate_table)
@@ -23,10 +24,12 @@ from arms import ARMS_BY_ID, invalidated_metrics  # noqa: E402
 from bench import redact  # noqa: E402
 
 
-def result(median, p_raw, p_adj, metric="ttfa_ms", lo=None, hi=None, n=None):
+def result(median, p_raw, p_adj, metric="ttfa_ms", lo=None, hi=None, n=None,
+           diffs=None):
     n = MIN_EQUIVALENCE_N if n is None else n
     return PairedResult(metric=metric, treat="gw", ctrl="direct", question="q",
-                        diffs=[median] * n, median=median,
+                        diffs=diffs if diffs is not None else [median] * n,
+                        median=median,
                         lo=median - 10 if lo is None else lo,
                         hi=median + 10 if hi is None else hi,
                         p_raw=p_raw, p_adj=p_adj)
@@ -626,3 +629,183 @@ class TestConfirmedDifferentConfigIsExcluded(unittest.TestCase):
         ttfa = res["ttfa_ms"][0]
         # family is 1 real test, not 2 — so no scaling is applied
         self.assertAlmostEqual(ttfa.p_adj, ttfa.p_raw)
+
+
+class TestTailIsDescribedNotDiagnosed(unittest.TestCase):
+    """A median says what a typical turn costs and is silent about a bimodal
+    cost. OpenAI semantic VAD costs ~100 ms on four turns in five and ~3.5 s on
+    the fifth; the median called that "no detectable difference" until a
+    reviewer checked the percentiles. Third time a median hid a tail here."""
+
+    # the real shape: 16 cheap turns, 4 catastrophic ones
+    BIMODAL = [80, 90, 100, 110, 120, 95, 105, 130, 70, 115,
+               100, 100, 100, 100, 100, 100, 3400, 3500, 3600, 3800]
+
+    def test_the_real_case_is_flagged(self):
+        r = result(106, 0.263, 1.000, lo=-106, hi=536, diffs=self.BIMODAL)
+        self.assertTrue(r.tail_unrepresented)
+        self.assertIn("p90", r.verdict())
+        self.assertNotIn("no detectable difference", r.verdict())
+
+    def test_the_verdict_claims_no_distribution_shape(self):
+        """Two quantiles cannot tell a second mode from broad variance, so the
+        verdict never says "bimodal". It may say which SIDE the spread is on —
+        that is a description of the p10 and p90, not a claim about modes."""
+        r = result(106, 0.263, 1.000, lo=-106, hi=536, diffs=self.BIMODAL)
+        v = r.verdict()
+        self.assertNotIn("bimodal", v.lower())
+        self.assertIn("judge on the tail", v)
+        self.assertIn("p90", v)
+
+    def test_a_broad_symmetric_spread_is_described_not_called_bimodal(self):
+        """The case that showed the old wording over-claimed: median ~0 with a
+        wide symmetric spread trips the same rule as a genuine second mode."""
+        sym = [-800, -600, -400, -200, -50, 50, 200, 400, 600, 800]
+        r = result(0, 1.0, 1.0, lo=-500, hi=500, diffs=sym)
+        self.assertTrue(r.tail_unrepresented)          # median is unrepresentative
+        self.assertFalse(r.upper_tail_dominates)       # and it is symmetric
+        self.assertNotIn("bimodal", r.verdict().lower())   # says nothing of modes
+        self.assertIn("wide both ways", r.verdict())
+
+    def test_tail_is_the_p90_of_paired_differences(self):
+        r = result(106, 0.263, 1.0, diffs=self.BIMODAL)
+        self.assertGreater(r.tail_ms, 3000)
+
+    def test_a_uniformly_small_cost_is_not_flagged(self):
+        tight = [95, 100, 105, 98, 102, 99, 101, 103, 97, 100]
+        r = result(100, 0.5, 1.0, lo=95, hi=105, diffs=tight)
+        self.assertFalse(r.tail_unrepresented)
+
+    def test_a_large_but_consistent_effect_is_still_directional(self):
+        big = [340, 350, 360, 345, 355, 352, 348, 351, 349, 353]
+        r = result(-350, 0.000, 0.002, lo=-542, hi=-149,
+                   diffs=[-x for x in big])
+        self.assertFalse(r.tail_unrepresented)
+        self.assertIn("faster by 350 ms", r.verdict())
+
+    def test_floor_stops_tiny_ratios_from_tripping_it(self):
+        # p90 five times a 2 ms median is still nothing worth flagging
+        r = result(2, 0.5, 1.0, diffs=[1, 2, 2, 2, 3, 2, 2, 2, 2, 40])
+        self.assertLess(r.tail_ms, TAIL_FLOOR_MS)
+        self.assertFalse(r.tail_unrepresented)
+
+    def test_empty_diffs_do_not_crash(self):
+        r = result(0, 1.0, 1.0, diffs=[])
+        self.assertFalse(r.tail_unrepresented)
+
+
+class TestPairedTableAlwaysCarriesTheTail(unittest.TestCase):
+    """The tail guard was added after a median hid a bimodal cost, then a newly
+    written table one section away omitted the p90 column — the rule was right
+    and the enforcement did not reach the newest content. Every generated
+    paired table carries it, so a hand-written one that does not is visibly
+    out of step with its own source."""
+
+    def _rows(self):
+        turns = []
+        for i in range(12):
+            turns.append(turn(i, "native-gateway", "en", ttfa_ms=1000 + i))
+            turns.append(turn(i, "native-direct", "en", ttfa_ms=1000))
+        res = compute_paired(turns, ["ttfa_ms"])
+        return paired_table(res["ttfa_ms"])
+
+    def test_header_declares_the_p90_column(self):
+        self.assertIn("p90", self._rows()[0])
+
+    def test_every_row_has_a_p90_cell(self):
+        header, _sep, *body = self._rows()
+        n = header.count("|")
+        for row in body:
+            self.assertEqual(row.count("|"), n, f"column count differs: {row}")
+
+
+class TestMagnitudeAsymmetryNotFrequency(unittest.TestCase):
+    """A large p90 alone cannot tell a cost from variance. The proxy
+    comparisons and OpenAI's semantic VAD look alike on p90 (+502 vs +3490,
+    both large) and are opposite in meaning: the proxy is as often ~500 ms
+    faster as slower, semantic VAD is almost never faster. Only the low tail
+    distinguishes them, and the verdict must say which it is."""
+
+    # measured: native-gateway - native-direct, p10 -494 / p90 +502
+    SYMMETRIC = [-1123, -620, -494, -357, -180, -90, -40, -10, 12, 40,
+                 90, 150, 220, 306, 378, 469, 502, 560, 623, 688]
+    # measured: gw-21-semantic - gw-21-server, p10 -336 / p90 +3490
+    ONE_SIDED = [-336, -50, 20, 60, 80, 95, 100, 105, 110, 120,
+                 130, 150, 200, 300, 420, 558, 3400, 3500, 3600, 3864]
+
+    def test_symmetric_spread_is_not_called_a_cost(self):
+        r = result(12, 1.0, 1.0, lo=-90, hi=141, diffs=self.SYMMETRIC)
+        self.assertTrue(r.tail_unrepresented)         # median is unrepresentative
+        self.assertFalse(r.upper_tail_dominates)      # but losses do not dwarf gains
+        self.assertIn("wide both ways", r.verdict())
+        self.assertIn("not a cost", r.verdict())
+
+    def test_magnitude_asymmetry_is_called_a_tail(self):
+        r = result(106, 0.263, 1.0, lo=-106, hi=536, diffs=self.ONE_SIDED)
+        self.assertTrue(r.upper_tail_dominates)
+        self.assertIn("losses dwarf gains", r.verdict())
+
+    def test_it_is_magnitude_not_frequency(self):
+        """The correction that forced the rename: the cost case was slower on
+        13 of 20 turns and FASTER on 7 — 35%, nowhere near "almost never".
+        What makes it a cost is that losses are an order of magnitude bigger."""
+        r = result(106, 0.263, 1.0, diffs=self.ONE_SIDED)
+        slower, faster = r.sign_counts
+        self.assertEqual((slower, faster), (18, 2))   # frequency: mostly slower…
+        self.assertGreater(faster, 0, "but not 'never' faster")
+        # …and the magnitudes are what differ by an order of magnitude
+        self.assertGreater(max(r.diffs), 10 * abs(min(r.diffs)))
+
+    def test_verdict_states_the_sign_counts_so_frequency_is_never_inferred(self):
+        for diffs in (self.SYMMETRIC, self.ONE_SIDED):
+            r = result(12, 1.0, 1.0, diffs=diffs)
+            slower, faster = r.sign_counts
+            self.assertIn(f"{slower} slower / {faster} faster", r.verdict())
+
+    def test_the_two_are_indistinguishable_on_p90_alone(self):
+        """The property that made the p90-only verdict wrong."""
+        a = result(12, 1.0, 1.0, diffs=self.SYMMETRIC)
+        b = result(106, 0.263, 1.0, diffs=self.ONE_SIDED)
+        self.assertGreater(a.tail_ms, 400)
+        self.assertGreater(b.tail_ms, 400)            # both large at p90
+        self.assertNotEqual(a.upper_tail_dominates, b.upper_tail_dominates)
+
+    def test_low_tail_is_the_p10(self):
+        r = result(12, 1.0, 1.0, diffs=self.SYMMETRIC)
+        self.assertLess(r.low_tail_ms, -400)
+
+    def test_empty_diffs_are_neither(self):
+        r = result(0, 1.0, 1.0, diffs=[])
+        self.assertFalse(r.upper_tail_dominates)
+        self.assertFalse(r.tail_unrepresented)
+        self.assertEqual(r.sign_counts, (0, 0))
+
+
+class TestDirectionalResultIsNotSuppressedByTheTailGuard(unittest.TestCase):
+    """The tail guard must AUGMENT a finding, not replace it. A corrected,
+    consistently-signed, practically-sized effect with broad tails is still an
+    effect — an earlier ordering let the descriptive guard override it, which
+    is the opposite of what the guard is for."""
+
+    # 18 slower / 2 faster, median +100, wide both ways
+    WIDE_BUT_REAL = ([-800, -700] + [100] * 12 + [600, 700, 800, 900, 1000, 1100])
+
+    def _r(self):
+        return result(100, 0.0004, 0.004, lo=60, hi=400, diffs=self.WIDE_BUT_REAL)
+
+    def test_the_directional_finding_survives(self):
+        r = self._r()
+        self.assertTrue(r.survives)
+        self.assertTrue(r.tail_unrepresented)     # both conditions hold
+        self.assertIn("slower by 100 ms", r.verdict())
+
+    def test_the_tail_is_reported_alongside_not_instead(self):
+        v = self._r().verdict()
+        self.assertIn("spread is wide", v)
+        self.assertIn("18 slower / 2 faster", v)
+
+    def test_it_is_not_demoted_to_a_non_finding(self):
+        v = self._r().verdict()
+        for demotion in ("not a cost", "no detectable difference",
+                         "judge on the tail"):
+            self.assertNotIn(demotion, v)

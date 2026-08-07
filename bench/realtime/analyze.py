@@ -27,6 +27,11 @@ Three rules keep a verdict honest in both directions:
       it is reported as "no detectable difference; CI admits up to 122 ms" —
       never as "no practical difference", which would assert something the
       data does not support.
+  The paired p90 is reported alongside every median, and when it dwarfs the
+      median the verdict says both numbers rather than the median alone. It
+      does NOT say "bimodal": two quantiles cannot tell a second mode from
+      broad variance, and describing what was measured is defensible where
+      inferring a shape is not.
 
 A directional claim needs the first two; an equivalence claim needs the third.
 Everything else is reported as a null with the bound the data actually gives.
@@ -72,6 +77,12 @@ ALPHA = 0.05
 # this — gaps only become perceptible to a caller in the 100+ ms range — so
 # 50 ms is a conservative floor that still admits anything worth acting on.
 PRACTICAL_MS = 50.0
+
+# A paired p90 above this, and far above the median, means the median is not a
+# fair summary of the comparison — not that the distribution has two modes,
+# which two quantiles cannot establish. 500 ms is well past anything a caller
+# would fail to notice as dead air.
+TAIL_FLOOR_MS = 500.0
 
 # An equivalence claim needs enough observations for the bootstrap interval to
 # mean anything. Resampling a single paired difference always returns [d, d],
@@ -349,12 +360,97 @@ class PairedResult:
             return float("nan")
         return max(abs(self.lo), abs(self.hi))
 
+    @property
+    def tail_ms(self) -> float:
+        """Worst-case cost at the p90 of the PAIRED differences.
+
+        A median says what a typical turn costs; it is silent about a bimodal
+        cost. OpenAI's semantic VAD costs ~100 ms on four turns in five and
+        ~3.5 s on the fifth — a median of +106 ms called that "no detectable
+        difference" until a reviewer checked the percentiles.
+        """
+        return pct(self.diffs, 90) if self.diffs else float("nan")
+
+    @property
+    def low_tail_ms(self) -> float:
+        """The p10 of the paired differences — the other side of the spread."""
+        return pct(self.diffs, 10) if self.diffs else float("nan")
+
+    @property
+    def sign_counts(self) -> tuple:
+        """(slower, faster) turn counts. Frequency, as distinct from magnitude."""
+        return (sum(1 for d in self.diffs if d > 0),
+                sum(1 for d in self.diffs if d < 0))
+
+    @property
+    def upper_tail_dominates(self) -> bool:
+        """Is the spread asymmetric in MAGNITUDE — big losses, small gains?
+
+        This is what decides whether a large p90 is a cost or just variance,
+        and it is emphatically not a statement about how OFTEN the treatment
+        is slower. OpenAI's semantic VAD was slower on 13 of 20 turns and
+        FASTER on 7 — 35% of the time — so "almost never faster" was wrong.
+        What makes it a cost is that the slow turns cost up to +3864 ms while
+        the fast ones saved at most 457 ms: an order of magnitude apart, and a
+        caller notices four seconds of silence but never notices 300 ms.
+
+        The proxy comparisons are symmetric in both: 12 slower / 11 faster on
+        the native pair, worst slow +688 against best fast -1123. Nothing
+        there for a caller to notice in either direction.
+        """
+        if not self.diffs or math.isnan(self.tail_ms) or math.isnan(self.low_tail_ms):
+            return False
+        return abs(self.low_tail_ms) < 0.4 * abs(self.tail_ms)
+
+    @property
+    def tail_unrepresented(self) -> bool:
+        """The median does not represent the upper tail of this comparison.
+
+        This says nothing about the *shape* of the distribution. Two quantiles
+        cannot distinguish a second mode from ordinary broad variance — a
+        symmetric spread with median 0 and p90 800 trips this exactly as a
+        genuinely bimodal cost does. An earlier version asserted "bimodal" on
+        this basis, which inferred structure the data does not establish; it
+        was added to fix a median hiding a tail and over-corrected into a
+        different over-claim.
+
+        All it licenses is: report both numbers and let the reader judge.
+        Whether a given case is bimodal is a question for the actual
+        differences, and belongs in prose where it can be shown.
+        """
+        if not self.diffs or math.isnan(self.tail_ms):
+            return False
+        return self.tail_ms > max(TAIL_FLOOR_MS, 5 * abs(self.median))
+
     def verdict(self) -> str:
         if self.not_comparable:
             return f"**not comparable** — {self.not_comparable}"
-        direction = "slower" if self.median > 0 else "faster"
         if self.survives:
-            return f"**{direction} by {abs(self.median):.0f} ms**"
+            # A corrected, consistently-signed, practically-sized effect is a
+            # finding. The tail guard AUGMENTS it — broad tails do not make a
+            # real effect unreal — so the directional verdict comes first and
+            # carries the tail alongside rather than being replaced by it.
+            direction = "slower" if self.median > 0 else "faster"
+            core = f"**{direction} by {abs(self.median):.0f} ms**"
+            if self.tail_unrepresented:
+                slower, faster = self.sign_counts
+                return (f"{core} — but spread is wide "
+                        f"(p10/p90 {self.low_tail_ms:+.0f}/{self.tail_ms:+.0f}, "
+                        f"{slower} slower / {faster} faster)")
+            return core
+        if self.tail_unrepresented:
+            # Describe the numbers; claim nothing about modes. But DO say which
+            # side the spread sits on, because a one-sided tail is a cost and a
+            # two-sided one is variance, and p90 alone cannot tell them apart.
+            slower, faster = self.sign_counts
+            if self.upper_tail_dominates:
+                return (f"**median {self.median:+.0f} ms, p90 {self.tail_ms:+.0f} ms** — "
+                        f"losses dwarf gains ({slower} slower / {faster} faster), "
+                        f"judge on the tail")
+            return (f"median {self.median:+.0f} ms, p10/p90 "
+                    f"{self.low_tail_ms:+.0f}/{self.tail_ms:+.0f} ms — "
+                    f"wide both ways ({slower} slower / {faster} faster), not a cost")
+        direction = "slower" if self.median > 0 else "faster"
         if self.p_adj < ALPHA and not self.practical:
             return (f"significant but below the {PRACTICAL_MS:.0f} ms floor "
                     f"({self.median:+.0f} ms)")
@@ -408,16 +504,19 @@ def compute_paired(turns: list[dict], metrics: list[str]) -> dict[str, list[Pair
 
 
 def paired_table(results: list[PairedResult]) -> list[str]:
-    rows = ["| comparison | pairs | median Δ | 95% CI | p90 Δ | p (raw) | p (Holm) | verdict |",
-            "|---|---:|---:|---|---:|---:|---:|---|"]
+    rows = ["| comparison | pairs | median Δ | 95% CI | **p10 / p90 Δ** | slower / faster "
+            "| p (raw) | p (Holm) | verdict |",
+            "|---|---:|---:|---|---:|---:|---:|---:|---|"]
     for r in results:
         if r.not_comparable:
             rows.append(f"| `{r.treat}` − `{r.ctrl}`<br><sub>{r.question}</sub> | 0 | "
-                        f"— | — | — | — | — | {r.verdict()} |")
+                        f"— | — | — | — | — | — | {r.verdict()} |")
             continue
         rows.append(
             f"| `{r.treat}` − `{r.ctrl}`<br><sub>{r.question}</sub> | {len(r.diffs)} | "
-            f"**{r.median:+.0f}** | [{r.lo:+.0f}, {r.hi:+.0f}] | {pct(r.diffs, 90):+.0f} | "
+            f"**{r.median:+.0f}** | [{r.lo:+.0f}, {r.hi:+.0f}] | "
+            f"{pct(r.diffs, 10):+.0f} / {pct(r.diffs, 90):+.0f} | "
+            f"{r.sign_counts[0]} / {r.sign_counts[1]} | "
             f"{r.p_raw:.3f} | {r.p_adj:.3f} | {r.verdict()} |")
     return rows
 
@@ -446,8 +545,10 @@ def main() -> int:
             else None)
     ok = [t for t in turns if t["ok"]]
     paired_results = compute_paired(ok, [m for m, _ in METRICS])
-    n_tests = sum(1 for v in paired_results.values() for r in v
-                  if not r.not_comparable)
+    tested = [r for v in paired_results.values() for r in v if not r.not_comparable]
+    n_tests = len(tested)
+    n_comparisons = len({(r.treat, r.ctrl) for r in tested})
+    n_metrics = len({r.metric for r in tested})
     out: list[str] = []
 
     def w(s: str = "") -> None:
@@ -457,8 +558,9 @@ def main() -> int:
       f"({len(turns) - len(ok)} failed or produced no audio).")
     w()
     w(f"**{n_tests} paired hypothesis tests** in this run "
-      f"({n_tests // max(1, len(METRICS))} comparisons x {len(METRICS)} metrics "
-      f"present in this dataset). At α={ALPHA} that is "
+      f"({n_comparisons} comparison(s) x {n_metrics} metric(s) present in this "
+      f"dataset; the product may exceed the count when a metric is excluded for "
+      f"a comparison). At α={ALPHA} that is "
       f"~{n_tests * ALPHA:.1f} spurious rejections expected under the null, so "
       f"p-values are Holm-corrected across the whole family. A directional verdict "
       f"additionally requires a median shift of at least {PRACTICAL_MS:.0f} ms; "

@@ -1,45 +1,104 @@
 # Realtime voice latency: Kataleptic gateway vs. direct Azure
 
-*Two independent 125-turn runs of the same five-arm design, 2026-08-01 and 2026-08-02.
-Numbers below are from the second, which was collected with the fully verified harness;
-the first is reported alongside as a replication. Harness and full method in
-[`bench/realtime/`](../../bench/realtime/README.md); regenerable with `bench.py --rounds 25`.*
+*Three independent runs: two 125-turn runs of the same five-arm design on 2026-08-01 and
+2026-08-02, and a 100-turn four-arm replication of the two proxy pairs on 2026-08-03,
+collected after the per-cell marker fix. **The proxy comparison — the question this report
+exists to answer — is anchored on the third**, which is the only one free of that confound;
+the five-arm sections are from the second, and all three are reported side by side. Harness
+and full method in [`bench/realtime/`](../../bench/realtime/README.md); regenerable with
+`bench.py --rounds 25`.*
 
 ---
 
+> **Follow-up (2026-08-03):** `gpt-realtime-2.1` and `2.1-mini` are now on the gateway and
+> are measured in [realtime-21-2026-08.md](realtime-21-2026-08.md). Both are faster than
+> gpt-realtime-2 — the mini tier by a full second — and both still split utterances under
+> server VAD exactly as gpt-realtime-2 does.
+
+> **Provenance (2026-08-03): the marker confound is settled by replication rather than by
+> argument.** Until `d5f3b2a` the harness drew a random `MK<8 hex>` marker **per turn**
+> rather than per `(round, utterance)` cell, so the two arms of a pair were answering
+> system prompts that differed in one ten-character token. `full` (08-01) and `full2`
+> (08-02) both predate that change; the 2.1 report's blocks are marked for the same reason.
+>
+> An earlier version of this note argued the confound could not have manufactured a null:
+> the marker is drawn **independently of the arm**, so it adds within-cell *variance* and
+> nothing directional, and noise makes a null easier to reach rather than harder. That
+> argument still holds, and it no longer has to be taken on its own. The post-fix
+> replication it called for — the two proxy pairs, 4 arms × 25 rounds, 100 turns, 99
+> usable — was run on 2026-08-03 as `full3`. It is free of the confound, it agrees with
+> both earlier runs, and **it is the run the proxy tables below are anchored on.**
+
 ## Answer
 
-**No. Routing through the Kataleptic gateway does not cost measurable latency, for
-either engine.**
+**No. Routing through the Kataleptic gateway costs no detectable latency in either
+direction, for either engine.**
 
-| comparison | run 2 (primary) | 95% CI | p raw / Holm | run 1 (replication) |
-|---|---:|---|---:|---:|
-| gpt-realtime-2 via gateway − direct | **+12 ms** | [−90, +141] | 1.00 / 1.00 | −18 ms |
-| Voice Live via gateway − direct | **−100 ms** | [−280, −15] | 0.043 / 0.78 | −19 ms |
+<!-- data: full3; column "run 1" = full; column "run 2" = full2; metric: ttfa_ms -->
+| comparison | run 1<br><sub>08-01</sub> | run 2<br><sub>08-02</sub> | run 3<br><sub>08-03, post-fix</sub> | 95% CI | **p10 / p90 Δ** | **min / max Δ** | slower / faster | p raw / Holm |
+|---|---:|---:|---:|---|---:|---:|---:|---:|
+| gpt-realtime-2 via gateway − direct | −18 ms | +12 ms | **−31 ms** | [−118, +306] | **−464 / +455** | **−1365 / +472** | **10 / 15** | 0.42 / 1.00 |
+| Voice Live via gateway − direct | −19 ms | −100 ms | **+31 ms** | [−103, +126] | **−218 / +205** | **−418 / +719** | **14 / 10** | 0.54 / 1.00 |
 
-Neither survives correction in either run, and the two runs disagree on sign for the
-native pair (+12 vs −18) — which is itself the finding: the effect is smaller than the
-run-to-run variation. **Stated precisely: no detectable difference, with the data ruling
-out anything larger than ~140 ms for the native pair and ~280 ms for Voice Live.** That is
-not a claim of exact equivalence — 25 pairs against this per-turn variance cannot deliver
-one — but at a p50 of 1.9–2.2 s it is decisive for the decision at hand.
+*Three medians, one per run, each bound to its own run. Every column to their right is
+**run 3's** — the post-fix replication, described in
+[its own section](#run-3-the-post-fix-replication) below.*
+
+**Three runs, six point estimates, and no stable sign.** The native pair reads −18, +12,
+−31 ms; the Voice Live pair −19, −100, +31 ms. Neither sequence keeps its sign, and
+nothing survives Holm correction in any run.
+
+**These three medians must not be averaged.** An average of −18, +12 and −31 is a number
+with a sign, and it would be the one thing the data is clear does not exist. The
+disagreement *is* the result: an effect that changes direction between runs of the same
+design against the same endpoints is smaller than the run-to-run variation, which is
+exactly what "no detectable difference" means and is stronger evidence for it than any
+single run's p-value.
+
+**Stronger still, and easy to miss: within every run the gateway is slower on only about
+half the turns.** By sign, the native pair splits 10/25, 12/23 and 10/25 slower across the
+three runs — 40%, 52%, 40% — and Voice Live 12/25, 7/25 and 14/24, or 48%, 28% and 58%.
+Five of those six are a coin flip and the sixth leans *toward* the gateway. That is a
+per-turn statement, measured on identical caller audio in the same round, where the sign
+instability above is only a per-run one — 147 matched pairs rather than six point
+estimates. **A cost cannot be negative as often as it is positive.**
+
+**Read the p10/p90 pair, not just the median.** Individual turns scatter by roughly
+±450 ms on the native pair and ±210 ms on Voice Live — but *in both directions*. That is
+per-turn variance: network jitter and model non-determinism. The confidence intervals are
+the right summary of it, and they are what bounds the claim.
+
+The distinction that matters is **magnitude, not frequency**. Compare OpenAI's semantic
+VAD, measured in the [2.1 report](realtime-21-2026-08.md): it was slower on 13 of 20 turns
+and *faster on 7*, so it is not "almost never faster" — but its slow turns cost up to
+**+3864 ms** where its fast ones saved at most **457 ms**. That asymmetry in size is what
+makes it a cost a caller feels. The proxy comparisons are symmetric in both size and count:
+on the native pair the worst slow turn is +472 ms against a best fast turn of −496 ms once
+the single −1365 ms cell is set aside, and on Voice Live +719 against −418. That −1365 is
+one cell and is [dissected below](#the-1365-ms-outlier) — it is the *direct* arm having a
+single slow turn, not the gateway a fast one, and the median does not depend on it.
+
+**Stated precisely: no detectable difference, with the loosest of the three intervals
+ruling out anything larger than ~310 ms on the native pair and ~130 ms on Voice Live.**
+The loosest is quoted deliberately. Run 3's native interval reaches +306 ms where run 2's
+reached only +141, and picking the tightest of three would be choosing the run that
+flatters the claim after seeing all three. That is not exact equivalence — 25 pairs against
+this per-turn variance cannot deliver one — but ~310 ms is 14% of the native pair's 2.2 s
+time-to-first-audio and ~130 ms is under 8% of Voice Live's 1.8 s, which is decisive for
+the decision at hand.
 
 The measurements also flatter the gateway. From the machine that ran this, the Cloudflare
 edge fronting `api.kataleptic.com` is 30 ms of TCP RTT away while Azure swedencentral is
 61 ms, so the gateway arms get a ~31 ms shorter round trip before any proxying happens.
-Adding that back:
-
-| | measured | path-adjusted |
-|---|---:|---:|
-| native, run 2 | +12 ms | **+43 ms** |
-| native, run 1 | −18 ms | **+13 ms** |
-| Voice Live, run 2 | −100 ms | **−69 ms** |
-| Voice Live, run 1 | −19 ms | **+12 ms** |
-
-**No point estimate is defensible from this.** The adjusted values span −69 to +43 ms and
-do not agree on sign, so quoting any one of them as "the proxy cost" would claim precision
-the data does not contain. What the benchmark supports is the **bound** above, not an
-estimate.
+Adding that constant back moves every median above 31 ms toward "gateway slower": the
+native pair becomes +13, +43 and 0 ms across the three runs, Voice Live +12, −69 and
++62 ms. **No point estimate is defensible from this either.** The adjusted values span −69
+to +62 ms and still do not agree on sign, so quoting any one of them as "the proxy cost"
+would claim precision the data does not contain. What the benchmark supports is the
+**bound** above, not an estimate. (Those six adjusted figures are arithmetic on the table's
+medians plus a traceroute constant, not statistics any run derives, so they are stated in
+prose rather than in a table — an unverifiable table sitting beside verified ones is
+exactly where a stale number hides.)
 
 A separate and much more precise measurement does exist. During recon the gateway's own
 protocol path was timed directly — round-tripping a free `input_audio_buffer.clear`
@@ -49,13 +108,13 @@ number to quote for the gateway's own overhead; this benchmark's job is to confi
 much larger is hiding behind it.
 
 Either way the conclusion is the same and it is a null result: **the proxy is not where
-your latency is.** At a p50 time-to-first-audio of 1.9–2.2 s, even the loosest bound the
-data allows — ~280 ms — is under 15%, and the directly measured 5–8 ms is under half a
-percent.
-If OpenFon wants faster turn-taking, the levers are the turn detector (~720 ms of the
+your latency is.** At a p50 time-to-first-audio of 1.8–2.2 s, even the loosest bound the
+data allows — ~310 ms on the native pair — is 14% of it, and the directly measured 5–8 ms
+is under half a percent.
+If OpenFon wants faster turn-taking, the levers are the turn detector (~0.7 s of the
 budget as measured, and largely ours to set) and the choice of engine (Voice Live's
 gpt-4.1-mini cascade reaches first audio a few hundred milliseconds sooner than
-gpt-realtime-2, consistently in direction across both runs) — not disintermediating
+gpt-realtime-2, consistently in direction across all three runs) — not disintermediating
 Kataleptic.
 
 **A separate finding, from the [VAD follow-up](#follow-up-is-the-splitting-the-brain-or-the-turn-detector)
@@ -102,6 +161,13 @@ each round, 4 utterances (EN/DE × short/long) cycling across 25 rounds.
 123/125 turns produced a usable measurement; the 2 rejections are described under
 Caveats and are not failures of the endpoint but of a control we require.
 
+**Run 3 (`full3`, 2026-08-03) drops the fifth arm and keeps the first four** — the two
+proxy pairs and nothing else, since its purpose is to re-measure exactly the comparison
+this report leads with, under a harness that draws the prompt marker per
+`(round, utterance)` cell rather than per turn. Same arms, same endpoints, same held-constant
+list, same 4 utterances × 25 rounds; 100 turns, 99 usable. It cannot speak to
+`vl-native-brain`, which is why the five-arm sections below remain sourced from run 2.
+
 ---
 
 ## Time to first agent audio
@@ -114,6 +180,7 @@ turn's own measurement rather than the constant.
 
 Raw (what a caller on OpenFon's current settings experiences):
 
+<!-- data: full2; metric: ttfa_ms -->
 | arm | brain | n | min | **p50** | p90 | p99 | IQR |
 |---|---|---:|---:|---:|---:|---:|---:|
 | `native-direct` | gpt-realtime-2 | 25 | 1305 | **2205** | 2620 | 3404 | 376 |
@@ -127,6 +194,7 @@ that turn's *own measured* end-of-turn detection removed. Subtracting the nomina
 would be wrong: under server VAD the detector actually spends ~740 ms, and a semantic
 detector has no fixed hangover at all.
 
+<!-- data: full2; metric: ttfa_minus_vad_ms -->
 | arm | brain | min | **p50** | p90 | p99 |
 |---|---|---:|---:|---:|---:|
 | `native-direct` | gpt-realtime-2 | 611 | **1512** | 1857 | 2664 |
@@ -137,15 +205,24 @@ detector has no fixed hangover at all.
 
 Paired on the engine-only figure, neither proxy comparison survives correction
 (`native-gateway` − `native-direct` +33 ms, p = 1.00; `vl-gateway` − `vl-direct` −95 ms,
-p raw 0.043 / Holm 0.78).
+p raw 0.043 / Holm 0.87).
 
 Paired, on identical caller audio in the same round:
 
-| comparison | pairs | median Δ | 95% CI | p90 Δ | p raw | p Holm | verdict |
-|---|---:|---:|---|---:|---:|---:|---|
-| `native-gateway` − `native-direct` | 23 | **+12** | [−90, +141] | +502 | 1.000 | 1.000 | no detectable difference; CI admits up to 141 ms |
-| `vl-gateway` − `vl-direct` | 25 | **−100** | [−280, −15] | +171 | 0.043 | 0.779 | borderline, not robust to correction |
-| `vl-native-brain` − `native-direct` | 25 | **−46** | [−152, −1] | +508 | 0.043 | 0.779 | no detectable difference; CI admits up to 152 ms |
+<!-- data: full2; metric: ttfa_ms -->
+| comparison | pairs | median Δ | 95% CI | **p10 / p90 Δ** | slower / faster | p raw | p Holm | verdict |
+|---|---:|---:|---|---:|---:|---:|---:|---|
+| `native-gateway` − `native-direct` | 23 | **+12** | [−90, +141] | **−494 / +502** | **12 / 11** | 1.000 | 1.000 | wide both ways, not a cost |
+| `vl-gateway` − `vl-direct` | 25 | **−100** | [−280, −15] | **−374 / +171** | **7 / 18** | 0.043 | 0.866 | borderline — faster by 100 ms, not robust to Holm |
+| `vl-native-brain` − `native-direct` | 25 | **−46** | [−152, −1] | **−536 / +508** | **7 / 18** | 0.043 | 0.866 | wide both ways, not a cost |
+
+> Regenerated with the current analyzer. Three changes since first publication: the Holm
+> values are 0.866, not the 0.779 published earlier — that figure predated
+> `session_ready_ms` joining the metric family; the paired **p10** is now shown beside the
+> p90, because a large p90 alone cannot distinguish a cost from variance; and with both
+> visible, two rows that a p90-only view flagged as tails turn out to be **symmetric
+> spread** — the gateway is ~500 ms faster about as often as it is ~500 ms slower.
+> Neither changes a conclusion; both were published as cleaner than the data supports.
 
 p-values are Holm-corrected across all 27 paired tests in the run (see
 [Statistical discipline](#statistical-discipline)); a directional verdict additionally
@@ -158,14 +235,82 @@ Whatever jitter the extra hop adds is smaller than the jitter already in the dir
 `native-gateway` shows 23 turns rather than 25 because two were **rejected**, not lost —
 see the session-race caveat below.
 
+### Run 3: the post-fix replication
+
+*2026-08-03, four arms × 25 rounds, 100 turns, 99 usable (one `vl-direct` connect was reset
+by the peer). The two proxy pairs only, collected after `d5f3b2a` moved the prompt marker
+to the `(round, utterance)` cell — so this is the one run in which the two arms of every
+pair answered a byte-identical system prompt.*
+
+<!-- data: full3; metric: ttfa_ms -->
+| arm | brain | n | min | **p50** | p90 | max | IQR |
+|---|---|---:|---:|---:|---:|---:|---:|
+| `native-direct` | gpt-realtime-2 | 25 | 1687 | **2187** | 2570 | 3538 | 409 |
+| `native-gateway` | gpt-realtime-2 | 25 | 1713 | **2204** | 2487 | 2497 | 255 |
+| `vl-direct` | gpt-4.1-mini | 24 | 1542 | **1790** | 2266 | 2483 | 496 |
+| `vl-gateway` | gpt-4.1-mini | 25 | 1479 | **1813** | 2348 | 2824 | 388 |
+
+Paired, on identical caller audio in the same round:
+
+<!-- data: full3; metric: ttfa_ms -->
+| comparison | pairs | median Δ | 95% CI | **p10 / p90 Δ** | **min / max Δ** | slower / faster | p raw | p Holm | verdict |
+|---|---:|---:|---|---:|---:|---:|---:|---:|---|
+| `native-gateway` − `native-direct` | 25 | **−31** | [−118, +306] | **−464 / +455** | **−1365 / +472** | **10 / 15** | 0.424 | 1.000 | wide both ways, not a cost |
+| `vl-gateway` − `vl-direct` | 24 | **+31** | [−103, +126] | **−218 / +205** | **−418 / +719** | **14 / 10** | 0.541 | 1.000 | symmetric spread, not a cost |
+
+Two things are worth reading off this beyond the medians. **The gateway's spread is not
+wider**, which is what an extra hop would be expected to cost: on the native pair it is
+tighter on both measures (p90 2487 vs 2570, IQR 255 vs 409), and on Voice Live it is
+tighter by IQR (388 vs 496) while its p90 sits 82 ms above the direct arm's. That
+replicates run 2's reading — whatever jitter the hop adds is of the same order as the
+jitter already in the direct path — without overstating it as a tail improvement in
+both pairs.
+
+And the run's own null is *tighter than run 2's on Voice Live* (CI [−103, +126] against
+[−280, −15]) while being **looser on the native pair** ([−118, +306] against [−90, +141]).
+That is why the bound this report quotes is the loosest of the three rather than run 3's:
+being the best-controlled run does not make it the most precise one, and conflating the
+two would let the cleanest run set a bound the noisier ones contradict.
+
+#### The −1365 ms outlier
+
+The native pair's most extreme difference is nearly three times the next one, so it is worth
+saying exactly what it is rather than leaving it in a `min` column. It is **one cell —
+round 2, `de-short` — and it is the *direct* arm having a single slow turn, not the gateway
+having a fast one.**
+
+- That turn is `native-direct`'s slowest of the run: it *is* the 3538 ms `max` in the table
+  above, against that arm's own p50 of 2187 and p90 of 2570. The gateway's turn in the same
+  cell was unremarkable, within 30 ms of its arm's median.
+- **It is not a slow dial.** Connect, config and `speech_stopped` on that turn all sit at
+  their arm's medians, and the two arms' end-of-turn decisions are 1.4 ms apart. All but
+  those 1.4 ms sit downstream of the turn ending, in inference and synthesis: the same
+  cell's engine-only difference is −1363 ms, so subtracting each turn's own detection time
+  does not touch it.
+- **It is not the utterance splitting either.** Both arms split on that cell — splits in
+  this run are exactly symmetric, 6/25 on each native arm, all of them `de-short`, zero
+  discordant cells, McNemar p = 1.00 — so segmentation is not what distinguishes the two
+  turns.
+
+**The median does not depend on it.** Dropping the cell entirely moves the pair median from
+−31 ms to −23 ms over the remaining 24 pairs, and leaves the count of turns on which the
+gateway was *slower* at 10 — the cell is one of the 15 faster ones, so removing it takes
+that side to 14 and changes nothing about the balance. Neither median approaches the 50 ms
+practical floor from either side. Since the excursion is on the *direct*
+arm it flatters the gateway, so removing it moves the estimate toward the gateway being
+slower — the conservative direction for the claim being made. Read as what it is: one slow
+inference on a 25-pair sample, which is also why the median rather than the mean is the
+statistic this report quotes throughout.
+
 ### Engine choice dominates
 
 The interesting number is not the proxy delta, it is the gap between engines: Voice Live's
 gpt-4.1-mini cascade reaches first audio at a p50 of **2002 ms** raw (1284 ms engine-only)
 where gpt-realtime-2 takes **2205 ms** (1512 ms) — a raw gap of **203 ms** and an
 engine-only gap of **228 ms** in run 2. Run 1 put the same gap at 549 ms raw / 443 ms
-engine-only, so the magnitude is not stable across runs; the ordering is (Voice Live first
-in both), and the gap is an order of magnitude larger than anything the proxy contributes.
+engine-only and run 3 at 397 ms raw / 441 ms engine-only, so the magnitude is not stable
+across runs; the ordering is (Voice Live first in all three), and the gap is an order of
+magnitude larger than anything the proxy contributes.
 Treat "a few hundred milliseconds, direction consistent" as the finding rather than either
 point estimate. Whether that
 trade is worth it depends on what OpenFon values — gpt-realtime-2 hears tone rather than
@@ -185,6 +330,7 @@ silently substituted Azure semantic VAD or anything else). `speech_stopped_ms` t
 measures each server's *own* end-of-turn decision, from the end of caller speech to its
 `input_audio_buffer.speech_stopped`:
 
+<!-- data: full2; metric: speech_stopped_ms -->
 | arm | brain | min | **p50** | p90 | IQR |
 |---|---|---:|---:|---:|---:|
 | `native-direct` | gpt-realtime-2 | 686 | **724** | 747 | 40 |
@@ -194,7 +340,8 @@ measures each server's *own* end-of-turn decision, from the end of caller speech
 | `vl-native-brain` | gpt-realtime-2 | 692 | **727** | 751 | 31 |
 
 **Every arm decides end-of-turn within 26 ms of every other** (p50 707–733 ms in run 2,
-737–765 ms in run 1; all paired deltas null) — the 550 ms hangover plus ~170 ms of
+737–765 ms in run 1, 704–710 ms in run 3; all paired deltas null or below the 50 ms
+practical floor) — the 550 ms hangover plus ~170 ms of
 detection and network, the same everywhere. Turn detection is therefore *not* where the engines
 diverge. The ~550 ms difference in time-to-first-audio accrues entirely **downstream of
 the turn ending**, in model inference plus speech synthesis.
@@ -211,12 +358,16 @@ end-of-turn speed — see the VAD-splits caveat below.
 
 ## Supporting metrics
 
+<!-- data: full2 -->
 | metric | native-direct | native-gateway | vl-direct | vl-gateway | vl-native-brain |
 |---|---:|---:|---:|---:|---:|
 | `speech_stopped_ms` p50 (VAD end-of-turn) | 724 | 707 | 733 | 731 | 727 |
-| `transcript_ms` p50 (caller's transcript) | 1332 | *(n=3, excluded)* | 1271 | 1193 | 1292 |
+| `transcript_ms` p50 (caller's transcript) | 1332 | *(excluded)* | 1271 | 1193 | 1292 |
 | `connect_ms` paired Δ | — | **−91 ms** | — | **−121 ms** | — |
 | `config_ms` paired Δ vs `native-direct` | — | +37 ms | — | — | **+65 ms** |
+
+*`native-gateway` is excluded from the transcript row: the gateway substituted its own
+STT deployment on all but three turns, so the three that survive are not a distribution.*
 
 Every paired `ttft`, `transcript` and `response_total` comparison for the two proxy pairs
 is null (p ≥ 0.11). The reply lengths confirm the arms were doing comparable work.
@@ -235,6 +386,23 @@ medians. On that measure the gateway is still ahead from here: **465 ms vs 491 m
 p_adj < 0.001). None of this transfers to a Cloudflare Worker, which has a different
 geometry again.
 
+**Run 3 replicates the shape and sharpens the `config_ms` half of it:**
+
+<!-- data: full3 -->
+| comparison | `connect_ms` paired Δ | `config_ms` paired Δ | `session_ready_ms` paired Δ |
+|---|---:|---:|---:|
+| `native-gateway` − `native-direct` | **−60 ms** | **+100 ms** | +13 ms |
+| `vl-gateway` − `vl-direct` | −24 ms | +21 ms | −6 ms |
+
+Same trade in the same direction — faster to open a socket, slower to configure one, and
+the two very nearly cancelling on `session_ready_ms`. The one figure that moved materially
+is the native pair's `config_ms`, **+37 ms in run 2 and +100 ms here**, slower on 25 of 25
+turns and surviving Holm in this run where it was demoted in the last. It is a larger lazy
+upstream dial than run 2 saw, it is still paid once before the call rather than per turn,
+and it still does not reach `ttfa_ms`. Two runs a day apart disagreeing by a factor of
+nearly three is the same lesson as the headline: **a session-setup point estimate from one
+run is not a constant of the gateway.**
+
 The one non-connection result that survives correction lives here too:
 **`vl-native-brain` − `native-direct` on `config_ms` is +65 ms** (CI [+40, +78],
 p_adj < 0.001) — Voice Live is measurably slower than the Foundry endpoint at applying a
@@ -246,8 +414,11 @@ benchmark establishes.
 
 ## Statistical discipline
 
-This run performs **27 paired hypothesis tests** (3 comparisons × 9 metrics). At
-α = 0.05 that is ~1.4 spurious rejections expected under the null — so an uncorrected
+This run performs **27 paired hypothesis tests** (3 comparisons × 9 metrics); run 3, with
+two comparisons instead of three, performs **17** — 2 × 9 less the native `transcript_ms`
+comparison, which the gateway's STT substitution leaves with no usable pair — and is
+corrected within its own family.
+At α = 0.05 that is ~1.4 spurious rejections expected under the null — so an uncorrected
 table would reliably manufacture a finding. Two guards are applied, and both are in the
 code rather than only in this prose:
 
@@ -277,6 +448,7 @@ What survives both gates:
 
 Everything in the primary run with an uncorrected p below 0.05 (27 tests in the family):
 
+<!-- data: full2 -->
 | result | median | p raw | p Holm | status |
 |---|---:|---:|---:|---|
 | `connect_ms`, `vl-gateway` − `vl-direct` | −121 ms | 0.000 | 0.000 | **survives both gates** |
@@ -312,8 +484,10 @@ only one this benchmark establishes.
 
 > **"Voice Live's serving stack is faster with the brain held constant" is not an
 > established result.** In the primary run it is −46 ms with a CI upper bound touching zero
-> (−152, −1) and a corrected p of 0.78; run 1 put it at −93 ms, also demoted. The honest
-> statement is: *no robust difference; if anything Voice Live's stack is slightly faster.*
+> (−152, −1) and a corrected p of 0.87; run 1 put it at −93 ms, also demoted. Its
+> paired differences are wide in *both* directions (p10/p90 −536 / +508), so "if anything
+> faster" describes the median of a scatter, not a reliable advantage. The honest
+> statement is: *no robust difference either way.*
 > Confirming it would need a dedicated, better-powered run.
 
 Note also how many rows sit at exactly p = 0.043 — that is the smallest two-sided p an
@@ -322,13 +496,22 @@ metrics landing there together is what a family of correlated near-null tests lo
 and is precisely why the correction exists.
 
 **This discipline strengthens the headline rather than weakening it.** The proxy null is
-not "we failed to find an effect" — it is a bounded null, replicated: two independent
-125-turn runs, neither surviving correction, disagreeing on sign, with the true effect
-confined to roughly ±140 ms (native) and ±280 ms (Voice Live) at 95%. Alongside it sits an
+not "we failed to find an effect" — it is a bounded null, replicated twice: three
+independent runs, none surviving correction in either pair, disagreeing on sign in both
+pairs, with the true effect confined by the loosest of the three intervals to roughly
+±310 ms (native) and ±130 ms (Voice Live) at 95%. Alongside it sits an
 independent and far more precise direct measurement of the gateway's own protocol overhead
 at 5–8 ms. That is a much stronger position than a bare "p > 0.05", and it deserves not to
 be surrounded by over-claimed marginal findings — including one of my own, since an earlier
-draft quoted a single "+10 ms true proxy cost" that the replication does not support.
+draft quoted a single "+10 ms true proxy cost" that the replications do not support.
+
+**The three medians are reported side by side and are deliberately not pooled.** Averaging
+−18, +12 and −31 would produce a single signed number, and combining three intervals would
+produce one narrower than any of them — both of which would describe the run-to-run
+variation as if it were measurement precision. The variation is the finding, so it is left
+visible. Pooling would also require the runs to be exchangeable, and they are not: run 3
+uses four arms and a fixed harness where runs 1 and 2 used five arms and the per-turn
+marker.
 
 ## Caveats
 
@@ -344,9 +527,12 @@ the confidence, and it is the one adjustment that pairing cannot make for us.
 
 **Multiple comparisons** are handled in [Statistical discipline](#statistical-discipline)
 above rather than as an afterthought here: 27 tests, Holm-corrected as one family, with a
-50 ms practical floor on top. The short version is that **the four surviving results are
-all about session setup, none about speech** — and "Voice Live serves gpt-realtime-2 faster
-than the Foundry deployment" is **not** among the findings.
+50 ms practical floor on top. Each run is its own family — run 3 is corrected across
+**17** tests, not 27 — because a family is the set of
+tests a reader scans together, and pooling three runs into one family would correct each
+run for tests it did not perform. The short version is that **the four surviving results in
+run 2 are all about session setup, none about speech** — and "Voice Live serves
+gpt-realtime-2 faster than the Foundry deployment" is **not** among the findings.
 
 **Correction is not a substitute for power.** Holm makes the reported claims trustworthy;
 it does not make the borderline ones false. The −46 ms `ttfa` effect for
@@ -375,10 +561,16 @@ Before the check existed they were silently measured — with a hangover **50 ms
 every arm they were being compared against**, which biases the gateway toward looking
 faster. That is a systematic bias in the direction of the result, and it is a plausible
 part of why run 1's gateway point estimates were negative (−18, −19 ms) where run 2's are
-+12 and −100. Neither run's comparison survives correction either way, so the conclusion is
++12 and −100. No run's comparison survives correction either way, so the conclusion is
 unchanged; but the earlier point estimates should be read as slightly flattering to the
 gateway, and this is exactly the class of error that only shows up once you check the echo
 rather than the request.
+
+**The race did not recur on turn detection in run 3**: all 25 `native-gateway` turns passed
+the detector check and none was rejected. That is not evidence the race is fixed — it is a
+race, and run 2 lost it twice in 25 — but it does mean run 3's native pair carries none of
+the bias described above, which is one more reason it is the run the headline is anchored
+on.
 
 **A second control diverges the same way.** Every arm's
 `session.updated` echo is now checked field by field against what was asked for, and
@@ -389,8 +581,10 @@ aborts the turn instead of being recorded and ignored. That check found the
 deployment (`AZURE_REALTIME_TRANSCRIPTION_MODEL`), which races with the client's value.
 
 In run 2 the gateway's `whisper` deployment won on **22 of 25 turns**; over 10 consecutive
-sessions in a separate probe it won 8 times. So the STT model on that arm is not merely
-different from the direct arm — it varies session to session.
+sessions in a separate probe it won 8 times; in run 3 it won on **all 25**, which leaves
+that run with no usable `transcript_ms` pair on the native comparison at all. So the STT
+model on that arm is not merely different from the direct arm — it varies session to
+session, and how often it wins varies run to run.
 
 Rather than note this and carry on, those turns are now **excluded from
 `transcript_ms`**: a confirmed-different control is worse than an unconfirmable one, and an
@@ -449,6 +643,7 @@ Neither detector can be moved onto the other brain on the Foundry surface.
 
 ### Split rate — the detector, decisively
 
+<!-- data: vad-split2 -->
 | arm | brain | detector | turns split |
 |---|---|---|---:|
 | `native-direct` | gpt-realtime-2 | `server_vad` | **10/10** |
@@ -507,14 +702,27 @@ degrades reply quality. The first is a barge-in study; the second is task #6.
 
 Paired on `en-short`, where nothing splits on any arm:
 
-| comparison | median Δ ttfa | 95% CI | p raw / Holm |
-|---|---:|---|---:|
-| `vlnat-azsemantic` − `vl-native-brain`<br><sub>Azure semantic vs server VAD, brain and stack held constant</sub> | **−72 ms** | [−600, +255] | 1.000 / 1.000 |
-| `nat-semantic` − `native-direct`<br><sub>OpenAI semantic vs server VAD, brain held constant</sub> | **+662 ms** | [+248, +3425] | 0.021 / 0.645 |
-| `vlmini-azsemantic` − `vl-direct`<br><sub>Azure semantic vs server VAD, brain gpt-4.1-mini</sub> | +177 ms | [−69, +260] | 0.344 / 1.000 |
+<!-- data: vad-ttfa; metric: ttfa_ms -->
+| comparison | median Δ ttfa | 95% CI | **p10 / p90 Δ** | slower / faster | p raw / Holm |
+|---|---:|---|---:|---:|---:|
+| `vlnat-azsemantic` − `vl-native-brain`<br><sub>Azure semantic vs server VAD, brain and stack held constant</sub> | **−72 ms** | [−600, +255] | −1025 / +489 | **5 / 5** | 1.000 / 1.000 |
+| `nat-semantic` − `native-direct`<br><sub>OpenAI semantic vs server VAD, brain held constant</sub> | **+662 ms** | [+248, +3425] | **−78 / +3651** | **9 / 1** | 0.021 / 0.730 |
+| `vlmini-azsemantic` − `vl-direct`<br><sub>Azure semantic vs server VAD, brain gpt-4.1-mini</sub> | +177 ms | [−69, +260] | −244 / +318 | 7 / 3 | 0.344 / 1.000 |
+
+> Corrected within this run's family of **36** tests (4 comparisons × 9 metrics). The Holm
+> value on the middle row was published as 0.645, from a family of 31 — the same staleness
+> the main table above was corrected for when `session_ready_ms` joined the metric family,
+> missed here because this block is analysed separately. It changes nothing: 0.021 raw is
+> not significant at either family size, and the finding rests on the p90 either way. Found
+> by `check_report_tables.py` once it stopped skipping rows it did not recognise.
+
+Note the sign counts: Azure's detector on the same brain and stack is 5 slower / 5 faster —
+a coin flip. OpenAI's is 9 slower / 1 faster **and** its losses reach +3651 ms against a
+best case of −78 ms. Asymmetric in both, which is why it is the one that hurts.
 
 `speech_stopped_ms` shows the mechanism directly — this is the detector's own decision time:
 
+<!-- data: vad-ttfa; metric: speech_stopped_ms -->
 | arm | detector | p50 | p90 | IQR |
 |---|---|---:|---:|---:|
 | `native-direct` | `server_vad` | 736 | 760 | 59 |
@@ -555,9 +763,10 @@ multi-second end-of-turn tail, which is worse on a phone call.
 
 ## Cost
 
-Both main runs cost about **$2** each (125 turns, ~25 minutes wall clock), the VAD
-follow-up **$1.61** (120 turns), and the split re-run **$0.9** — roughly **$6.50** across
-everything. Caller-audio synthesis was a one-off four requests to Azure Speech.
+Both five-arm runs cost about **$2** each (125 turns, ~25 minutes wall clock), the VAD
+follow-up **$1.61** (120 turns), the split re-run **$0.9**, and the post-fix replication
+about **$1.60** (100 turns) — roughly **$8** across everything. Caller-audio synthesis was
+a one-off four requests to Azure Speech.
 
 Worth noting for its own sake: **gpt-realtime-2 costs ~4× what the Voice Live gpt-4.1-mini
 tier costs** for the same conversation, on top of being ~550 ms slower to first audio.
@@ -575,4 +784,21 @@ export AZURE_SPEECH_KEY=$(az cognitiveservices account keys list \
   -n openfon-speech -g openfon-rg --query key1 -o tsv)
 ./venv/bin/python bench.py --rounds 25 --tag full
 ./venv/bin/python analyze.py results/turns-<stamp>-full.jsonl
+```
+
+The post-fix replication is the same command with two arms dropped:
+
+```bash
+./venv/bin/python bench.py --rounds 25 --tag full3 \
+  --arms native-direct,native-gateway,vl-direct,vl-gateway
+```
+
+**Without spending anything**: the five runs behind this report — `full` (run 1), `full2`
+(run 2), `full3` (run 3, the post-fix replication the proxy tables are anchored on),
+`vad-ttfa` and `vad-split2` — are committed under `bench/realtime/published/`,
+and each table names the one it quotes in an HTML comment above it. Re-derive every figure
+with no credentials, no network and no venv:
+
+```bash
+python3 bench/realtime/check_report_tables.py
 ```
