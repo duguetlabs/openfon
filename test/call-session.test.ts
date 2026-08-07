@@ -618,12 +618,22 @@ describe('realtime session payload', () => {
     expect(await turnDetection('gpt-realtime-2')).toEqual(TUNED_SERVER_VAD);
   });
 
-  it('keeps the 2.1 tiers on server VAD too', async () => {
-    // Both split 12/12 under server_vad, exactly like gpt-realtime-2. Semantic
-    // VAD would take 2.1 to 0/12 but only takes 2.1-mini to 4/12 — a mitigation
-    // rather than a fix on mini, and on 2.1 still subject to the same
-    // end-of-turn tail that rules it out on gpt-realtime-2.
+  it('keeps gpt-realtime-2.1 on server VAD despite a null median', async () => {
+    // The trap this test exists for. Semantic VAD fixes 2.1's splitting outright
+    // (12/12 -> 0/12) and looks free at the median: +106 ms paired, null. It is
+    // not free — the paired distribution is bimodal, p90 +3490 ms, so about one
+    // turn in five costs 3.5 s, and `speech_stopped_ms` p90 is 4442 ms against
+    // server VAD's 805. That is the same tail gpt-realtime-2 is rejected for
+    // (4512 ms), measured the same way.
+    //
+    // This row was briefly shipped as semantic_vad on the median alone. Anyone
+    // changing it back should have a p90 in hand, not a p50.
     expect(await turnDetection('gpt-realtime-2.1')).toEqual(TUNED_SERVER_VAD);
+  });
+
+  it('keeps 2.1-mini on server VAD, where the same detector does not even work', async () => {
+    // Semantic VAD only reaches 4/12 on mini — still one turn in three — while
+    // costing +734 ms and a 5123 ms p90, the worst of the three tiers.
     expect(await turnDetection('gpt-realtime-2.1-mini')).toEqual(TUNED_SERVER_VAD);
   });
 
