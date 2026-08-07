@@ -30,20 +30,33 @@ from pathlib import Path
 
 import websockets
 
-from engines import ARMS, connect_kwargs, load_prompt
-from events import function_call, redact, response_cancelled
+from engines import ARMS, connect_kwargs, load_prompt, open_log, preflight_logs
+from events import (function_call, redact, response_cancelled, scenario_filter,
+                    scenario_ids)
 
 FRAME_MS = 40                       # 40 ms frames ~= a realistic RTP cadence
 LANG_CODE = {"en_US": "en", "de_DE": "de"}
 MAX_TURN_WAIT_S = 25
 MAX_SESSION_S = 180                 # hard cap so a runaway session cannot bill forever
+# Outer wall-clock bound on a whole scenario. MAX_SESSION_S is only consulted
+# between turns, so it cannot end a call that is stuck *inside* one. This is the
+# belt-and-braces bound: it does not care which step hung, only that the whole
+# thing takes finite time. Two hangs have already been found in this harness by
+# two different routes — an unbounded connect, and a service that accepted a
+# connection and went silent — so the next one is assumed rather than predicted.
+SCENARIO_HARD_TIMEOUT_S = 300
+
+
+# ffmpeg also runs synchronously on the event-loop thread. Same reasoning as
+# AZ_CLI_TIMEOUT_S: while it blocks, asyncio cannot run a timeout callback.
+FFMPEG_TIMEOUT_S = 120
 
 
 def pcm24k(path: Path) -> bytes:
     return subprocess.run(
         ["ffmpeg", "-loglevel", "error", "-i", str(path),
          "-ac", "1", "-ar", "24000", "-f", "s16le", "-"],
-        check=True, capture_output=True,
+        check=True, capture_output=True, timeout=FFMPEG_TIMEOUT_S,
     ).stdout
 
 
@@ -340,20 +353,98 @@ async def main() -> None:
     ap.add_argument("--only", help="comma-separated scenario ids")
     ap.add_argument("--out", required=True)
     ap.add_argument("--logdir", default="logs")
+    ap.add_argument("--force-logs", action="store_true",
+                    help="replace existing raw logs (they are the only\n                          artifact a result can be re-scored from)")
+    ap.add_argument("--preflight-logs", action="store_true",
+                    help="check this invocation's raw logs for collisions and\n                          exit, without connecting or writing anything")
     a = ap.parse_args()
 
     failed: list[str] = []
     spec = json.loads(Path(a.scenarios).read_text())
-    want = {s.strip() for s in a.only.split(",")} if a.only else None
+    # Validated before anything is spent; see events.scenario_filter for why an
+    # unknown id is an error rather than a filter, and why it lives there.
+    # `scenario_ids` first, because `--only` is validated against a *set* of the
+    # fixture's ids and a set is where a repeated id stops being visible.
+    try:
+        known = scenario_ids(spec["scenarios"], a.scenarios)
+    except ValueError as e:
+        sys.exit(str(e))
+    try:
+        want = scenario_filter(a.only, set(known))
+    except ValueError as e:
+        sys.exit(str(e).replace("the fixture", a.scenarios))
     Path(a.logdir).mkdir(parents=True, exist_ok=True)
+
+    if a.arm not in ARMS:
+        sys.exit(f"--arm {a.arm!r} is not a known arm. Known: "
+                 f"{', '.join(sorted(ARMS))}")
+
+    # Checked here so `--preflight-logs` means "this invocation is safe to
+    # start", not merely "its logs are free". Clearing an unknown arm or a
+    # missing audio tree lets run_all.sh truncate the results and only then
+    # discover the problem — the destroy-then-recreate failure the log
+    # preflight exists to stop, arriving through a different input.
+    # Same indexing as the runner's `enumerate(turns_meta)` below — zero-based.
+    missing = [str(p) for sc in spec["scenarios"]
+               if not want or sc["id"] in want
+               for ti in range(len(sc["turns"]))
+               if not (p := Path(a.audio) / sc["id"] / f"t{ti:02d}.wav").exists()]
+    if missing:
+        sys.exit(f"{len(missing)} caller audio file(s) are missing under "
+                 f"--audio {a.audio}:\n  " + "\n  ".join(missing[:10]) +
+                 ("\n  ..." if len(missing) > 10 else "") +
+                 "\nA scenario whose audio is absent cannot be run; it would "
+                 "be recorded as an engine failure.")
+
+    # Every log this invocation will write, checked before the first call is
+    # placed rather than one at a time as each scenario starts. See
+    # engines.preflight_logs: a collision on scenario 7 aborts after six have
+    # been billed, and run_all.sh truncates the result file before any runner
+    # starts.
+    # One entry per scenario this invocation will run, not per distinct log
+    # path: `dict.values()` collapses a collision before the preflight can see
+    # it, which is how a repeated fixture id used to reach the run. The ids are
+    # unique by `scenario_ids` above; passing the selection rather than the map
+    # keeps that true for any future caller too.
+    selected = [sid for sid in known if not want or sid in want]
+    logs = {sid: Path(a.logdir) / f"sc-{a.arm}-{sid}-t{a.trial}.jsonl"
+            for sid in selected}
+    preflight_logs([logs[sid] for sid in selected], a.force_logs)
+    if a.preflight_logs:
+        return
 
     for sc in spec["scenarios"]:
         if want and sc["id"] not in want:
             continue
-        logp = Path(a.logdir) / f"sc-{a.arm}-{sc['id']}-t{a.trial}.jsonl"
-        with open(logp, "w") as log:
+        logp = logs[sc["id"]]
+        with open_log(logp, a.force_logs) as log:
+            t_start = time.time()
             try:
-                r = await run_scenario(a.arm, sc, Path(a.audio), a.trial, log)
+                r = await asyncio.wait_for(
+                    run_scenario(a.arm, sc, Path(a.audio), a.trial, log),
+                    timeout=SCENARIO_HARD_TIMEOUT_S)
+            except asyncio.TimeoutError:
+                # An inner `wait_for` — the 10 s first-receive, the 30 s open
+                # timeout — raises the same TimeoutError and lands here too.
+                # Reporting every one of them as "hard timeout after 300s"
+                # misstates both the cause and the duration, which sends the
+                # next person debugging this to the wrong bound. Distinguish by
+                # how long it actually took, and always report the real elapsed.
+                elapsed = time.time() - t_start
+                which = ("outer wall-clock bound"
+                         if elapsed >= SCENARIO_HARD_TIMEOUT_S - 1
+                         else "an inner step timeout, not the outer bound")
+                r = {"arm": a.arm, "trial": a.trial, "scenario": sc["id"],
+                     "lang": sc["lang"], "intent": sc["intent"],
+                     "error": f"timeout after {elapsed:.1f}s ({which})",
+                     "turns": [], "transcript": [], "tool_calls": [],
+                     "audio_in_s": 0.0, "audio_out_bytes": 0}
+            except subprocess.TimeoutExpired as e:
+                r = {"arm": a.arm, "trial": a.trial, "scenario": sc["id"],
+                     "lang": sc["lang"], "intent": sc["intent"],
+                     "error": f"subprocess timeout: {e}",
+                     "turns": [], "transcript": [], "tool_calls": [],
+                     "audio_in_s": 0.0, "audio_out_bytes": 0}
             except Exception as e:  # noqa: BLE001
                 r = {"arm": a.arm, "trial": a.trial, "scenario": sc["id"],
                      "lang": sc["lang"], "intent": sc["intent"],

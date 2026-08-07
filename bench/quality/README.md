@@ -78,16 +78,102 @@ DATA=/path/to/data
 # 3. Validate every arm's session payload before spending anything.
 .venv/bin/python bench/quality/probe_session.py --wav $DATA/conditions/clean/en_us/en_us-000.wav
 
-# 4. Run. Arms and conditions are strictly serialised.
-cd bench/quality && DATA=$DATA PY=../../.venv/bin/python ./run_all.sh
+# 4. Run — ALWAYS to a new directory. run_all.sh truncates $OUT/results/*.jsonl,
+#    and OUT defaults to bench/quality, so omitting it would destroy the
+#    committed data both reports quote. The script now refuses rather than
+#    letting that happen; set OUT and it proceeds.
+#
+#    Set OUT once and use $OUT in EVERY path below. A bare `results/...` here
+#    resolves against bench/quality, so it would score the committed data and
+#    then overwrite the committed CSVs with the result — the same destruction
+#    the truncation guard prevents in step 4, arriving through path resolution
+#    instead of a truncating command.
+cd bench/quality
+export OUT=/tmp/mybench
+OUT=$OUT DATA=$DATA PY=../../.venv/bin/python ./run_all.sh
 
-# 5. Score.
-python score_asr.py   --hyp results/asr.jsonl --expect-clips 25 --out results/asr_scores.csv
-python score_slots.py --runs results/scenarios.jsonl --out results/slots.csv
-KATALEPTIC_KEY=... python judge.py --runs results/scenarios.jsonl --out results/judge.csv --seed 1
-KATALEPTIC_KEY=... python judge.py --runs results/scenarios.jsonl --out results/judge_seed2.csv --seed 2
-python summarize.py --slots results/slots.csv --judge results/judge.csv \
-  --scenarios fixtures/scenarios.json --trials 3 --out results/summary.csv
+#    Its defaults reproduce the MERGED report only: three ASR arms x 2 langs x
+#    8 conditions x 25 clips = 1200 ASR rows, and five scenario arms x 11
+#    scenarios x 3 trials = 165 scenario runs.
+
+# 5. Score the base pass, and snapshot it as the merged report's own results.
+#    Do this BEFORE appending the extension. The 2.1 run re-judged every arm, so
+#    the merged report's figures are not reproducible from the combined pass —
+#    which is why check_report.py looks for results/main-report/. Skip this and
+#    step 7 cannot verify the five-arm report at all.
+#
+#    The scorers take their expected matrix from these arguments, never from the
+#    rows they are scoring: an axis inferred from the data cannot be missing
+#    from it, so a whole arm or condition that never produced a row would be
+#    certified complete. Declare them, and a gap is a gap.
+CONDS=clean,cafe_snr20,cafe_snr10,cafe_snr5,cafe_snr0,tel,tel_cafe_snr10,tel_loss3
+ASR_BASE=vl-gpt41mini,vl-gpt41mini-dns,native-gpt-realtime-2
+ASR_ALL=$ASR_BASE,native-gpt-realtime-21,native-gpt-realtime-21-mini
+SC_BASE=vl-gpt41mini,vl-gpt41mini-dns,vl-gpt41mini-semvad,vl-native-brain,native-gpt-realtime-2
+SC_ALL=$SC_BASE,native-gpt-realtime-21,native-gpt-realtime-21-mini,vl-native-brain-21
+
+score() {  # score <results-dir> <asr-arms> <scenario-arms> [judge-arms]
+  local R="$1" AARMS="$2" SARMS="$3" ARMS="${4:-}"
+  python score_asr.py   --hyp $R/asr.jsonl --expect-clips 25 --allow-incomplete \
+                        --expect-arms "$AARMS" --expect-langs en_us,de_de \
+                        --expect-conditions "$CONDS" --out $R/asr_scores.csv
+  python score_slots.py --runs $R/scenarios.jsonl --out $R/slots.csv
+  KATALEPTIC_KEY=... python judge.py --runs $R/scenarios.jsonl \
+                        --out $R/judge.csv --seed 1
+  KATALEPTIC_KEY=... python judge.py --runs $R/scenarios.jsonl \
+                        --out $R/judge_seed2.csv --seed 2 ${ARMS:+--arms "$ARMS"}
+  python summarize.py --slots $R/slots.csv --judge $R/judge.csv \
+    --scenarios fixtures/scenarios.json --trials 3 --expect-arms "$SARMS" \
+    --out $R/summary.csv
+}
+score $OUT/results "$ASR_BASE" "$SC_BASE"
+
+#    The noise-suppression probes. run_all.sh does not run these — they are a
+#    separate experiment, not part of the matrix — but the merged report's DNS
+#    tables are recomputed from their raw output, so step 7 cannot verify that
+#    report without them. Four files, ~1.5 audio-minutes each.
+python probe_dns.py --lang en_us --n 50 --data $DATA/conditions \
+                    --out $OUT/results/dns_probe_en.jsonl
+for c in clean cafe_snr10 cafe_snr5; do
+  python probe_dns.py --lang de_de --n 50 --data $DATA/conditions \
+                      --condition $c --legs off,deep \
+                      --out $OUT/results/dns_probe_de_$c.jsonl
+done
+
+mkdir -p $OUT/results/main-report
+cp $OUT/results/{summary,summary_per_run,slots,judge,judge_seed2}.csv \
+   $OUT/results/asr_scores{,_summary}.csv \
+   $OUT/results/dns_probe_*.jsonl $OUT/results/main-report/
+
+# 6. Append the addendum's arms, then re-score the combined matrix.
+#    A deliberately smaller matrix: six of the eight conditions, and only the
+#    nine *scored* scenarios (the two barge-in ones are excluded from scoring,
+#    so they were not re-run). APPEND=1 adds to the run above instead of
+#    truncating it.
+OUT=$OUT DATA=$DATA PY=../../.venv/bin/python TRACK=a APPEND=1 \
+  ASR_ARMS="native-gpt-realtime-21 native-gpt-realtime-21-mini" \
+  CONDITIONS="clean,cafe_snr10,cafe_snr5,cafe_snr0,tel,tel_cafe_snr10" \
+  ./run_all.sh                                            # +600 ASR rows
+
+OUT=$OUT DATA=$DATA PY=../../.venv/bin/python TRACK=b APPEND=1 \
+  SC_ARMS="native-gpt-realtime-21 native-gpt-realtime-21-mini vl-native-brain-21" \
+  ONLY="book-de-01,book-en-01,codeswitch-01,emergency-de-01,holiday-de-01,hours-de-01,hours-en-01,message-de-01,reschedule-en-01" \
+  ./run_all.sh                                            # +81 scenario runs
+
+#    Totals: 1200+600 = 1800 ASR rows, 165+81 = 246 scenario runs, which is
+#    what results/ holds today. The matrix is asymmetric by design, so
+#    score_asr.py needs --allow-incomplete; absent cells are emitted with n=0
+#    and complete=0 rather than omitted, so the gaps stay visible in the CSV.
+#
+#    Seed 2 covers SEVEN arms: the second judge pass predates vl-native-brain-21
+#    and the addendum's reliability figures are computed over the 219 rows the
+#    two passes share. Without --arms it judges all 246 and cannot reproduce
+#    its own denominator.
+score $OUT/results "$ASR_ALL" "$SC_ALL" \
+  "native-gpt-realtime-2,native-gpt-realtime-21,native-gpt-realtime-21-mini,vl-gpt41mini,vl-gpt41mini-dns,vl-gpt41mini-semvad,vl-native-brain"
+
+# 7. Check both reports against the run.
+python check_report.py --results $OUT/results
 
 # What every completeness check compares, and how it can be fooled:
 #   bench/quality/COMPLETENESS.md
@@ -112,6 +198,33 @@ disagreement rate is the reliability number, and it belongs in the report.
 
 `summarize.py` reports **pass^k** — scenarios an arm got right on *every* trial —
 next to the mean. A single-run pass rate rewards luck.
+
+### Checking the reports against the results
+
+```sh
+python3 check_report.py        # exits non-zero and lists every disagreement
+```
+
+Every figure in `docs/research/voice-engine-quality-*.md` is compared against the
+CSVs it was written from — Track B metrics against `summary.csv`, Track A WER and
+empty-transcript counts against `asr_scores.csv`, SNR₅₀ against
+`asr_scores_summary.csv`, judge agreement recomputed from both judge passes, and
+the headline spend against the cost table. Three review rounds found the same defect — a sentence
+correct when written and stale after the study was extended — and prose does not
+fail CI on its own. This makes it fail: `test_scoring.py` runs it.
+
+`RESULTS_FOR` maps each report to its own pass *and* to the number of table cells
+it must resolve. The 2.1 run re-judged every arm and overwrote `results/` in
+place, so the merged report is checked against `results/main-report/`, the pass
+that produced it. **A re-run that changes existing arms' numbers should write to
+a new directory and add a mapping**, not overwrite; a report whose data has been
+overwritten cannot be verified by anyone, including you. A report with no mapping
+is a failure, not a skip.
+
+The cell count is enforced **per report**, not across the run — otherwise two
+documents mask each other and one can silently stop being checked while the
+totals still look healthy. If you remove a table on purpose, lower that report's
+number in the same commit.
 
 ## Things that will bite you
 
@@ -150,9 +263,11 @@ score_asr.py      WER/CER, dWER, SNR50
 score_slots.py    programmatic Track B scoring
 judge.py          blind LLM judge, soft dimensions only
 summarize.py      per-arm aggregation incl. pass^k
+check_report.py   verifies the reports against the CSVs they quote
 gen_prompt.ts     freezes the real buildSystemPrompt output
 fixtures/         business fixture, scenarios, frozen prompt
 prepare/          dataset download + conditioning recipes
-results/          CSV/JSONL outputs
+results/          CSV/JSONL outputs (current pass)
+results/main-report/  the merged report's pass, which the 2.1 run overwrote
 logs/             raw event logs — results can be re-scored without re-spending
 ```

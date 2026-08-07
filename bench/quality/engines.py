@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -57,6 +58,7 @@ def azure_key() -> str:
                 ["az", "cognitiveservices", "account", "keys", "list",
                  "-n", AZURE_ACCOUNT, "-g", AZURE_RG, "--query", "key1", "-o", "tsv"],
                 check=True, capture_output=True, text=True,
+                timeout=AZ_CLI_TIMEOUT_S,
             ).stdout.strip()
     return _KEY_CACHE["key"]
 
@@ -80,6 +82,17 @@ class Arm:
     # production-faithful setting. Varying it per arm makes the confound
     # explicit and lets us hold it constant where it matters.
     vad_type: str = "server_vad"
+    # Can this arm run Track A at all? `session_asr` disables turn detection so
+    # each clip is committed by hand, and Voice Live refuses that on the
+    # gpt-realtime brains for the reason quoted above — the same message, from
+    # the other direction: it will not accept `turn_detection: None` beside
+    # azure-speech transcription. That refusal is a documented property of the
+    # arm, not a fault, so it is declared here rather than discovered by sending
+    # a payload the service is known to reject. `run_all.sh` excludes these arms
+    # from ASR_ARMS for exactly this reason; `probe_session.py` reads this flag
+    # to decide which payload to validate an arm with, so its pre-flight cannot
+    # fail an arm over a combination the study never uses.
+    asr_manual_commit: bool = True
     usd_per_min: float = 0.0
     notes: str = ""
 
@@ -242,6 +255,7 @@ ARMS: dict[str, Arm] = {
         brain="gpt-realtime-2", stack="voice-live", voice=VOICE_AZURE,
         noise_reduction=None, echo_cancellation=False,
         vad_type="azure_semantic_vad_multilingual",
+        asr_manual_commit=False,
         usd_per_min=0.07,
         notes="Voice Live serving the native brain, front-end off to match "
               "vl-gpt41mini. Separates 'better brain' from 'better serving stack'. "
@@ -258,6 +272,41 @@ ARMS: dict[str, Arm] = {
               "that vl-native-brain is forced onto — and that the Kataleptic HD "
               "tier actually ships. Makes the brain comparison VAD-neutral.",
     ),
+    # gpt-realtime-2.1 and its mini, both deployed 2026-07-07 on duguet-labs-eu.
+    # Same Foundry GA surface as gpt-realtime-2, so the only variable is the model.
+    "vl-native-brain-21": Arm(
+        name="vl-native-brain-21", dialect="flat", model="gpt-realtime-2.1",
+        brain="gpt-realtime-2.1", stack="voice-live", voice=VOICE_AZURE,
+        noise_reduction=None, echo_cancellation=False,
+        vad_type="azure_semantic_vad_multilingual",
+        asr_manual_commit=False,
+        usd_per_min=0.07,
+        notes="Voice Live serving gpt-realtime-2.1 (reported as "
+              "gpt-realtime-2.1-global-standard). The candidate single tier: "
+              "azure-speech recognition with a gpt-realtime brain. Semantic VAD "
+              "is forced — Voice Live rejects server_vad for gpt-realtime brains "
+              "— so compare slot capture against vl-gpt41mini-semvad, not "
+              "vl-gpt41mini.",
+    ),
+    "native-gpt-realtime-21": Arm(
+        name="native-gpt-realtime-21", dialect="ga", model="gpt-realtime-2.1",
+        brain="gpt-realtime-2.1", stack="foundry-native", voice=VOICE_OPENAI,
+        noise_reduction=None, echo_cancellation=False,
+        usd_per_min=0.07,
+        notes="Successor to gpt-realtime-2 on the same surface. The question is "
+              "whether it keeps 2's groundedness while closing the slot-capture "
+              "and latency gaps to Voice Live.",
+    ),
+    "native-gpt-realtime-21-mini": Arm(
+        name="native-gpt-realtime-21-mini", dialect="ga",
+        model="gpt-realtime-2.1-mini",
+        brain="gpt-realtime-2.1-mini", stack="foundry-native", voice=VOICE_OPENAI,
+        noise_reduction=None, echo_cancellation=False,
+        usd_per_min=0.035,
+        notes="The interesting one: if it reaches gpt-4.1-mini's latency and cost "
+              "with gpt-realtime-class groundedness, the split recommendation "
+              "collapses into a single default.",
+    ),
     "native-gpt-realtime-2": Arm(
         name="native-gpt-realtime-2", dialect="ga", model="gpt-realtime-2",
         brain="gpt-realtime-2", stack="foundry-native", voice=VOICE_OPENAI,
@@ -269,11 +318,125 @@ ARMS: dict[str, Arm] = {
 }
 
 
+# A stalled handshake must not hang the run. `websockets.connect` waits forever
+# by default: a Voice Live session that accepted the TCP connection and then
+# never sent `session.created` stopped a run dead for 13 minutes with a
+# zero-byte log and no error. `open_timeout` bounds the handshake; `ping_*`
+# make a silently dead connection surface as an exception rather than a stall.
+CONNECT_TIMEOUT_S = 30
+# `az` runs synchronously on the event-loop thread, so a stalled CLI blocks the
+# loop itself and no asyncio timeout can fire while it is stuck. Its own timeout
+# is the only thing that bounds it.
+AZ_CLI_TIMEOUT_S = 60
+PING_INTERVAL_S = 20
+PING_TIMEOUT_S = 20
+
+
+def transport_kwargs() -> dict[str, Any]:
+    """Transport bounds only — deliberately free of credentials.
+
+    Split from `connect_kwargs` because that resolves the Azure key eagerly by
+    shelling out to `az`, so merely *inspecting* the timeout policy required a
+    cloud login. That failed on a CI runner and would fail for anyone cloning
+    the repo without this Azure setup. The timeout policy is a property of the
+    harness, not of whoever is authenticated.
+    """
+    return {"max_size": 32 * 1024 * 1024,
+            "open_timeout": CONNECT_TIMEOUT_S,
+            "ping_interval": PING_INTERVAL_S,
+            "ping_timeout": PING_TIMEOUT_S}
+
+
 def connect_kwargs(arm: Arm) -> dict[str, Any]:
-    return {"additional_headers": {"api-key": azure_key()}, "max_size": 32 * 1024 * 1024}
+    return {"additional_headers": {"api-key": azure_key()}, **transport_kwargs()}
 
 
 def load_prompt() -> dict[str, Any]:
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, "fixtures", "riverside-prompt.json")) as f:
         return json.load(f)
+
+
+def log_is_populated(path) -> bool:
+    return os.path.exists(path) and os.path.getsize(path) > 0
+
+
+# A raw-log collision exits with this rather than the usual 1, so `run_all.sh`
+# can tell "these logs are populated" apart from "the preflight could not run at
+# all" — a missing interpreter, a bad argument, an import error. Reporting the
+# second as the first sends the next person to the wrong problem, which is the
+# same defect as a timeout naming the wrong bound. Deliberately not 1, 2 (what
+# argparse exits with) or 3.
+LOG_COLLISION_EXIT = 97
+
+
+def preflight_logs(paths, force: bool = False) -> None:
+    """Refuse a run whose raw logs already hold events, *before* it starts.
+
+    `open_log` guards each file at the moment the runner opens it, which is one
+    step short of the property it was reaching for. Two consequences, both paid
+    for in data:
+
+    * A runner asked for several units opens the second log after the first has
+      been billed, so a collision there discards transcripts already paid for.
+    * `run_all.sh`'s `FORCE=1` path truncates the result file first and never
+      forwarded a log-replacement option, so this guard fired *after* the
+      results it was meant to replace were gone, and the replacement could not
+      be produced. Destroy-then-recreate is only safe when the recreate cannot
+      fail; there it failed by construction.
+
+    Every colliding target is listed, not just the first: discovering them one
+    aborted run at a time is the same wasted-work loop in slow motion.
+    """
+    # One target per unit of work. A caller that maps two units onto the same
+    # path has a run that collides with *itself*, and this preflight cannot see
+    # it by looking at the filesystem: the file is checked once, found free, and
+    # the second unit then overwrites what the first paid for. Callers that
+    # deduplicate before calling (a dict keyed by unit) hide the collision here,
+    # so the input is required to enumerate units, not files.
+    paths = list(paths)
+    names = [os.path.abspath(os.fspath(p)) for p in paths]
+    if repeated := sorted({n for n in names if names.count(n) > 1}):
+        print(f"refusing to start: {len(repeated)} raw log path(s) are the "
+              "target of more than one unit of this run:\n  "
+              + "\n  ".join(repeated) +
+              "\nThe run would overwrite its own output, and checking the "
+              "filesystem cannot detect that — each path is free exactly once. "
+              "Two units named the same thing; fix the selection.",
+              file=sys.stderr)
+        raise SystemExit(LOG_COLLISION_EXIT)
+    bad = [str(p) for p in paths if not force and log_is_populated(p)]
+    if bad:
+        print(f"refusing to start: {len(bad)} raw log(s) this run would replace "
+              "already hold events:\n  " + "\n  ".join(bad) +
+              "\nRaw logs are the only artifact a result can be re-scored from "
+              "without paying for the call again. Point --logdir somewhere new, "
+              "or pass --force-logs to replace them.", file=sys.stderr)
+        raise SystemExit(LOG_COLLISION_EXIT)
+
+
+def open_log(path, force: bool = False):
+    """Open a raw event log for writing, refusing to destroy a populated one.
+
+    The runners open their log with mode "w" *before* doing any work, and
+    `--logdir` defaults to `logs` — the committed directory. So any invocation
+    from `bench/quality` that names an arm/scenario/trial already on disk empties
+    that log, and if the run then fails (missing audio, no credentials, a
+    validation exit) the file stays empty.
+
+    That is not hypothetical: `sc-vl-gpt41mini-book-de-01-t1.jsonl` was emptied
+    exactly this way while verifying that a new test failed against the old
+    behaviour — the check ran the real runner against the real log directory.
+    The result row still recorded its `end_call`, so the run became
+    unre-scorable and `rederive_tools.py` reported a log/result disagreement.
+
+    `run_all.sh` guards `results/`; nothing guarded `logs/`, and the logs are the
+    only artifact from which results can be rebuilt without paying again.
+    """
+    if not force and log_is_populated(path):
+        raise SystemExit(
+            f"refusing to truncate {path}, which already holds "
+            f"{os.path.getsize(path)} bytes. Raw logs are the only artifact a "
+            f"result can be re-scored from without re-running the call. Pass "
+            f"--logdir somewhere new, or --force-logs to replace it.")
+    return open(path, "w")

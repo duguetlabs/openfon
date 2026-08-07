@@ -1,6 +1,10 @@
 arm,lang,wer_clean,wer_cafe10,wer_tel,wer_tel_cafe10,wer_tel_loss3,snr50_db,d_cafe10,d_tel,d_tel_cafe10,d_tel_loss3
 native-gpt-realtime-2,de_de,3.31,4.29,3.7,6.63,5.07,7.3,0.98,0.39,3.32,1.76
 native-gpt-realtime-2,en_us,4.47,5.55,6.08,7.69,8.23,3.4,1.08,1.61,3.22,3.76
+native-gpt-realtime-21,de_de,3.31,4.29,3.7,6.63,,7.3,0.98,0.39,3.32,
+native-gpt-realtime-21,en_us,4.47,5.55,6.08,7.69,,3.4,1.08,1.61,3.22,
+native-gpt-realtime-21-mini,de_de,3.31,4.29,3.7,6.63,,7.3,0.98,0.39,3.32,
+native-gpt-realtime-21-mini,en_us,4.47,5.55,6.08,7.69,,3.4,1.08,1.61,3.22,
 vl-gpt41mini,de_de,3.7,4.68,4.29,5.07,5.26,5.9,0.98,0.59,1.37,1.56
 vl-gpt41mini,en_us,4.83,5.55,5.72,8.59,8.77,2.0,0.72,0.89,3.76,3.94
 vl-gpt41mini-dns,de_de,3.9,7.21,3.7,9.16,4.68,9.6,3.31,-0.2,5.26,0.78

@@ -25,11 +25,15 @@ from pathlib import Path
 
 import websockets
 
-from engines import ARMS, connect_kwargs
+from engines import ARMS, connect_kwargs, open_log, preflight_logs
 
 class CommitDesync(RuntimeError):
     """The commit stream fell out of sync; the session must not be reused."""
 
+
+# Outer wall-clock bound on a whole batch — see run_scenarios.py for why this
+# exists in addition to the per-receive timeouts.
+BATCH_HARD_TIMEOUT_S = 900
 
 MARKER = "openfon-bench-asr"
 FRAME_MS = 200
@@ -38,11 +42,16 @@ LANG_CODE = {"en_us": "en", "de_de": "de", "fr_fr": "fr", "es_419": "es",
              "da_dk": "da", "fi_fi": "fi"}
 
 
+# ffmpeg also runs synchronously on the event-loop thread. Same reasoning as
+# AZ_CLI_TIMEOUT_S: while it blocks, asyncio cannot run a timeout callback.
+FFMPEG_TIMEOUT_S = 120
+
+
 def pcm24k(path: Path) -> bytes:
     return subprocess.run(
         ["ffmpeg", "-loglevel", "error", "-i", str(path),
          "-ac", "1", "-ar", "24000", "-f", "s16le", "-"],
-        check=True, capture_output=True,
+        check=True, capture_output=True, timeout=FFMPEG_TIMEOUT_S,
     ).stdout
 
 
@@ -196,6 +205,10 @@ async def main() -> None:
     ap.add_argument("--n", type=int, default=30)
     ap.add_argument("--out", required=True)
     ap.add_argument("--logdir", default="logs")
+    ap.add_argument("--force-logs", action="store_true",
+                    help="replace existing raw logs (they are the only\n                          artifact a result can be re-scored from)")
+    ap.add_argument("--preflight-logs", action="store_true",
+                    help="check this invocation's raw logs for collisions and\n                          exit, without connecting or writing anything")
     a = ap.parse_args()
 
     root = Path(a.data)
@@ -203,21 +216,161 @@ async def main() -> None:
     Path(a.logdir).mkdir(parents=True, exist_ok=True)
     results: list[dict] = []
 
-    for cond in [c.strip() for c in a.conditions.split(",") if c.strip()]:
+    conditions = [c.strip() for c in a.conditions.split(",") if c.strip()]
+    if not conditions:
+        # `--conditions ','` parsed to nothing, the loop never ran, and the
+        # process exited 0 having done no work — while run_all.sh had already
+        # truncated asr.jsonl and went on to report the full Track A matrix as
+        # successful. A malformed selection is not an empty one.
+        sys.exit(f"--conditions {a.conditions!r} names no conditions")
+    if len(set(conditions)) != len(conditions):
+        # A repeated condition writes the same log twice, so the run collides
+        # with *itself* and no preflight can see it: the second pass finds the
+        # file populated and aborts after the first has been billed. Deduping
+        # silently would be the same empty-is-absent mistake in another coat —
+        # a list that names a condition twice is malformed, not a selection.
+        dupes = sorted({c for c in conditions if conditions.count(c) > 1})
+        sys.exit(f"--conditions {a.conditions!r} names {dupes} more than once; "
+                 "each condition writes one raw log, so a repeat would "
+                 "overwrite the log the first pass just paid for")
+
+    if a.arm not in ARMS:
+        sys.exit(f"--arm {a.arm!r} is not a known arm. Known: "
+                 f"{', '.join(sorted(ARMS))}")
+    if not ARMS[a.arm].asr_manual_commit:
+        # The capability is declared on the arm, and this is the component whose
+        # mistake costs money — so this is where it has to be consulted. It was
+        # declared for `probe_session.py` and not read here, which left the
+        # preflight approving a run this runner is deterministically rejected
+        # for: `transcribe_batch` sends `session_asr()`, Voice Live refuses
+        # `turn_detection: None` on a gpt-realtime brain, and by then
+        # `run_all.sh` may already have truncated the results being replaced.
+        #
+        # A fact declared in one place and not consulted where it is acted on.
+        # A preflight that approves a run the runner will refuse is worse than
+        # no preflight, because failing before the money is its whole purpose.
+        sys.exit(f"--arm {a.arm!r} cannot run Track A: Voice Live rejects "
+                 "manual-commit transcription on a gpt-realtime brain "
+                 "(turn_detection must be AzureSemanticVAD), which is what "
+                 "this runner sends. It is a Track B arm — see "
+                 "Arm.asr_manual_commit and run_all.sh's ASR_ARMS. Track A "
+                 "arms: "
+                 f"{', '.join(sorted(n for n, x in ARMS.items() if x.asr_manual_commit))}")
+
+    # Everything that can be checked without the network is checked here, so
+    # `--preflight-logs` means "this invocation is safe to start" rather than
+    # "its logs are free". A preflight that clears an unknown arm or a missing
+    # data root lets run_all.sh truncate the results and discover the problem
+    # during the real run — the same destroy-then-recreate failure the log
+    # preflight was added to stop, reached through a different input.
+    #
+    # Hoisting the manifests out of the loop fixes the same shape a second
+    # time: a missing manifest for condition 5 used to abort after four
+    # conditions had been paid for.
+    clips_by_cond: dict[str, list[dict]] = {}
+    for cond in conditions:
         d = root / cond / a.lang
-        manifest = [json.loads(l) for l in (d / "manifest.jsonl").read_text().splitlines()]
+        mpath = d / "manifest.jsonl"
+        if not mpath.exists():
+            sys.exit(f"no clip manifest at {mpath}. --data must point at the "
+                     "conditions root, which holds <condition>/<lang>/manifest.jsonl")
+        try:
+            manifest = [json.loads(l) for l in mpath.read_text().splitlines()
+                        if l.strip()]
+        except json.JSONDecodeError as e:
+            sys.exit(f"{mpath} is not readable as JSONL: {e}")
         clips = [{"id": m["id"], "path": str(d / m["wav"]),
                   "reference": m["reference"], "condition": cond}
                  for m in manifest[: a.n]]
+        if not clips:
+            # An empty cell is indistinguishable from an engine that
+            # transcribed nothing once it reaches the scorer, so it is refused
+            # here rather than measured.
+            sys.exit(f"{mpath} lists no clips, so {a.lang}/{cond} would "
+                     "produce an empty cell rather than a measurement")
+        if len(clips) < a.n:
+            # A short cell is not a small measurement; score_asr.py compares
+            # each cell's clip ids against --expect-clips and refuses it. Left
+            # to the scorer, that refusal arrives after the calls have been
+            # paid for — and, in run_all.sh's FORCE path, after the results it
+            # was replacing are gone.
+            sys.exit(f"{mpath} lists {len(manifest)} clip(s) but --n is {a.n}. "
+                     "A short cell is refused by the scorer, so this run would "
+                     "be billed and then rejected")
+        ids = [c["id"] for c in clips]
+        if len(set(ids)) != len(ids):
+            # score_asr.py rejects a duplicated clip id unconditionally — it is
+            # an identity violation, not a coverage gap, so --allow-incomplete
+            # cannot excuse it. Left to the scorer, that refusal arrives after
+            # the whole cell has been paid for and, under FORCE=1, after the
+            # results it replaces are gone.
+            dupes = sorted({i for i in ids if ids.count(i) > 1})
+            sys.exit(f"{mpath} lists {dupes[:5]} more than once in its first "
+                     f"{a.n} entries. Duplicate clip ids double-weight the WER "
+                     "and the scorer refuses them outright")
+        if absent := [c["path"] for c in clips if not Path(c["path"]).exists()]:
+            # The manifest naming a wav does not make it present, and ffmpeg
+            # discovers that mid-run. "Validated" has to mean the inputs were
+            # looked at, not that a file listing them parsed.
+            sys.exit(f"{len(absent)} clip(s) named by {mpath} do not exist:\n  "
+                     + "\n  ".join(absent[:10])
+                     + ("\n  ..." if len(absent) > 10 else ""))
+        clips_by_cond[cond] = clips
+
+    # Validate every log this invocation will write before the first batch is
+    # billed. `open_log` alone checks condition N's log only once conditions
+    # 1..N-1 have been paid for, and the rows for those lived in `results` until
+    # after the loop — so the SystemExit it raises took working transcripts with
+    # it. Checking up front costs nothing and cannot.
+    logs = {cond: Path(a.logdir) / f"asr-{a.arm}-{a.lang}-{cond}.jsonl"
+            for cond in conditions}
+    preflight_logs(logs.values(), a.force_logs)
+    if a.preflight_logs:
+        return
+
+    for cond in conditions:
+        clips = clips_by_cond[cond]
         print(f"[{a.arm}] {a.lang}/{cond}: {len(clips)} clips", file=sys.stderr)
-        logp = Path(a.logdir) / f"asr-{a.arm}-{a.lang}-{cond}.jsonl"
-        with open(logp, "w") as log:
+        logp = logs[cond]
+        rows: list[dict] = []
+        with open_log(logp, a.force_logs) as log:
             for attempt in (1, 2):
+                t_start = time.time()
                 try:
-                    results += await transcribe_batch(a.arm, a.lang, clips, log)
+                    rows = await asyncio.wait_for(
+                        transcribe_batch(a.arm, a.lang, clips, log),
+                        timeout=BATCH_HARD_TIMEOUT_S)
                     break
                 except Exception as e:  # noqa: BLE001
-                    print(f"  batch failed ({type(e).__name__}: {e}); "
+                    # `str(TimeoutError())` is the empty string, and score_asr.py
+                    # distinguishes an outage from a genuinely empty transcript by
+                    # truthiness of `error`. An empty message therefore reads as
+                    # "no error" and a timed-out cell scores as 100% WER — the
+                    # "refuse outages as measurements" guard defeated by a falsy
+                    # sentinel. Every failure reason must be non-empty.
+                    reason = str(e) or f"{type(e).__name__} (no message)"
+                    if isinstance(e, asyncio.TimeoutError):
+                        # Several bounds raise this same exception and land here:
+                        # the 30 s handshake `open_timeout`, the 10 s and 30 s
+                        # `ws.recv()` waits, and the outer batch deadline.
+                        # Attributing a failure that took eight seconds to a
+                        # 900-second deadline misstates both cause and duration.
+                        #
+                        # The label is deliberately generic below the outer
+                        # bound. Naming it "an inner recv timeout" was wrong for
+                        # a handshake that never reached a receive — the third
+                        # time a new bound was described by the branch an older
+                        # one wrote. A bound this code cannot distinguish should
+                        # not be given a name that claims it can; the elapsed
+                        # time is the part that is always true.
+                        elapsed = time.time() - t_start
+                        which = ("outer BATCH_HARD_TIMEOUT_S bound "
+                                 f"({BATCH_HARD_TIMEOUT_S}s)"
+                                 if elapsed >= BATCH_HARD_TIMEOUT_S - 1
+                                 else "an inner step timeout — connect or "
+                                      "receive — not the outer bound")
+                        reason = f"timeout after {elapsed:.1f}s ({which})"
+                    print(f"  batch failed ({type(e).__name__}: {reason}); "
                           f"{'retrying' if attempt == 1 else 'giving up'}", file=sys.stderr)
                     if attempt == 2:
                         # These rows exist so the failure is visible in the data,
@@ -226,18 +379,29 @@ async def main() -> None:
                         # nothing: without the exit code below and the all-error
                         # guard in score_asr.py, a transport or configuration
                         # outage is published as 100% WER.
-                        results += [{"arm": a.arm, "lang": a.lang, "condition": cond,
-                                     "id": c["id"], "reference": c["reference"],
-                                     "hypothesis": "", "error": str(e),
-                                     "audio_seconds": 0.0, "latency_s": 0.0}
-                                    for c in clips]
+                        rows = [{"arm": a.arm, "lang": a.lang, "condition": cond,
+                                 "id": c["id"], "reference": c["reference"],
+                                 "hypothesis": "", "error": reason,
+                                 "audio_seconds": 0.0, "latency_s": 0.0}
+                                for c in clips]
                         exhausted.append(f"{a.lang}/{cond}")
                     await asyncio.sleep(5)
+        # Persist this condition before starting the next one. These rows are
+        # already paid for; they used to accumulate in `results` and be written
+        # only after every condition finished, so anything that ended the
+        # process mid-run — the `open_log` SystemExit above all, which fires on
+        # a *later* condition's log — discarded transcripts that had been
+        # billed. An abort now costs the condition that failed, not the run.
+        #
+        # A half-written file is not a silent one: score_asr.py checks each
+        # cell's clip ids against `--expect-clips`, so a short cell is refused
+        # rather than scored, and run_all.sh exits non-zero either way.
+        with open(a.out, "a") as f:
+            for r in rows:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        results.extend(rows)
         await asyncio.sleep(1)  # stagger session opens
 
-    with open(a.out, "a") as f:
-        for r in results:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
     secs = sum(r["audio_seconds"] for r in results)
     print(f"[{a.arm}] wrote {len(results)} rows, {secs/60:.1f} audio-min "
           f"(~${secs/60*ARMS[a.arm].usd_per_min:.2f})", file=sys.stderr)

@@ -29,6 +29,8 @@ import urllib.request
 from collections import defaultdict
 from pathlib import Path
 
+from events import scenario_ids
+
 MODEL = os.environ.get("JUDGE_MODEL", "gpt-5.5")
 BASE = os.environ.get("JUDGE_BASE_URL", "https://api.kataleptic.com/v1")
 
@@ -156,6 +158,11 @@ def main() -> None:
     ap.add_argument("--prompt", default="fixtures/riverside-prompt.json")
     ap.add_argument("--out", required=True)
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--arms", help="comma-separated arms to judge; default all. "
+                    "The committed seed-2 pass covers seven arms, not eight — "
+                    "without this the documented rerun judges 246 rows where "
+                    "judge_seed2.csv has 219, and cannot reproduce its own "
+                    "denominator.")
     a = ap.parse_args()
 
     api_key = os.environ.get("KATALEPTIC_KEY", "").strip()
@@ -163,12 +170,61 @@ def main() -> None:
         sys.exit("set KATALEPTIC_KEY")
 
     spec = json.loads(Path(a.scenarios).read_text())
+    # Before the money: a repeated fixture id is judged twice, at full price,
+    # and lands as two verdict rows for one (arm, trial, scenario).
+    try:
+        scenario_ids(spec["scenarios"], a.scenarios)
+    except ValueError as e:
+        sys.exit(str(e))
     kb = json.loads(Path(a.prompt).read_text())["system_prompt"]
     runs = [json.loads(l) for l in Path(a.runs).read_text().splitlines() if l.strip()]
+
+    if a.arms is not None:
+        want_arms = {s.strip() for s in a.arms.split(",") if s.strip()}
+        if not want_arms:
+            # `--arms ','` parsed to an empty set while the guard read `if
+            # a.arms:`, so the value was truthy, the unknown-arm check had
+            # nothing to reject, and every run was filtered out. The pass then
+            # died with "produced no verdicts at all" — a message about the
+            # data, for a defect in the flag. `--arms ""` went the other way
+            # and judged everything. Third instance of empty-is-absent in this
+            # harness: a malformed selection is not a missing one.
+            sys.exit(f"--arms {a.arms!r} names no arms. Omit the flag to judge "
+                     "every arm, or give a comma-separated list.")
+        # Same rule as --only in run_scenarios.py: an arm that is not in the
+        # data is a mistake, not a selection, and silently judging nothing is
+        # the failure mode this harness keeps producing.
+        present = {r["arm"] for r in runs}
+        if unknown := sorted(want_arms - present):
+            sys.exit(f"--arms names arm(s) with no runs in {a.runs}: "
+                     f"{', '.join(unknown)}. Present: {', '.join(sorted(present))}")
+        runs = [r for r in runs if r["arm"] in want_arms]
 
     by_scenario: dict[str, list[dict]] = defaultdict(list)
     for r in runs:
         by_scenario[r["scenario"]].append(r)
+
+    # Refuse a selection that cannot cover the fixture BEFORE spending on the
+    # part that can. A scenario with no candidates is still a failure — the
+    # loop below records it and the exit stays non-zero — but discovering it
+    # there means every other scenario has already been judged and billed, and
+    # the run then exits non-zero anyway. The commonest way to hit this is
+    # `--arms` naming only a 2.1 arm: those arms deliberately skipped the two
+    # unscored barge-in scenarios, so nine paid passes precede a failure that
+    # was knowable from the inputs.
+    #
+    # This narrows nothing: the expectation is still every scenario in the
+    # fixture. It only moves the moment of refusal to before the money.
+    if uncovered := [sc["id"] for sc in spec["scenarios"]
+                     if not by_scenario.get(sc["id"])]:
+        sys.exit(
+            f"{len(uncovered)} fixture scenario(s) have no runs to judge: "
+            f"{', '.join(uncovered)}. "
+            + (f"The --arms selection ({a.arms}) excludes every run of them; "
+               "widen it, or judge without a filter."
+               if a.arms is not None else
+               f"{a.runs} is missing those runs entirely.")
+            + " Refusing before spending on the scenarios that are covered.")
 
     rows: list[dict] = []
     failures: list[str] = []

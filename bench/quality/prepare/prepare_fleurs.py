@@ -91,6 +91,22 @@ def main() -> None:
     )
     print(f"{args.lang}: {n} utts, {total/60:.1f} min -> {out}", file=sys.stderr)
 
+    # The loop ends either at --n or when the split runs out, and those look the
+    # same from here: a short manifest is written and this exits 0. Every
+    # consumer then treats the file as the declared clip set — `run_asr.py` does
+    # refuse a cell shorter than its `--n`, but that refusal arrives when
+    # somebody runs the paid benchmark, which is the late-refusal shape this
+    # harness keeps moving earlier. Two `continue`s above skip examples silently
+    # (no audio bytes, duration out of range), so a filter that is slightly too
+    # tight yields a quietly smaller corpus.
+    if n < args.n:
+        sys.exit(f"only {n} of the requested {args.n} utterances met the "
+                 f"filters ({args.min_sec}-{args.max_sec}s with decodable "
+                 f"audio) before the {args.lang} split ran out. "
+                 f"{out}/manifest.jsonl is SHORT: widen the duration range, "
+                 f"lower --n, or pick another split — do not build conditions "
+                 "from it, because every downstream cell inherits this size.")
+
 
 if __name__ == "__main__":
     main()

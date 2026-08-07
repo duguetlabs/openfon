@@ -24,24 +24,37 @@ from engines import ARMS, connect_kwargs
 MARKER = "openfon-bench-probe"
 
 
+FFMPEG_TIMEOUT_S = 120
+
+
 def load_pcm24k(path: Path) -> bytes:
     """Read a 16 kHz mono WAV and resample to 24 kHz PCM16 via ffmpeg."""
     out = subprocess.run(
         ["ffmpeg", "-loglevel", "error", "-i", str(path),
          "-ac", "1", "-ar", "24000", "-f", "s16le", "-"],
-        check=True, capture_output=True,
+        check=True, capture_output=True, timeout=FFMPEG_TIMEOUT_S,
     )
     return out.stdout
 
 
 async def probe(arm_name: str, wav: Path | None) -> dict:
     arm = ARMS[arm_name]
-    res: dict = {"arm": arm_name, "url": arm.url.split("?")[0], "model": arm.model}
+    # Validate each arm with the payload the study actually sends it. Probing
+    # every arm with `session_asr` meant the two Voice-Live gpt-realtime arms
+    # were sent a combination the service is documented to reject — they run
+    # Track B only, and `run_all.sh` keeps them out of ASR_ARMS for that reason.
+    # Recording that expected refusal as a failed arm makes the documented
+    # pre-flight fail deterministically on arms that are perfectly valid, and a
+    # pre-flight that cries wolf is one people learn to skip. Saying it in the
+    # exit status is only right when the thing being said is true.
+    payload = (arm.session_asr("en", MARKER) if arm.asr_manual_commit
+               else arm.session_dialog(MARKER, "en"))
+    res: dict = {"arm": arm_name, "url": arm.url.split("?")[0], "model": arm.model,
+                 "payload": "asr" if arm.asr_manual_commit else "dialog"}
     loop = asyncio.get_event_loop()
     try:
         async with websockets.connect(arm.url, **connect_kwargs(arm)) as ws:
-            await ws.send(json.dumps(
-                {"type": "session.update", "session": arm.session_asr("en", MARKER)}))
+            await ws.send(json.dumps({"type": "session.update", "session": payload}))
 
             created = updated = None
             errors: list = []
@@ -74,7 +87,14 @@ async def probe(arm_name: str, wav: Path | None) -> dict:
                 res["noise_reduction_after"] = updated.get("input_audio_noise_reduction")
                 res["echo_cancellation_after"] = updated.get("input_audio_echo_cancellation")
 
-            if wav and updated is not None:
+            # Manual commit only. On a dialog-payload arm the VAD owns the
+            # buffer, so committing by hand would both misbehave and provoke a
+            # billed response from a pre-flight.
+            if wav and updated is not None and not arm.asr_manual_commit:
+                res["transcript_skipped"] = (
+                    "dialog payload: this arm does not accept manual commit, "
+                    "so a clip round-trip is not part of its pre-flight")
+            if wav and updated is not None and arm.asr_manual_commit:
                 pcm = load_pcm24k(wav)
                 for i in range(0, len(pcm), 9600):  # 200 ms frames
                     await ws.send(json.dumps({
@@ -124,12 +144,54 @@ async def main() -> None:
     ap.add_argument("--wav", help="a clean 16 kHz WAV to round-trip")
     a = ap.parse_args()
 
+    names = [n.strip() for n in a.arms.split(",") if n.strip()]
+    if not names:
+        sys.exit(f"--arms {a.arms!r} names no arms")
+    if unknown := sorted(set(names) - set(ARMS)):
+        sys.exit(f"--arms names {', '.join(unknown)}, which are not arms. "
+                 f"Known: {', '.join(sorted(ARMS))}")
+
     wav = Path(a.wav) if a.wav else None
-    for name in a.arms.split(","):
+    failed: list[str] = []
+    for name in names:
         # Serialised on purpose: parallel handshakes inflated connect time to 3.6 s.
-        print(json.dumps(await probe(name.strip(), wav), ensure_ascii=False, indent=2))
+        res = await probe(name, wav)
+        print(json.dumps(res, ensure_ascii=False, indent=2))
         sys.stdout.flush()
+        # `probe` reports failures in its result rather than raising, so the
+        # exit code is the only place left to say the pre-flight did not pass.
+        if res.get("exception"):
+            failed.append(f"{name}: {res['exception']}")
+        elif res.get("errors"):
+            failed.append(f"{name}: service errors {res['errors']}")
+        elif not res.get("accepted"):
+            # The check this file is named for, and the one the first version of
+            # this guard left out: `probe` records `accepted: false` when
+            # `session.updated` never arrives, with no exception and no error
+            # events to show for it — a bare timeout. That collection matched
+            # none of the branches above, so a session that was never
+            # established passed the pre-flight. The sweep for "work that can be
+            # skipped and still exit 0" had this very file open and missed an
+            # instance of it; see COMPLETENESS.md.
+            failed.append(f"{name}: the session was never accepted — no "
+                          "session.updated within 15 s, and no error event "
+                          "saying why")
+        elif (wav is not None and res.get("transcript_skipped") is None
+                and not res.get("transcript")):
+            # The whole point of --wav is proving a clip round-trips. Printing
+            # `"transcript": null` and exiting 0 is this harness's signature
+            # defect in its own pre-flight: absence reading as a pass.
+            failed.append(f"{name}: no transcript came back for {wav}")
         await asyncio.sleep(1)
+
+    # This is README step 3, the gate in front of a paid run. A pre-flight that
+    # reports every arm broken and still exits 0 cannot gate anything: a caller
+    # chaining `probe_session.py && run_all.sh` would spend on a matrix whose
+    # arms it has just proved unreachable.
+    if failed:
+        sys.exit(f"\n{len(failed)} of {len(names)} arm(s) did not pass the "
+                 "pre-flight:\n  " + "\n  ".join(failed) +
+                 "\nDo not start a paid run until these are resolved.")
 
 
 if __name__ == "__main__":

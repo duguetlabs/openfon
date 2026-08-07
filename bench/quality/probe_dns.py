@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import collections
 import json
 import subprocess
 import sys
@@ -49,11 +50,14 @@ LEGS = {
 }
 
 
+FFMPEG_TIMEOUT_S = 120
+
+
 def pcm(path: Path, rate: int) -> bytes:
     return subprocess.run(
         ["ffmpeg", "-loglevel", "error", "-i", str(path),
          "-ac", "1", "-ar", str(rate), "-f", "s16le", "-"],
-        check=True, capture_output=True,
+        check=True, capture_output=True, timeout=FFMPEG_TIMEOUT_S,
     ).stdout
 
 
@@ -128,10 +132,30 @@ async def run_leg(leg: str, lang: str, clips: list[dict]) -> list[dict]:
             if ev.get("type") == "conversation.item.input_audio_transcription.completed":
                 offer(ev.get("item_id") or "", ev.get("transcript") or "")
 
+    # AFTER the drain, not inside the per-clip loop. An empty hypothesis has two
+    # causes and they mean opposite things: the service returning an empty
+    # transcript IS the finding this probe exists to measure — deep noise
+    # suppression drops utterances — while never getting a transcription event
+    # at all is an outage, and the two produce a byte-identical row. Recording
+    # which one happened is the only way `check_report.py` (and a reader) can
+    # tell them apart, and the second must never be published as the first.
+    #
+    # Deciding it before the drain was the same false-alarm defect this probe's
+    # own guard was written to avoid: the drain exists precisely because a
+    # completion can arrive late, so a clip resolved there would have been
+    # written with a valid hypothesis *and* an error, and would have aborted a
+    # probe that in fact succeeded. `seen` is final only once draining is done.
     for clip, item_id in order:
+        if item_id is None:
+            err = "no input_audio_buffer.committed within 60 s"
+        elif item_id not in seen:
+            err = "no transcription event for this clip, including the drain"
+        else:
+            err = None
         out.append({"leg": leg, "lang": lang, "id": clip["id"],
                     "reference": clip["reference"],
-                    "hypothesis": pending.get(item_id or "", "")})
+                    "hypothesis": pending.get(item_id or "", ""),
+                    "error": err})
     return out
 
 
@@ -145,13 +169,45 @@ async def main() -> None:
     ap.add_argument("--out", default="results/dns_probe.jsonl")
     a = ap.parse_args()
 
+    # Same validation as run_asr.py, and for the same reason: this probe's
+    # output is not a diagnostic, it is the source `check_report.py` recomputes
+    # the merged report's noise-suppression tables from — the numbers carrying
+    # "never enable Azure noise suppression". A duplicated clip id would
+    # double-weight that WER, and both legs are paid for before anything reads
+    # the file. The manifests are shared with run_asr.py, which validates them;
+    # validating on one path and not the other is a uniqueness assumption held
+    # in one place and trusted in two.
+    legs = [x.strip() for x in a.legs.split(",") if x.strip()]
+    if not legs:
+        sys.exit(f"--legs {a.legs!r} names no legs")
+    if dupes := sorted({x for x in legs if legs.count(x) > 1}):
+        sys.exit(f"--legs {a.legs!r} names {', '.join(dupes)} more than once; "
+                 "the repeat is a second paid pass whose rows are indistinguishable "
+                 "from the first's in the output")
+    if unknown := sorted(set(legs) - set(LEGS)):
+        # `LEGS[leg]` raised KeyError after the earlier legs had been billed.
+        sys.exit(f"--legs names {', '.join(unknown)}, which are not legs. "
+                 f"Known: {', '.join(LEGS)}")
+
     d = Path(a.data) / a.condition / a.lang
-    manifest = [json.loads(l) for l in (d / "manifest.jsonl").read_text().splitlines()]
+    mpath = d / "manifest.jsonl"
+    if not mpath.exists():
+        sys.exit(f"no clip manifest at {mpath}")
+    manifest = [json.loads(l) for l in mpath.read_text().splitlines() if l.strip()]
     clips = [{"id": m["id"], "path": str(d / m["wav"]), "reference": m["reference"]}
              for m in manifest[: a.n]]
+    if len(clips) < a.n:
+        sys.exit(f"{mpath} lists {len(manifest)} clip(s) but --n is {a.n}")
+    ids = [c["id"] for c in clips]
+    if dupes := sorted({i for i in ids if ids.count(i) > 1}):
+        sys.exit(f"{mpath} lists {', '.join(dupes[:5])} more than once in its "
+                 f"first {a.n} entries; duplicate ids double-weight the WER")
+    if absent := [c["path"] for c in clips if not Path(c["path"]).exists()]:
+        sys.exit(f"{len(absent)} clip(s) named by {mpath} do not exist:\n  "
+                 + "\n  ".join(absent[:10]))
 
     rows: list[dict] = []
-    for leg in [x.strip() for x in a.legs.split(",") if x.strip()]:
+    for leg in legs:
         print(f"[{leg}] {len(clips)} clips", file=sys.stderr)
         rows += await run_leg(leg, a.lang, clips)
         await asyncio.sleep(1)           # serialise session opens
@@ -171,6 +227,26 @@ async def main() -> None:
               if ne else float("nan"))
         print(f"{leg:12s}{len(rs):4d}{len(rs)-len(ne):7d}"
               f"{100*(len(rs)-len(ne))/len(rs):7.1f}%{wa:9.2f}{wn:14.2f}")
+
+    # The table above is the whole output, and it cannot show what did not
+    # happen: a leg that lost its session prints a high empty rate and a high
+    # WER, which is exactly the shape of the result this probe reports. So the
+    # exit status carries it. Same rule as score_asr.py check #2a — an outage is
+    # not a measurement — and it matters more here, because these files are what
+    # check_report.py recomputes the "never enable Azure noise suppression"
+    # figures from.
+    if errored := [r for r in rows if r.get("error")]:
+        by_leg = collections.Counter(r["leg"] for r in errored)
+        sys.exit(f"\n{len(errored)} of {len(rows)} clip(s) produced no "
+                 f"transcription event at all ({dict(by_leg)}). Those rows are "
+                 f"empty because the session failed, not because the engine "
+                 f"dropped the utterance, and the two are indistinguishable in "
+                 f"{a.out}. Re-run the affected leg(s) before publishing any "
+                 "figure from this file.")
+    missing_legs = [l for l in legs if not any(r["leg"] == l for r in rows)]
+    if missing_legs:
+        sys.exit(f"\nno rows for leg(s) {', '.join(missing_legs)}; "
+                 f"{a.out} does not contain the comparison it was asked for")
 
 
 if __name__ == "__main__":
