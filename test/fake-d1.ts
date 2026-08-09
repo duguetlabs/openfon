@@ -23,6 +23,7 @@ function cutoff(offset: unknown): number {
 export interface FakeCall extends Row {
   id: string;
   business_id: string;
+  assistant_id?: string | null;
   status: string;
   started_at: number;
   connected_at: number | null;
@@ -32,6 +33,7 @@ export class FakeD1 {
   users: Row[] = [];
   sessions: Row[] = [];
   businesses: Row[] = [];
+  assistants: Row[] = [];
   calls: FakeCall[] = [];
   turns: { call_id: string; ts: number }[] = [];
   counters = new Map<string, number>(); // `${bucket}|${window_start}` -> count
@@ -61,6 +63,14 @@ export class FakeD1 {
   seedBusiness(b: Partial<Row> & { id: string; slug: string }): Row {
     const row = { max_concurrent_calls: 5, max_calls_per_day: 500, ...b };
     this.businesses.push(row);
+    this.assistants.push({
+      id: `asst_${b.id}`,
+      business_id: b.id,
+      public_slug: b.slug,
+      state: 'active',
+      name: 'Alex',
+      language: 'en',
+    });
     return row;
   }
 
@@ -174,6 +184,16 @@ class FakeStatement {
       return { rows: b ? [b] : [], changes: 0 };
     }
 
+    // ---- assistants ----
+    if (q.startsWith('SELECT assistants.id AS assistant_id, businesses.id')) {
+      const assistant = this.db.assistants.find((x) => x.public_slug === a[0] && x.state === 'active');
+      const business = assistant && this.db.businesses.find((x) => x.id === assistant.business_id);
+      return {
+        rows: assistant && business ? [{ assistant_id: assistant.id, ...business }] : [],
+        changes: 0,
+      };
+    }
+
     // ---- calls ----
     if (q.startsWith('SELECT COUNT(*) AS n FROM calls') && q.includes('connected_at IS NOT NULL')) {
       // No age cutoff: the sweep is the only thing that releases a live slot.
@@ -186,14 +206,22 @@ class FakeStatement {
     // cap, so a refusal writes nothing. changes === 0 is the refusal.
     if (q.startsWith('INSERT INTO calls') && q.includes('WHERE (SELECT COUNT(*)')) {
       const since = cutoff('-1 day');
+      const hasAssistant = q.includes('assistant_id');
+      const businessArg = hasAssistant ? a[4] : a[3];
+      const maxArg = hasAssistant ? a[5] : a[4];
       const n = this.db.calls.filter(
         (c) =>
-          c.business_id === a[3] &&
+          c.business_id === businessArg &&
           c.started_at > since &&
           !(c.status === 'abandoned' && c.connected_at === null)
       ).length;
-      if (n >= Number(a[4])) return { rows: [], changes: 0 };
-      this.db.seedCall({ id: String(a[0]), business_id: String(a[1]), caller_id: String(a[2]) });
+      if (n >= Number(maxArg)) return { rows: [], changes: 0 };
+      this.db.seedCall({
+        id: String(a[0]),
+        business_id: String(a[1]),
+        assistant_id: hasAssistant ? String(a[2]) : null,
+        caller_id: String(hasAssistant ? a[3] : a[2]),
+      });
       return { rows: [], changes: 1 };
     }
     if (q.startsWith('SELECT calls.id, calls.business_id, businesses.max_concurrent_calls')) {

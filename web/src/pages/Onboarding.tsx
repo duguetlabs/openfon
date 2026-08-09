@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api';
 import { useSession } from '../App';
-import { Button, Card, Field, FieldLabel, Logo, TextArea, LANGUAGES, inputClassSm, selectClass } from '../ui';
+import { Button, Card, Field, FieldLabel, Logo, TextArea, LANGUAGES, inputClassSm } from '../ui';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -208,7 +208,7 @@ export default function Onboarding() {
                 <label className="block">
                   <FieldLabel>Language</FieldLabel>
                   <select
-                    className={selectClass}
+                    className="w-full rounded-[10px] border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-ink outline-none focus:border-iris focus:ring-[3px] focus:ring-iris/15"
                     value={language}
                     onChange={(e) => setLanguage(e.target.value)}
                   >

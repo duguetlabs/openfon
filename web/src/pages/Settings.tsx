@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type Agent, type Business, type EngineProfile, type VoiceCatalog } from '../api';
 import { useSession } from '../App';
-import { Button, Card, Field, FieldLabel, SectionTitle, TextArea, LANGUAGES, inputClassSm, selectClass } from '../ui';
+import { Button, Card, Field, FieldLabel, SectionTitle, TextArea, LANGUAGES, inputClassSm } from '../ui';
 import { ListEditor } from './Onboarding';
 
 interface Hour {
@@ -201,7 +201,7 @@ export default function Settings() {
             <label className="block">
               <FieldLabel>Language</FieldLabel>
               <select
-                className={selectClass}
+                className="w-full rounded-[10px] border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-ink outline-none focus:border-iris focus:ring-[3px] focus:ring-iris/15"
                 value={agent.language}
                 onChange={(e) => setA({ language: e.target.value })}
               >
@@ -360,7 +360,7 @@ export default function Settings() {
               <label className="mt-4 block rounded-xl border border-line bg-wash-iris/40 p-4">
                 <FieldLabel>Realtime model</FieldLabel>
                 <select
-                  className={selectClass}
+                  className="w-full rounded-[10px] border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-ink outline-none focus:border-iris focus:ring-[3px] focus:ring-iris/15"
                   value={agent.realtime_model}
                   onChange={(e) => setA({ realtime_model: e.target.value })}
                 >
@@ -408,7 +408,13 @@ export default function Settings() {
           />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Model" value={agent.llm_model} onChange={(e) => setA({ llm_model: e.target.value })} placeholder="llama-3.3-70b" />
-            <Field label="API key" type="password" value={agent.llm_api_key} onChange={(e) => setA({ llm_api_key: e.target.value })} placeholder="sk-…" />
+            <Field
+              label="API key"
+              type="password"
+              value={agent.llm_api_key}
+              onChange={(e) => setA({ llm_api_key: e.target.value })}
+              placeholder={agent.apiKeyConfigured ? 'Configured — enter a new key to replace it' : 'sk-…'}
+            />
           </div>
         </Card>
       </section>

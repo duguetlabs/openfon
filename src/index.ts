@@ -5,6 +5,7 @@ import type { Env, Business, AgentSettings } from './types';
 import { createSession, deleteSession, getUserIdFromSession, hashPassword, newId, verifyPassword } from './auth';
 import { sameLlmEndpoint, validateLlmBaseUrl } from './providers';
 import { CallSession } from './call-session';
+import { registerStudioApi } from './studio-api';
 
 export { CallSession };
 
@@ -338,15 +339,43 @@ app.get('/api/me', async (c) => {
   return c.json(user);
 });
 
+registerStudioApi(app);
+
 app.get('/api/me/business', async (c) => {
   const biz = await c.env.DB.prepare('SELECT * FROM businesses WHERE user_id = ? LIMIT 1')
     .bind(c.get('userId'))
     .first<Business>();
   if (!biz) return c.json(null);
-  const settings = await c.env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?')
+  const assistant = await c.env.DB.prepare('SELECT * FROM assistants WHERE business_id = ? ORDER BY created_at, id LIMIT 1')
     .bind(biz.id)
-    .first<AgentSettings>();
-  return c.json({ ...biz, agent: settings ? maskSettings(settings) : null });
+    .first<Record<string, string | number | null>>();
+  const provider = await c.env.DB.prepare('SELECT llm_base_url, llm_api_key FROM provider_settings WHERE business_id = ?')
+    .bind(biz.id)
+    .first<{ llm_base_url: string; llm_api_key: string }>();
+  const settings = assistant
+    ? {
+        business_id: biz.id,
+        agent_name: assistant.name,
+        greeting: assistant.greeting,
+        persona: assistant.persona,
+        language: assistant.language,
+        voice: assistant.voice,
+        take_messages: assistant.take_messages,
+        custom_instructions: assistant.custom_instructions,
+        llm_base_url: provider?.llm_base_url ?? '',
+        llm_api_key: '',
+        apiKeyConfigured: Boolean(
+          provider?.llm_api_key ||
+            ((!provider?.llm_base_url || sameLlmEndpoint(provider.llm_base_url, c.env.DEFAULT_LLM_BASE_URL)) &&
+              c.env.DEFAULT_LLM_API_KEY)
+        ),
+        llm_model: assistant.llm_model,
+        engine: assistant.engine,
+        realtime_model: assistant.realtime_model,
+        realtime_voice: assistant.realtime_voice,
+      }
+    : null;
+  return c.json({ ...biz, agent: settings });
 });
 
 app.post('/api/me/business', async (c) => {
@@ -377,6 +406,23 @@ app.post('/api/me/business', async (c) => {
     )
     .run();
   await c.env.DB.prepare('INSERT INTO agent_settings (business_id) VALUES (?)').bind(id).run();
+  const assistantId = newId();
+  const collectionId = newId();
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO assistants (id, business_id, public_slug, state, name, activated_at)
+       VALUES (?, ?, ?, 'active', 'Alex', datetime('now'))`
+    ).bind(assistantId, id, slug),
+    c.env.DB.prepare('INSERT INTO provider_settings (business_id) VALUES (?)').bind(id),
+    c.env.DB.prepare(
+      `INSERT INTO knowledge_collections (id, business_id, name, description, is_default)
+       VALUES (?, ?, 'Workspace knowledge', 'Services and answers shared by default with new assistants.', 1)`
+    ).bind(collectionId, id),
+    c.env.DB.prepare(
+      'INSERT INTO assistant_knowledge_collections (assistant_id, collection_id) VALUES (?, ?)'
+    ).bind(assistantId, collectionId),
+  ]);
+  await syncLegacyKnowledge(c.env, id, body.services_json ?? '[]', body.faqs_json ?? '[]');
   const biz = await c.env.DB.prepare('SELECT * FROM businesses WHERE id = ?').bind(id).first<Business>();
   return c.json(biz, 201);
 });
@@ -404,6 +450,9 @@ app.put('/api/me/business/:id', async (c) => {
       biz.id
     )
     .run();
+  if (b.services_json !== undefined || b.faqs_json !== undefined) {
+    await syncLegacyKnowledge(c.env, biz.id, b.services_json ?? biz.services_json, b.faqs_json ?? biz.faqs_json);
+  }
   return c.json({ ok: true });
 });
 
@@ -413,22 +462,112 @@ function clampCap(v: unknown, current: number, max: number): number {
   return typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= max ? v : current;
 }
 
+async function syncLegacyKnowledge(env: Env, businessId: string, servicesJson: string, faqsJson: string): Promise<void> {
+  const collection = await env.DB.prepare(
+    'SELECT id FROM knowledge_collections WHERE business_id = ? AND is_default = 1 LIMIT 1'
+  )
+    .bind(businessId)
+    .first<{ id: string }>();
+  if (!collection) return;
+  const parse = <T>(raw: string): T[] => {
+    try {
+      const value = JSON.parse(raw) as unknown;
+      return Array.isArray(value) ? (value as T[]) : [];
+    } catch {
+      return [];
+    }
+  };
+  const services = parse<{ name?: string; price?: string; duration?: string; notes?: string }>(servicesJson);
+  const faqs = parse<{ q?: string; a?: string }>(faqsJson);
+  const statements = [
+    env.DB.prepare(
+      `DELETE FROM knowledge_items WHERE business_id = ? AND (
+        id LIKE ? OR id LIKE ? OR id LIKE ? OR id LIKE ?
+      )`
+    ).bind(
+      businessId,
+      `ki_service_${businessId}_%`,
+      `ki_faq_${businessId}_%`,
+      `legacy_${businessId}_service_%`,
+      `legacy_${businessId}_faq_%`
+    ),
+  ];
+  services.forEach((service, index) => {
+    const name = service.name?.trim();
+    if (!name) return;
+    const content = [service.price?.trim(), service.duration?.trim(), service.notes?.trim()].filter(Boolean).join(' · ');
+    statements.push(
+      env.DB.prepare(
+        `INSERT INTO knowledge_items (
+          id, business_id, collection_id, kind, status, title, content, activated_at
+         ) VALUES (?, ?, ?, 'service', 'active', ?, ?, datetime('now'))`
+      ).bind(`legacy_${businessId}_service_${index}`, businessId, collection.id, name, content)
+    );
+  });
+  faqs.forEach((faq, index) => {
+    const question = faq.q?.trim();
+    const answer = faq.a?.trim();
+    if (!question || !answer) return;
+    statements.push(
+      env.DB.prepare(
+        `INSERT INTO knowledge_items (
+          id, business_id, collection_id, kind, status, question, answer, activated_at
+         ) VALUES (?, ?, ?, 'faq', 'active', ?, ?, datetime('now'))`
+      ).bind(`legacy_${businessId}_faq_${index}`, businessId, collection.id, question, answer)
+    );
+  });
+  await env.DB.batch(statements);
+}
+
 app.put('/api/me/business/:id/agent', async (c) => {
   const biz = await ownedBusiness(c.env, c.get('userId'), c.req.param('id'));
   if (!biz) return c.json({ error: 'Not found' }, 404);
-  const cur = await c.env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?')
+  const cur = await c.env.DB.prepare(
+    `SELECT assistants.*,
+      assistants.name AS agent_name,
+      provider_settings.llm_base_url,
+      provider_settings.llm_api_key
+     FROM assistants LEFT JOIN provider_settings ON provider_settings.business_id = assistants.business_id
+     WHERE assistants.business_id = ? ORDER BY assistants.created_at, assistants.id LIMIT 1`
+  )
     .bind(biz.id)
-    .first<AgentSettings>();
+    .first<AgentSettings & { id: string; name: string }>();
   if (!cur) return c.json({ error: 'Not found' }, 404);
   const s = await c.req.json<Partial<AgentSettings>>();
   // "••••" placeholder from the UI means "keep the stored key"
-  const llmKey = s.llm_api_key !== undefined && !/^•+$/.test(s.llm_api_key) ? s.llm_api_key : cur.llm_api_key;
+  const llmKey = s.llm_api_key !== undefined && s.llm_api_key !== '' && !/^•+$/.test(s.llm_api_key) ? s.llm_api_key : cur.llm_api_key;
   const engine = s.engine === 'realtime' ? 'realtime' : s.engine === 'pipeline' ? 'pipeline' : cur.engine;
   const realtimeModel = s.realtime_model !== undefined ? s.realtime_model : cur.realtime_model;
   const realtimeVoice = s.realtime_voice !== undefined ? s.realtime_voice : cur.realtime_voice;
   const llmBaseUrl = s.llm_base_url ?? cur.llm_base_url;
   const bad = llmEndpointError(c.env, llmBaseUrl, llmKey);
   if (bad) return c.json({ error: bad }, 400);
+  await c.env.DB.prepare(
+    `UPDATE assistants SET name=?, greeting=?, persona=?, language=?, voice=?, take_messages=?, custom_instructions=?,
+      engine=?, realtime_model=?, realtime_voice=?, llm_model=?, updated_at=datetime('now') WHERE id=?`
+  )
+    .bind(
+      s.agent_name ?? cur.agent_name,
+      s.greeting ?? cur.greeting,
+      s.persona ?? cur.persona,
+      s.language ?? cur.language,
+      s.voice ?? cur.voice,
+      s.take_messages !== undefined ? (s.take_messages ? 1 : 0) : cur.take_messages,
+      s.custom_instructions ?? cur.custom_instructions,
+      engine,
+      realtimeModel,
+      realtimeVoice,
+      s.llm_model ?? cur.llm_model,
+      cur.id
+    )
+    .run();
+  await c.env.DB.prepare(
+    `INSERT INTO provider_settings (business_id, llm_base_url, llm_api_key) VALUES (?, ?, ?)
+     ON CONFLICT(business_id) DO UPDATE SET llm_base_url=excluded.llm_base_url,
+       llm_api_key=excluded.llm_api_key, updated_at=datetime('now')`
+  )
+    .bind(biz.id, llmBaseUrl, llmKey)
+    .run();
   await c.env.DB.prepare(
     `UPDATE agent_settings SET agent_name=?, greeting=?, persona=?, language=?, voice=?, take_messages=?, custom_instructions=?, llm_base_url=?, llm_api_key=?, llm_model=?, engine=?, realtime_model=?, realtime_voice=? WHERE business_id=?`
   )
@@ -457,7 +596,7 @@ app.get('/api/me/business/:id/calls', async (c) => {
   if (!biz) return c.json({ error: 'Not found' }, 404);
   const { results } = await c.env.DB.prepare(
     `SELECT id, channel, caller_id, status, started_at, connected_at, ended_at, duration_s, summary, intent, message_json
-     FROM calls WHERE business_id = ? ORDER BY started_at DESC LIMIT 100`
+     FROM calls WHERE business_id = ? AND environment = 'live' ORDER BY started_at DESC, id DESC LIMIT 100`
   )
     .bind(biz.id)
     .all();
@@ -473,7 +612,7 @@ app.get('/api/me/calls/:callId', async (c) => {
     .first();
   if (!call) return c.json({ error: 'Not found' }, 404);
   const { results: turns } = await c.env.DB.prepare(
-    'SELECT role, text, ts FROM call_turns WHERE call_id = ? ORDER BY id'
+    'SELECT id, role, text, ts FROM call_turns WHERE call_id = ? ORDER BY id'
   )
     .bind(c.req.param('callId'))
     .all();
@@ -482,10 +621,6 @@ app.get('/api/me/calls/:callId', async (c) => {
 
 async function ownedBusiness(env: Env, userId: string, id: string): Promise<Business | null> {
   return env.DB.prepare('SELECT * FROM businesses WHERE id = ? AND user_id = ?').bind(id, userId).first<Business>();
-}
-
-function maskSettings(s: AgentSettings): AgentSettings {
-  return { ...s, llm_api_key: s.llm_api_key ? '••••••••' : '' };
 }
 
 // A custom LLM endpoint is only ever called with the key stored next to it
@@ -504,8 +639,8 @@ function llmEndpointError(env: Env, baseUrl: string, apiKey: string): string | n
 const PROFILE_FIELDS = ['engine', 'realtime_model', 'realtime_voice', 'language', 'voice', 'llm_base_url', 'llm_api_key', 'llm_model'] as const;
 type ProfileFields = Record<(typeof PROFILE_FIELDS)[number], string> & { id: string; name: string; business_id: string };
 
-function maskProfile(p: ProfileFields): ProfileFields {
-  return { ...p, llm_api_key: p.llm_api_key ? '••••••••' : '' };
+function maskProfile(p: ProfileFields): ProfileFields & { apiKeyConfigured: boolean } {
+  return { ...p, llm_api_key: '', apiKeyConfigured: Boolean(p.llm_api_key) };
 }
 
 app.get('/api/me/business/:id/profiles', async (c) => {
@@ -523,10 +658,11 @@ app.post('/api/me/business/:id/profiles', async (c) => {
   const b = await c.req.json<Partial<ProfileFields>>();
   if (!b.name?.trim()) return c.json({ error: 'Profile name required' }, 400);
   const id = newId();
-  // '••••' means "snapshot the key currently in agent_settings"
+  // A missing/blank value means "snapshot the workspace key". Credentials are
+  // never returned by an API, including as a masked placeholder.
   let llmKey = b.llm_api_key ?? '';
-  if (/^•+$/.test(llmKey)) {
-    const cur = await c.env.DB.prepare('SELECT llm_api_key FROM agent_settings WHERE business_id = ?')
+  if (!llmKey || /^•+$/.test(llmKey)) {
+    const cur = await c.env.DB.prepare('SELECT llm_api_key FROM provider_settings WHERE business_id = ?')
       .bind(biz.id)
       .first<{ llm_api_key: string }>();
     llmKey = cur?.llm_api_key ?? '';
@@ -569,7 +705,7 @@ app.put('/api/me/profiles/:pid', async (c) => {
   const p = await ownedProfile(c.env, c.get('userId'), c.req.param('pid'));
   if (!p) return c.json({ error: 'Not found' }, 404);
   const b = await c.req.json<Partial<ProfileFields>>();
-  const llmKey = b.llm_api_key !== undefined && !/^•+$/.test(b.llm_api_key) ? b.llm_api_key : p.llm_api_key;
+  const llmKey = b.llm_api_key !== undefined && b.llm_api_key !== '' && !/^•+$/.test(b.llm_api_key) ? b.llm_api_key : p.llm_api_key;
   const llmBaseUrl = b.llm_base_url ?? p.llm_base_url;
   const bad = llmEndpointError(c.env, llmBaseUrl, llmKey);
   if (bad) return c.json({ error: bad }, 400);
@@ -610,6 +746,19 @@ app.post('/api/me/profiles/:pid/apply', async (c) => {
     `UPDATE agent_settings SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_base_url=?, llm_api_key=?, llm_model=? WHERE business_id=?`
   )
     .bind(p.engine, p.realtime_model, p.realtime_voice, p.language, p.voice, p.llm_base_url, p.llm_api_key, p.llm_model, p.business_id)
+    .run();
+  await c.env.DB.prepare(
+    `UPDATE assistants SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?, updated_at=datetime('now')
+     WHERE id = (SELECT id FROM assistants WHERE business_id = ? ORDER BY created_at, id LIMIT 1)`
+  )
+    .bind(p.engine, p.realtime_model, p.realtime_voice, p.language, p.voice, p.llm_model, p.business_id)
+    .run();
+  await c.env.DB.prepare(
+    `INSERT INTO provider_settings (business_id, llm_base_url, llm_api_key) VALUES (?, ?, ?)
+     ON CONFLICT(business_id) DO UPDATE SET llm_base_url=excluded.llm_base_url,
+       llm_api_key=excluded.llm_api_key, updated_at=datetime('now')`
+  )
+    .bind(p.business_id, p.llm_base_url, p.llm_api_key)
     .run();
   return c.json({ ok: true });
 });
@@ -687,26 +836,37 @@ async function liveCalls(env: Env, businessId: string): Promise<number> {
 
 // ---------- public widget API ----------
 app.get('/api/public/agent/:slug', async (c) => {
-  const biz = await c.env.DB.prepare('SELECT id, name, slug FROM businesses WHERE slug = ?')
+  const agent = await c.env.DB.prepare(
+    `SELECT assistants.id, assistants.name AS agent_name, assistants.language,
+      businesses.id AS business_id, businesses.name AS business_name
+     FROM assistants JOIN businesses ON businesses.id = assistants.business_id
+     WHERE assistants.public_slug = ? AND assistants.state = 'active'`
+  )
     .bind(c.req.param('slug'))
-    .first<{ id: string; name: string; slug: string }>();
-  if (!biz) return c.json({ error: 'Not found' }, 404);
-  const settings = await c.env.DB.prepare('SELECT agent_name, language FROM agent_settings WHERE business_id = ?')
-    .bind(biz.id)
-    .first<{ agent_name: string; language: string }>();
-  return c.json({ businessName: biz.name, agentName: settings?.agent_name ?? 'Alex', language: settings?.language ?? 'en' });
+    .first<{ id: string; agent_name: string; language: string; business_id: string; business_name: string }>();
+  if (!agent) return c.json({ error: 'Not found' }, 404);
+  return c.json({
+    assistantId: agent.id,
+    businessName: agent.business_name,
+    agentName: agent.agent_name,
+    language: agent.language,
+  });
 });
 
 app.post('/api/public/call/start', async (c) => {
   const { slug } = await c.req.json<{ slug?: string }>();
   // The per-IP ceilings were already applied by the /api/public/* middleware.
   const addr = clientIp(c);
-  const biz = await c.env.DB.prepare('SELECT id, max_concurrent_calls, max_calls_per_day FROM businesses WHERE slug = ?')
+  const target = await c.env.DB.prepare(
+    `SELECT assistants.id AS assistant_id, businesses.id, businesses.max_concurrent_calls, businesses.max_calls_per_day
+     FROM assistants JOIN businesses ON businesses.id = assistants.business_id
+     WHERE assistants.public_slug = ? AND assistants.state = 'active'`
+  )
     .bind(slug ?? '')
-    .first<{ id: string; max_concurrent_calls: number; max_calls_per_day: number }>();
-  if (!biz) return c.json({ error: 'Unknown agent' }, 404);
+    .first<{ assistant_id: string; id: string; max_concurrent_calls: number; max_calls_per_day: number }>();
+  if (!target) return c.json({ error: 'Unknown or unavailable assistant' }, 404);
 
-  if ((await liveCalls(c.env, biz.id)) >= biz.max_concurrent_calls) {
+  if ((await liveCalls(c.env, target.id)) >= target.max_concurrent_calls) {
     return tooMany(c, BUSY, 30);
   }
 
@@ -735,13 +895,20 @@ app.post('/api/public/call/start', async (c) => {
   // when the sweep retires it, not before.
   const callId = newId();
   const claim = await c.env.DB.prepare(
-    `INSERT INTO calls (id, business_id, channel, caller_id)
-     SELECT ?, ?, 'web', ?
+    `INSERT INTO calls (id, business_id, assistant_id, channel, caller_id, environment, direction)
+     SELECT ?, ?, ?, 'web', ?, 'live', 'inbound'
       WHERE (SELECT COUNT(*) FROM calls
               WHERE business_id = ? AND started_at > datetime('now', '-1 day')
                 AND NOT (status = 'abandoned' AND connected_at IS NULL)) < ?`
   )
-    .bind(callId, biz.id, addr === 'local' ? 'anonymous' : addr, biz.id, biz.max_calls_per_day)
+    .bind(
+      callId,
+      target.id,
+      target.assistant_id,
+      addr === 'local' ? 'anonymous' : addr,
+      target.id,
+      target.max_calls_per_day
+    )
     .run();
   if ((claim.meta.changes ?? 0) !== 1) {
     return tooMany(c, 'This agent has reached its daily call limit. Please try again tomorrow.', 3600);

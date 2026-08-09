@@ -22,6 +22,14 @@ interface Faq {
   a: string;
 }
 
+export interface PromptKnowledgeItem {
+  kind: 'faq' | 'service' | 'note';
+  title: string;
+  question: string;
+  answer: string;
+  content: string;
+}
+
 function parse<T>(json: string, fallback: T): T {
   try {
     return JSON.parse(json) as T;
@@ -54,10 +62,20 @@ export function buildCalendar(hours: Hours[], closures: Closure[], now: Date, ti
   return lines.join('\n');
 }
 
-export function buildSystemPrompt(biz: Business, settings: AgentSettings, now: Date): string {
+export function buildSystemPrompt(
+  biz: Business,
+  settings: AgentSettings,
+  now: Date,
+  knowledge?: PromptKnowledgeItem[]
+): string {
   const hours = parse<Hours[]>(biz.hours_json, []);
-  const services = parse<Service[]>(biz.services_json, []);
-  const faqs = parse<Faq[]>(biz.faqs_json, []);
+  const services: Service[] = knowledge
+    ? knowledge.filter((item) => item.kind === 'service').map((item) => ({ name: item.title, notes: item.content }))
+    : parse<Service[]>(biz.services_json, []);
+  const faqs = knowledge
+    ? knowledge.filter((item) => item.kind === 'faq').map((item) => ({ q: item.question, a: item.answer }))
+    : parse<Faq[]>(biz.faqs_json, []);
+  const notes = knowledge?.filter((item) => item.kind === 'note') ?? [];
 
   const hoursText = hours.length
     ? hours.map((h) => `${h.day}: ${h.closed ? 'CLOSED' : `${h.open}–${h.close}`}`).join('\n')
@@ -89,6 +107,9 @@ export function buildSystemPrompt(biz: Business, settings: AgentSettings, now: D
         .join('\n')
     : 'Not specified.';
   const faqText = faqs.length ? faqs.map((f) => `Q: ${f.q}\nA: ${f.a}`).join('\n\n') : 'None provided.';
+  const notesText = notes.length
+    ? notes.map((item) => `- ${item.title ? `${item.title}: ` : ''}${item.content}`).join('\n')
+    : 'None provided.';
 
   return `You are ${settings.agent_name}, the phone receptionist for ${biz.name}. You are ${settings.persona}. You are on a live voice call with a caller — your replies are spoken aloud.
 
@@ -114,6 +135,9 @@ ${servicesText}
 
 FAQ:
 ${faqText}
+
+OTHER APPROVED KNOWLEDGE:
+${notesText}
 
 BEHAVIOR:
 - Answer questions using only the facts above. If you don't know, say so and offer to take a message.
@@ -157,8 +181,10 @@ const VOCAB_CARRIERS: Record<string, string> = {
   ru: 'Телефонный звонок по поводу: ',
 };
 
-export function sttVocab(biz: Business, settings: AgentSettings): string {
-  const services = parse<Service[]>(biz.services_json, []).map((s) => s.name);
+export function sttVocab(biz: Business, settings: AgentSettings, knowledge?: PromptKnowledgeItem[]): string {
+  const services = knowledge
+    ? knowledge.filter((item) => item.kind === 'service').map((item) => item.title)
+    : parse<Service[]>(biz.services_json, []).map((s) => s.name);
   const parts = [biz.name, settings.agent_name, ...services, biz.address];
   const carrier = VOCAB_CARRIERS[settings.language] ?? VOCAB_CARRIERS.en;
   return (carrier + parts.filter(Boolean).join(', ')).slice(0, 400);
