@@ -16,6 +16,485 @@ type StudioApp = Hono<{ Bindings: Env; Variables: Vars }>;
 
 type Workspace = Business & { user_id: string };
 
+const STUDIO_SPEND_PER_MINUTE = 10;
+const TEST_CALLS_PER_DAY = 100;
+const PROVIDER_CHECKS_PER_DAY = 50;
+
+const AGENT_SNAPSHOT_SQL = `json_object(
+  'agent_name', agent_settings.agent_name, 'greeting', agent_settings.greeting,
+  'persona', agent_settings.persona, 'language', agent_settings.language,
+  'voice', agent_settings.voice, 'take_messages', agent_settings.take_messages,
+  'custom_instructions', agent_settings.custom_instructions, 'engine', agent_settings.engine,
+  'realtime_model', agent_settings.realtime_model, 'realtime_voice', agent_settings.realtime_voice,
+  'llm_model', agent_settings.llm_model
+)`;
+
+function updateAgentSnapshot(env: Env, businessId: string): D1PreparedStatement {
+  return env.DB.prepare(
+    `UPDATE compatibility_sync_state SET agent_snapshot=(
+       SELECT ${AGENT_SNAPSHOT_SQL} FROM agent_settings WHERE business_id=?
+     ), synced_at=datetime('now') WHERE business_id=?`
+  ).bind(businessId, businessId);
+}
+
+async function reserveStudioSpend(env: Env, workspaceId: string, suffix: string, windowSeconds: number, max: number) {
+  const windowStart = Math.floor(Date.now() / 1000 / windowSeconds) * windowSeconds;
+  const row = await env.DB.prepare(
+    `INSERT INTO rate_counters (bucket, window_start, count) VALUES (?, ?, 1)
+     ON CONFLICT(bucket, window_start) DO UPDATE SET count=rate_counters.count + 1
+       WHERE rate_counters.count < ?
+     RETURNING count`
+  )
+    .bind(`studio:${suffix}:${workspaceId}`, windowStart, max)
+    .first<{ count: number }>();
+  return Boolean(row);
+}
+
+const LEGACY_PROFILE_FIELDS = [
+  'name',
+  'engine',
+  'realtime_model',
+  'realtime_voice',
+  'language',
+  'voice',
+  'llm_model',
+] as const;
+
+type LegacyProfile = Record<(typeof LEGACY_PROFILE_FIELDS)[number], string> & {
+  id: string;
+  business_id: string;
+  created_at: string;
+};
+
+function recordArray(raw: string): Record<string, unknown>[] {
+  try {
+    const value = JSON.parse(raw) as unknown;
+    return Array.isArray(value)
+      ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function textField(record: Record<string, unknown>, key: string): string {
+  return typeof record[key] === 'string' ? record[key].trim() : '';
+}
+
+function canonicalJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, canonicalJson(entry)])
+    );
+  }
+  return value;
+}
+
+function jsonSemanticallyEqual(left: string, right: string): boolean {
+  if (left === right) return true;
+  try {
+    return JSON.stringify(canonicalJson(JSON.parse(left))) === JSON.stringify(canonicalJson(JSON.parse(right)));
+  } catch {
+    return false;
+  }
+}
+
+interface LegacyKnowledgeRow {
+  id: string;
+  collection_id: string;
+  kind: 'faq' | 'service';
+  status: 'active';
+  title: string;
+  question: string;
+  answer: string;
+  content: string;
+}
+
+function expectedLegacyKnowledge(
+  businessId: string,
+  collectionId: string,
+  servicesJson: string,
+  faqsJson: string
+): LegacyKnowledgeRow[] {
+  const rows: LegacyKnowledgeRow[] = [];
+  recordArray(servicesJson).forEach((service, index) => {
+    const title = textField(service, 'name');
+    if (!title) return;
+    const price = textField(service, 'price');
+    const duration = textField(service, 'duration');
+    const notes = textField(service, 'notes');
+    const details = [price, duration].filter(Boolean).join(' · ');
+    rows.push({
+      id: `legacy_${businessId}_service_${index}`,
+      collection_id: collectionId,
+      kind: 'service',
+      status: 'active',
+      title,
+      question: '',
+      answer: '',
+      content: details && notes ? `${details} — ${notes}` : details || notes,
+    });
+  });
+  recordArray(faqsJson).forEach((faq, index) => {
+    const question = textField(faq, 'q');
+    const answer = textField(faq, 'a');
+    if (!question || !answer) return;
+    rows.push({
+      id: `legacy_${businessId}_faq_${index}`,
+      collection_id: collectionId,
+      kind: 'faq',
+      status: 'active',
+      title: '',
+      question,
+      answer,
+      content: '',
+    });
+  });
+  return rows;
+}
+
+export async function syncLegacyKnowledge(
+  env: Env,
+  workspace: Pick<Business, 'id' | 'services_json' | 'faqs_json'>,
+  collectionId?: string,
+  changed: { services: boolean; faqs: boolean } = { services: true, faqs: true }
+): Promise<void> {
+  const collection = collectionId
+    ? { id: collectionId }
+    : await env.DB.prepare(
+        'SELECT id FROM knowledge_collections WHERE business_id = ? AND is_default = 1 ORDER BY created_at, id LIMIT 1'
+      )
+        .bind(workspace.id)
+        .first<{ id: string }>();
+  if (!collection) return;
+  const expected = expectedLegacyKnowledge(workspace.id, collection.id, workspace.services_json, workspace.faqs_json);
+  const statements: D1PreparedStatement[] = [];
+  if (changed.services) {
+    statements.push(
+      env.DB.prepare(
+        `DELETE FROM knowledge_items WHERE business_id = ? AND (
+          instr(id, ?) = 1 OR instr(id, ?) = 1
+        )`
+      ).bind(workspace.id, `ki_service_${workspace.id}_`, `legacy_${workspace.id}_service_`)
+    );
+  }
+  if (changed.faqs) {
+    statements.push(
+      env.DB.prepare(
+        `DELETE FROM knowledge_items WHERE business_id = ? AND (
+          instr(id, ?) = 1 OR instr(id, ?) = 1
+        )`
+      ).bind(workspace.id, `ki_faq_${workspace.id}_`, `legacy_${workspace.id}_faq_`)
+    );
+  }
+  for (const row of expected.filter((entry) =>
+    entry.kind === 'service' ? changed.services : changed.faqs
+  )) {
+    statements.push(
+      env.DB.prepare(
+        `INSERT INTO knowledge_items (
+          id, business_id, collection_id, kind, status, title, question, answer, content, activated_at
+         ) VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, datetime('now'))`
+      ).bind(
+        row.id,
+        workspace.id,
+        row.collection_id,
+        row.kind,
+        row.title,
+        row.question,
+        row.answer,
+        row.content
+      )
+    );
+  }
+  statements.push(
+    env.DB.prepare(
+      `INSERT INTO compatibility_sync_state (business_id, services_json, faqs_json, collection_id, agent_snapshot)
+       SELECT ?, ?, ?, ?, ${AGENT_SNAPSHOT_SQL} FROM agent_settings WHERE business_id=?
+       ON CONFLICT(business_id) DO UPDATE SET services_json=excluded.services_json,
+         faqs_json=excluded.faqs_json, collection_id=excluded.collection_id,
+         synced_at=datetime('now')`
+    ).bind(workspace.id, workspace.services_json, workspace.faqs_json, collection.id, workspace.id)
+  );
+  await env.DB.batch(statements);
+}
+
+function profileSignature(profiles: LegacyProfile[]): string {
+  return JSON.stringify(
+    profiles
+      .map((profile) => ({
+        id: profile.id,
+        business_id: profile.business_id,
+        ...Object.fromEntries(LEGACY_PROFILE_FIELDS.map((field) => [field, profile[field]])),
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id))
+  );
+}
+
+export async function ensureWorkspaceFoundation(
+  env: Env,
+  workspace: Pick<Business, 'id' | 'slug' | 'services_json' | 'faqs_json'>
+): Promise<void> {
+  let [legacy, assistant, provider, legacyProfilesResult, presetsResult] = await Promise.all([
+    env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?').bind(workspace.id).first<AgentSettings>(),
+    env.DB.prepare('SELECT * FROM assistants WHERE business_id = ? AND public_slug = ? LIMIT 1')
+      .bind(workspace.id, workspace.slug)
+      .first<Assistant>(),
+    env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?').bind(workspace.id).first<ProviderSettings>(),
+    env.DB.prepare('SELECT * FROM engine_profiles WHERE business_id = ? ORDER BY id').bind(workspace.id).all<LegacyProfile>(),
+    env.DB.prepare('SELECT * FROM engine_presets WHERE business_id = ? ORDER BY id').bind(workspace.id).all<LegacyProfile>(),
+  ]);
+  if (!legacy) {
+    if (assistant) {
+      // New-domain rows are authoritative when only the compatibility adapter
+      // was lost. Reconstructing defaults here would silently overwrite a
+      // configured assistant and provider on the next reconciliation pass.
+      await env.DB.prepare(
+        `INSERT OR IGNORE INTO agent_settings (
+          business_id, agent_name, greeting, persona, language, voice,
+          take_messages, custom_instructions, llm_base_url, llm_api_key,
+          llm_model, engine, realtime_model, realtime_voice
+         )
+         SELECT assistants.business_id, assistants.name, assistants.greeting,
+           assistants.persona, assistants.language, assistants.voice,
+           assistants.take_messages, assistants.custom_instructions,
+           COALESCE(provider_settings.llm_base_url, ''),
+           COALESCE(provider_settings.llm_api_key, ''), assistants.llm_model,
+           assistants.engine, assistants.realtime_model, assistants.realtime_voice
+          FROM assistants
+          LEFT JOIN provider_settings ON provider_settings.business_id=assistants.business_id
+         WHERE assistants.id=?`
+      ).bind(assistant.id).run();
+    } else {
+      await env.DB.prepare('INSERT OR IGNORE INTO agent_settings (business_id) VALUES (?)').bind(workspace.id).run();
+    }
+    legacy = await env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?')
+      .bind(workspace.id)
+      .first<AgentSettings>();
+  }
+  if (!legacy) throw new Error('Could not restore workspace settings');
+
+  const syncState = await env.DB.prepare(
+      `SELECT compatibility_sync_state.services_json, compatibility_sync_state.faqs_json,
+        compatibility_sync_state.collection_id,
+        compatibility_sync_state.agent_snapshot,
+        compatibility_sync_state.agent_snapshot <> ${AGENT_SNAPSHOT_SQL} AS agent_changed
+       FROM compatibility_sync_state
+       JOIN agent_settings ON agent_settings.business_id=compatibility_sync_state.business_id
+      WHERE compatibility_sync_state.business_id = ?`
+    )
+      .bind(workspace.id)
+      .first<{
+        services_json: string;
+        faqs_json: string;
+        collection_id: string;
+        agent_snapshot: string;
+        agent_changed: number;
+      }>();
+  const statements: D1PreparedStatement[] = [];
+  const assistantValues = [
+    legacy.agent_name,
+    legacy.greeting,
+    legacy.persona,
+    legacy.language,
+    legacy.voice,
+    legacy.take_messages,
+    legacy.custom_instructions,
+    legacy.engine,
+    legacy.realtime_model,
+    legacy.realtime_voice,
+    legacy.llm_model,
+  ];
+  const legacyEssentialsReady = Boolean(
+    legacy.agent_name.trim() && legacy.persona.trim() && legacy.language.trim()
+  );
+  let agentSnapshotNeedsUpdate = Boolean(syncState?.agent_changed);
+  if (!assistant) {
+    statements.push(
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO assistants (
+          id, business_id, public_slug, state, name, greeting, persona, language,
+          voice, take_messages, custom_instructions, engine, realtime_model,
+          realtime_voice, llm_model, activated_at
+         )
+         SELECT ?, ?, ?,
+           CASE WHEN
+             trim(agent_name, char(9) || char(10) || char(11) || char(12) || char(13) || ' ')<>''
+             AND trim(persona, char(9) || char(10) || char(11) || char(12) || char(13) || ' ')<>''
+             AND trim(language, char(9) || char(10) || char(11) || char(12) || char(13) || ' ')<>''
+           THEN 'active' ELSE 'draft' END,
+           agent_name, greeting, persona, language,
+           voice, take_messages, custom_instructions, engine, realtime_model,
+           realtime_voice, llm_model,
+           CASE WHEN
+             trim(agent_name, char(9) || char(10) || char(11) || char(12) || char(13) || ' ')<>''
+             AND trim(persona, char(9) || char(10) || char(11) || char(12) || char(13) || ' ')<>''
+             AND trim(language, char(9) || char(10) || char(11) || char(12) || char(13) || ' ')<>''
+           THEN datetime('now') ELSE NULL END
+           FROM agent_settings WHERE business_id=?`
+      ).bind(`asst_${workspace.id}`, workspace.id, workspace.slug, workspace.id)
+    );
+  } else {
+    const valuesDiffer = [
+      assistant.name,
+      assistant.greeting,
+      assistant.persona,
+      assistant.language,
+      assistant.voice,
+      assistant.take_messages,
+      assistant.custom_instructions,
+      assistant.engine,
+      assistant.realtime_model,
+      assistant.realtime_voice,
+      assistant.llm_model,
+    ].some((value, index) => value !== assistantValues[index]);
+    if (
+      assistant.state === 'draft' &&
+      legacyEssentialsReady &&
+      (Boolean(syncState?.agent_changed) ||
+        !syncState)
+    ) {
+      statements.push(
+        env.DB.prepare(
+          `UPDATE assistants SET
+            (name, greeting, persona, language, voice, take_messages, custom_instructions,
+             engine, realtime_model, realtime_voice, llm_model) =
+            (SELECT agent_name, greeting, persona, language, voice, take_messages, custom_instructions,
+               engine, realtime_model, realtime_voice, llm_model
+               FROM agent_settings WHERE business_id=?),
+            state='active', activated_at=COALESCE(activated_at, datetime('now')),
+            updated_at=datetime('now')
+           WHERE id=?`
+        ).bind(workspace.id, assistant.id)
+      );
+    } else if (assistant.state !== 'draft' && valuesDiffer) {
+      if (legacyEssentialsReady) {
+        statements.push(
+          env.DB.prepare(
+            `UPDATE assistants SET
+              (name, greeting, persona, language, voice, take_messages, custom_instructions,
+               engine, realtime_model, realtime_voice, llm_model) =
+              (SELECT agent_name, greeting, persona, language, voice, take_messages, custom_instructions,
+                 engine, realtime_model, realtime_voice, llm_model
+                 FROM agent_settings WHERE business_id=?),
+              updated_at=datetime('now')
+             WHERE id=?`
+          ).bind(workspace.id, assistant.id)
+        );
+      } else {
+        // Old workers allowed incomplete writes. Never let one turn a valid
+        // active/paused assistant into a permanently failing reconciliation;
+        // restore the compatibility behavior fields from the valid source.
+        statements.push(
+          env.DB.prepare(
+            `UPDATE agent_settings SET
+              (agent_name, greeting, persona, language, voice, take_messages,
+               custom_instructions, engine, realtime_model, realtime_voice, llm_model) =
+              (SELECT name, greeting, persona, language, voice, take_messages,
+                 custom_instructions, engine, realtime_model, realtime_voice, llm_model
+                 FROM assistants WHERE id=?)
+             WHERE business_id=?`
+          ).bind(assistant.id, workspace.id)
+        );
+        agentSnapshotNeedsUpdate = true;
+      }
+    }
+    if (agentSnapshotNeedsUpdate) {
+      statements.push(updateAgentSnapshot(env, workspace.id));
+    }
+  }
+  if (
+    !provider ||
+    provider.llm_base_url !== legacy.llm_base_url ||
+    provider.llm_api_key !== legacy.llm_api_key
+  ) {
+    statements.push(
+      env.DB.prepare(
+        `INSERT INTO provider_settings (business_id, llm_base_url, llm_api_key)
+         SELECT business_id, llm_base_url, llm_api_key FROM agent_settings WHERE business_id=?
+         ON CONFLICT(business_id) DO UPDATE SET llm_base_url=excluded.llm_base_url,
+           llm_api_key=excluded.llm_api_key, updated_at=datetime('now')`
+      ).bind(workspace.id)
+    );
+  }
+  if (!syncState || !assistant) {
+    statements.push(
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO knowledge_collections (id, business_id, name, description, is_default)
+         SELECT ?, ?, 'Workspace knowledge', 'Services and answers shared by default with new assistants.', 1
+         WHERE NOT EXISTS (SELECT 1 FROM knowledge_collections WHERE business_id = ? AND is_default = 1)`
+      ).bind(`kc_default_${workspace.id}`, workspace.id, workspace.id),
+      env.DB.prepare(
+        `UPDATE knowledge_collections SET is_default=1, updated_at=datetime('now')
+         WHERE business_id=? AND name='Workspace knowledge'
+           AND NOT EXISTS (SELECT 1 FROM knowledge_collections WHERE business_id=? AND is_default=1)`
+      ).bind(workspace.id, workspace.id),
+    );
+  }
+  if (profileSignature(legacyProfilesResult.results) !== profileSignature(presetsResult.results)) {
+    statements.push(
+      env.DB.prepare(
+        `INSERT INTO engine_presets (
+          id, business_id, name, engine, realtime_model, realtime_voice, language,
+          voice, llm_model, created_at, updated_at
+         )
+         SELECT id, business_id, name, engine, realtime_model, realtime_voice,
+           language, voice, llm_model, created_at, datetime('now')
+           FROM engine_profiles WHERE business_id = ?
+         ON CONFLICT(id) DO UPDATE SET name=excluded.name, engine=excluded.engine,
+           realtime_model=excluded.realtime_model, realtime_voice=excluded.realtime_voice,
+           language=excluded.language, voice=excluded.voice, llm_model=excluded.llm_model,
+           updated_at=datetime('now')`
+      ).bind(workspace.id),
+      env.DB.prepare(
+        `DELETE FROM engine_presets WHERE business_id=?
+          AND NOT EXISTS (SELECT 1 FROM engine_profiles WHERE engine_profiles.id=engine_presets.id)`
+      ).bind(workspace.id)
+    );
+  }
+  if (statements.length > 0) await env.DB.batch(statements);
+  const collection = await env.DB.prepare(
+    'SELECT id FROM knowledge_collections WHERE business_id = ? AND is_default = 1 ORDER BY created_at, id LIMIT 1'
+  )
+    .bind(workspace.id)
+    .first<{ id: string }>();
+  if (!collection) throw new Error('Could not restore workspace knowledge');
+  if (!syncState || !assistant || syncState.collection_id !== collection.id) {
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO assistant_knowledge_collections (assistant_id, collection_id)
+       SELECT assistants.id, ? FROM assistants
+        WHERE assistants.business_id=? AND assistants.public_slug=?`
+    )
+      .bind(collection.id, workspace.id, workspace.slug)
+      .run();
+  }
+  const collectionChanged = !syncState || syncState.collection_id !== collection.id;
+  const servicesChanged =
+    !syncState || !jsonSemanticallyEqual(syncState.services_json, workspace.services_json);
+  const faqsChanged = !syncState || !jsonSemanticallyEqual(syncState.faqs_json, workspace.faqs_json);
+  if (collectionChanged || servicesChanged || faqsChanged) {
+    await syncLegacyKnowledge(env, workspace, collection.id, {
+      services: collectionChanged || servicesChanged,
+      faqs: collectionChanged || faqsChanged,
+    });
+  } else if (
+    syncState.services_json !== workspace.services_json ||
+    syncState.faqs_json !== workspace.faqs_json
+  ) {
+    // Old workers may reserialize unchanged JSON. Advance only the raw marker;
+    // rebuilding would overwrite owner-approved edits to imported items.
+    await env.DB.prepare(
+      `UPDATE compatibility_sync_state SET services_json=?, faqs_json=?, synced_at=datetime('now')
+       WHERE business_id=?`
+    )
+      .bind(workspace.services_json, workspace.faqs_json, workspace.id)
+      .run();
+  }
+}
+
 function slugBase(value: string): string {
   return (
     value
@@ -33,7 +512,11 @@ function assistantSlug(name: string): string {
 }
 
 async function workspaceForUser(env: Env, userId: string): Promise<Workspace | null> {
-  return env.DB.prepare('SELECT * FROM businesses WHERE user_id = ? LIMIT 1').bind(userId).first<Workspace>();
+  const workspace = await env.DB.prepare('SELECT * FROM businesses WHERE user_id = ? ORDER BY created_at, id LIMIT 1')
+    .bind(userId)
+    .first<Workspace>();
+  if (workspace) await ensureWorkspaceFoundation(env, workspace);
+  return workspace;
 }
 
 async function ownedAssistant(env: Env, userId: string, assistantId: string): Promise<Assistant | null> {
@@ -44,6 +527,14 @@ async function ownedAssistant(env: Env, userId: string, assistantId: string): Pr
   )
     .bind(assistantId, userId)
     .first<Assistant>();
+}
+
+async function isCompatibilityAssistant(env: Env, assistant: Assistant): Promise<boolean> {
+  return Boolean(
+    await env.DB.prepare('SELECT 1 AS found FROM businesses WHERE id = ? AND slug = ?')
+      .bind(assistant.business_id, assistant.public_slug)
+      .first()
+  );
 }
 
 async function ownedCollection(env: Env, userId: string, collectionId: string): Promise<KnowledgeCollection | null> {
@@ -160,7 +651,9 @@ export function registerStudioApi(app: StudioApp): void {
     const [{ results: assistants }, provider, test] = await Promise.all([
       c.env.DB.prepare('SELECT * FROM assistants WHERE business_id = ? ORDER BY created_at, id').bind(workspace.id).all<Assistant>(),
       c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?').bind(workspace.id).first<ProviderSettings>(),
-      c.env.DB.prepare("SELECT 1 AS found FROM calls WHERE business_id = ? AND environment = 'test' LIMIT 1")
+      c.env.DB.prepare(
+        "SELECT 1 AS found FROM calls WHERE business_id = ? AND environment = 'test' AND connected_at IS NOT NULL LIMIT 1"
+      )
         .bind(workspace.id)
         .first<{ found: number }>(),
     ]);
@@ -199,9 +692,16 @@ export function registerStudioApi(app: StudioApp): void {
     const workspace = await workspaceForUser(c.env, c.get('userId'));
     if (!workspace) return c.json({ error: 'Create a workspace first' }, 409);
     const body = await c.req.json<Partial<Assistant>>();
+    if (
+      (body.name !== undefined && !body.name.trim()) ||
+      (body.persona !== undefined && !body.persona.trim()) ||
+      (body.language !== undefined && !body.language.trim())
+    ) {
+      return c.json({ error: 'Assistant name, personality, and language cannot be blank' }, 400);
+    }
     if (!body.name?.trim()) return c.json({ error: 'Assistant name required' }, 400);
     const id = newId();
-    await c.env.DB.prepare(
+    const createAssistant = c.env.DB.prepare(
       `INSERT INTO assistants (
         id, business_id, public_slug, state, name, greeting, persona, language,
         voice, take_messages, custom_instructions, engine, realtime_model,
@@ -223,14 +723,13 @@ export function registerStudioApi(app: StudioApp): void {
         body.realtime_model ?? '',
         body.realtime_voice ?? '',
         body.llm_model ?? ''
-      )
-      .run();
-    await c.env.DB.prepare(
+      );
+    const attachDefault = c.env.DB.prepare(
       `INSERT OR IGNORE INTO assistant_knowledge_collections (assistant_id, collection_id)
        SELECT ?, id FROM knowledge_collections WHERE business_id = ? AND is_default = 1`
     )
-      .bind(id, workspace.id)
-      .run();
+      .bind(id, workspace.id);
+    await c.env.DB.batch([createAssistant, attachDefault]);
     const row = await c.env.DB.prepare('SELECT * FROM assistants WHERE id = ?').bind(id).first<Assistant>();
     return c.json(row, 201);
   });
@@ -250,28 +749,70 @@ export function registerStudioApi(app: StudioApp): void {
     const assistant = await ownedAssistant(c.env, c.get('userId'), c.req.param('assistantId'));
     if (!assistant) return c.json({ error: 'Not found' }, 404);
     const body = await c.req.json<Partial<Assistant>>();
+    if (
+      (body.name !== undefined && !body.name.trim()) ||
+      (body.persona !== undefined && !body.persona.trim()) ||
+      (body.language !== undefined && !body.language.trim())
+    ) {
+      return c.json({ error: 'Assistant name, personality, and language cannot be blank' }, 400);
+    }
     const name = body.name?.trim() || assistant.name;
     const engine = body.engine === 'realtime' ? 'realtime' : body.engine === 'pipeline' ? 'pipeline' : assistant.engine;
-    await c.env.DB.prepare(
+    const greeting = body.greeting ?? assistant.greeting;
+    const persona = body.persona ?? assistant.persona;
+    const language = body.language ?? assistant.language;
+    const voice = body.voice ?? assistant.voice;
+    const takeMessages = body.take_messages !== undefined ? (body.take_messages ? 1 : 0) : assistant.take_messages;
+    const instructions = body.custom_instructions ?? assistant.custom_instructions;
+    const realtimeModel = body.realtime_model ?? assistant.realtime_model;
+    const realtimeVoice = body.realtime_voice ?? assistant.realtime_voice;
+    const llmModel = body.llm_model ?? assistant.llm_model;
+    if (assistant.state === 'active' && (!name.trim() || !persona.trim() || !language.trim())) {
+      return c.json({ error: 'Active assistants require a name, personality, and language' }, 400);
+    }
+    const statements = [
+      c.env.DB.prepare(
       `UPDATE assistants SET name=?, greeting=?, persona=?, language=?, voice=?, take_messages=?,
         custom_instructions=?, engine=?, realtime_model=?, realtime_voice=?, llm_model=?, updated_at=datetime('now')
        WHERE id=?`
-    )
-      .bind(
+      ).bind(
         name,
-        body.greeting ?? assistant.greeting,
-        body.persona ?? assistant.persona,
-        body.language ?? assistant.language,
-        body.voice ?? assistant.voice,
-        body.take_messages !== undefined ? (body.take_messages ? 1 : 0) : assistant.take_messages,
-        body.custom_instructions ?? assistant.custom_instructions,
+        greeting,
+        persona,
+        language,
+        voice,
+        takeMessages,
+        instructions,
         engine,
-        body.realtime_model ?? assistant.realtime_model,
-        body.realtime_voice ?? assistant.realtime_voice,
-        body.llm_model ?? assistant.llm_model,
+        realtimeModel,
+        realtimeVoice,
+        llmModel,
         assistant.id
-      )
-      .run();
+      ),
+    ];
+    if (await isCompatibilityAssistant(c.env, assistant)) {
+      statements.push(
+        c.env.DB.prepare(
+        `UPDATE agent_settings SET agent_name=?, greeting=?, persona=?, language=?, voice=?, take_messages=?,
+          custom_instructions=?, llm_model=?, engine=?, realtime_model=?, realtime_voice=? WHERE business_id=?`
+        ).bind(
+          name,
+          greeting,
+          persona,
+          language,
+          voice,
+          takeMessages,
+          instructions,
+          llmModel,
+          engine,
+          realtimeModel,
+          realtimeVoice,
+          assistant.business_id
+        )
+      );
+      statements.push(updateAgentSnapshot(c.env, assistant.business_id));
+    }
+    await c.env.DB.batch(statements);
     const row = await c.env.DB.prepare('SELECT * FROM assistants WHERE id = ?').bind(assistant.id).first<Assistant>();
     return c.json(row);
   });
@@ -282,11 +823,19 @@ export function registerStudioApi(app: StudioApp): void {
     if (!assistant.name.trim() || !assistant.language.trim() || !assistant.persona.trim()) {
       return c.json({ error: 'Complete the assistant essentials before activation' }, 400);
     }
-    await c.env.DB.prepare(
-      "UPDATE assistants SET state='active', activated_at=COALESCE(activated_at, datetime('now')), updated_at=datetime('now') WHERE id=?"
+    const activated = await c.env.DB.prepare(
+      `UPDATE assistants SET state='active', activated_at=COALESCE(activated_at, datetime('now')),
+        updated_at=datetime('now')
+       WHERE id=?
+         AND trim(name, char(9) || char(10) || char(11) || char(12) || char(13) || ' ')<>''
+         AND trim(persona, char(9) || char(10) || char(11) || char(12) || char(13) || ' ')<>''
+         AND trim(language, char(9) || char(10) || char(11) || char(12) || char(13) || ' ')<>''`
     )
       .bind(assistant.id)
       .run();
+    if ((activated.meta.changes ?? 0) !== 1) {
+      return c.json({ error: 'Complete the assistant essentials before activation' }, 409);
+    }
     return c.json({ ok: true, state: 'active' });
   });
 
@@ -302,13 +851,29 @@ export function registerStudioApi(app: StudioApp): void {
   app.post('/api/me/assistants/:assistantId/test-calls', async (c) => {
     const assistant = await ownedAssistant(c.env, c.get('userId'), c.req.param('assistantId'));
     if (!assistant) return c.json({ error: 'Not found' }, 404);
+    if (!(await reserveStudioSpend(c.env, assistant.business_id, 'minute', 60, STUDIO_SPEND_PER_MINUTE))) {
+      return c.json({ error: 'Too many test actions. Please wait a minute.' }, 429, { 'Retry-After': '60' });
+    }
     const callId = newId();
-    await c.env.DB.prepare(
+    const inserted = await c.env.DB.prepare(
       `INSERT INTO calls (id, business_id, assistant_id, channel, caller_id, environment, direction)
-       VALUES (?, ?, ?, 'web', ?, 'test', 'inbound')`
+       SELECT ?, ?, ?, 'web', ?, 'test', 'inbound'
+        WHERE (SELECT COUNT(*) FROM calls
+                WHERE business_id=? AND environment='test'
+                  AND started_at > datetime('now', '-1 day')) < ?`
     )
-      .bind(callId, assistant.business_id, assistant.id, `owner:${c.get('userId')}`)
+      .bind(
+        callId,
+        assistant.business_id,
+        assistant.id,
+        `owner:${c.get('userId')}`,
+        assistant.business_id,
+        TEST_CALLS_PER_DAY
+      )
       .run();
+    if ((inserted.meta.changes ?? 0) !== 1) {
+      return c.json({ error: 'Daily test-call limit reached. Try again tomorrow.' }, 429, { 'Retry-After': '3600' });
+    }
     return c.json({ callId, assistantId: assistant.id, environment: 'test' }, 201);
   });
 
@@ -363,16 +928,30 @@ export function registerStudioApi(app: StudioApp): void {
     const workspace = await workspaceForUser(c.env, c.get('userId'));
     const parsed = Number.parseInt(c.req.query('days') ?? '30', 10);
     const days = parsed === 7 || parsed === 90 ? parsed : 30;
-    if (!workspace) return c.json({ days, metrics: { total: 0 }, recentCalls: [] });
+    if (!workspace) {
+      return c.json({
+        days,
+        metrics: {
+          total: 0,
+          completed: 0,
+          failed: 0,
+          messages: 0,
+          booking_requests: 0,
+          talk_time_s: 0,
+          average_duration_s: 0,
+        },
+        recentCalls: [],
+      });
+    }
     const since = `-${days} days`;
     const [metrics, recent] = await Promise.all([
       c.env.DB.prepare(
         `SELECT
           COUNT(*) AS total,
-          SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
-          SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
-          SUM(CASE WHEN intent = 'message' OR message_json IS NOT NULL THEN 1 ELSE 0 END) AS messages,
-          SUM(CASE WHEN intent = 'booking' THEN 1 ELSE 0 END) AS booking_requests,
+          COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed,
+          COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed,
+          COALESCE(SUM(CASE WHEN intent = 'message' OR message_json IS NOT NULL THEN 1 ELSE 0 END), 0) AS messages,
+          COALESCE(SUM(CASE WHEN intent = 'booking' THEN 1 ELSE 0 END), 0) AS booking_requests,
           COALESCE(SUM(duration_s), 0) AS talk_time_s,
           COALESCE(AVG(CASE WHEN status = 'completed' THEN duration_s END), 0) AS average_duration_s
          FROM calls WHERE business_id = ? AND environment = 'live' AND started_at >= datetime('now', ?)`
@@ -662,16 +1241,21 @@ export function registerStudioApi(app: StudioApp): void {
     const apiKey = body.apiKey !== undefined ? body.apiKey?.trim() ?? '' : current?.llm_api_key ?? '';
     const bad = providerValidationError(c.env, baseUrl, apiKey);
     if (bad) return c.json({ error: bad }, 400);
-    await c.env.DB.prepare(
-      `INSERT INTO provider_settings (business_id, llm_base_url, llm_api_key)
-       VALUES (?, ?, ?)
-       ON CONFLICT(business_id) DO UPDATE SET
-         llm_base_url=excluded.llm_base_url,
-         llm_api_key=excluded.llm_api_key,
-         updated_at=datetime('now')`
-    )
-      .bind(workspace.id, baseUrl, apiKey)
-      .run();
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO provider_settings (business_id, llm_base_url, llm_api_key)
+         VALUES (?, ?, ?)
+         ON CONFLICT(business_id) DO UPDATE SET
+           llm_base_url=excluded.llm_base_url,
+           llm_api_key=excluded.llm_api_key,
+           updated_at=datetime('now')`
+      ).bind(workspace.id, baseUrl, apiKey),
+      c.env.DB.prepare('UPDATE agent_settings SET llm_base_url=?, llm_api_key=? WHERE business_id=?').bind(
+        baseUrl,
+        apiKey,
+        workspace.id
+      ),
+    ]);
     return c.json({ ok: true, apiKeyConfigured: providerConfigured(c.env, { ...(current ?? {}), llm_base_url: baseUrl, llm_api_key: apiKey } as ProviderSettings) });
   });
 
@@ -682,14 +1266,24 @@ export function registerStudioApi(app: StudioApp): void {
     let assistant: Assistant | null = null;
     if (body.assistantId) assistant = await ownedAssistant(c.env, c.get('userId'), body.assistantId);
     else {
-      assistant = await c.env.DB.prepare('SELECT * FROM assistants WHERE business_id = ? ORDER BY created_at LIMIT 1')
-        .bind(workspace.id)
+      assistant = await c.env.DB.prepare(
+        'SELECT * FROM assistants WHERE business_id = ? AND public_slug = ? LIMIT 1'
+      )
+        .bind(workspace.id, workspace.slug)
         .first<Assistant>();
     }
     if (!assistant) return c.json({ error: 'Create an assistant first' }, 409);
     const provider = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
       .bind(workspace.id)
       .first<ProviderSettings>();
+    if (!(await reserveStudioSpend(c.env, workspace.id, 'minute', 60, STUDIO_SPEND_PER_MINUTE))) {
+      return c.json({ error: 'Too many provider checks. Please wait a minute.' }, 429, { 'Retry-After': '60' });
+    }
+    if (!(await reserveStudioSpend(c.env, workspace.id, 'provider-day', 86_400, PROVIDER_CHECKS_PER_DAY))) {
+      return c.json({ error: 'Daily provider-check limit reached. Try again tomorrow.' }, 429, {
+        'Retry-After': '3600',
+      });
+    }
     try {
       const cfg = resolveLlm(c.env, settingsForProvider(assistant, provider));
       await chatComplete(
@@ -725,23 +1319,40 @@ export function registerStudioApi(app: StudioApp): void {
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name) return c.json({ error: 'Preset name required' }, 400);
     const id = newId();
-    await c.env.DB.prepare(
+    const engine = body.engine === 'realtime' ? 'realtime' : 'pipeline';
+    const realtimeModel = typeof body.realtime_model === 'string' ? body.realtime_model : '';
+    const realtimeVoice = typeof body.realtime_voice === 'string' ? body.realtime_voice : '';
+    const language = typeof body.language === 'string' ? body.language.trim() || 'en' : 'en';
+    const voice = typeof body.voice === 'string' ? body.voice : '';
+    const llmModel = typeof body.llm_model === 'string' ? body.llm_model : '';
+    const provider = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
+      .bind(workspace.id)
+      .first<ProviderSettings>();
+    await c.env.DB.batch([
+      c.env.DB.prepare(
       `INSERT INTO engine_presets (
         id, business_id, name, engine, realtime_model, realtime_voice, language, voice, llm_model
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-      .bind(
+      ).bind(id, workspace.id, name, engine, realtimeModel, realtimeVoice, language, voice, llmModel),
+      c.env.DB.prepare(
+        `INSERT INTO engine_profiles (
+          id, business_id, name, engine, realtime_model, realtime_voice, language,
+          voice, llm_base_url, llm_api_key, llm_model
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
         id,
         workspace.id,
         name,
-        body.engine === 'realtime' ? 'realtime' : 'pipeline',
-        typeof body.realtime_model === 'string' ? body.realtime_model : '',
-        typeof body.realtime_voice === 'string' ? body.realtime_voice : '',
-        typeof body.language === 'string' ? body.language : 'en',
-        typeof body.voice === 'string' ? body.voice : '',
-        typeof body.llm_model === 'string' ? body.llm_model : ''
-      )
-      .run();
+        engine,
+        realtimeModel,
+        realtimeVoice,
+        language,
+        voice,
+        provider?.llm_base_url ?? '',
+        provider?.llm_api_key ?? '',
+        llmModel
+      ),
+    ]);
     const row = await c.env.DB.prepare('SELECT * FROM engine_presets WHERE id = ?').bind(id).first();
     return c.json(row, 201);
   });
@@ -758,11 +1369,12 @@ export function registerStudioApi(app: StudioApp): void {
       .bind(c.req.param('presetId'), c.get('userId'))
       .first<Record<string, string>>();
     if (!assistant || !preset || assistant.business_id !== preset.business_id) return c.json({ error: 'Not found' }, 404);
-    await c.env.DB.prepare(
-      `UPDATE assistants SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?, updated_at=datetime('now')
-       WHERE id=?`
-    )
-      .bind(
+    if (!preset.language.trim()) return c.json({ error: 'Preset language is required before applying it' }, 400);
+    const statements = [
+      c.env.DB.prepare(
+        `UPDATE assistants SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?, updated_at=datetime('now')
+         WHERE id=?`
+      ).bind(
         preset.engine,
         preset.realtime_model,
         preset.realtime_voice,
@@ -770,8 +1382,26 @@ export function registerStudioApi(app: StudioApp): void {
         preset.voice,
         preset.llm_model,
         assistant.id
-      )
-      .run();
+      ),
+    ];
+    if (await isCompatibilityAssistant(c.env, assistant)) {
+      statements.push(
+        c.env.DB.prepare(
+          `UPDATE agent_settings SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?
+           WHERE business_id=?`
+        ).bind(
+          preset.engine,
+          preset.realtime_model,
+          preset.realtime_voice,
+          preset.language,
+          preset.voice,
+          preset.llm_model,
+          assistant.business_id
+        )
+      );
+      statements.push(updateAgentSnapshot(c.env, assistant.business_id));
+    }
+    await c.env.DB.batch(statements);
     return c.json({ ok: true });
   });
 
@@ -786,21 +1416,24 @@ export function registerStudioApi(app: StudioApp): void {
     if (!preset) return c.json({ error: 'Not found' }, 404);
     const body = await c.req.json<Record<string, unknown>>();
     const value = (key: string) => (typeof body[key] === 'string' ? body[key] as string : preset[key]);
-    await c.env.DB.prepare(
-      `UPDATE engine_presets SET name=?, engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?, updated_at=datetime('now')
-       WHERE id=?`
-    )
-      .bind(
-        value('name').trim() || preset.name,
-        body.engine === 'realtime' ? 'realtime' : body.engine === 'pipeline' ? 'pipeline' : preset.engine,
-        value('realtime_model'),
-        value('realtime_voice'),
-        value('language'),
-        value('voice'),
-        value('llm_model'),
-        preset.id
-      )
-      .run();
+    const name = value('name').trim() || preset.name;
+    const engine = body.engine === 'realtime' ? 'realtime' : body.engine === 'pipeline' ? 'pipeline' : preset.engine;
+    const realtimeModel = value('realtime_model');
+    const realtimeVoice = value('realtime_voice');
+    const language = value('language');
+    if (!language.trim()) return c.json({ error: 'Preset language is required' }, 400);
+    const voice = value('voice');
+    const llmModel = value('llm_model');
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE engine_presets SET name=?, engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?, updated_at=datetime('now')
+         WHERE id=?`
+      ).bind(name, engine, realtimeModel, realtimeVoice, language, voice, llmModel, preset.id),
+      c.env.DB.prepare(
+        `UPDATE engine_profiles SET name=?, engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?
+         WHERE id=?`
+      ).bind(name, engine, realtimeModel, realtimeVoice, language, voice, llmModel, preset.id),
+    ]);
     return c.json({ ok: true });
   });
 
@@ -813,7 +1446,10 @@ export function registerStudioApi(app: StudioApp): void {
       .bind(c.req.param('presetId'), c.get('userId'))
       .first<{ id: string }>();
     if (!preset) return c.json({ error: 'Not found' }, 404);
-    await c.env.DB.prepare('DELETE FROM engine_presets WHERE id = ?').bind(preset.id).run();
+    await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM engine_presets WHERE id = ?').bind(preset.id),
+      c.env.DB.prepare('DELETE FROM engine_profiles WHERE id = ?').bind(preset.id),
+    ]);
     return c.json({ ok: true });
   });
 }

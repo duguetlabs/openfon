@@ -122,6 +122,26 @@ describe('POST /api/public/call/start burst', () => {
   });
 });
 
+describe('GET /ws/call/:id handshake budget', () => {
+  it('bounds random and replayed upgrade lookups in the shared public bucket', async () => {
+    const { db, call } = setup();
+    for (let i = 0; i < 30; i++) {
+      expect(
+        (await call(`/ws/call/missing-${i}`, { headers: { Upgrade: 'websocket' } })).status
+      ).toBe(404);
+    }
+    const blocked = await call('/ws/call/missing-over-limit', { headers: { Upgrade: 'websocket' } });
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get('Retry-After')).toBe('60');
+
+    const settled = db.rowsWritten;
+    for (let i = 0; i < 50; i++) {
+      expect((await call('/ws/call/replayed', { headers: { Upgrade: 'websocket' } })).status).toBe(429);
+    }
+    expect(db.rowsWritten).toBe(settled);
+  });
+});
+
 describe('per-business call caps', () => {
   it('turns callers away once the concurrency cap is reached', async () => {
     const { db, attach, start } = setup();

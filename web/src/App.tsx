@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, createContext, useContext } from 'react';
 import { Routes, Route, Navigate, useNavigate, Link, useLocation } from 'react-router-dom';
-import { api, type Business, type Me } from './api';
+import { api, type Assistant, type Business, type Me } from './api';
 import { Logo, Spinner } from './ui';
 import AuthPage from './pages/Auth';
 import Onboarding from './pages/Onboarding';
@@ -12,25 +12,49 @@ import Widget from './pages/Widget';
 interface Session {
   me: Me | null;
   business: Business | null;
+  workspaceReady: boolean;
+  firstAssistant: Assistant | null;
+  firstAssistantReady: boolean;
   refresh: () => Promise<void>;
 }
 
-const SessionCtx = createContext<Session>({ me: null, business: null, refresh: async () => {} });
+const SessionCtx = createContext<Session>({
+  me: null,
+  business: null,
+  workspaceReady: false,
+  firstAssistant: null,
+  firstAssistantReady: false,
+  refresh: async () => {},
+});
 export const useSession = () => useContext(SessionCtx);
 
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [me, setMe] = useState<Me | null>(null);
   const [business, setBusiness] = useState<Business | null>(null);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+  const [firstAssistant, setFirstAssistant] = useState<Assistant | null>(null);
+  const [firstAssistantReady, setFirstAssistantReady] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
       const m = await api.me();
       setMe(m);
-      setBusiness(await api.business());
+      // Both endpoints run the compatibility reconciler. Keep them ordered so
+      // a resumed onboarding load cannot launch two repairs for the same
+      // partially-created workspace.
+      const nextBusiness = await api.business();
+      const bootstrap = await api.bootstrap();
+      setBusiness(nextBusiness);
+      setWorkspaceReady(bootstrap.setup.workspace);
+      setFirstAssistant(bootstrap.assistants[0] ?? null);
+      setFirstAssistantReady(bootstrap.setup.firstAssistant);
     } catch {
       setMe(null);
       setBusiness(null);
+      setWorkspaceReady(false);
+      setFirstAssistant(null);
+      setFirstAssistantReady(false);
     }
   }, []);
 
@@ -47,7 +71,9 @@ export default function App() {
   }
 
   return (
-    <SessionCtx.Provider value={{ me, business, refresh }}>
+    <SessionCtx.Provider
+      value={{ me, business, workspaceReady, firstAssistant, firstAssistantReady, refresh }}
+    >
       <Routes>
         <Route path="/call/:slug" element={<Widget />} />
         <Route path="/auth" element={me ? <Navigate to="/" replace /> : <AuthPage />} />
@@ -56,7 +82,7 @@ export default function App() {
           element={
             !me ? (
               <Navigate to="/auth" replace />
-            ) : !business ? (
+            ) : !business || !workspaceReady || !firstAssistantReady ? (
               <Onboarding />
             ) : (
               <Shell>

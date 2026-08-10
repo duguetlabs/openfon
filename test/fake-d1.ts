@@ -24,6 +24,7 @@ export interface FakeCall extends Row {
   id: string;
   business_id: string;
   assistant_id?: string | null;
+  environment?: 'test' | 'live';
   status: string;
   started_at: number;
   connected_at: number | null;
@@ -69,13 +70,29 @@ export class FakeD1 {
       public_slug: b.slug,
       state: 'active',
       name: 'Alex',
+      greeting: '',
+      persona: 'friendly and professional',
       language: 'en',
+      voice: '',
+      take_messages: 1,
+      custom_instructions: '',
+      engine: 'pipeline',
+      realtime_model: '',
+      realtime_voice: '',
+      llm_model: '',
     });
     return row;
   }
 
   seedCall(c: Partial<FakeCall> & { id: string; business_id: string }): FakeCall {
-    const row: FakeCall = { status: 'active', started_at: Date.now(), connected_at: null, ...c };
+    const row: FakeCall = {
+      assistant_id: `asst_${c.business_id}`,
+      environment: 'live',
+      status: 'active',
+      started_at: Date.now(),
+      connected_at: null,
+      ...c,
+    };
     this.calls.push(row);
     return row;
   }
@@ -179,26 +196,109 @@ class FakeStatement {
     }
 
     // ---- businesses ----
+    if (q.startsWith('SELECT * FROM businesses WHERE slug')) {
+      const b = this.db.businesses.find((x) => x.slug === a[0]);
+      return { rows: b ? [b] : [], changes: 0 };
+    }
     if (q.startsWith('SELECT id, max_concurrent_calls, max_calls_per_day FROM businesses WHERE slug')) {
       const b = this.db.businesses.find((x) => x.slug === a[0]);
       return { rows: b ? [b] : [], changes: 0 };
     }
 
+    // Compatibility/foundation reads performed before a public call. The
+    // focused limits fake stores the same data in its assistant/business rows,
+    // so these branches expose that already-reconciled view without pretending
+    // to be a general SQL engine.
+    if (q.startsWith('SELECT * FROM agent_settings WHERE business_id')) {
+      const assistant = this.db.assistants.find((x) => x.business_id === a[0]);
+      return {
+        rows: assistant
+          ? [
+              {
+                business_id: a[0],
+                agent_name: assistant.name,
+                greeting: assistant.greeting ?? '',
+                persona: assistant.persona ?? 'friendly and professional',
+                language: assistant.language ?? 'en',
+                voice: assistant.voice ?? '',
+                take_messages: assistant.take_messages ?? 1,
+                custom_instructions: assistant.custom_instructions ?? '',
+                llm_base_url: '',
+                llm_api_key: '',
+                llm_model: assistant.llm_model ?? '',
+                engine: assistant.engine ?? 'pipeline',
+                realtime_model: assistant.realtime_model ?? '',
+                realtime_voice: assistant.realtime_voice ?? '',
+              },
+            ]
+          : [],
+        changes: 0,
+      };
+    }
+    if (q.startsWith('SELECT * FROM provider_settings WHERE business_id')) {
+      return { rows: [{ business_id: a[0], llm_base_url: '', llm_api_key: '' }], changes: 0 };
+    }
+    if (q.startsWith('SELECT * FROM engine_profiles WHERE business_id')) return { rows: [], changes: 0 };
+    if (q.startsWith('SELECT * FROM engine_presets WHERE business_id')) return { rows: [], changes: 0 };
+    if (q.startsWith('SELECT id FROM knowledge_collections WHERE business_id')) {
+      return { rows: [{ id: `kc_default_${String(a[0])}` }], changes: 0 };
+    }
+    if (q.startsWith('SELECT id, collection_id, kind, status, title, question, answer, content FROM knowledge_items')) {
+      return { rows: [], changes: 0 };
+    }
+    if (
+      q.startsWith('INSERT OR IGNORE INTO knowledge_collections') ||
+      q.startsWith('UPDATE knowledge_collections SET is_default') ||
+      q.startsWith('INSERT OR IGNORE INTO assistant_knowledge_collections')
+    ) {
+      return { rows: [], changes: 0 };
+    }
+
     // ---- assistants ----
-    if (q.startsWith('SELECT assistants.id AS assistant_id, businesses.id')) {
+    if (q.startsWith('SELECT 1 AS found FROM assistants WHERE public_slug')) {
+      const assistant = this.db.assistants.find((x) => x.public_slug === a[0]);
+      return { rows: assistant ? [{ found: 1 }] : [], changes: 0 };
+    }
+    if (q.startsWith('SELECT * FROM assistants WHERE business_id')) {
+      const assistant = this.db.assistants.find((x) => x.business_id === a[0] && x.public_slug === a[1]);
+      return { rows: assistant ? [assistant] : [], changes: 0 };
+    }
+    if (q.startsWith('SELECT assistants.id AS assistant_id')) {
       const assistant = this.db.assistants.find((x) => x.public_slug === a[0] && x.state === 'active');
       const business = assistant && this.db.businesses.find((x) => x.id === assistant.business_id);
       return {
-        rows: assistant && business ? [{ assistant_id: assistant.id, ...business }] : [],
+        rows:
+          assistant && business
+            ? [
+                {
+                  assistant_id: assistant.id,
+                  agent_name: assistant.name,
+                  language: assistant.language,
+                  business_id: business.id,
+                  business_name: business.name,
+                  workspace_slug: business.slug,
+                  max_concurrent_calls: business.max_concurrent_calls,
+                  max_calls_per_day: business.max_calls_per_day,
+                  services_json: business.services_json ?? '[]',
+                  faqs_json: business.faqs_json ?? '[]',
+                  needs_repair: 0,
+                },
+              ]
+            : [],
         changes: 0,
       };
     }
 
     // ---- calls ----
     if (q.startsWith('SELECT COUNT(*) AS n FROM calls') && q.includes('connected_at IS NOT NULL')) {
-      // No age cutoff: the sweep is the only thing that releases a live slot.
+      // No age cutoff: the sweep is the only thing that releases a slot.
       const n = this.db.calls.filter(
-        (c) => c.business_id === a[0] && c.id !== a[1] && c.status === 'active' && c.connected_at !== null
+        (c) =>
+          c.business_id === a[0] &&
+          c.id !== a[1] &&
+          (c.environment ?? 'live') === a[2] &&
+          c.status === 'active' &&
+          c.connected_at !== null
       ).length;
       return { rows: [{ n }], changes: 0 };
     }
@@ -209,9 +309,11 @@ class FakeStatement {
       const hasAssistant = q.includes('assistant_id');
       const businessArg = hasAssistant ? a[4] : a[3];
       const maxArg = hasAssistant ? a[5] : a[4];
+      const environment = q.includes("environment='test'") ? 'test' : 'live';
       const n = this.db.calls.filter(
         (c) =>
           c.business_id === businessArg &&
+          (c.environment ?? 'live') === environment &&
           c.started_at > since &&
           !(c.status === 'abandoned' && c.connected_at === null)
       ).length;
@@ -221,15 +323,31 @@ class FakeStatement {
         business_id: String(a[1]),
         assistant_id: hasAssistant ? String(a[2]) : null,
         caller_id: String(hasAssistant ? a[3] : a[2]),
+        environment,
       });
       return { rows: [], changes: 1 };
     }
-    if (q.startsWith('SELECT calls.id, calls.business_id, businesses.max_concurrent_calls')) {
+    if (q.startsWith('SELECT calls.id, calls.business_id') && q.includes('businesses.max_concurrent_calls')) {
       const since = cutoff(a[1]);
       const c = this.db.calls.find((x) => x.id === a[0] && x.status === 'active' && x.started_at > since);
       const b = c && this.db.businesses.find((x) => x.id === c.business_id);
       return {
-        rows: c && b ? [{ id: c.id, business_id: c.business_id, max_concurrent_calls: b.max_concurrent_calls }] : [],
+        rows:
+          c && b
+            ? [
+                {
+                  id: c.id,
+                  business_id: c.business_id,
+                  assistant_id: c.assistant_id ?? null,
+                  environment: c.environment ?? 'live',
+                  user_id: b.user_id,
+                  workspace_slug: b.slug,
+                  services_json: b.services_json ?? '[]',
+                  faqs_json: b.faqs_json ?? '[]',
+                  max_concurrent_calls: b.max_concurrent_calls,
+                },
+              ]
+            : [],
         changes: 0,
       };
     }
@@ -253,7 +371,18 @@ class FakeStatement {
     }
     // Conditional: changes === 1 only for the request that takes the slot.
     if (q.startsWith('UPDATE calls SET connected_at')) {
-      const c = this.db.calls.find((x) => x.id === a[0] && x.connected_at === null);
+      const c = this.db.calls.find((x) => {
+        if (x.id !== a[0] || x.connected_at !== null) return false;
+        if (!q.includes("environment = 'test'") || x.environment === 'test') return true;
+        return this.db.assistants.some(
+          (assistant) =>
+            assistant.business_id === x.business_id &&
+            assistant.state === 'active' &&
+            (assistant.id === x.assistant_id ||
+              (x.assistant_id == null &&
+                assistant.public_slug === this.db.businesses.find((business) => business.id === x.business_id)?.slug))
+        );
+      });
       if (c) c.connected_at = Date.now();
       return { rows: [], changes: c ? 1 : 0 };
     }
@@ -289,6 +418,10 @@ class FakeStatement {
     if (q.startsWith('SELECT id, password_hash FROM users')) {
       const u = this.db.users.find((x) => x.email === a[0]);
       return { rows: u ? [u] : [], changes: 0 };
+    }
+    if (q.startsWith('SELECT user_id, expires_at FROM sessions WHERE token')) {
+      const session = this.db.sessions.find((x) => x.token === a[0]);
+      return { rows: session ? [session] : [], changes: 0 };
     }
     if (q.startsWith('DELETE FROM sessions WHERE expires_at')) {
       // Compared as TEXT, the way SQLite actually does it, and against a cutoff

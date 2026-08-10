@@ -20,39 +20,87 @@ interface Faq {
   a: string;
 }
 
+function readRows<T>(raw: string | undefined, valid: (value: unknown) => value is T, fallback: T[]): T[] {
+  if (!raw) return fallback;
+  try {
+    const value: unknown = JSON.parse(raw);
+    return Array.isArray(value) && value.every(valid) ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function isHour(value: unknown): value is Hour {
+  if (!value || typeof value !== 'object') return false;
+  const row = value as Partial<Hour>;
+  return (
+    typeof row.day === 'string' &&
+    typeof row.open === 'string' &&
+    typeof row.close === 'string' &&
+    typeof row.closed === 'boolean'
+  );
+}
+
+function isService(value: unknown): value is Service {
+  if (!value || typeof value !== 'object') return false;
+  const row = value as Partial<Service>;
+  return typeof row.name === 'string' && typeof row.price === 'string';
+}
+
+function isFaq(value: unknown): value is Faq {
+  if (!value || typeof value !== 'object') return false;
+  const row = value as Partial<Faq>;
+  return typeof row.q === 'string' && typeof row.a === 'string';
+}
+
 export default function Onboarding() {
-  const { refresh } = useSession();
-  const [step, setStep] = useState(0);
+  const { business, workspaceReady, firstAssistant, refresh } = useSession();
+  const defaultHours = DAYS.map((day) => ({
+    day,
+    open: '09:00',
+    close: '17:00',
+    closed: day === 'Saturday' || day === 'Sunday',
+  }));
+  const [step, setStep] = useState(business && workspaceReady ? 2 : 0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [address, setAddress] = useState('');
-  const [phone, setPhone] = useState('');
-  const [hours, setHours] = useState<Hour[]>(
-    DAYS.map((day) => ({ day, open: '09:00', close: '17:00', closed: day === 'Saturday' || day === 'Sunday' }))
+  const [name, setName] = useState(business?.name ?? '');
+  const [description, setDescription] = useState(business?.description ?? '');
+  const [address, setAddress] = useState(business?.address ?? '');
+  const [phone, setPhone] = useState(business?.phone ?? '');
+  const [hours, setHours] = useState<Hour[]>(() => readRows(business?.hours_json, isHour, defaultHours));
+  const [services, setServices] = useState<Service[]>(() =>
+    readRows(business?.services_json, isService, [{ name: '', price: '' }])
   );
-  const [services, setServices] = useState<Service[]>([{ name: '', price: '' }]);
-  const [faqs, setFaqs] = useState<Faq[]>([{ q: '', a: '' }]);
-  const [agentName, setAgentName] = useState('Alex');
-  const [persona, setPersona] = useState('friendly and professional');
-  const [language, setLanguage] = useState('en');
-  const [greeting, setGreeting] = useState('');
+  const [faqs, setFaqs] = useState<Faq[]>(() => readRows(business?.faqs_json, isFaq, [{ q: '', a: '' }]));
+  const [agentName, setAgentName] = useState(firstAssistant?.name || business?.agent?.agent_name || 'Alex');
+  const [persona, setPersona] = useState(
+    firstAssistant?.persona || business?.agent?.persona || 'friendly and professional'
+  );
+  const [language, setLanguage] = useState(firstAssistant?.language || business?.agent?.language || 'en');
+  const [greeting, setGreeting] = useState(firstAssistant?.greeting || business?.agent?.greeting || '');
 
   async function finish() {
+    if (!name.trim() || !description.trim() || !agentName.trim() || !persona.trim() || !language.trim()) {
+      setError('Complete the required workspace and assistant details first.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
-      const biz = await api.createBusiness({
+      const workspace = {
         name,
         description,
         address,
         phone,
+        timezone: business?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
         hours_json: JSON.stringify(hours),
         services_json: JSON.stringify(services.filter((s) => s.name.trim())),
         faqs_json: JSON.stringify(faqs.filter((f) => f.q.trim() && f.a.trim())),
-      });
+      };
+      const biz = business ?? (await api.createBusiness(workspace));
+      if (business) await api.updateBusiness(business.id, workspace);
       await api.updateAgent(biz.id, { agent_name: agentName, persona, language, greeting });
       await refresh();
     } catch (err) {
@@ -242,11 +290,17 @@ export default function Onboarding() {
               ← Back
             </Button>
             {step < 2 ? (
-              <Button onClick={() => setStep(step + 1)} disabled={step === 0 && !name.trim()}>
+              <Button
+                onClick={() => setStep(step + 1)}
+                disabled={step === 0 && (!name.trim() || !description.trim())}
+              >
                 Continue →
               </Button>
             ) : (
-              <Button onClick={() => void finish()} disabled={busy}>
+              <Button
+                onClick={() => void finish()}
+                disabled={busy || !agentName.trim() || !persona.trim() || !language.trim()}
+              >
                 {busy ? 'Setting up…' : 'Open my line ☎'}
               </Button>
             )}

@@ -200,7 +200,11 @@ export class CallSession implements DurableObject {
   private callId = '';
   private biz: Business | null = null;
   private settings: AgentSettings | null = null;
-  private knowledge: PromptKnowledgeItem[] = [];
+  // Undefined is deliberate: a mixed-version call row with no assistant_id
+  // must keep using the legacy services/FAQs stored on the business. An
+  // assistant with zero active attached items sets this to [], which is a real
+  // and authoritative empty knowledge set.
+  private knowledge: PromptKnowledgeItem[] | undefined;
   private history: ChatMessage[] = [];
   private busy = false;
   private ended = false; // stop handling caller messages
@@ -371,7 +375,7 @@ export class CallSession implements DurableObject {
       this.settings = await this.env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?')
         .bind(businessId)
         .first<AgentSettings>();
-      this.knowledge = [];
+      this.knowledge = undefined;
     }
   }
 
@@ -1019,7 +1023,9 @@ export class CallSession implements DurableObject {
       });
       ws.addEventListener('message', (ev) => {
         if (!this.readableUpstreams.has(ws)) return; // abandoned or rotated out
-        this.onUpstreamMessage(ev, ws).catch((err) => console.error('upstream handler error', err));
+        this.onUpstreamMessage(ev, ws).catch(() =>
+          console.error('upstream handler error: provider response redacted')
+        );
       });
       ws.addEventListener('error', () => {
         clearTimeout(timer);
@@ -1224,7 +1230,10 @@ export class CallSession implements DurableObject {
         void this.recoverUpstream();
         break;
       case 'error':
-        console.error('realtime engine error:', JSON.stringify(msg.error ?? msg).slice(0, 300));
+        // Realtime credentials travel in the upstream URL. Error frames are
+        // untrusted and some gateways echo request details, so never persist or
+        // log their arbitrary payload.
+        console.error('realtime engine error: provider response redacted');
         break;
     }
   }

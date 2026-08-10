@@ -4,6 +4,26 @@
 -- to a business. Keep that row for one compatibility release, but make the new
 -- assistant record the source of truth for all multi-assistant routes.
 
+-- The product boundary has always been one workspace per account, but 0001 did
+-- not encode it and the old SELECT-then-INSERT route could race. A trigger is
+-- intentionally used instead of a unique index: it enforces every future write
+-- without making upgrades fail for an installation that already contains a
+-- historical duplicate. Reads choose one canonical row deterministically.
+CREATE INDEX idx_businesses_user_created ON businesses(user_id, created_at, id);
+CREATE TRIGGER businesses_one_workspace_per_user
+BEFORE INSERT ON businesses
+WHEN EXISTS (SELECT 1 FROM businesses WHERE user_id = NEW.user_id)
+BEGIN
+  SELECT RAISE(ABORT, 'one workspace per account');
+END;
+CREATE TRIGGER businesses_one_workspace_per_user_update
+BEFORE UPDATE OF user_id ON businesses
+WHEN NEW.user_id <> OLD.user_id
+  AND EXISTS (SELECT 1 FROM businesses WHERE user_id = NEW.user_id AND id <> OLD.id)
+BEGIN
+  SELECT RAISE(ABORT, 'one workspace per account');
+END;
+
 CREATE TABLE assistants (
   id TEXT PRIMARY KEY,
   business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
@@ -56,6 +76,33 @@ SELECT
 FROM businesses b
 LEFT JOIN agent_settings a ON a.business_id = b.id;
 
+-- Lifecycle validity must hold at execution time, not only after an API read:
+-- concurrent edits and activation requests can otherwise race stale checks.
+-- Existing rows are preserved above; every future activation or active edit is
+-- constrained to complete essentials.
+CREATE TRIGGER assistants_active_essentials_insert
+BEFORE INSERT ON assistants
+WHEN NEW.state = 'active'
+  AND (
+    trim(NEW.name, char(9) || char(10) || char(11) || char(12) || char(13) || ' ') = ''
+    OR trim(NEW.persona, char(9) || char(10) || char(11) || char(12) || char(13) || ' ') = ''
+    OR trim(NEW.language, char(9) || char(10) || char(11) || char(12) || char(13) || ' ') = ''
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'active assistant requires complete essentials');
+END;
+CREATE TRIGGER assistants_active_essentials_update
+BEFORE UPDATE OF state, name, persona, language ON assistants
+WHEN NEW.state = 'active'
+  AND (
+    trim(NEW.name, char(9) || char(10) || char(11) || char(12) || char(13) || ' ') = ''
+    OR trim(NEW.persona, char(9) || char(10) || char(11) || char(12) || char(13) || ' ') = ''
+    OR trim(NEW.language, char(9) || char(10) || char(11) || char(12) || char(13) || ' ') = ''
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'active assistant requires complete essentials');
+END;
+
 -- Provider endpoints and credentials are workspace-wide. The API never returns
 -- llm_api_key; it reports only whether one is configured.
 CREATE TABLE provider_settings (
@@ -74,6 +121,30 @@ SELECT
   b.created_at
 FROM businesses b
 LEFT JOIN agent_settings a ON a.business_id = b.id;
+
+-- A compact source snapshot lets the public call path notice mixed-version
+-- writes without running the full reconciliation on every call. Old workers
+-- continue to update businesses/agent_settings; the new worker compares those
+-- rows with this snapshot and repairs only when they diverge.
+CREATE TABLE compatibility_sync_state (
+  business_id TEXT PRIMARY KEY REFERENCES businesses(id) ON DELETE CASCADE,
+  services_json TEXT NOT NULL DEFAULT '[]',
+  faqs_json TEXT NOT NULL DEFAULT '[]',
+  collection_id TEXT NOT NULL DEFAULT '',
+  agent_snapshot TEXT NOT NULL DEFAULT '',
+  synced_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+INSERT INTO compatibility_sync_state (business_id, services_json, faqs_json, collection_id, agent_snapshot, synced_at)
+SELECT b.id, b.services_json, b.faqs_json, 'kc_default_' || b.id,
+  json_object(
+    'agent_name', a.agent_name, 'greeting', a.greeting, 'persona', a.persona,
+    'language', a.language, 'voice', a.voice, 'take_messages', a.take_messages,
+    'custom_instructions', a.custom_instructions, 'engine', a.engine,
+    'realtime_model', a.realtime_model, 'realtime_voice', a.realtime_voice,
+    'llm_model', a.llm_model
+  ),
+  b.created_at
+FROM businesses b JOIN agent_settings a ON a.business_id=b.id;
 
 -- New presets deliberately contain no endpoint or credential fields. Legacy
 -- engine_profiles remains available to the compatibility routes for one
@@ -198,8 +269,15 @@ SELECT
   b.created_at,
   b.created_at,
   b.created_at
-FROM businesses b, json_each(CASE WHEN json_valid(b.services_json) THEN b.services_json ELSE '[]' END) j
-WHERE trim(COALESCE(json_extract(j.value, '$.name'), '')) <> '';
+FROM businesses b, json_each(
+  CASE
+    WHEN json_valid(b.services_json) THEN
+      CASE WHEN json_type(b.services_json) = 'array' THEN b.services_json ELSE '[]' END
+    ELSE '[]'
+  END
+) j
+WHERE j.type = 'object'
+  AND trim(COALESCE(json_extract(j.value, '$.name'), '')) <> '';
 
 INSERT INTO knowledge_items (
   id, business_id, collection_id, kind, status, question, answer,
@@ -216,6 +294,13 @@ SELECT
   b.created_at,
   b.created_at,
   b.created_at
-FROM businesses b, json_each(CASE WHEN json_valid(b.faqs_json) THEN b.faqs_json ELSE '[]' END) j
-WHERE trim(COALESCE(json_extract(j.value, '$.q'), '')) <> ''
+FROM businesses b, json_each(
+  CASE
+    WHEN json_valid(b.faqs_json) THEN
+      CASE WHEN json_type(b.faqs_json) = 'array' THEN b.faqs_json ELSE '[]' END
+    ELSE '[]'
+  END
+) j
+WHERE j.type = 'object'
+  AND trim(COALESCE(json_extract(j.value, '$.q'), '')) <> ''
   AND trim(COALESCE(json_extract(j.value, '$.a'), '')) <> '';
