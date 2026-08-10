@@ -1264,6 +1264,68 @@ describe('Calm Studio API foundation', () => {
     expect(overview.recentCalls).toEqual([]);
   });
 
+  it('counts only real parsed messages while keeping contact-only bookings separate', async () => {
+    const workspace = await createWorkspace();
+    const { assistants } = await data<{ assistants: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'));
+    const insert = db.database.prepare(
+      `INSERT INTO calls (
+        id, business_id, assistant_id, status, environment, direction, duration_s,
+        intent, message_json, outcome
+       ) VALUES (?, ?, ?, 'completed', 'live', 'inbound', 20, ?, ?, ?)`
+    );
+    insert.run(
+      'booking-contact',
+      workspace.id as string,
+      assistants[0].id,
+      'booking',
+      JSON.stringify({ caller_name: 'Maria', caller_phone: '0664 1234567', message: null }),
+      'booking_requested'
+    );
+    insert.run(
+      'booking-whitespace',
+      workspace.id as string,
+      assistants[0].id,
+      'booking',
+      JSON.stringify({ caller_name: 'Jon', caller_phone: '0664 7654321', message: '   ' }),
+      'booking_requested'
+    );
+    insert.run(
+      'message-current',
+      workspace.id as string,
+      assistants[0].id,
+      'message',
+      JSON.stringify({ caller_name: 'Kim', caller_phone: null, message: 'Please call about the invoice.' }),
+      'message_taken'
+    );
+    insert.run(
+      'message-legacy',
+      workspace.id as string,
+      assistants[0].id,
+      'message',
+      JSON.stringify({ caller_name: null, caller_phone: null, message: 'Please call about the crown.' }),
+      null
+    );
+    insert.run('message-malformed', workspace.id as string, assistants[0].id, 'message', '{not-json', null);
+
+    const overview = await data<{
+      metrics: { total: number; completed: number; messages: number; booking_requests: number };
+      recentCalls: Array<{ id: string; message_json: string | null; outcome: string | null }>;
+    }>(await request(env, '/api/me/overview?days=30'));
+    expect(overview.metrics).toMatchObject({
+      total: 5,
+      completed: 5,
+      messages: 2,
+      booking_requests: 2,
+    });
+    const booking = overview.recentCalls.find((call) => call.id === 'booking-contact');
+    expect(booking?.outcome).toBe('booking_requested');
+    expect(JSON.parse(booking?.message_json ?? '{}')).toEqual({
+      caller_name: 'Maria',
+      caller_phone: '0664 1234567',
+      message: null,
+    });
+  });
+
   it('keeps overview totals accurate beyond 100 and cursors stable while excluding tests', async () => {
     const workspace = await createWorkspace();
     const { assistants } = await data<{ assistants: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'));

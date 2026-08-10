@@ -90,6 +90,46 @@ export interface CallRow {
   failure_message?: string | null;
 }
 
+export interface CallContact {
+  caller_name: string | null;
+  caller_phone: string | null;
+  message: string | null;
+}
+
+export interface TakenMessage extends CallContact {
+  message: string;
+}
+
+// Parse the structured contact container independently from its outcome. A
+// booking can legitimately contain a name and phone number with no callback
+// message, and those details must remain visible even though it is not counted
+// or labelled as a taken message. Historical malformed rows are ignored safely.
+export function callContact(messageJson: string | null): CallContact | null {
+  if (!messageJson) return null;
+  try {
+    const parsed = JSON.parse(messageJson) as Record<string, unknown>;
+    const message = typeof parsed.message === 'string' ? parsed.message.trim() : '';
+    const callerName = typeof parsed.caller_name === 'string' ? parsed.caller_name.trim() : '';
+    const callerPhone = typeof parsed.caller_phone === 'string' ? parsed.caller_phone.trim() : '';
+    if (!callerName && !callerPhone && !message) return null;
+    return { caller_name: callerName || null, caller_phone: callerPhone || null, message: message || null };
+  } catch {
+    return null;
+  }
+}
+
+export function takenMessage(messageJson: string | null): TakenMessage | null {
+  const contact = callContact(messageJson);
+  return contact?.message ? { ...contact, message: contact.message } : null;
+}
+
+export function bookingRequestContact(
+  call: Pick<CallRow, 'intent' | 'message_json' | 'outcome'>
+): CallContact | null {
+  if (call.outcome !== 'booking_requested' && !(call.outcome == null && call.intent === 'booking')) return null;
+  return callContact(call.message_json);
+}
+
 export interface CallDetail extends CallRow {
   turns: { id: number; role: 'caller' | 'agent'; text: string; ts: string }[];
 }

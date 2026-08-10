@@ -1014,7 +1014,13 @@ export function registerStudioApi(app: StudioApp): void {
           COUNT(*) AS total,
           COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed,
           COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed,
-          COALESCE(SUM(CASE WHEN intent = 'message' OR message_json IS NOT NULL THEN 1 ELSE 0 END), 0) AS messages,
+          COALESCE(SUM(CASE
+            WHEN message_json IS NOT NULL AND json_valid(message_json) THEN
+              CASE WHEN json_type(message_json, '$.message') = 'text'
+                AND trim(CAST(json_extract(message_json, '$.message') AS TEXT)) <> ''
+                THEN 1 ELSE 0 END
+            ELSE 0
+          END), 0) AS messages,
           COALESCE(SUM(CASE WHEN intent = 'booking' THEN 1 ELSE 0 END), 0) AS booking_requests,
           COALESCE(SUM(duration_s), 0) AS talk_time_s,
           COALESCE(AVG(CASE WHEN status = 'completed' THEN duration_s END), 0) AS average_duration_s

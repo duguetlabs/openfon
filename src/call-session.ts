@@ -78,6 +78,16 @@ function parseSummary(raw: string): SummaryResult {
   return { summary: cleaned.slice(0, 200) || null };
 }
 
+function messageJsonHasRealMessage(messageJson: string | null): boolean {
+  if (!messageJson) return false;
+  try {
+    const parsed = JSON.parse(messageJson) as { message?: unknown };
+    return typeof parsed.message === 'string' && Boolean(parsed.message.trim());
+  } catch {
+    return false;
+  }
+}
+
 interface CallRow {
   id: string;
   business_id: string;
@@ -1717,9 +1727,13 @@ export class CallSession implements DurableObject {
       summary = summary ? `${this.failure} — ${summary}` : this.failure;
     }
     const status = this.failure ? 'failed' : 'completed';
+    // message_json also carries caller contact details. Its mere presence does
+    // not mean a callback message was taken: booking flows commonly collect a
+    // name and phone number without a separate message. Inspect the parsed
+    // message itself before giving it precedence over booking intent.
     const outcome = this.failure
       ? 'failed'
-      : messageJson
+      : messageJsonHasRealMessage(messageJson)
         ? 'message_taken'
         : intent === 'booking'
           ? 'booking_requested'

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, type CallDetail } from '../api';
+import { api, bookingRequestContact, takenMessage, type CallDetail } from '../api';
 import { Card, Spinner, fmtDuration, fmtTime } from '../ui';
 
 export default function CallDetailPage() {
@@ -15,7 +15,8 @@ export default function CallDetailPage() {
   if (error) return <p className="text-rose">{error}</p>;
   if (!call) return <Spinner />;
 
-  const message = call.message_json ? (JSON.parse(call.message_json) as { caller_name?: string; caller_phone?: string; message?: string }) : null;
+  const message = takenMessage(call.message_json);
+  const booking = message ? null : bookingRequestContact(call);
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -48,6 +49,16 @@ export default function CallDetailPage() {
             {message.caller_phone && <span className="font-mono text-ink-soft"> · {message.caller_phone}</span>}
           </p>
           {message.message && <p className="mt-1 text-sm leading-relaxed text-ink">{message.message}</p>}
+        </Card>
+      )}
+
+      {booking && (
+        <Card className="rise rise-1 mb-8 border-iris/20 bg-wash-iris">
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-iris">Booking requested</p>
+          <p className="mt-2.5 text-sm text-ink">
+            {booking.caller_name && <strong>{booking.caller_name}</strong>}
+            {booking.caller_phone && <span className="font-mono text-ink-soft"> · {booking.caller_phone}</span>}
+          </p>
         </Card>
       )}
 

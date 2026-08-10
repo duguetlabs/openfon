@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type Agent, type Business, type EngineProfile, type VoiceCatalog } from '../api';
 import { useSession } from '../App';
+import { readServiceRows, serializeServiceRows, type ServiceRow } from '../service-rows';
 import { Button, Card, Field, FieldLabel, SectionTitle, TextArea, LANGUAGES, inputClassSm } from '../ui';
 import { ListEditor } from './Onboarding';
 
@@ -23,7 +24,7 @@ export default function Settings() {
   const { business, refresh } = useSession();
   const [biz, setBiz] = useState<Business | null>(null);
   const [hours, setHours] = useState<Hour[]>([]);
-  const [services, setServices] = useState<{ name: string; price: string }[]>([]);
+  const [services, setServices] = useState<ServiceRow[]>([]);
   const [faqs, setFaqs] = useState<{ q: string; a: string }[]>([]);
   const [closures, setClosures] = useState<{ date: string; reason: string }[]>([]);
   const [agent, setAgent] = useState<Agent | null>(null);
@@ -38,7 +39,7 @@ export default function Settings() {
     if (business) {
       setBiz({ ...business });
       setHours(parse(business.hours_json, []));
-      setServices(parse(business.services_json, []));
+      setServices(readServiceRows(business.services_json));
       setFaqs(parse(business.faqs_json, []));
       setClosures(parse(business.closures_json, []));
       setAgent(business.agent ? { ...business.agent } : null);
@@ -57,7 +58,7 @@ export default function Settings() {
       await api.updateBusiness(biz!.id, {
         ...biz!,
         hours_json: JSON.stringify(hours),
-        services_json: JSON.stringify(services.filter((s) => s.name.trim())),
+        services_json: serializeServiceRows(services),
         faqs_json: JSON.stringify(faqs.filter((f) => f.q.trim() && f.a.trim())),
         closures_json: JSON.stringify(closures.filter((c) => c.date.trim())),
       });
@@ -143,7 +144,7 @@ export default function Settings() {
                 <input
                   className={`${inputClassSm} w-28`}
                   placeholder="Price"
-                  value={row.price}
+                  value={row.price ?? ''}
                   onChange={(e) => setR({ ...row, price: e.target.value })}
                 />
               </>

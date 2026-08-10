@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api';
 import { useSession } from '../App';
+import { readServiceRows, serializeServiceRows, type ServiceRow } from '../service-rows';
 import { Button, Card, Field, FieldLabel, Logo, TextArea, LANGUAGES, inputClassSm } from '../ui';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -10,10 +11,6 @@ interface Hour {
   open: string;
   close: string;
   closed: boolean;
-}
-interface Service {
-  name: string;
-  price: string;
 }
 interface Faq {
   q: string;
@@ -41,12 +38,6 @@ function isHour(value: unknown): value is Hour {
   );
 }
 
-function isService(value: unknown): value is Service {
-  if (!value || typeof value !== 'object') return false;
-  const row = value as Partial<Service>;
-  return typeof row.name === 'string' && typeof row.price === 'string';
-}
-
 function isFaq(value: unknown): value is Faq {
   if (!value || typeof value !== 'object') return false;
   const row = value as Partial<Faq>;
@@ -70,9 +61,7 @@ export default function Onboarding() {
   const [address, setAddress] = useState(business?.address ?? '');
   const [phone, setPhone] = useState(business?.phone ?? '');
   const [hours, setHours] = useState<Hour[]>(() => readRows(business?.hours_json, isHour, defaultHours));
-  const [services, setServices] = useState<Service[]>(() =>
-    readRows(business?.services_json, isService, [{ name: '', price: '' }])
-  );
+  const [services, setServices] = useState<ServiceRow[]>(() => readServiceRows(business?.services_json));
   const [faqs, setFaqs] = useState<Faq[]>(() => readRows(business?.faqs_json, isFaq, [{ q: '', a: '' }]));
   const [agentName, setAgentName] = useState(firstAssistant?.name || business?.agent?.agent_name || 'Alex');
   const [persona, setPersona] = useState(
@@ -96,7 +85,7 @@ export default function Onboarding() {
         phone,
         timezone: business?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
         hours_json: JSON.stringify(hours),
-        services_json: JSON.stringify(services.filter((s) => s.name.trim())),
+        services_json: serializeServiceRows(services),
         faqs_json: JSON.stringify(faqs.filter((f) => f.q.trim() && f.a.trim())),
       };
       const biz = business ?? (await api.createBusiness(workspace));
@@ -226,7 +215,7 @@ export default function Onboarding() {
                     <input
                       className={`${inputClassSm} w-28`}
                       placeholder="€80"
-                      value={row.price}
+                      value={row.price ?? ''}
                       onChange={(e) => set({ ...row, price: e.target.value })}
                     />
                   </>
