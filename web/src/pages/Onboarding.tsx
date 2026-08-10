@@ -102,6 +102,14 @@ export default function Onboarding() {
       const biz = business ?? (await api.createBusiness(workspace));
       if (business) await api.updateBusiness(business.id, workspace);
       await api.updateAgent(biz.id, { agent_name: agentName, persona, language, greeting });
+      // The legacy update activates a draft primary assistant, while preserving
+      // an intentionally paused one. This compatibility screen is also the
+      // recovery path when no primary assistant is live, so explicitly finish
+      // activation for either lifecycle state before exposing the dashboard's
+      // public link.
+      if (firstAssistant && firstAssistant.state !== 'active') {
+        await api.activateAssistant(firstAssistant.id);
+      }
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
@@ -301,7 +309,7 @@ export default function Onboarding() {
                 onClick={() => void finish()}
                 disabled={busy || !agentName.trim() || !persona.trim() || !language.trim()}
               >
-                {busy ? 'Setting up…' : 'Open my line ☎'}
+                {busy ? 'Setting up…' : firstAssistant?.state === 'active' ? 'Open my line ☎' : 'Activate my line ☎'}
               </Button>
             )}
           </div>

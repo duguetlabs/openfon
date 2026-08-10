@@ -403,6 +403,7 @@ app.get('/api/me/business', async (c) => {
             ((!provider?.llm_base_url || sameLlmEndpoint(provider.llm_base_url, c.env.DEFAULT_LLM_BASE_URL)) &&
               c.env.DEFAULT_LLM_API_KEY)
         ),
+        workspaceApiKeyConfigured: Boolean(provider?.llm_api_key),
         llm_model: assistant.llm_model,
         engine: assistant.engine,
         realtime_model: assistant.realtime_model,
@@ -550,9 +551,23 @@ app.put('/api/me/business/:id/agent', async (c) => {
     .bind(biz.id, biz.slug)
     .first<AgentSettings & { id: string; name: string; state: 'draft' | 'active' | 'paused' }>();
   if (!cur) return c.json({ error: 'Not found' }, 404);
-  const s = await c.req.json<Partial<AgentSettings>>();
-  // "••••" placeholder from the UI means "keep the stored key"
-  const llmKey = s.llm_api_key !== undefined && s.llm_api_key !== '' && !/^•+$/.test(s.llm_api_key) ? s.llm_api_key : cur.llm_api_key;
+  const s = await c.req.json<Partial<AgentSettings> & { clearApiKey?: boolean }>();
+  if (s.clearApiKey !== undefined && typeof s.clearApiKey !== 'boolean') {
+    return c.json({ error: 'clearApiKey must be a boolean' }, 400);
+  }
+  if (s.llm_api_key !== undefined && typeof s.llm_api_key !== 'string') {
+    return c.json({ error: 'API key must be a string' }, 400);
+  }
+  // Empty, omitted, and old masked-placeholder values all mean "keep". The
+  // key is write-only, so clearing it needs its own unambiguous signal; this
+  // prevents an unrelated settings save from erasing a credential the browser
+  // was deliberately never allowed to read back.
+  const submittedKey = s.llm_api_key?.trim() ?? '';
+  const replacementKey = submittedKey && !/^•+$/.test(submittedKey) ? submittedKey : null;
+  if (s.clearApiKey && replacementKey) {
+    return c.json({ error: 'Choose either a replacement API key or clearApiKey' }, 400);
+  }
+  const llmKey = s.clearApiKey ? '' : replacementKey ?? cur.llm_api_key;
   const engine = s.engine === 'realtime' ? 'realtime' : s.engine === 'pipeline' ? 'pipeline' : cur.engine;
   const realtimeModel = s.realtime_model !== undefined ? s.realtime_model : cur.realtime_model;
   const realtimeVoice = s.realtime_voice !== undefined ? s.realtime_voice : cur.realtime_voice;

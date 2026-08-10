@@ -14,6 +14,7 @@ export interface Agent {
   llm_base_url: string;
   llm_api_key: string;
   apiKeyConfigured?: boolean;
+  workspaceApiKeyConfigured?: boolean;
   llm_model: string;
   engine: string;
   realtime_model: string;
@@ -154,6 +155,7 @@ export interface ProviderView {
   baseUrl: string;
   usesInstanceDefault: boolean;
   apiKeyConfigured: boolean;
+  workspaceApiKeyConfigured: boolean;
   updatedAt: string | null;
 }
 
@@ -226,7 +228,8 @@ export const api = {
   bootstrap: () => req<Bootstrap>('GET', '/api/me/bootstrap'),
   createBusiness: (b: Partial<Business>) => req<Business>('POST', '/api/me/business', b),
   updateBusiness: (id: string, b: Partial<Business>) => req<{ ok: true }>('PUT', `/api/me/business/${id}`, b),
-  updateAgent: (id: string, a: Partial<Agent>) => req<{ ok: true }>('PUT', `/api/me/business/${id}/agent`, a),
+  updateAgent: (id: string, a: Partial<Agent> & { clearApiKey?: boolean }) =>
+    req<{ ok: true }>('PUT', `/api/me/business/${id}/agent`, a),
   calls: (id: string) => req<CallRow[]>('GET', `/api/me/business/${id}/calls`),
   call: (callId: string) => req<CallDetail>('GET', `/api/me/calls/${callId}`),
   assistants: () => req<Assistant[]>('GET', '/api/me/assistants'),
@@ -250,7 +253,8 @@ export const api = {
   attachKnowledgeCollection: (assistantId: string, collectionId: string) => req<{ ok: true }>('POST', `/api/me/assistants/${assistantId}/knowledge-collections/${collectionId}`, {}),
   detachKnowledgeCollection: (assistantId: string, collectionId: string) => req<{ ok: true }>('DELETE', `/api/me/assistants/${assistantId}/knowledge-collections/${collectionId}`),
   provider: () => req<ProviderView>('GET', '/api/me/provider'),
-  updateProvider: (body: { baseUrl?: string; apiKey?: string | null }) => req<{ ok: true; apiKeyConfigured: boolean }>('PUT', '/api/me/provider', body),
+  updateProvider: (body: { baseUrl?: string; apiKey?: string | null; clearApiKey?: boolean }) =>
+    req<{ ok: true; apiKeyConfigured: boolean; workspaceApiKeyConfigured: boolean }>('PUT', '/api/me/provider', body),
   checkProvider: (assistantId?: string) => req<{ ok: true; model: string }>('POST', '/api/me/provider/check', assistantId ? { assistantId } : {}),
   enginePresets: () => req<EnginePreset[]>('GET', '/api/me/engine-presets'),
   createEnginePreset: (body: Partial<EnginePreset>) => req<EnginePreset>('POST', '/api/me/engine-presets', body),

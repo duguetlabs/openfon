@@ -992,6 +992,122 @@ describe('Calm Studio API foundation', () => {
     expect(await rejected.text()).not.toContain(secret);
   });
 
+  it('keeps write-only provider keys unless the owner explicitly clears them in either API generation', async () => {
+    const workspace = (await createWorkspace()) as { id: string };
+    const newApiSecret = 'sk-new-api-clear-test';
+    expect(
+      (
+        await request(
+          env,
+          '/api/me/provider',
+          json('PUT', { baseUrl: 'https://provider.example/v1', apiKey: newApiSecret })
+        )
+      ).status
+    ).toBe(200);
+    const configuredBusinessText = await (await request(env, '/api/me/business')).text();
+    expect(configuredBusinessText).not.toContain(newApiSecret);
+    expect(JSON.parse(configuredBusinessText)).toMatchObject({
+      agent: { llm_api_key: '', apiKeyConfigured: true, workspaceApiKeyConfigured: true },
+    });
+
+    // The key is write-only. Omitting it or submitting the empty password field
+    // must preserve the stored value rather than turning an unrelated save into
+    // a credential deletion.
+    for (const body of [{ baseUrl: 'https://provider.example/v1' }, { apiKey: '' }]) {
+      const kept = await request(env, '/api/me/provider', json('PUT', body));
+      expect(kept.status).toBe(200);
+      expect(await kept.text()).not.toContain(newApiSecret);
+      expect(db.database.prepare('SELECT llm_api_key FROM provider_settings WHERE business_id=?').get(workspace.id)).toEqual({
+        llm_api_key: newApiSecret,
+      });
+    }
+
+    // Clearing a custom endpoint's key alone would make it inherit the instance
+    // key, so the existing endpoint safety rule rejects that without mutation.
+    const unsafeClear = await request(env, '/api/me/provider', json('PUT', { clearApiKey: true }));
+    expect(unsafeClear.status).toBe(400);
+    expect(await unsafeClear.text()).not.toContain(newApiSecret);
+    expect(db.database.prepare('SELECT llm_base_url, llm_api_key FROM provider_settings WHERE business_id=?').get(workspace.id)).toEqual({
+      llm_base_url: 'https://provider.example/v1',
+      llm_api_key: newApiSecret,
+    });
+
+    const cleared = await data<{
+      apiKeyConfigured: boolean;
+      workspaceApiKeyConfigured: boolean;
+    }>(await request(env, '/api/me/provider', json('PUT', { baseUrl: '', clearApiKey: true })));
+    expect(cleared).toMatchObject({ apiKeyConfigured: true, workspaceApiKeyConfigured: false });
+    expect(db.database.prepare('SELECT llm_api_key FROM provider_settings WHERE business_id=?').get(workspace.id)).toEqual({
+      llm_api_key: '',
+    });
+    expect(db.database.prepare('SELECT llm_api_key FROM agent_settings WHERE business_id=?').get(workspace.id)).toEqual({
+      llm_api_key: '',
+    });
+
+    const legacySecret = 'sk-legacy-clear-test';
+    expect(
+      (await request(env, '/api/me/provider', json('PUT', { baseUrl: '', apiKey: legacySecret }))).status
+    ).toBe(200);
+    const legacyOmission = await request(
+      env,
+      `/api/me/business/${workspace.id}/agent`,
+      json('PUT', {
+        agent_name: 'Maya',
+        persona: 'calm and helpful',
+        language: 'en',
+      })
+    );
+    expect(legacyOmission.status).toBe(200);
+    expect(await legacyOmission.text()).not.toContain(legacySecret);
+    expect(db.database.prepare('SELECT llm_api_key FROM provider_settings WHERE business_id=?').get(workspace.id)).toEqual({
+      llm_api_key: legacySecret,
+    });
+
+    const legacyKeep = await request(
+      env,
+      `/api/me/business/${workspace.id}/agent`,
+      json('PUT', {
+        llm_api_key: '',
+      })
+    );
+    expect(legacyKeep.status).toBe(200);
+    expect(await legacyKeep.text()).not.toContain(legacySecret);
+    expect(db.database.prepare('SELECT llm_api_key FROM provider_settings WHERE business_id=?').get(workspace.id)).toEqual({
+      llm_api_key: legacySecret,
+    });
+
+    const ambiguous = await request(
+      env,
+      `/api/me/business/${workspace.id}/agent`,
+      json('PUT', { clearApiKey: true, llm_api_key: 'sk-conflicting-replacement' })
+    );
+    expect(ambiguous.status).toBe(400);
+    expect(await ambiguous.text()).not.toContain(legacySecret);
+    expect(db.database.prepare('SELECT llm_api_key FROM provider_settings WHERE business_id=?').get(workspace.id)).toEqual({
+      llm_api_key: legacySecret,
+    });
+
+    const legacyClear = await request(
+      env,
+      `/api/me/business/${workspace.id}/agent`,
+      json('PUT', { clearApiKey: true })
+    );
+    expect(legacyClear.status).toBe(200);
+    expect(await legacyClear.text()).not.toContain(legacySecret);
+    expect(db.database.prepare('SELECT llm_api_key FROM provider_settings WHERE business_id=?').get(workspace.id)).toEqual({
+      llm_api_key: '',
+    });
+    expect(db.database.prepare('SELECT llm_api_key FROM agent_settings WHERE business_id=?').get(workspace.id)).toEqual({
+      llm_api_key: '',
+    });
+    const businessText = await (await request(env, '/api/me/business')).text();
+    expect(businessText).not.toContain(legacySecret);
+    expect(businessText).not.toContain('••');
+    expect(JSON.parse(businessText)).toMatchObject({
+      agent: { llm_api_key: '', apiKeyConfigured: true, workspaceApiKeyConfigured: false },
+    });
+  });
+
   it('keeps compatibility assistant, provider, and preset writes synchronized in both API generations', async () => {
     const workspace = await createWorkspace();
     const { assistants } = await data<{ assistants: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'));

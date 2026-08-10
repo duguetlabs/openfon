@@ -632,6 +632,59 @@ function likeTerm(value: string): string {
   return `%${value.replace(/[\\%_]/g, '\\$&')}%`;
 }
 
+interface NormalizedTimestamp {
+  sqlite: string;
+  epochMs: number;
+}
+
+// Call timestamps are stored by SQLite as UTC text (`YYYY-MM-DD HH:mm:ss`).
+// Comparing that text directly with an RFC 3339 query value containing `T`,
+// `Z`, milliseconds, or an offset gives chronological nonsense. Accept one
+// unambiguous Internet timestamp shape and convert it to the same sortable UTC
+// representation before binding it. Milliseconds are retained when non-zero so
+// an exact sub-second boundary is not widened to the whole second.
+function normalizedCallTimestamp(raw: string): NormalizedTimestamp | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|[+-]\d{2}:\d{2})$/i.exec(raw);
+  if (!match) return null;
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, , zone] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (
+    year === 0 ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > daysInMonth[month - 1] ||
+    hour > 23 ||
+    minute > 59 ||
+    second > 59
+  ) {
+    return null;
+  }
+  if (zone.toUpperCase() !== 'Z') {
+    const offsetHour = Number(zone.slice(1, 3));
+    const offsetMinute = Number(zone.slice(4, 6));
+    if (offsetHour > 23 || offsetMinute > 59) return null;
+  }
+  const epochMs = Date.parse(raw);
+  if (!Number.isFinite(epochMs)) return null;
+  const iso = new Date(epochMs).toISOString();
+  // Applying an offset to a four-digit input can cross into ISO year 0000 or
+  // the extended-year form (`+010000-...`). Neither has the fixed-width shape
+  // used by D1's `YYYY-MM-DD HH:mm:ss` call timestamps, so reject it instead of
+  // slicing a malformed SQL bound.
+  if (iso.startsWith('0000-') || !/^\d{4}-/.test(iso)) return null;
+  const seconds = iso.slice(0, 19).replace('T', ' ');
+  const milliseconds = iso.slice(19, 23);
+  return { sqlite: milliseconds === '.000' ? seconds : `${seconds}${milliseconds}`, epochMs };
+}
+
 export function registerStudioApi(app: StudioApp): void {
   app.get('/api/me/bootstrap', async (c) => {
     const userId = c.get('userId');
@@ -893,8 +946,19 @@ export function registerStudioApi(app: StudioApp): void {
       conditions.push('calls.direction = ?');
       args.push(q.direction);
     }
-    if (q.from) (conditions.push('calls.started_at >= ?'), args.push(q.from));
-    if (q.to) (conditions.push('calls.started_at < ?'), args.push(q.to));
+    const from = q.from === undefined ? null : normalizedCallTimestamp(q.from);
+    const to = q.to === undefined ? null : normalizedCallTimestamp(q.to);
+    if (q.from !== undefined && !from) return c.json({ error: 'Invalid from timestamp; use RFC 3339 with a timezone' }, 400);
+    if (q.to !== undefined && !to) return c.json({ error: 'Invalid to timestamp; use RFC 3339 with a timezone' }, 400);
+    if (from && to && from.epochMs > to.epochMs) {
+      return c.json({ error: 'The from timestamp must be before or equal to the to timestamp' }, 400);
+    }
+    // Preserve the route's half-open range contract: from is inclusive and to
+    // is exclusive. Adjacent windows can therefore share an endpoint without
+    // returning the boundary call twice. Equal endpoints are a valid empty
+    // range; only a genuinely reversed range is rejected above.
+    if (from) (conditions.push('calls.started_at >= ?'), args.push(from.sqlite));
+    if (to) (conditions.push('calls.started_at < ?'), args.push(to.sqlite));
     if (q.search?.trim()) {
       conditions.push(
         `(calls.caller_id LIKE ? ESCAPE '\\' OR calls.summary LIKE ? ESCAPE '\\' OR EXISTS (
@@ -1226,6 +1290,7 @@ export function registerStudioApi(app: StudioApp): void {
       baseUrl: provider?.llm_base_url || c.env.DEFAULT_LLM_BASE_URL,
       usesInstanceDefault: !provider?.llm_base_url || sameLlmEndpoint(provider.llm_base_url, c.env.DEFAULT_LLM_BASE_URL),
       apiKeyConfigured: providerConfigured(c.env, provider),
+      workspaceApiKeyConfigured: Boolean(provider?.llm_api_key),
       updatedAt: provider?.updated_at ?? null,
     });
   });
@@ -1236,9 +1301,23 @@ export function registerStudioApi(app: StudioApp): void {
     const current = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
       .bind(workspace.id)
       .first<ProviderSettings>();
-    const body = await c.req.json<{ baseUrl?: string; apiKey?: string | null }>();
+    const body = await c.req.json<{ baseUrl?: string; apiKey?: string | null; clearApiKey?: boolean }>();
+    if (body.clearApiKey !== undefined && typeof body.clearApiKey !== 'boolean') {
+      return c.json({ error: 'clearApiKey must be a boolean' }, 400);
+    }
+    if (body.apiKey !== undefined && body.apiKey !== null && typeof body.apiKey !== 'string') {
+      return c.json({ error: 'API key must be a string or null' }, 400);
+    }
     const baseUrl = body.baseUrl !== undefined ? body.baseUrl.trim() : current?.llm_base_url ?? '';
-    const apiKey = body.apiKey !== undefined ? body.apiKey?.trim() ?? '' : current?.llm_api_key ?? '';
+    const replacementKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
+    const clearApiKey = body.clearApiKey === true || body.apiKey === null;
+    if (clearApiKey && replacementKey) {
+      return c.json({ error: 'Choose either a replacement API key or clearApiKey' }, 400);
+    }
+    // A blank or omitted write-only field is not evidence that the owner meant
+    // to delete a secret they cannot read back. Null remains an explicit clear
+    // for existing typed clients; the UI uses the named clearApiKey signal.
+    const apiKey = clearApiKey ? '' : replacementKey || current?.llm_api_key || '';
     const bad = providerValidationError(c.env, baseUrl, apiKey);
     if (bad) return c.json({ error: bad }, 400);
     await c.env.DB.batch([
@@ -1256,7 +1335,15 @@ export function registerStudioApi(app: StudioApp): void {
         workspace.id
       ),
     ]);
-    return c.json({ ok: true, apiKeyConfigured: providerConfigured(c.env, { ...(current ?? {}), llm_base_url: baseUrl, llm_api_key: apiKey } as ProviderSettings) });
+    return c.json({
+      ok: true,
+      apiKeyConfigured: providerConfigured(c.env, {
+        ...(current ?? {}),
+        llm_base_url: baseUrl,
+        llm_api_key: apiKey,
+      } as ProviderSettings),
+      workspaceApiKeyConfigured: Boolean(apiKey),
+    });
   });
 
   app.post('/api/me/provider/check', async (c) => {

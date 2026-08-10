@@ -32,6 +32,7 @@ export default function Settings() {
   const [profiles, setProfiles] = useState<EngineProfile[]>([]);
   const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
   const [newProfileName, setNewProfileName] = useState('');
+  const [clearApiKey, setClearApiKey] = useState(false);
 
   useEffect(() => {
     if (business) {
@@ -41,6 +42,7 @@ export default function Settings() {
       setFaqs(parse(business.faqs_json, []));
       setClosures(parse(business.closures_json, []));
       setAgent(business.agent ? { ...business.agent } : null);
+      setClearApiKey(false);
       void api.profiles(business.id).then(setProfiles).catch(() => {});
       void api.voices().then(setVoiceCatalog).catch(() => {});
     }
@@ -59,7 +61,8 @@ export default function Settings() {
         faqs_json: JSON.stringify(faqs.filter((f) => f.q.trim() && f.a.trim())),
         closures_json: JSON.stringify(closures.filter((c) => c.date.trim())),
       });
-      await api.updateAgent(biz!.id, agent!);
+      await api.updateAgent(biz!.id, { ...agent!, ...(clearApiKey ? { clearApiKey: true } : {}) });
+      setClearApiKey(false);
       await refresh();
       setSaved('Saved.');
       setTimeout(() => setSaved(''), 2000);
@@ -323,7 +326,7 @@ export default function Settings() {
       </section>
 
       <section className="rise rise-2">
-        <SectionTitle sub="OpenFon speaks the OpenAI API dialect — point it at Kataleptic, OpenAI, Groq, Ollama, or your own server. Empty fields use the instance defaults.">
+        <SectionTitle sub="OpenFon speaks the OpenAI API dialect — point it at Kataleptic, OpenAI, Groq, Ollama, or your own server. Empty model and endpoint fields use instance defaults; saved API keys stay until explicitly replaced or removed.">
           AI provider
         </SectionTitle>
         <Card className="space-y-4">
@@ -408,13 +411,51 @@ export default function Settings() {
           />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Model" value={agent.llm_model} onChange={(e) => setA({ llm_model: e.target.value })} placeholder="llama-3.3-70b" />
-            <Field
-              label="API key"
-              type="password"
-              value={agent.llm_api_key}
-              onChange={(e) => setA({ llm_api_key: e.target.value })}
-              placeholder={agent.apiKeyConfigured ? 'Configured — enter a new key to replace it' : 'sk-…'}
-            />
+            <div>
+              <Field
+                label="API key"
+                type="password"
+                value={agent.llm_api_key}
+                onChange={(e) => {
+                  setClearApiKey(false);
+                  setA({ llm_api_key: e.target.value });
+                }}
+                placeholder={
+                  clearApiKey
+                    ? 'Saved key will be removed'
+                    : agent.workspaceApiKeyConfigured
+                      ? 'Configured — enter a new key to replace it'
+                      : agent.apiKeyConfigured
+                        ? 'Using the instance key'
+                        : 'sk-…'
+                }
+              />
+              {agent.workspaceApiKeyConfigured && !clearApiKey && (
+                <button
+                  type="button"
+                  className="mt-2 text-xs font-semibold text-rose underline decoration-rose/30 underline-offset-2 hover:decoration-rose"
+                  onClick={() => {
+                    setA({ llm_api_key: '' });
+                    setClearApiKey(true);
+                  }}
+                >
+                  Remove saved key
+                </button>
+              )}
+              {clearApiKey && (
+                <p className="mt-2 text-xs text-ink-soft" role="status">
+                  The saved key will be removed when you save. Use the instance-default Base URL first if you want to
+                  fall back to its key.{' '}
+                  <button
+                    type="button"
+                    className="font-semibold text-iris underline decoration-iris/30 underline-offset-2 hover:decoration-iris"
+                    onClick={() => setClearApiKey(false)}
+                  >
+                    Undo
+                  </button>
+                </p>
+              )}
+            </div>
           </div>
         </Card>
       </section>

@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import CallDetailPage from './pages/CallDetail';
 import Settings from './pages/Settings';
 import Widget from './pages/Widget';
+import { compatibilityAssistant, compatibilitySetupPending } from './session-gate';
 
 interface Session {
   me: Me | null;
@@ -47,7 +48,7 @@ export default function App() {
       const bootstrap = await api.bootstrap();
       setBusiness(nextBusiness);
       setWorkspaceReady(bootstrap.setup.workspace);
-      setFirstAssistant(bootstrap.assistants[0] ?? null);
+      setFirstAssistant(compatibilityAssistant(nextBusiness, bootstrap.assistants));
       setFirstAssistantReady(bootstrap.setup.firstAssistant);
     } catch {
       setMe(null);
@@ -82,7 +83,7 @@ export default function App() {
           element={
             !me ? (
               <Navigate to="/auth" replace />
-            ) : !business || !workspaceReady || !firstAssistantReady ? (
+            ) : compatibilitySetupPending(business, workspaceReady, firstAssistantReady, firstAssistant) ? (
               <Onboarding />
             ) : (
               <Shell>
