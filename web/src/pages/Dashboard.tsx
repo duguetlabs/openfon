@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, type CallRow } from '../api';
+import { api, takenMessage, type CallRow } from '../api';
 import { useSession } from '../App';
 import { Card, Spinner, fmtDuration, fmtTime } from '../ui';
 
@@ -41,7 +41,7 @@ export default function Dashboard() {
 
   if (!business) return null;
   const completed = calls?.filter((c) => c.status === 'completed') ?? [];
-  const messages = completed.filter((c) => c.message_json);
+  const messages = completed.filter((c) => takenMessage(c.message_json));
   const totalSec = completed.reduce((a, c) => a + (c.duration_s ?? 0), 0);
 
   return (

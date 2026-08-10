@@ -180,14 +180,17 @@ export async function chatComplete(
     }),
   });
   if (res.status >= 300 && res.status < 400) {
-    // The target can name an internal host or carry signed query parameters,
-    // and these errors surface on a public socket — log it, don't throw it.
-    console.error(`LLM endpoint redirected to ${res.headers.get('location') ?? 'an undisclosed location'}`);
+    // A redirect Location may contain userinfo or signed query credentials.
+    // The status is enough to diagnose an unsupported provider response; never
+    // copy the target into logs or an API error.
+    console.error(`LLM endpoint returned redirect status ${res.status}; target redacted`);
     throw new Error(`LLM error ${res.status}: endpoint redirected; redirects are not followed`);
   }
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`LLM error ${res.status}: ${body.slice(0, 300)}`);
+    // Provider bodies are untrusted and may reflect the Authorization header,
+    // signed query data, or internal diagnostics. Call failures are logged and
+    // stored for the owner, so carry only the status across that boundary.
+    throw new Error(`LLM error ${res.status}: provider request failed`);
   }
   const data = (await res.json()) as { choices: { message: { content: string } }[] };
   return data.choices[0]?.message?.content ?? '';
@@ -359,8 +362,7 @@ export async function transcribe(env: Env, audio: ArrayBuffer, contentType: stri
     body: form,
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`STT error ${res.status}: ${body.slice(0, 300)}`);
+    throw new Error(`STT error ${res.status}: provider request failed`);
   }
   const data = (await res.json()) as { text: string; language?: string };
   return { text: (data.text ?? '').trim(), language: normalizeLang(data.language) };
@@ -392,7 +394,7 @@ export async function synthesize(env: Env, text: string, voice: string, format: 
     body: ssml,
   });
   if (!res.ok) {
-    console.error(`TTS error ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    console.error(`TTS error ${res.status}: provider response redacted`);
     return null;
   }
   return res.arrayBuffer();

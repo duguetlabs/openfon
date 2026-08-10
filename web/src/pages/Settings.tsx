@@ -1,46 +1,45 @@
 import { useEffect, useState } from 'react';
 import { api, type Agent, type Business, type EngineProfile, type VoiceCatalog } from '../api';
 import { useSession } from '../App';
-import { Button, Card, Field, FieldLabel, SectionTitle, TextArea, LANGUAGES, inputClassSm, selectClass } from '../ui';
+import {
+  readClosureRows,
+  readFaqRows,
+  readHourRows,
+  serializeClosureRows,
+  serializeFaqRows,
+  serializeHourRows,
+  type ClosureRow,
+  type FaqRow,
+  type HourRow,
+} from '../row-arrays';
+import { readServiceRows, serializeServiceRows, type ServiceRow } from '../service-rows';
+import { Button, Card, Field, FieldLabel, SectionTitle, TextArea, LANGUAGES, inputClassSm } from '../ui';
 import { ListEditor } from './Onboarding';
-
-interface Hour {
-  day: string;
-  open: string;
-  close: string;
-  closed: boolean;
-}
-
-function parse<T>(json: string, fallback: T): T {
-  try {
-    return JSON.parse(json) as T;
-  } catch {
-    return fallback;
-  }
-}
 
 export default function Settings() {
   const { business, refresh } = useSession();
   const [biz, setBiz] = useState<Business | null>(null);
-  const [hours, setHours] = useState<Hour[]>([]);
-  const [services, setServices] = useState<{ name: string; price: string }[]>([]);
-  const [faqs, setFaqs] = useState<{ q: string; a: string }[]>([]);
-  const [closures, setClosures] = useState<{ date: string; reason: string }[]>([]);
+  const [hours, setHours] = useState<HourRow[]>([]);
+  const [services, setServices] = useState<ServiceRow[]>([]);
+  const [faqs, setFaqs] = useState<FaqRow[]>([]);
+  const [closures, setClosures] = useState<ClosureRow[]>([]);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [saved, setSaved] = useState('');
   const [error, setError] = useState('');
   const [profiles, setProfiles] = useState<EngineProfile[]>([]);
   const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
   const [newProfileName, setNewProfileName] = useState('');
+  const [clearApiKey, setClearApiKey] = useState(false);
 
   useEffect(() => {
     if (business) {
       setBiz({ ...business });
-      setHours(parse(business.hours_json, []));
-      setServices(parse(business.services_json, []));
-      setFaqs(parse(business.faqs_json, []));
-      setClosures(parse(business.closures_json, []));
+      setHours(readHourRows(business.hours_json, []));
+      setServices(readServiceRows(business.services_json));
+      setFaqs(readFaqRows(business.faqs_json, []));
+      setClosures(readClosureRows(business.closures_json));
       setAgent(business.agent ? { ...business.agent } : null);
+      setClearApiKey(false);
       void api.profiles(business.id).then(setProfiles).catch(() => {});
       void api.voices().then(setVoiceCatalog).catch(() => {});
     }
@@ -54,12 +53,13 @@ export default function Settings() {
     try {
       await api.updateBusiness(biz!.id, {
         ...biz!,
-        hours_json: JSON.stringify(hours),
-        services_json: JSON.stringify(services.filter((s) => s.name.trim())),
-        faqs_json: JSON.stringify(faqs.filter((f) => f.q.trim() && f.a.trim())),
-        closures_json: JSON.stringify(closures.filter((c) => c.date.trim())),
+        hours_json: serializeHourRows(hours),
+        services_json: serializeServiceRows(services),
+        faqs_json: serializeFaqRows(faqs),
+        closures_json: serializeClosureRows(closures),
       });
-      await api.updateAgent(biz!.id, agent!);
+      await api.updateAgent(biz!.id, { ...agent!, ...(clearApiKey ? { clearApiKey: true } : {}) });
+      setClearApiKey(false);
       await refresh();
       setSaved('Saved.');
       setTimeout(() => setSaved(''), 2000);
@@ -93,11 +93,17 @@ export default function Settings() {
             <FieldLabel>Opening hours</FieldLabel>
             <div className="mt-2 space-y-1.5">
               {hours.map((h, i) => (
-                <div key={h.day} className="flex items-center gap-3 text-sm">
+                <div
+                  key={h.day}
+                  className="flex items-center gap-3 text-sm"
+                  role="group"
+                  aria-label={`${h.day} opening hours`}
+                >
                   <span className="w-12 font-mono text-xs text-ink-soft">{h.day.slice(0, 3)}</span>
                   <input
                     type="checkbox"
                     className="accent-iris"
+                    aria-label={`Open on ${h.day}`}
                     checked={!h.closed}
                     onChange={(e) => setHours(hours.map((x, j) => (j === i ? { ...x, closed: !e.target.checked } : x)))}
                   />
@@ -108,6 +114,7 @@ export default function Settings() {
                       <input
                         type="time"
                         className={`${inputClassSm} px-2 py-1 font-mono text-xs`}
+                        aria-label={`${h.day} opening time`}
                         value={h.open}
                         onChange={(e) => setHours(hours.map((x, j) => (j === i ? { ...x, open: e.target.value } : x)))}
                       />
@@ -115,6 +122,7 @@ export default function Settings() {
                       <input
                         type="time"
                         className={`${inputClassSm} px-2 py-1 font-mono text-xs`}
+                        aria-label={`${h.day} closing time`}
                         value={h.close}
                         onChange={(e) => setHours(hours.map((x, j) => (j === i ? { ...x, close: e.target.value } : x)))}
                       />
@@ -129,18 +137,20 @@ export default function Settings() {
             rows={services}
             onChange={setServices}
             empty={{ name: '', price: '' }}
-            render={(row, setR) => (
+            render={(row, setR, rowIndex) => (
               <>
                 <input
                   className={`${inputClassSm} flex-1`}
                   placeholder="Service"
+                  aria-label={`Service ${rowIndex + 1} name`}
                   value={row.name}
                   onChange={(e) => setR({ ...row, name: e.target.value })}
                 />
                 <input
                   className={`${inputClassSm} w-28`}
                   placeholder="Price"
-                  value={row.price}
+                  aria-label={`Service ${rowIndex + 1} price`}
+                  value={row.price ?? ''}
                   onChange={(e) => setR({ ...row, price: e.target.value })}
                 />
               </>
@@ -151,18 +161,20 @@ export default function Settings() {
             rows={closures}
             onChange={setClosures}
             empty={{ date: '', reason: '' }}
-            render={(row, setR) => (
+            render={(row, setR, rowIndex) => (
               <>
                 <input
                   type="date"
                   className={`${inputClassSm} font-mono`}
+                  aria-label={`Closure ${rowIndex + 1} date`}
                   value={row.date}
                   onChange={(e) => setR({ ...row, date: e.target.value })}
                 />
                 <input
                   className={`${inputClassSm} flex-1`}
                   placeholder="Public holiday"
-                  value={row.reason}
+                  aria-label={`Closure ${rowIndex + 1} reason`}
+                  value={row.reason ?? ''}
                   onChange={(e) => setR({ ...row, reason: e.target.value })}
                 />
               </>
@@ -173,17 +185,19 @@ export default function Settings() {
             rows={faqs}
             onChange={setFaqs}
             empty={{ q: '', a: '' }}
-            render={(row, setR) => (
+            render={(row, setR, rowIndex) => (
               <div className="flex-1 space-y-1.5">
                 <input
                   className={`${inputClassSm} w-full`}
                   placeholder="Question"
+                  aria-label={`FAQ ${rowIndex + 1} question`}
                   value={row.q}
                   onChange={(e) => setR({ ...row, q: e.target.value })}
                 />
                 <input
                   className={`${inputClassSm} w-full`}
                   placeholder="Answer"
+                  aria-label={`FAQ ${rowIndex + 1} answer`}
                   value={row.a}
                   onChange={(e) => setR({ ...row, a: e.target.value })}
                 />
@@ -201,7 +215,7 @@ export default function Settings() {
             <label className="block">
               <FieldLabel>Language</FieldLabel>
               <select
-                className={selectClass}
+                className="w-full rounded-[10px] border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-ink outline-none focus:border-iris focus:ring-[3px] focus:ring-iris/15"
                 value={agent.language}
                 onChange={(e) => setA({ language: e.target.value })}
               >
@@ -323,7 +337,7 @@ export default function Settings() {
       </section>
 
       <section className="rise rise-2">
-        <SectionTitle sub="OpenFon speaks the OpenAI API dialect — point it at Kataleptic, OpenAI, Groq, Ollama, or your own server. Empty fields use the instance defaults.">
+        <SectionTitle sub="OpenFon speaks the OpenAI API dialect — point it at Kataleptic, OpenAI, Groq, Ollama, or your own server. Empty model and endpoint fields use instance defaults; saved API keys stay until explicitly replaced or removed.">
           AI provider
         </SectionTitle>
         <Card className="space-y-4">
@@ -360,7 +374,7 @@ export default function Settings() {
               <label className="mt-4 block rounded-xl border border-line bg-wash-iris/40 p-4">
                 <FieldLabel>Realtime model</FieldLabel>
                 <select
-                  className={selectClass}
+                  className="w-full rounded-[10px] border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-ink outline-none focus:border-iris focus:ring-[3px] focus:ring-iris/15"
                   value={agent.realtime_model}
                   onChange={(e) => setA({ realtime_model: e.target.value })}
                 >
@@ -408,7 +422,51 @@ export default function Settings() {
           />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Model" value={agent.llm_model} onChange={(e) => setA({ llm_model: e.target.value })} placeholder="llama-3.3-70b" />
-            <Field label="API key" type="password" value={agent.llm_api_key} onChange={(e) => setA({ llm_api_key: e.target.value })} placeholder="sk-…" />
+            <div>
+              <Field
+                label="API key"
+                type="password"
+                value={agent.llm_api_key}
+                onChange={(e) => {
+                  setClearApiKey(false);
+                  setA({ llm_api_key: e.target.value });
+                }}
+                placeholder={
+                  clearApiKey
+                    ? 'Saved key will be removed'
+                    : agent.workspaceApiKeyConfigured
+                      ? 'Configured — enter a new key to replace it'
+                      : agent.apiKeyConfigured
+                        ? 'Using the instance key'
+                        : 'sk-…'
+                }
+              />
+              {agent.workspaceApiKeyConfigured && !clearApiKey && (
+                <button
+                  type="button"
+                  className="mt-2 text-xs font-semibold text-rose underline decoration-rose/30 underline-offset-2 hover:decoration-rose"
+                  onClick={() => {
+                    setA({ llm_api_key: '' });
+                    setClearApiKey(true);
+                  }}
+                >
+                  Remove saved key
+                </button>
+              )}
+              {clearApiKey && (
+                <p className="mt-2 text-xs text-ink-soft" role="status">
+                  The saved key will be removed when you save. Use the instance-default Base URL first if you want to
+                  fall back to its key.{' '}
+                  <button
+                    type="button"
+                    className="font-semibold text-iris underline decoration-iris/30 underline-offset-2 hover:decoration-iris"
+                    onClick={() => setClearApiKey(false)}
+                  >
+                    Undo
+                  </button>
+                </p>
+              )}
+            </div>
           </div>
         </Card>
       </section>

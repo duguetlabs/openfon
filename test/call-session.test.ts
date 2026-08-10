@@ -284,6 +284,9 @@ describe('second attach to a live call', () => {
     expect(retired).toBeDefined();
     expect(retired.sql).toContain("status = 'failed'");
     expect(String(retired.args[1])).toContain('could not be started');
+    expect(retired.sql).toContain("outcome = 'failed'");
+    expect(retired.sql).toContain("failure_code = 'watchdog_unavailable'");
+    expect(String(retired.args[2])).toContain('watchdog could not be started');
     expect(retired.sql).toContain("status = 'active'"); // never contests another writer
 
     // Nothing else was retained, so the next attempt is a clean one.
@@ -352,6 +355,27 @@ describe('second attach to a live call', () => {
 });
 
 describe('handleStart idempotency', () => {
+  it('keeps legacy services and FAQs for a mixed-version call without an assistant id', async () => {
+    const previousServices = BIZ_ROW.services_json;
+    const previousFaqs = BIZ_ROW.faqs_json;
+    BIZ_ROW.services_json = JSON.stringify([{ name: 'Emergency cleaning', price: '€90' }]);
+    BIZ_ROW.faqs_json = JSON.stringify([{ q: 'Do you validate parking?', a: 'Yes, for two hours.' }]);
+    try {
+      const { session } = newSession();
+      await session.fetch(upgradeRequest());
+      serverSockets[0].receive({ type: 'start' });
+      await flush();
+
+      const history = (session as unknown as { history: { content: string }[] }).history;
+      expect(history[0].content).toContain('Emergency cleaning');
+      expect(history[0].content).toContain('Do you validate parking?');
+      expect(history[0].content).toContain('Yes, for two hours.');
+    } finally {
+      BIZ_ROW.services_json = previousServices;
+      BIZ_ROW.faqs_json = previousFaqs;
+    }
+  });
+
   it('answers once no matter how many start messages arrive', async () => {
     const { session, turnWrites } = newSession();
     await session.fetch(upgradeRequest());
@@ -606,6 +630,29 @@ describe('realtime session payload', () => {
   };
 
   const TUNED_SERVER_VAD = { type: 'server_vad', threshold: 0.7, prefix_padding_ms: 300, silence_duration_ms: 550 };
+
+  it('redacts valid and malformed upstream error frames before logging', async () => {
+    const { session } = newSession('realtime');
+    await session.fetch(upgradeRequest());
+    serverSockets.at(-1)!.receive({ type: 'start' });
+    await flush();
+    const upstream = upstreamSockets.at(-1)!;
+    upstream.emit('open', {});
+    await flush();
+
+    const secret = 'realtime-secret-never-log';
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      upstream.receive({ type: 'error', error: { message: `reflected ${secret}` } });
+      upstream.emit('message', { data: `not-json token=${secret}` });
+      await flush();
+      const logged = JSON.stringify(errorLog.mock.calls);
+      expect(logged).toContain('provider response redacted');
+      expect(logged).not.toContain(secret);
+    } finally {
+      errorLog.mockRestore();
+    }
+  });
 
   it('keeps gpt-realtime tiers on server VAD, splitting and all', async () => {
     // server_vad ends the caller's turn at a clause pause on this brain 10/10,

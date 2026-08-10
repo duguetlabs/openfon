@@ -14,6 +14,7 @@
 //   server JSON  {type:"thinking"} | {type:"error", message} | {type:"ended"}
 import type { Env, Business, AgentSettings, ChatMessage } from './types';
 import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './prompt';
+import type { PromptKnowledgeItem } from './prompt';
 import { chatComplete, detectLang, isFarewell, isVocabEcho, LlmConfigError, normalizeLang, piperVoiceFor, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
 
 // WebSocket binary payloads vary by runtime: ArrayBuffer, ArrayBufferView, or Blob.
@@ -77,9 +78,20 @@ function parseSummary(raw: string): SummaryResult {
   return { summary: cleaned.slice(0, 200) || null };
 }
 
+function messageJsonHasRealMessage(messageJson: string | null): boolean {
+  if (!messageJson) return false;
+  try {
+    const parsed = JSON.parse(messageJson) as { message?: unknown };
+    return typeof parsed.message === 'string' && Boolean(parsed.message.trim());
+  } catch {
+    return false;
+  }
+}
+
 interface CallRow {
   id: string;
   business_id: string;
+  assistant_id: string | null;
   status: string;
   started_at: string;
 }
@@ -198,6 +210,11 @@ export class CallSession implements DurableObject {
   private callId = '';
   private biz: Business | null = null;
   private settings: AgentSettings | null = null;
+  // Undefined is deliberate: a mixed-version call row with no assistant_id
+  // must keep using the legacy services/FAQs stored on the business. An
+  // assistant with zero active attached items sets this to [], which is a real
+  // and authoritative empty knowledge set.
+  private knowledge: PromptKnowledgeItem[] | undefined;
   private history: ChatMessage[] = [];
   private busy = false;
   private ended = false; // stop handling caller messages
@@ -257,11 +274,14 @@ export class CallSession implements DurableObject {
       // one layer out: no socket was the first half, no orphaned row is this.
       console.error(`call ${this.callId}: could not arm the watchdog; retiring the row`, err);
       await this.env.DB.prepare(
-        `UPDATE calls SET status = 'failed', ended_at = ?, summary = ? WHERE id = ? AND status = 'active'`
+        `UPDATE calls SET status = 'failed', ended_at = ?, summary = ?, outcome = 'failed',
+          failure_code = 'watchdog_unavailable', failure_message = ?
+         WHERE id = ? AND status = 'active'`
       )
         .bind(
           CallSession.sqlTime(Date.now()),
           'Call failed: the call could not be started.',
+          'The call watchdog could not be started.',
           this.callId
         )
         .run()
@@ -322,17 +342,65 @@ export class CallSession implements DurableObject {
     void this.finalize().catch((e) => console.error('finalize after failure failed', e));
   }
 
+  private async loadSettings(businessId: string, assistantId: string | null): Promise<void> {
+    if (assistantId) {
+      this.settings = await this.env.DB.prepare(
+        `SELECT
+          assistants.business_id,
+          assistants.name AS agent_name,
+          assistants.greeting,
+          assistants.persona,
+          assistants.language,
+          assistants.voice,
+          assistants.take_messages,
+          assistants.custom_instructions,
+          COALESCE(provider_settings.llm_base_url, '') AS llm_base_url,
+          COALESCE(provider_settings.llm_api_key, '') AS llm_api_key,
+          assistants.llm_model,
+          assistants.engine,
+          assistants.realtime_model,
+          assistants.realtime_voice
+         FROM assistants
+         LEFT JOIN provider_settings ON provider_settings.business_id = assistants.business_id
+         WHERE assistants.id = ? AND assistants.business_id = ?`
+      )
+        .bind(assistantId, businessId)
+        .first<AgentSettings>();
+      const { results } = await this.env.DB.prepare(
+        `SELECT knowledge_items.kind, knowledge_items.title, knowledge_items.question,
+          knowledge_items.answer, knowledge_items.content
+         FROM knowledge_items
+         JOIN assistant_knowledge_collections
+           ON assistant_knowledge_collections.collection_id = knowledge_items.collection_id
+         WHERE assistant_knowledge_collections.assistant_id = ?
+           AND knowledge_items.business_id = ?
+           AND knowledge_items.status = 'active'
+         ORDER BY knowledge_items.created_at, knowledge_items.id`
+      )
+        .bind(assistantId, businessId)
+        .all<PromptKnowledgeItem>();
+      this.knowledge = results;
+    }
+    // Compatibility for a call row created before 0008 or during a mixed-version
+    // rollout. Migration 0008 backfills assistant_id, but an old worker can
+    // still insert a NULL until the new worker takes traffic.
+    if (!this.settings) {
+      this.settings = await this.env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?')
+        .bind(businessId)
+        .first<AgentSettings>();
+      this.knowledge = undefined;
+    }
+  }
+
   private async loadCall(): Promise<void> {
-    const call = await this.env.DB.prepare('SELECT id, business_id, status, started_at FROM calls WHERE id = ?')
+    const call = await this.env.DB.prepare('SELECT id, business_id, assistant_id, status, started_at FROM calls WHERE id = ?')
       .bind(this.callId)
       .first<CallRow>();
     if (!call || call.status !== 'active') throw new Error('call not found or not active');
     this.biz = await this.env.DB.prepare('SELECT * FROM businesses WHERE id = ?')
       .bind(call.business_id)
       .first<Business>();
-    this.settings = await this.env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?')
-      .bind(call.business_id)
-      .first<AgentSettings>();
+    await this.loadSettings(call.business_id, call.assistant_id);
     if (!this.biz || !this.settings) throw new Error('business not configured');
   }
 
@@ -444,7 +512,7 @@ export class CallSession implements DurableObject {
     if (this.ended) return;
     this.lang = this.settings!.language in SUPPORTED_LANGUAGES ? this.settings!.language : 'en';
     const greeting = defaultGreeting(this.biz!, this.settings!);
-    const systemPrompt = buildSystemPrompt(this.biz!, this.settings!, new Date());
+    const systemPrompt = buildSystemPrompt(this.biz!, this.settings!, new Date(), this.knowledge);
 
     if (this.settings!.engine === 'realtime') {
       const ok = await this.startRealtime(systemPrompt, greeting).catch((err) => {
@@ -789,7 +857,7 @@ export class CallSession implements DurableObject {
               // HD call about a field nobody can apply. If Kataleptic stops
               // spending that first update, this can go back to unconditional —
               // and `phrase_list` becomes the supported spelling of it there.
-              ...(this.realtimeModel === 'kataleptic-realtime-hd' ? {} : { prompt: this.biz && this.settings ? sttVocab(this.biz, this.settings) : undefined }),
+              ...(this.realtimeModel === 'kataleptic-realtime-hd' ? {} : { prompt: this.biz && this.settings ? sttVocab(this.biz, this.settings, this.knowledge) : undefined }),
               // On cascade tiers this is a greeting seed + STT accuracy hint,
               // not a pin: per-utterance detection overrides it once the caller
               // speaks (verified 2026-06-13 after Kataleptic's fix).
@@ -968,7 +1036,9 @@ export class CallSession implements DurableObject {
       });
       ws.addEventListener('message', (ev) => {
         if (!this.readableUpstreams.has(ws)) return; // abandoned or rotated out
-        this.onUpstreamMessage(ev, ws).catch((err) => console.error('upstream handler error', err));
+        this.onUpstreamMessage(ev, ws).catch(() =>
+          console.error('upstream handler error: provider response redacted')
+        );
       });
       ws.addEventListener('error', () => {
         clearTimeout(timer);
@@ -1110,7 +1180,7 @@ export class CallSession implements DurableObject {
           const text = msg.transcript.trim();
           // STT echoes the vocabulary bias prompt back on silence-committed
           // turns; cancel the response it triggered and pretend it never happened.
-          const vocab = this.biz && this.settings ? sttVocab(this.biz, this.settings) : '';
+          const vocab = this.biz && this.settings ? sttVocab(this.biz, this.settings, this.knowledge) : '';
           if (vocab && isVocabEcho(text, vocab)) {
             console.log(`call ${this.callId}: dropped vocab-echo transcript: ${text.slice(0, 80)}`);
             this.sendUpstream({ type: 'response.cancel' });
@@ -1173,7 +1243,10 @@ export class CallSession implements DurableObject {
         void this.recoverUpstream();
         break;
       case 'error':
-        console.error('realtime engine error:', JSON.stringify(msg.error ?? msg).slice(0, 300));
+        // Realtime credentials travel in the upstream URL. Error frames are
+        // untrusted and some gateways echo request details, so never persist or
+        // log their arbitrary payload.
+        console.error('realtime engine error: provider response redacted');
         break;
     }
   }
@@ -1195,7 +1268,7 @@ export class CallSession implements DurableObject {
     this.busy = true;
     try {
       this.send({ type: 'thinking' });
-      const vocab = this.biz && this.settings ? sttVocab(this.biz, this.settings) : undefined;
+      const vocab = this.biz && this.settings ? sttVocab(this.biz, this.settings, this.knowledge) : undefined;
       const { text, language } = await transcribe(this.env, audio, this.pendingContentType, vocab);
       if (!text) {
         this.busy = false;
@@ -1478,11 +1551,9 @@ export class CallSession implements DurableObject {
   // "call stuck in progress" into "call completed, caller's message gone",
   // which looks fine on the dashboard and is therefore worse. Read the same
   // data back out of D1 and summarize normally.
-  private async rehydrateHistory(businessId: string): Promise<void> {
+  private async rehydrateHistory(businessId: string, assistantId: string | null): Promise<void> {
     if (this.history.length > 0) return; // live session: memory is authoritative
-    this.settings ??= await this.env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?')
-      .bind(businessId)
-      .first<AgentSettings>();
+    if (!this.settings) await this.loadSettings(businessId, assistantId);
     const { results } = await this.env.DB.prepare('SELECT role, text FROM call_turns WHERE call_id = ? ORDER BY id')
       .bind(this.callId)
       .all<{ role: string; text: string }>();
@@ -1581,9 +1652,9 @@ export class CallSession implements DurableObject {
       /* already gone */
     }
     const endedAt = await this.rememberEnding();
-    const call = await this.env.DB.prepare('SELECT started_at, business_id FROM calls WHERE id = ? AND status = ?')
+    const call = await this.env.DB.prepare('SELECT started_at, business_id, assistant_id FROM calls WHERE id = ? AND status = ?')
       .bind(this.callId, 'active')
-      .first<{ started_at: string; business_id: string }>();
+      .first<{ started_at: string; business_id: string; assistant_id: string | null }>();
     if (!call) {
       // The row is no longer active: either something else completed it, or the
       // sweep retired it as 'abandoned' before we got here. The sweep is
@@ -1596,7 +1667,7 @@ export class CallSession implements DurableObject {
       return;
     }
     const duration = Math.max(0, Math.round((endedAt - new Date(call.started_at + 'Z').getTime()) / 1000));
-    await this.rehydrateHistory(call.business_id);
+    await this.rehydrateHistory(call.business_id, call.assistant_id);
     // Survives eviction between attempts, so a retry never pays the
     // summarization model a second time for the same conversation.
     this.summarized ??= (await this.state.storage.get<typeof this.summarized>('summarized')) ?? null;
@@ -1659,6 +1730,17 @@ export class CallSession implements DurableObject {
       summary = summary ? `${this.failure} — ${summary}` : this.failure;
     }
     const status = this.failure ? 'failed' : 'completed';
+    // message_json also carries caller contact details. Its mere presence does
+    // not mean a callback message was taken: booking flows commonly collect a
+    // name and phone number without a separate message. Inspect the parsed
+    // message itself before giving it precedence over booking intent.
+    const outcome = this.failure
+      ? 'failed'
+      : messageJsonHasRealMessage(messageJson)
+        ? 'message_taken'
+        : intent === 'booking'
+          ? 'booking_requested'
+          : 'answered';
     // If this throws, `finalized` stays false and the watchdog is still armed,
     // so the alarm retries. Clearing the watchdog first would strand the row
     // as 'active' with nothing left to ever reclaim it.
@@ -1669,10 +1751,22 @@ export class CallSession implements DurableObject {
     // status and duration — the salvage path exists to cooperate with the
     // sweep, and unconditionally overriding it is the opposite.
     const res = await this.env.DB.prepare(
-      `UPDATE calls SET status = ?, ended_at = ?, duration_s = ?, summary = ?, intent = ?, message_json = ?
+      `UPDATE calls SET status = ?, ended_at = ?, duration_s = ?, summary = ?, intent = ?, message_json = ?,
+        outcome = ?, failure_code = ?, failure_message = ?
         WHERE id = ? AND status = 'active'`
     )
-      .bind(status, CallSession.sqlTime(endedAt), duration, summary, intent, messageJson, this.callId)
+      .bind(
+        status,
+        CallSession.sqlTime(endedAt),
+        duration,
+        summary,
+        intent,
+        messageJson,
+        outcome,
+        this.failure ? 'session_error' : null,
+        this.failure,
+        this.callId
+      )
       .run();
     // `changes` missing means the driver did not report one, not that nothing
     // matched — only an explicit zero means the sweep got there first.
