@@ -5,7 +5,12 @@ import type { Env, Business, AgentSettings } from './types';
 import { createSession, deleteSession, getUserIdFromSession, hashPassword, newId, verifyPassword } from './auth';
 import { sameLlmEndpoint, validateLlmBaseUrl } from './providers';
 import { CallSession } from './call-session';
-import { ensureWorkspaceFoundation, registerStudioApi, syncLegacyKnowledge } from './studio-api';
+import {
+  ensureWorkspaceFoundation,
+  registerStudioApi,
+  sameLegacyKnowledgeProjection,
+  syncLegacyKnowledge,
+} from './studio-api';
 
 export { CallSession };
 
@@ -24,27 +29,6 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 40);
   return `${base || 'business'}-${newId().replace(/-/g, '').slice(0, 12)}`;
-}
-
-function canonicalJson(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalJson);
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, entry]) => [key, canonicalJson(entry)])
-    );
-  }
-  return value;
-}
-
-function jsonSemanticallyEqual(left: string, right: string): boolean {
-  if (left === right) return true;
-  try {
-    return JSON.stringify(canonicalJson(JSON.parse(left))) === JSON.stringify(canonicalJson(JSON.parse(right)));
-  } catch {
-    return false;
-  }
 }
 
 function updateCompatibilitySnapshot(env: Env, businessId: string): D1PreparedStatement {
@@ -108,6 +92,11 @@ const LIMITS = {
   // so a loop of deliberately correct logins cannot run for ever.
   loginOk: { name: 'lgok', window: 900, max: 30 },
   loginEmail: { name: 'lgem', window: 900, max: 5 },
+  // Creating an account runs PBKDF2 and writes both a user and a session. Keep
+  // that public work finite across made-up email addresses. Invalid forms are
+  // rejected before consuming this allowance, while every well-formed attempt
+  // reserves before the first account lookup or password hash.
+  signupIp: { name: 'sgip', window: 3600, max: 5 },
 } satisfies Record<string, Limit>;
 
 // Call creation, counted in a second column of the *same* row as publicApi
@@ -148,7 +137,7 @@ const STALE_CONNECTED = '-90 minutes';
 function clientIp(c: Ctx): string {
   // Set by Cloudflare on every edge request; absent under `wrangler dev`, where
   // one shared bucket is the safe answer.
-  return c.req.header('CF-Connecting-IP') ?? 'local';
+  return c.req.header('CF-Connecting-IP')?.trim() || 'local';
 }
 
 function windowStart(limit: Limit, now = Date.now()): number {
@@ -250,6 +239,13 @@ app.post('/api/auth/signup', async (c) => {
   const { email, password } = await c.req.json<{ email?: string; password?: string }>();
   if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return c.json({ error: 'Valid email required' }, 400);
   if (!password || password.length < 8) return c.json({ error: 'Password must be at least 8 characters' }, 400);
+  // Reserve before lookup/hash/write. In particular, do not key anything on
+  // the attacker-controlled email first: once this IP bucket is full, changing
+  // the address must not buy another counter row or another PBKDF2 run.
+  const signupTaken = await consume(c.env, LIMITS.signupIp, clientIp(c));
+  if (signupTaken.over) {
+    return tooMany(c, 'Too many accounts created from this connection. Please try again later.', LIMITS.signupIp.window);
+  }
   const existing = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email.toLowerCase()).first();
   if (existing) return c.json({ error: 'An account with this email already exists' }, 409);
   const id = newId();
@@ -494,14 +490,18 @@ app.put('/api/me/business/:id', async (c) => {
   if (!biz) return c.json({ error: 'Not found' }, 404);
   const b = await c.req.json<Partial<Business>>();
   const servicesChanged =
-    b.services_json !== undefined && !jsonSemanticallyEqual(b.services_json, biz.services_json);
-  const faqsChanged = b.faqs_json !== undefined && !jsonSemanticallyEqual(b.faqs_json, biz.faqs_json);
-  // Keep the synchronized serialization when the submitted JSON is only a
-  // whitespace/key-order rewrite. Persisting that rewrite without rebuilding
-  // the projection would make the next reconciliation mistake it for a source
-  // change and clobber approved item edits.
-  const servicesJson = servicesChanged ? b.services_json! : biz.services_json;
-  const faqsJson = faqsChanged ? b.faqs_json! : biz.faqs_json;
+    b.services_json !== undefined &&
+    !sameLegacyKnowledgeProjection('service', b.services_json, biz.services_json);
+  const faqsChanged =
+    b.faqs_json !== undefined &&
+    !sameLegacyKnowledgeProjection('faq', b.faqs_json, biz.faqs_json);
+  // Always persist the compatibility editor's cleaned source so legacy workers
+  // and prompt fallbacks stop seeing malformed rows. Projection-equivalent
+  // cleanup deliberately skips syncLegacyKnowledge below: the old raw marker
+  // remains as provenance, while explicit typed edits, drafts, and deletions
+  // remain untouched.
+  const servicesJson = b.services_json ?? biz.services_json;
+  const faqsJson = b.faqs_json ?? biz.faqs_json;
   await c.env.DB.prepare(
     `UPDATE businesses SET name=?, description=?, address=?, phone=?, website=?, timezone=?, hours_json=?, services_json=?, faqs_json=?, closures_json=?, max_concurrent_calls=?, max_calls_per_day=? WHERE id=?`
   )
@@ -922,16 +922,19 @@ interface PublicAssistantTarget {
   max_calls_per_day: number;
   services_json: string;
   faqs_json: string;
+  synced_services_json: string | null;
+  synced_faqs_json: string | null;
   needs_repair: number;
 }
 
 async function activePublicAssistant(env: Env, slug: string): Promise<PublicAssistantTarget | null> {
-  const lookup = () =>
-    env.DB.prepare(
+  const lookup = async () => {
+    const target = await env.DB.prepare(
       `SELECT assistants.id AS assistant_id, assistants.name AS agent_name, assistants.language,
         businesses.id AS business_id, businesses.name AS business_name, businesses.slug AS workspace_slug,
         businesses.max_concurrent_calls, businesses.max_calls_per_day,
         businesses.services_json, businesses.faqs_json,
+        sync.services_json AS synced_services_json, sync.faqs_json AS synced_faqs_json,
         CASE WHEN legacy.business_id IS NULL
           OR compatibility.id IS NULL
           OR provider_settings.business_id IS NULL
@@ -951,8 +954,6 @@ async function activePublicAssistant(env: Env, slug: string): Promise<PublicAssi
           ))
           OR provider_settings.llm_base_url <> legacy.llm_base_url
           OR provider_settings.llm_api_key <> legacy.llm_api_key
-          OR sync.services_json <> businesses.services_json
-          OR sync.faqs_json <> businesses.faqs_json
           OR default_collection.id IS NULL
           OR sync.collection_id <> default_collection.id
           OR sync.agent_snapshot <> json_object(
@@ -981,6 +982,17 @@ async function activePublicAssistant(env: Env, slug: string): Promise<PublicAssi
     )
       .bind(slug)
       .first<PublicAssistantTarget>();
+    if (
+      target &&
+      target.synced_services_json !== null &&
+      target.synced_faqs_json !== null &&
+      (!sameLegacyKnowledgeProjection('service', target.synced_services_json, target.services_json) ||
+        !sameLegacyKnowledgeProjection('faq', target.synced_faqs_json, target.faqs_json))
+    ) {
+      target.needs_repair = 1;
+    }
+    return target;
+  };
   const reconcile = async (current: PublicAssistantTarget): Promise<PublicAssistantTarget> => {
     let repaired = current;
     for (let attempt = 0; repaired.needs_repair && attempt < 2; attempt++) {

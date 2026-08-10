@@ -1,3 +1,5 @@
+import { readRowArray } from './row-arrays';
+
 export interface ServiceRow {
   name: string;
   price?: string;
@@ -21,18 +23,7 @@ function isServiceRow(value: unknown): value is ServiceRow {
 }
 
 export function readServiceRows(raw: string | undefined): ServiceRow[] {
-  if (raw) {
-    try {
-      const value: unknown = JSON.parse(raw);
-      if (Array.isArray(value)) {
-        const rows = value.filter(isServiceRow);
-        if (rows.length || value.length === 0) return rows;
-      }
-    } catch {
-      // Fall through to the editable blank row.
-    }
-  }
-  return [{ name: '', price: '' }];
+  return readRowArray(raw, isServiceRow, [{ name: '', price: '' }]);
 }
 
 export function serializeServiceRows(rows: ServiceRow[]): string {

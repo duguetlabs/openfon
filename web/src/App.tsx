@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, createContext, useContext } from 'react';
+import { useCallback, useEffect, useRef, useState, createContext, useContext } from 'react';
 import { Routes, Route, Navigate, useNavigate, Link, useLocation } from 'react-router-dom';
 import { api, type Assistant, type Business, type Me } from './api';
 import { Logo, Spinner } from './ui';
@@ -8,7 +8,13 @@ import Dashboard from './pages/Dashboard';
 import CallDetailPage from './pages/CallDetail';
 import Settings from './pages/Settings';
 import Widget from './pages/Widget';
-import { compatibilityAssistant, compatibilitySetupPending } from './session-gate';
+import {
+  CompatibilitySessionCoordinator,
+  loadCompatibilitySession,
+  SIGN_OUT_UNCONFIRMED_MESSAGE,
+  type CompatibilitySessionSnapshot,
+} from './session-load';
+import { compatibilitySetupPending } from './session-gate';
 
 interface Session {
   me: Me | null;
@@ -17,6 +23,9 @@ interface Session {
   firstAssistant: Assistant | null;
   firstAssistantReady: boolean;
   refresh: () => Promise<void>;
+  signOut: () => Promise<void>;
+  signOutPending: boolean;
+  signOutWarning: string | null;
 }
 
 const SessionCtx = createContext<Session>({
@@ -26,6 +35,9 @@ const SessionCtx = createContext<Session>({
   firstAssistant: null,
   firstAssistantReady: false,
   refresh: async () => {},
+  signOut: async () => {},
+  signOutPending: false,
+  signOutWarning: null,
 });
 export const useSession = () => useContext(SessionCtx);
 
@@ -36,31 +48,59 @@ export default function App() {
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const [firstAssistant, setFirstAssistant] = useState<Assistant | null>(null);
   const [firstAssistantReady, setFirstAssistantReady] = useState(false);
+  const [signOutPending, setSignOutPending] = useState(false);
+  const [signOutWarning, setSignOutWarning] = useState<string | null>(null);
+  const sessionCoordinator = useRef(new CompatibilitySessionCoordinator());
 
-  const refresh = useCallback(async () => {
-    try {
-      const m = await api.me();
-      setMe(m);
-      // Both endpoints run the compatibility reconciler. Keep them ordered so
-      // a resumed onboarding load cannot launch two repairs for the same
-      // partially-created workspace.
-      const nextBusiness = await api.business();
-      const bootstrap = await api.bootstrap();
-      setBusiness(nextBusiness);
-      setWorkspaceReady(bootstrap.setup.workspace);
-      setFirstAssistant(compatibilityAssistant(nextBusiness, bootstrap.assistants));
-      setFirstAssistantReady(bootstrap.setup.firstAssistant);
-    } catch {
-      setMe(null);
-      setBusiness(null);
-      setWorkspaceReady(false);
-      setFirstAssistant(null);
-      setFirstAssistantReady(false);
-    }
+  const clearSession = useCallback(() => {
+    setMe(null);
+    setBusiness(null);
+    setWorkspaceReady(false);
+    setFirstAssistant(null);
+    setFirstAssistantReady(false);
   }, []);
 
+  const publishSession = useCallback((snapshot: CompatibilitySessionSnapshot) => {
+    // Publish the account and its workspace as one renderable snapshot. If
+    // `me` lands first after sign-in, a resumable Onboarding mounts against a
+    // transient null business and keeps those empty one-shot form values.
+    setMe(snapshot.me);
+    setBusiness(snapshot.business);
+    setWorkspaceReady(snapshot.workspaceReady);
+    setFirstAssistant(snapshot.firstAssistant);
+    setFirstAssistantReady(snapshot.firstAssistantReady);
+    // A confirmed authenticated refresh (including login/signup) supersedes a
+    // previous unconfirmed logout attempt.
+    setSignOutPending(false);
+    setSignOutWarning(null);
+    setLoading(false);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    await sessionCoordinator.current.refresh(loadCompatibilitySession, publishSession, () => {
+      clearSession();
+      setSignOutPending(false);
+      setLoading(false);
+    });
+  }, [clearSession, publishSession]);
+
+  const signOut = useCallback(() => {
+    setSignOutPending(true);
+    return sessionCoordinator.current.signOut(api.logout, {
+      clearLocal: clearSession,
+      confirmed: () => {
+        setSignOutPending(false);
+        setSignOutWarning(null);
+      },
+      failed: () => {
+        setSignOutPending(false);
+        setSignOutWarning(SIGN_OUT_UNCONFIRMED_MESSAGE);
+      },
+    });
+  }, [clearSession]);
+
   useEffect(() => {
-    void refresh().finally(() => setLoading(false));
+    void refresh();
   }, [refresh]);
 
   if (loading) {
@@ -73,7 +113,17 @@ export default function App() {
 
   return (
     <SessionCtx.Provider
-      value={{ me, business, workspaceReady, firstAssistant, firstAssistantReady, refresh }}
+      value={{
+        me,
+        business,
+        workspaceReady,
+        firstAssistant,
+        firstAssistantReady,
+        refresh,
+        signOut,
+        signOutPending,
+        signOutWarning,
+      }}
     >
       <Routes>
         <Route path="/call/:slug" element={<Widget />} />
@@ -103,7 +153,7 @@ export default function App() {
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
-  const { business, refresh } = useSession();
+  const { business, signOut } = useSession();
   const nav = useNavigate();
   const loc = useLocation();
   const tab = (path: string, label: string) => (
@@ -140,7 +190,9 @@ function Shell({ children }: { children: React.ReactNode }) {
             )}
             <button
               onClick={() => {
-                void api.logout().then(refresh);
+                void signOut().catch(() => {
+                  // The persistent auth-screen warning owns this handled error.
+                });
                 nav('/auth');
               }}
               className="ml-1 rounded-lg px-3 py-1.5 text-sm text-ink-soft transition-colors hover:text-ink"

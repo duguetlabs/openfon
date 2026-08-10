@@ -284,6 +284,9 @@ describe('second attach to a live call', () => {
     expect(retired).toBeDefined();
     expect(retired.sql).toContain("status = 'failed'");
     expect(String(retired.args[1])).toContain('could not be started');
+    expect(retired.sql).toContain("outcome = 'failed'");
+    expect(retired.sql).toContain("failure_code = 'watchdog_unavailable'");
+    expect(String(retired.args[2])).toContain('watchdog could not be started');
     expect(retired.sql).toContain("status = 'active'"); // never contests another writer
 
     // Nothing else was retained, so the next attempt is a clean one.

@@ -1,32 +1,28 @@
 import { useEffect, useState } from 'react';
 import { api, type Agent, type Business, type EngineProfile, type VoiceCatalog } from '../api';
 import { useSession } from '../App';
+import {
+  readClosureRows,
+  readFaqRows,
+  readHourRows,
+  serializeClosureRows,
+  serializeFaqRows,
+  serializeHourRows,
+  type ClosureRow,
+  type FaqRow,
+  type HourRow,
+} from '../row-arrays';
 import { readServiceRows, serializeServiceRows, type ServiceRow } from '../service-rows';
 import { Button, Card, Field, FieldLabel, SectionTitle, TextArea, LANGUAGES, inputClassSm } from '../ui';
 import { ListEditor } from './Onboarding';
 
-interface Hour {
-  day: string;
-  open: string;
-  close: string;
-  closed: boolean;
-}
-
-function parse<T>(json: string, fallback: T): T {
-  try {
-    return JSON.parse(json) as T;
-  } catch {
-    return fallback;
-  }
-}
-
 export default function Settings() {
   const { business, refresh } = useSession();
   const [biz, setBiz] = useState<Business | null>(null);
-  const [hours, setHours] = useState<Hour[]>([]);
+  const [hours, setHours] = useState<HourRow[]>([]);
   const [services, setServices] = useState<ServiceRow[]>([]);
-  const [faqs, setFaqs] = useState<{ q: string; a: string }[]>([]);
-  const [closures, setClosures] = useState<{ date: string; reason: string }[]>([]);
+  const [faqs, setFaqs] = useState<FaqRow[]>([]);
+  const [closures, setClosures] = useState<ClosureRow[]>([]);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [saved, setSaved] = useState('');
   const [error, setError] = useState('');
@@ -38,10 +34,10 @@ export default function Settings() {
   useEffect(() => {
     if (business) {
       setBiz({ ...business });
-      setHours(parse(business.hours_json, []));
+      setHours(readHourRows(business.hours_json, []));
       setServices(readServiceRows(business.services_json));
-      setFaqs(parse(business.faqs_json, []));
-      setClosures(parse(business.closures_json, []));
+      setFaqs(readFaqRows(business.faqs_json, []));
+      setClosures(readClosureRows(business.closures_json));
       setAgent(business.agent ? { ...business.agent } : null);
       setClearApiKey(false);
       void api.profiles(business.id).then(setProfiles).catch(() => {});
@@ -57,10 +53,10 @@ export default function Settings() {
     try {
       await api.updateBusiness(biz!.id, {
         ...biz!,
-        hours_json: JSON.stringify(hours),
+        hours_json: serializeHourRows(hours),
         services_json: serializeServiceRows(services),
-        faqs_json: JSON.stringify(faqs.filter((f) => f.q.trim() && f.a.trim())),
-        closures_json: JSON.stringify(closures.filter((c) => c.date.trim())),
+        faqs_json: serializeFaqRows(faqs),
+        closures_json: serializeClosureRows(closures),
       });
       await api.updateAgent(biz!.id, { ...agent!, ...(clearApiKey ? { clearApiKey: true } : {}) });
       setClearApiKey(false);
@@ -97,11 +93,17 @@ export default function Settings() {
             <FieldLabel>Opening hours</FieldLabel>
             <div className="mt-2 space-y-1.5">
               {hours.map((h, i) => (
-                <div key={h.day} className="flex items-center gap-3 text-sm">
+                <div
+                  key={h.day}
+                  className="flex items-center gap-3 text-sm"
+                  role="group"
+                  aria-label={`${h.day} opening hours`}
+                >
                   <span className="w-12 font-mono text-xs text-ink-soft">{h.day.slice(0, 3)}</span>
                   <input
                     type="checkbox"
                     className="accent-iris"
+                    aria-label={`Open on ${h.day}`}
                     checked={!h.closed}
                     onChange={(e) => setHours(hours.map((x, j) => (j === i ? { ...x, closed: !e.target.checked } : x)))}
                   />
@@ -112,6 +114,7 @@ export default function Settings() {
                       <input
                         type="time"
                         className={`${inputClassSm} px-2 py-1 font-mono text-xs`}
+                        aria-label={`${h.day} opening time`}
                         value={h.open}
                         onChange={(e) => setHours(hours.map((x, j) => (j === i ? { ...x, open: e.target.value } : x)))}
                       />
@@ -119,6 +122,7 @@ export default function Settings() {
                       <input
                         type="time"
                         className={`${inputClassSm} px-2 py-1 font-mono text-xs`}
+                        aria-label={`${h.day} closing time`}
                         value={h.close}
                         onChange={(e) => setHours(hours.map((x, j) => (j === i ? { ...x, close: e.target.value } : x)))}
                       />
@@ -133,17 +137,19 @@ export default function Settings() {
             rows={services}
             onChange={setServices}
             empty={{ name: '', price: '' }}
-            render={(row, setR) => (
+            render={(row, setR, rowIndex) => (
               <>
                 <input
                   className={`${inputClassSm} flex-1`}
                   placeholder="Service"
+                  aria-label={`Service ${rowIndex + 1} name`}
                   value={row.name}
                   onChange={(e) => setR({ ...row, name: e.target.value })}
                 />
                 <input
                   className={`${inputClassSm} w-28`}
                   placeholder="Price"
+                  aria-label={`Service ${rowIndex + 1} price`}
                   value={row.price ?? ''}
                   onChange={(e) => setR({ ...row, price: e.target.value })}
                 />
@@ -155,18 +161,20 @@ export default function Settings() {
             rows={closures}
             onChange={setClosures}
             empty={{ date: '', reason: '' }}
-            render={(row, setR) => (
+            render={(row, setR, rowIndex) => (
               <>
                 <input
                   type="date"
                   className={`${inputClassSm} font-mono`}
+                  aria-label={`Closure ${rowIndex + 1} date`}
                   value={row.date}
                   onChange={(e) => setR({ ...row, date: e.target.value })}
                 />
                 <input
                   className={`${inputClassSm} flex-1`}
                   placeholder="Public holiday"
-                  value={row.reason}
+                  aria-label={`Closure ${rowIndex + 1} reason`}
+                  value={row.reason ?? ''}
                   onChange={(e) => setR({ ...row, reason: e.target.value })}
                 />
               </>
@@ -177,17 +185,19 @@ export default function Settings() {
             rows={faqs}
             onChange={setFaqs}
             empty={{ q: '', a: '' }}
-            render={(row, setR) => (
+            render={(row, setR, rowIndex) => (
               <div className="flex-1 space-y-1.5">
                 <input
                   className={`${inputClassSm} w-full`}
                   placeholder="Question"
+                  aria-label={`FAQ ${rowIndex + 1} question`}
                   value={row.q}
                   onChange={(e) => setR({ ...row, q: e.target.value })}
                 />
                 <input
                   className={`${inputClassSm} w-full`}
                   placeholder="Answer"
+                  aria-label={`FAQ ${rowIndex + 1} answer`}
                   value={row.a}
                   onChange={(e) => setR({ ...row, a: e.target.value })}
                 />

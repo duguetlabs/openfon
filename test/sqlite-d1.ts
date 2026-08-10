@@ -8,7 +8,8 @@ class SqliteStatement {
 
   constructor(
     private readonly database: DatabaseSync,
-    private readonly sql: string
+    private readonly sql: string,
+    private readonly beforeExecute: () => void
   ) {}
 
   bind(...values: BindValue[]): SqliteStatement {
@@ -17,10 +18,12 @@ class SqliteStatement {
   }
 
   async first<T>(): Promise<T | null> {
+    this.beforeExecute();
     return (this.database.prepare(this.sql).get(...this.values) as T | undefined) ?? null;
   }
 
   async all<T>(): Promise<{ results: T[]; success: true; meta: Record<string, unknown> }> {
+    this.beforeExecute();
     return {
       results: this.database.prepare(this.sql).all(...this.values) as T[],
       success: true,
@@ -29,6 +32,7 @@ class SqliteStatement {
   }
 
   async run(): Promise<{ results: unknown[]; success: true; meta: { changes: number } }> {
+    this.beforeExecute();
     const result = this.database.prepare(this.sql).run(...this.values);
     return { results: [], success: true, meta: { changes: Number(result.changes) } };
   }
@@ -36,13 +40,14 @@ class SqliteStatement {
 
 export class SqliteD1 {
   readonly database = new DatabaseSync(':memory:');
+  hook: ((sql: string) => void) | null = null;
 
   constructor() {
     this.database.exec('PRAGMA foreign_keys = ON;');
   }
 
   prepare(sql: string): SqliteStatement {
-    return new SqliteStatement(this.database, sql);
+    return new SqliteStatement(this.database, sql, () => this.hook?.(sql));
   }
 
   async batch<T = unknown>(statements: SqliteStatement[]): Promise<Array<{ results: T[]; meta: { changes: number } }>> {

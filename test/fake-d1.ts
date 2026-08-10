@@ -174,11 +174,27 @@ class FakeStatement {
       const n = this.db.counters.get(`${a[0]}|${a[1]}`);
       return { rows: n === undefined ? [] : [{ count: n }], changes: 0 };
     }
-    if (q.startsWith('UPDATE rate_counters SET count = count - 1')) {
+    if (
+      q.startsWith('UPDATE rate_counters SET count = count - 1') ||
+      q.startsWith('UPDATE rate_counters SET count=count-1')
+    ) {
       const key = `${a[0]}|${a[1]}`;
       const n = this.db.counters.get(key) ?? 0;
       if (n > 0) this.db.counters.set(key, n - 1);
       return { rows: [], changes: n > 0 ? 1 : 0 };
+    }
+    if (
+      q.startsWith('DELETE FROM rate_counters WHERE bucket') &&
+      q.includes('window_start') &&
+      q.includes('count=0')
+    ) {
+      const key = `${a[0]}|${a[1]}`;
+      if (this.db.counters.get(key) === 0) {
+        this.db.counters.delete(key);
+        this.db.starts.delete(key);
+        return { rows: [], changes: 1 };
+      }
+      return { rows: [], changes: 0 };
     }
     if (q.startsWith('DELETE FROM rate_counters WHERE bucket')) {
       let changes = 0;
@@ -415,9 +431,17 @@ class FakeStatement {
     }
 
     // ---- users / sessions ----
+    if (q.startsWith('SELECT id FROM users WHERE email')) {
+      const u = this.db.users.find((x) => x.email === a[0]);
+      return { rows: u ? [{ id: u.id }] : [], changes: 0 };
+    }
     if (q.startsWith('SELECT id, password_hash FROM users')) {
       const u = this.db.users.find((x) => x.email === a[0]);
       return { rows: u ? [u] : [], changes: 0 };
+    }
+    if (q.startsWith('INSERT INTO users')) {
+      this.db.users.push({ id: a[0], email: a[1], password_hash: a[2] });
+      return { rows: [], changes: 1 };
     }
     if (q.startsWith('SELECT user_id, expires_at FROM sessions WHERE token')) {
       const session = this.db.sessions.find((x) => x.token === a[0]);

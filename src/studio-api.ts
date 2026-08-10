@@ -19,6 +19,45 @@ type Workspace = Business & { user_id: string };
 const STUDIO_SPEND_PER_MINUTE = 10;
 const TEST_CALLS_PER_DAY = 100;
 const PROVIDER_CHECKS_PER_DAY = 50;
+const STUDIO_SPEND_PER_IP_PER_MINUTE = 20;
+// One account can legitimately spend the full route-specific daily allowances,
+// but creating more accounts must not reset the instance's exposure to the
+// default provider key. This shared IP bucket spans every workspace and both
+// studio-spending routes.
+const STUDIO_SPEND_PER_IP_PER_DAY = TEST_CALLS_PER_DAY + PROVIDER_CHECKS_PER_DAY;
+const DAY_SECONDS = 86_400;
+
+export function fixedWindowRetryAfter(windowSeconds: number, now = Date.now()): number {
+  const elapsed = Math.floor(now / 1000) % windowSeconds;
+  return windowSeconds - elapsed;
+}
+
+function sqliteTimestampMs(value: string): number {
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value) ? `${value.replace(' ', 'T')}Z` : value;
+  return Date.parse(normalized);
+}
+
+function rollingDayRetryAfter(oldestStartedAt: string | undefined, now = Date.now()): number {
+  if (!oldestStartedAt) return DAY_SECONDS;
+  const startedAt = sqliteTimestampMs(oldestStartedAt);
+  if (!Number.isFinite(startedAt)) return DAY_SECONDS;
+  return Math.max(1, Math.ceil((startedAt + DAY_SECONDS * 1000 - now) / 1000));
+}
+
+async function testCallDayState(
+  env: Env,
+  businessId: string
+): Promise<{ count: number; oldest_started_at: string | null }> {
+  return (
+    (await env.DB.prepare(
+      `SELECT COUNT(*) AS count, MIN(started_at) AS oldest_started_at FROM calls
+        WHERE business_id=? AND environment='test'
+          AND started_at > datetime('now', '-1 day')`
+    )
+      .bind(businessId)
+      .first<{ count: number; oldest_started_at: string | null }>()) ?? { count: 0, oldest_started_at: null }
+  );
+}
 
 const AGENT_SNAPSHOT_SQL = `json_object(
   'agent_name', agent_settings.agent_name, 'greeting', agent_settings.greeting,
@@ -37,17 +76,108 @@ function updateAgentSnapshot(env: Env, businessId: string): D1PreparedStatement 
   ).bind(businessId, businessId);
 }
 
-async function reserveStudioSpend(env: Env, workspaceId: string, suffix: string, windowSeconds: number, max: number) {
-  const windowStart = Math.floor(Date.now() / 1000 / windowSeconds) * windowSeconds;
+interface StudioReservation {
+  bucket: string;
+  windowStart: number;
+}
+
+function studioWindowStart(windowSeconds: number, now = Date.now()): number {
+  return Math.floor(now / 1000 / windowSeconds) * windowSeconds;
+}
+
+async function reserveStudioSpend(
+  env: Env,
+  subject: string,
+  suffix: string,
+  windowSeconds: number,
+  max: number,
+  now: number
+): Promise<StudioReservation | null> {
+  const windowStart = studioWindowStart(windowSeconds, now);
+  const bucket = `studio:${suffix}:${subject}`;
   const row = await env.DB.prepare(
     `INSERT INTO rate_counters (bucket, window_start, count) VALUES (?, ?, 1)
      ON CONFLICT(bucket, window_start) DO UPDATE SET count=rate_counters.count + 1
        WHERE rate_counters.count < ?
      RETURNING count`
   )
-    .bind(`studio:${suffix}:${workspaceId}`, windowStart, max)
+    .bind(bucket, windowStart, max)
     .first<{ count: number }>();
-  return Boolean(row);
+  return row ? { bucket, windowStart } : null;
+}
+
+async function refundStudioSpend(env: Env, reservations: readonly StudioReservation[]): Promise<void> {
+  if (!reservations.length) return;
+  // The original window is part of each token. Recomputing it here would leak
+  // capacity whenever a request crosses a minute/day boundary before a later
+  // gate rejects. Decrement first, then remove a now-empty row so a rejected
+  // action leaves no new counter record behind.
+  const statements: D1PreparedStatement[] = [];
+  for (const reservation of [...reservations].reverse()) {
+    statements.push(
+      env.DB.prepare(
+        'UPDATE rate_counters SET count=count-1 WHERE bucket=? AND window_start=? AND count>0'
+      ).bind(reservation.bucket, reservation.windowStart),
+      env.DB.prepare('DELETE FROM rate_counters WHERE bucket=? AND window_start=? AND count=0').bind(
+        reservation.bucket,
+        reservation.windowStart
+      )
+    );
+  }
+  await env.DB.batch(statements);
+}
+
+async function studioSpendAtLimit(
+  env: Env,
+  subject: string,
+  suffix: string,
+  windowSeconds: number,
+  max: number,
+  now: number
+): Promise<boolean> {
+  const row = await env.DB.prepare('SELECT count FROM rate_counters WHERE bucket=? AND window_start=?')
+    .bind(`studio:${suffix}:${subject}`, studioWindowStart(windowSeconds, now))
+    .first<{ count: number }>();
+  return (row?.count ?? 0) >= max;
+}
+
+function studioClientIp(connectingIp: string | undefined): string {
+  // Cloudflare supplies this at the edge. Development and self-hosted requests
+  // without it deliberately share one conservative bucket instead of getting
+  // an unbounded fresh subject per request.
+  return connectingIp?.trim() || 'local';
+}
+
+async function reserveStudioIpSpend(
+  env: Env,
+  connectingIp: string | undefined,
+  now: number
+): Promise<{ blocked: 'minute' | 'day' | null; reservations: StudioReservation[] }> {
+  const subject = studioClientIp(connectingIp);
+  const minute = await reserveStudioSpend(env, subject, 'ip-minute', 60, STUDIO_SPEND_PER_IP_PER_MINUTE, now);
+  if (!minute) {
+    return { blocked: 'minute', reservations: [] };
+  }
+  const day = await reserveStudioSpend(env, subject, 'ip-day', DAY_SECONDS, STUDIO_SPEND_PER_IP_PER_DAY, now);
+  if (!day) {
+    return { blocked: 'day', reservations: [minute] };
+  }
+  return { blocked: null, reservations: [minute, day] };
+}
+
+async function studioIpLimitAtCapacity(
+  env: Env,
+  connectingIp: string | undefined,
+  now: number
+): Promise<'minute' | 'day' | null> {
+  const subject = studioClientIp(connectingIp);
+  if (await studioSpendAtLimit(env, subject, 'ip-minute', 60, STUDIO_SPEND_PER_IP_PER_MINUTE, now)) {
+    return 'minute';
+  }
+  if (await studioSpendAtLimit(env, subject, 'ip-day', DAY_SECONDS, STUDIO_SPEND_PER_IP_PER_DAY, now)) {
+    return 'day';
+  }
+  return null;
 }
 
 const LEGACY_PROFILE_FIELDS = [
@@ -81,25 +211,70 @@ function textField(record: Record<string, unknown>, key: string): string {
   return typeof record[key] === 'string' ? record[key].trim() : '';
 }
 
-function canonicalJson(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalJson);
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, entry]) => [key, canonicalJson(entry)])
-    );
-  }
-  return value;
+function optionalTextFields(record: Record<string, unknown>, keys: readonly string[]): boolean {
+  return keys.every((key) => record[key] === undefined || typeof record[key] === 'string');
 }
 
-function jsonSemanticallyEqual(left: string, right: string): boolean {
+interface LegacyServiceProjection {
+  sourceIndex: number;
+  name: string;
+  price: string;
+  duration: string;
+  notes: string;
+}
+
+interface LegacyFaqProjection {
+  sourceIndex: number;
+  question: string;
+  answer: string;
+}
+
+function projectedLegacyServices(raw: string): LegacyServiceProjection[] {
+  const services: LegacyServiceProjection[] = [];
+  recordArray(raw).forEach((service, sourceIndex) => {
+    // Match the compatibility editors: a malformed optional field invalidates
+    // the whole row. Treating {name: 'X', price: 5} as projected here while the
+    // UI drops it would make cleanup look like an intentional deletion.
+    if (typeof service.name !== 'string' || !optionalTextFields(service, ['price', 'duration', 'notes'])) return;
+    const name = service.name.trim();
+    if (!name) return;
+    services.push({
+      sourceIndex,
+      name,
+      price: textField(service, 'price'),
+      duration: textField(service, 'duration'),
+      notes: textField(service, 'notes'),
+    });
+  });
+  return services;
+}
+
+function projectedLegacyFaqs(raw: string): LegacyFaqProjection[] {
+  const faqs: LegacyFaqProjection[] = [];
+  recordArray(raw).forEach((faq, sourceIndex) => {
+    if (typeof faq.q !== 'string' || typeof faq.a !== 'string') return;
+    const question = faq.q.trim();
+    const answer = faq.a.trim();
+    if (!question || !answer) return;
+    faqs.push({ sourceIndex, question, answer });
+  });
+  return faqs;
+}
+
+export function sameLegacyKnowledgeProjection(
+  kind: 'service' | 'faq',
+  left: string,
+  right: string
+): boolean {
   if (left === right) return true;
-  try {
-    return JSON.stringify(canonicalJson(JSON.parse(left))) === JSON.stringify(canonicalJson(JSON.parse(right)));
-  } catch {
-    return false;
+  if (kind === 'service') {
+    const signature = (raw: string) =>
+      projectedLegacyServices(raw).map(({ name, price, duration, notes }) => ({ name, price, duration, notes }));
+    return JSON.stringify(signature(left)) === JSON.stringify(signature(right));
   }
+  const signature = (raw: string) =>
+    projectedLegacyFaqs(raw).map(({ question, answer }) => ({ question, answer }));
+  return JSON.stringify(signature(left)) === JSON.stringify(signature(right));
 }
 
 interface LegacyKnowledgeRow {
@@ -120,36 +295,28 @@ function expectedLegacyKnowledge(
   faqsJson: string
 ): LegacyKnowledgeRow[] {
   const rows: LegacyKnowledgeRow[] = [];
-  recordArray(servicesJson).forEach((service, index) => {
-    const title = textField(service, 'name');
-    if (!title) return;
-    const price = textField(service, 'price');
-    const duration = textField(service, 'duration');
-    const notes = textField(service, 'notes');
-    const details = [price, duration].filter(Boolean).join(' · ');
+  projectedLegacyServices(servicesJson).forEach((service) => {
+    const details = [service.price, service.duration].filter(Boolean).join(' · ');
     rows.push({
-      id: `legacy_${businessId}_service_${index}`,
+      id: `legacy_${businessId}_service_${service.sourceIndex}`,
       collection_id: collectionId,
       kind: 'service',
       status: 'active',
-      title,
+      title: service.name,
       question: '',
       answer: '',
-      content: details && notes ? `${details} — ${notes}` : details || notes,
+      content: details && service.notes ? `${details} — ${service.notes}` : details || service.notes,
     });
   });
-  recordArray(faqsJson).forEach((faq, index) => {
-    const question = textField(faq, 'q');
-    const answer = textField(faq, 'a');
-    if (!question || !answer) return;
+  projectedLegacyFaqs(faqsJson).forEach((faq) => {
     rows.push({
-      id: `legacy_${businessId}_faq_${index}`,
+      id: `legacy_${businessId}_faq_${faq.sourceIndex}`,
       collection_id: collectionId,
       kind: 'faq',
       status: 'active',
       title: '',
-      question,
-      answer,
+      question: faq.question,
+      answer: faq.answer,
       content: '',
     });
   });
@@ -277,23 +444,31 @@ export async function ensureWorkspaceFoundation(
   }
   if (!legacy) throw new Error('Could not restore workspace settings');
 
-  const syncState = await env.DB.prepare(
-      `SELECT compatibility_sync_state.services_json, compatibility_sync_state.faqs_json,
-        compatibility_sync_state.collection_id,
-        compatibility_sync_state.agent_snapshot,
-        compatibility_sync_state.agent_snapshot <> ${AGENT_SNAPSHOT_SQL} AS agent_changed
-       FROM compatibility_sync_state
-       JOIN agent_settings ON agent_settings.business_id=compatibility_sync_state.business_id
-      WHERE compatibility_sync_state.business_id = ?`
+  const [syncState, legacyLiveCall] = await Promise.all([
+    env.DB.prepare(
+        `SELECT compatibility_sync_state.services_json, compatibility_sync_state.faqs_json,
+          compatibility_sync_state.collection_id,
+          compatibility_sync_state.agent_snapshot,
+          compatibility_sync_state.agent_snapshot <> ${AGENT_SNAPSHOT_SQL} AS agent_changed
+         FROM compatibility_sync_state
+         JOIN agent_settings ON agent_settings.business_id=compatibility_sync_state.business_id
+        WHERE compatibility_sync_state.business_id = ?`
+      )
+        .bind(workspace.id)
+        .first<{
+          services_json: string;
+          faqs_json: string;
+          collection_id: string;
+          agent_snapshot: string;
+          agent_changed: number;
+        }>(),
+    env.DB.prepare(
+      `SELECT 1 AS found FROM calls
+        WHERE business_id=? AND environment='live' AND assistant_id IS NULL LIMIT 1`
     )
       .bind(workspace.id)
-      .first<{
-        services_json: string;
-        faqs_json: string;
-        collection_id: string;
-        agent_snapshot: string;
-        agent_changed: number;
-      }>();
+      .first<{ found: number }>(),
+  ]);
   const statements: D1PreparedStatement[] = [];
   const assistantValues = [
     legacy.agent_name,
@@ -473,24 +648,41 @@ export async function ensureWorkspaceFoundation(
   }
   const collectionChanged = !syncState || syncState.collection_id !== collection.id;
   const servicesChanged =
-    !syncState || !jsonSemanticallyEqual(syncState.services_json, workspace.services_json);
-  const faqsChanged = !syncState || !jsonSemanticallyEqual(syncState.faqs_json, workspace.faqs_json);
+    !syncState || !sameLegacyKnowledgeProjection('service', syncState.services_json, workspace.services_json);
+  const faqsChanged =
+    !syncState || !sameLegacyKnowledgeProjection('faq', syncState.faqs_json, workspace.faqs_json);
   if (collectionChanged || servicesChanged || faqsChanged) {
     await syncLegacyKnowledge(env, workspace, collection.id, {
       services: collectionChanged || servicesChanged,
       faqs: collectionChanged || faqsChanged,
     });
-  } else if (
-    syncState.services_json !== workspace.services_json ||
-    syncState.faqs_json !== workspace.faqs_json
-  ) {
-    // Old workers may reserialize unchanged JSON. Advance only the raw marker;
-    // rebuilding would overwrite owner-approved edits to imported items.
+  }
+  // Keep the prior raw marker when only formatting, unsupported fields, or
+  // malformed/nonprojected siblings changed. The projection comparison above
+  // makes repeated checks safe, while advancing the marker would erase the
+  // provenance needed to distinguish cleanup from a later real source edit.
+  if (legacyLiveCall) {
+    // Migration 0008 backfills every call it can see, but an old worker can
+    // still insert live rows without assistant_id until the rollout finishes.
+    // Attribute every such row to the singular compatibility assistant only
+    // after its collection projection is ready, so a new CallSession cannot
+    // observe a repaired id with half-repaired knowledge. Test rows deliberately
+    // remain explicit: they are created by the authenticated assistant route
+    // and must never be guessed from the workspace slug.
     await env.DB.prepare(
-      `UPDATE compatibility_sync_state SET services_json=?, faqs_json=?, synced_at=datetime('now')
-       WHERE business_id=?`
+      `UPDATE calls SET assistant_id=(
+         SELECT assistants.id FROM assistants
+          WHERE assistants.business_id=calls.business_id
+            AND assistants.public_slug=? LIMIT 1
+       )
+       WHERE business_id=? AND environment='live' AND assistant_id IS NULL
+         AND EXISTS (
+           SELECT 1 FROM assistants
+            WHERE assistants.business_id=calls.business_id
+              AND assistants.public_slug=?
+         )`
     )
-      .bind(workspace.services_json, workspace.faqs_json, workspace.id)
+      .bind(workspace.slug, workspace.id, workspace.slug)
       .run();
   }
 }
@@ -904,8 +1096,53 @@ export function registerStudioApi(app: StudioApp): void {
   app.post('/api/me/assistants/:assistantId/test-calls', async (c) => {
     const assistant = await ownedAssistant(c.env, c.get('userId'), c.req.param('assistantId'));
     if (!assistant) return c.json({ error: 'Not found' }, 404);
-    if (!(await reserveStudioSpend(c.env, assistant.business_id, 'minute', 60, STUDIO_SPEND_PER_MINUTE))) {
-      return c.json({ error: 'Too many test actions. Please wait a minute.' }, 429, { 'Retry-After': '60' });
+    const rateLimitNow = Date.now();
+    const minuteRetryAfter = String(fixedWindowRetryAfter(60, rateLimitNow));
+    // This read makes a known-full rolling day a zero-write refusal. The
+    // conditional INSERT below remains the authority for concurrent requests.
+    const dayState = await testCallDayState(c.env, assistant.business_id);
+    if (dayState.count >= TEST_CALLS_PER_DAY) {
+      return c.json({ error: 'Daily test-call limit reached. Try again tomorrow.' }, 429, {
+        'Retry-After': String(rollingDayRetryAfter(dayState.oldest_started_at ?? undefined)),
+      });
+    }
+    const knownIpLimit = await studioIpLimitAtCapacity(c.env, c.req.header('CF-Connecting-IP'), rateLimitNow);
+    if (knownIpLimit === 'minute') {
+      return c.json({ error: 'Too many studio actions from this connection. Please wait a minute.' }, 429, {
+        'Retry-After': minuteRetryAfter,
+      });
+    }
+    if (knownIpLimit === 'day') {
+      return c.json({ error: 'Daily studio action limit reached. Try again tomorrow.' }, 429, {
+        'Retry-After': String(fixedWindowRetryAfter(DAY_SECONDS, rateLimitNow)),
+      });
+    }
+    const workspaceReservation = await reserveStudioSpend(
+      c.env,
+      assistant.business_id,
+      'minute',
+      60,
+      STUDIO_SPEND_PER_MINUTE,
+      rateLimitNow
+    );
+    if (!workspaceReservation) {
+      return c.json({ error: 'Too many test actions. Please wait a minute.' }, 429, {
+        'Retry-After': minuteRetryAfter,
+      });
+    }
+    const ipLimit = await reserveStudioIpSpend(c.env, c.req.header('CF-Connecting-IP'), rateLimitNow);
+    const reservations = [workspaceReservation, ...ipLimit.reservations];
+    if (ipLimit.blocked === 'minute') {
+      await refundStudioSpend(c.env, reservations);
+      return c.json({ error: 'Too many studio actions from this connection. Please wait a minute.' }, 429, {
+        'Retry-After': minuteRetryAfter,
+      });
+    }
+    if (ipLimit.blocked === 'day') {
+      await refundStudioSpend(c.env, reservations);
+      return c.json({ error: 'Daily studio action limit reached. Try again tomorrow.' }, 429, {
+        'Retry-After': String(fixedWindowRetryAfter(DAY_SECONDS, rateLimitNow)),
+      });
     }
     const callId = newId();
     const inserted = await c.env.DB.prepare(
@@ -925,7 +1162,11 @@ export function registerStudioApi(app: StudioApp): void {
       )
       .run();
     if ((inserted.meta.changes ?? 0) !== 1) {
-      return c.json({ error: 'Daily test-call limit reached. Try again tomorrow.' }, 429, { 'Retry-After': '3600' });
+      await refundStudioSpend(c.env, reservations);
+      const currentDay = await testCallDayState(c.env, assistant.business_id);
+      return c.json({ error: 'Daily test-call limit reached. Try again tomorrow.' }, 429, {
+        'Retry-After': String(rollingDayRetryAfter(currentDay.oldest_started_at ?? undefined)),
+      });
     }
     return c.json({ callId, assistantId: assistant.id, environment: 'test' }, 201);
   });
@@ -1369,16 +1610,85 @@ export function registerStudioApi(app: StudioApp): void {
     const provider = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
       .bind(workspace.id)
       .first<ProviderSettings>();
-    if (!(await reserveStudioSpend(c.env, workspace.id, 'minute', 60, STUDIO_SPEND_PER_MINUTE))) {
-      return c.json({ error: 'Too many provider checks. Please wait a minute.' }, 429, { 'Retry-After': '60' });
+    let cfg: ReturnType<typeof resolveLlm>;
+    try {
+      // Invalid or incomplete configuration is not provider spend and must not
+      // let one account drain a shared office/NAT allowance without making an
+      // upstream request.
+      cfg = resolveLlm(c.env, settingsForProvider(assistant, provider));
+    } catch (error) {
+      if (error instanceof LlmConfigError) return c.json({ error: error.message }, 400);
+      return c.json({ error: 'Provider configuration is invalid.' }, 400);
     }
-    if (!(await reserveStudioSpend(c.env, workspace.id, 'provider-day', 86_400, PROVIDER_CHECKS_PER_DAY))) {
+    const rateLimitNow = Date.now();
+    const minuteRetryAfter = String(fixedWindowRetryAfter(60, rateLimitNow));
+    if (
+      await studioSpendAtLimit(
+        c.env,
+        workspace.id,
+        'provider-day',
+        DAY_SECONDS,
+        PROVIDER_CHECKS_PER_DAY,
+        rateLimitNow
+      )
+    ) {
       return c.json({ error: 'Daily provider-check limit reached. Try again tomorrow.' }, 429, {
-        'Retry-After': '3600',
+        'Retry-After': String(fixedWindowRetryAfter(DAY_SECONDS, rateLimitNow)),
+      });
+    }
+    const knownIpLimit = await studioIpLimitAtCapacity(c.env, c.req.header('CF-Connecting-IP'), rateLimitNow);
+    if (knownIpLimit === 'minute') {
+      return c.json({ error: 'Too many studio actions from this connection. Please wait a minute.' }, 429, {
+        'Retry-After': minuteRetryAfter,
+      });
+    }
+    if (knownIpLimit === 'day') {
+      return c.json({ error: 'Daily studio action limit reached. Try again tomorrow.' }, 429, {
+        'Retry-After': String(fixedWindowRetryAfter(DAY_SECONDS, rateLimitNow)),
+      });
+    }
+    const workspaceReservation = await reserveStudioSpend(
+      c.env,
+      workspace.id,
+      'minute',
+      60,
+      STUDIO_SPEND_PER_MINUTE,
+      rateLimitNow
+    );
+    if (!workspaceReservation) {
+      return c.json({ error: 'Too many provider checks. Please wait a minute.' }, 429, {
+        'Retry-After': minuteRetryAfter,
+      });
+    }
+    const ipLimit = await reserveStudioIpSpend(c.env, c.req.header('CF-Connecting-IP'), rateLimitNow);
+    const reservations = [workspaceReservation, ...ipLimit.reservations];
+    if (ipLimit.blocked === 'minute') {
+      await refundStudioSpend(c.env, reservations);
+      return c.json({ error: 'Too many studio actions from this connection. Please wait a minute.' }, 429, {
+        'Retry-After': minuteRetryAfter,
+      });
+    }
+    if (ipLimit.blocked === 'day') {
+      await refundStudioSpend(c.env, reservations);
+      return c.json({ error: 'Daily studio action limit reached. Try again tomorrow.' }, 429, {
+        'Retry-After': String(fixedWindowRetryAfter(DAY_SECONDS, rateLimitNow)),
+      });
+    }
+    const providerReservation = await reserveStudioSpend(
+      c.env,
+      workspace.id,
+      'provider-day',
+      DAY_SECONDS,
+      PROVIDER_CHECKS_PER_DAY,
+      rateLimitNow
+    );
+    if (!providerReservation) {
+      await refundStudioSpend(c.env, reservations);
+      return c.json({ error: 'Daily provider-check limit reached. Try again tomorrow.' }, 429, {
+        'Retry-After': String(fixedWindowRetryAfter(DAY_SECONDS, rateLimitNow)),
       });
     }
     try {
-      const cfg = resolveLlm(c.env, settingsForProvider(assistant, provider));
       await chatComplete(
         cfg,
         [

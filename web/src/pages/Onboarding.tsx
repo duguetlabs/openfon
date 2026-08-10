@@ -1,48 +1,18 @@
 import { useState } from 'react';
 import { api } from '../api';
 import { useSession } from '../App';
+import {
+  readFaqRows,
+  readHourRows,
+  serializeFaqRows,
+  serializeHourRows,
+  type FaqRow,
+  type HourRow,
+} from '../row-arrays';
 import { readServiceRows, serializeServiceRows, type ServiceRow } from '../service-rows';
 import { Button, Card, Field, FieldLabel, Logo, TextArea, LANGUAGES, inputClassSm } from '../ui';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
-interface Hour {
-  day: string;
-  open: string;
-  close: string;
-  closed: boolean;
-}
-interface Faq {
-  q: string;
-  a: string;
-}
-
-function readRows<T>(raw: string | undefined, valid: (value: unknown) => value is T, fallback: T[]): T[] {
-  if (!raw) return fallback;
-  try {
-    const value: unknown = JSON.parse(raw);
-    return Array.isArray(value) && value.every(valid) ? value : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function isHour(value: unknown): value is Hour {
-  if (!value || typeof value !== 'object') return false;
-  const row = value as Partial<Hour>;
-  return (
-    typeof row.day === 'string' &&
-    typeof row.open === 'string' &&
-    typeof row.close === 'string' &&
-    typeof row.closed === 'boolean'
-  );
-}
-
-function isFaq(value: unknown): value is Faq {
-  if (!value || typeof value !== 'object') return false;
-  const row = value as Partial<Faq>;
-  return typeof row.q === 'string' && typeof row.a === 'string';
-}
 
 export default function Onboarding() {
   const { business, workspaceReady, firstAssistant, refresh } = useSession();
@@ -60,9 +30,9 @@ export default function Onboarding() {
   const [description, setDescription] = useState(business?.description ?? '');
   const [address, setAddress] = useState(business?.address ?? '');
   const [phone, setPhone] = useState(business?.phone ?? '');
-  const [hours, setHours] = useState<Hour[]>(() => readRows(business?.hours_json, isHour, defaultHours));
+  const [hours, setHours] = useState<HourRow[]>(() => readHourRows(business?.hours_json, defaultHours));
   const [services, setServices] = useState<ServiceRow[]>(() => readServiceRows(business?.services_json));
-  const [faqs, setFaqs] = useState<Faq[]>(() => readRows(business?.faqs_json, isFaq, [{ q: '', a: '' }]));
+  const [faqs, setFaqs] = useState<FaqRow[]>(() => readFaqRows(business?.faqs_json, [{ q: '', a: '' }]));
   const [agentName, setAgentName] = useState(firstAssistant?.name || business?.agent?.agent_name || 'Alex');
   const [persona, setPersona] = useState(
     firstAssistant?.persona || business?.agent?.persona || 'friendly and professional'
@@ -84,9 +54,9 @@ export default function Onboarding() {
         address,
         phone,
         timezone: business?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-        hours_json: JSON.stringify(hours),
+        hours_json: serializeHourRows(hours),
         services_json: serializeServiceRows(services),
-        faqs_json: JSON.stringify(faqs.filter((f) => f.q.trim() && f.a.trim())),
+        faqs_json: serializeFaqRows(faqs),
       };
       const biz = business ?? (await api.createBusiness(workspace));
       if (business) await api.updateBusiness(business.id, workspace);
@@ -168,11 +138,17 @@ export default function Onboarding() {
                 <FieldLabel>Opening hours</FieldLabel>
                 <div className="mt-2 space-y-1.5">
                   {hours.map((h, i) => (
-                    <div key={h.day} className="flex items-center gap-3 text-sm">
+                    <div
+                      key={h.day}
+                      className="flex items-center gap-3 text-sm"
+                      role="group"
+                      aria-label={`${h.day} opening hours`}
+                    >
                       <span className="w-12 font-mono text-xs text-ink-soft">{h.day.slice(0, 3)}</span>
                       <input
                         type="checkbox"
                         className="accent-iris"
+                        aria-label={`Open on ${h.day}`}
                         checked={!h.closed}
                         onChange={(e) => setHours(hours.map((x, j) => (j === i ? { ...x, closed: !e.target.checked } : x)))}
                       />
@@ -183,6 +159,7 @@ export default function Onboarding() {
                           <input
                             type="time"
                             className={`${inputClassSm} px-2 py-1 font-mono text-xs`}
+                            aria-label={`${h.day} opening time`}
                             value={h.open}
                             onChange={(e) => setHours(hours.map((x, j) => (j === i ? { ...x, open: e.target.value } : x)))}
                           />
@@ -190,6 +167,7 @@ export default function Onboarding() {
                           <input
                             type="time"
                             className={`${inputClassSm} px-2 py-1 font-mono text-xs`}
+                            aria-label={`${h.day} closing time`}
                             value={h.close}
                             onChange={(e) => setHours(hours.map((x, j) => (j === i ? { ...x, close: e.target.value } : x)))}
                           />
@@ -204,17 +182,19 @@ export default function Onboarding() {
                 rows={services}
                 onChange={setServices}
                 empty={{ name: '', price: '' }}
-                render={(row, set) => (
+                render={(row, set, rowIndex) => (
                   <>
                     <input
                       className={`${inputClassSm} flex-1`}
                       placeholder="Service (e.g. Checkup)"
+                      aria-label={`Service ${rowIndex + 1} name`}
                       value={row.name}
                       onChange={(e) => set({ ...row, name: e.target.value })}
                     />
                     <input
                       className={`${inputClassSm} w-28`}
                       placeholder="€80"
+                      aria-label={`Service ${rowIndex + 1} price`}
                       value={row.price ?? ''}
                       onChange={(e) => set({ ...row, price: e.target.value })}
                     />
@@ -226,17 +206,19 @@ export default function Onboarding() {
                 rows={faqs}
                 onChange={setFaqs}
                 empty={{ q: '', a: '' }}
-                render={(row, set) => (
+                render={(row, set, rowIndex) => (
                   <div className="flex-1 space-y-1.5">
                     <input
                       className={`${inputClassSm} w-full`}
                       placeholder="Do you take walk-ins?"
+                      aria-label={`FAQ ${rowIndex + 1} question`}
                       value={row.q}
                       onChange={(e) => set({ ...row, q: e.target.value })}
                     />
                     <input
                       className={`${inputClassSm} w-full`}
                       placeholder="Yes, weekdays before noon."
+                      aria-label={`FAQ ${rowIndex + 1} answer`}
                       value={row.a}
                       onChange={(e) => set({ ...row, a: e.target.value })}
                     />
@@ -319,20 +301,20 @@ export function ListEditor<T>({
   rows: T[];
   onChange: (rows: T[]) => void;
   empty: T;
-  render: (row: T, set: (r: T) => void) => React.ReactNode;
+  render: (row: T, set: (r: T) => void, rowIndex: number) => React.ReactNode;
 }) {
   return (
-    <div>
+    <div role="group" aria-label={title}>
       <FieldLabel>{title}</FieldLabel>
       <div className="mt-2 space-y-2">
         {rows.map((row, i) => (
           <div key={i} className="flex items-start gap-2">
-            {render(row, (r) => onChange(rows.map((x, j) => (j === i ? r : x))))}
+            {render(row, (r) => onChange(rows.map((x, j) => (j === i ? r : x))), i)}
             <button
               type="button"
               className="mt-1.5 rounded px-1 text-ink-faint transition-colors hover:text-rose"
               onClick={() => onChange(rows.filter((_, j) => j !== i))}
-              aria-label="Remove"
+              aria-label={`Remove ${title} item ${i + 1}`}
             >
               ✕
             </button>
@@ -343,6 +325,7 @@ export function ListEditor<T>({
         type="button"
         className="mt-2.5 text-sm font-semibold text-iris underline decoration-iris/30 underline-offset-2 hover:decoration-iris"
         onClick={() => onChange([...rows, empty])}
+        aria-label={`Add ${title} item`}
       >
         + Add another
       </button>

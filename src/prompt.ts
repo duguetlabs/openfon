@@ -30,12 +30,56 @@ export interface PromptKnowledgeItem {
   content: string;
 }
 
-function parse<T>(json: string, fallback: T): T {
+function parseRows<T>(json: string, valid: (value: unknown) => value is T): T[] {
   try {
-    return JSON.parse(json) as T;
+    const value: unknown = JSON.parse(json);
+    return Array.isArray(value) ? value.filter(valid) : [];
   } catch {
-    return fallback;
+    return [];
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function optionalString(value: unknown): boolean {
+  return value === undefined || typeof value === 'string';
+}
+
+function isHours(value: unknown): value is Hours {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.day === 'string' &&
+    typeof value.open === 'string' &&
+    typeof value.close === 'string' &&
+    (value.closed === undefined || typeof value.closed === 'boolean')
+  );
+}
+
+function isClosure(value: unknown): value is Closure {
+  return isRecord(value) && typeof value.date === 'string' && optionalString(value.reason);
+}
+
+function isService(value: unknown): value is Service {
+  return (
+    isRecord(value) &&
+    typeof value.name === 'string' &&
+    Boolean(value.name.trim()) &&
+    optionalString(value.price) &&
+    optionalString(value.duration) &&
+    optionalString(value.notes)
+  );
+}
+
+function isFaq(value: unknown): value is Faq {
+  return (
+    isRecord(value) &&
+    typeof value.q === 'string' &&
+    Boolean(value.q.trim()) &&
+    typeof value.a === 'string' &&
+    Boolean(value.a.trim())
+  );
 }
 
 // LLMs cannot reliably map dates to weekdays, so pre-compute a calendar:
@@ -68,20 +112,20 @@ export function buildSystemPrompt(
   now: Date,
   knowledge?: PromptKnowledgeItem[]
 ): string {
-  const hours = parse<Hours[]>(biz.hours_json, []);
+  const hours = parseRows(biz.hours_json, isHours);
   const services: Service[] = knowledge
     ? knowledge.filter((item) => item.kind === 'service').map((item) => ({ name: item.title, notes: item.content }))
-    : parse<Service[]>(biz.services_json, []);
+    : parseRows(biz.services_json, isService);
   const faqs = knowledge
     ? knowledge.filter((item) => item.kind === 'faq').map((item) => ({ q: item.question, a: item.answer }))
-    : parse<Faq[]>(biz.faqs_json, []);
+    : parseRows(biz.faqs_json, isFaq);
   const notes = knowledge?.filter((item) => item.kind === 'note') ?? [];
 
   const hoursText = hours.length
     ? hours.map((h) => `${h.day}: ${h.closed ? 'CLOSED' : `${h.open}–${h.close}`}`).join('\n')
     : 'Not specified.';
   const closedDays = hours.filter((h) => h.closed).map((h) => h.day);
-  const closures = parse<Closure[]>(biz.closures_json ?? '[]', []);
+  const closures = parseRows(biz.closures_json ?? '[]', isClosure);
   let calendarText = '';
   try {
     calendarText = buildCalendar(hours, closures, now, biz.timezone || 'UTC');
@@ -184,7 +228,7 @@ const VOCAB_CARRIERS: Record<string, string> = {
 export function sttVocab(biz: Business, settings: AgentSettings, knowledge?: PromptKnowledgeItem[]): string {
   const services = knowledge
     ? knowledge.filter((item) => item.kind === 'service').map((item) => item.title)
-    : parse<Service[]>(biz.services_json, []).map((s) => s.name);
+    : parseRows(biz.services_json, isService).map((s) => s.name);
   const parts = [biz.name, settings.agent_name, ...services, biz.address];
   const carrier = VOCAB_CARRIERS[settings.language] ?? VOCAB_CARRIERS.en;
   return (carrier + parts.filter(Boolean).join(', ')).slice(0, 400);

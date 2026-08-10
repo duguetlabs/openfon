@@ -274,11 +274,14 @@ export class CallSession implements DurableObject {
       // one layer out: no socket was the first half, no orphaned row is this.
       console.error(`call ${this.callId}: could not arm the watchdog; retiring the row`, err);
       await this.env.DB.prepare(
-        `UPDATE calls SET status = 'failed', ended_at = ?, summary = ? WHERE id = ? AND status = 'active'`
+        `UPDATE calls SET status = 'failed', ended_at = ?, summary = ?, outcome = 'failed',
+          failure_code = 'watchdog_unavailable', failure_message = ?
+         WHERE id = ? AND status = 'active'`
       )
         .bind(
           CallSession.sqlTime(Date.now()),
           'Call failed: the call could not be started.',
+          'The call watchdog could not be started.',
           this.callId
         )
         .run()

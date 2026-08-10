@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from '../src/index';
-import type { Env } from '../src/types';
+import { buildSystemPrompt } from '../src/prompt';
+import { fixedWindowRetryAfter } from '../src/studio-api';
+import type { AgentSettings, Business, Env } from '../src/types';
 import { FakeD1, fakeCtx, fakeEnv } from './fake-d1';
 import { applyMigrations, SqliteD1 } from './sqlite-d1';
 
@@ -543,6 +545,159 @@ describe('Calm Studio API foundation', () => {
     });
   });
 
+  it('preserves typed knowledge edits when compatibility editors only clean malformed legacy rows', async () => {
+    const workspace = (await createWorkspace()) as { id: string; slug: string };
+    const validService = { name: 'Consultation', price: '€40', duration: '30 min' };
+    const validFaq = { q: 'Where can I park?', a: 'On the street.' };
+    const mixedServices = JSON.stringify([
+      validService,
+      null,
+      { name: 'Malformed optional field', price: 50 },
+      { name: 42, price: '€10' },
+    ]);
+    const mixedFaqs = JSON.stringify([validFaq, null, { q: 'Missing answer' }, { q: 42, a: 'Invalid' }]);
+    db.database
+      .prepare('UPDATE businesses SET services_json=?, faqs_json=? WHERE id=?')
+      .run(mixedServices, mixedFaqs, workspace.id);
+
+    expect((await request(env, '/api/me/bootstrap')).status).toBe(200);
+    const assistant = db.database.prepare('SELECT id FROM assistants WHERE business_id=?').get(workspace.id) as { id: string };
+    expect(
+      (
+        await request(
+          env,
+          `/api/me/assistants/${assistant.id}`,
+          json('PUT', { name: 'Alex', persona: 'calm', language: 'en' })
+        )
+      ).status
+    ).toBe(200);
+    expect((await request(env, `/api/me/assistants/${assistant.id}/activate`, json('POST', {}))).status).toBe(200);
+    const imported = db.database
+      .prepare('SELECT id, kind FROM knowledge_items WHERE business_id=? ORDER BY kind')
+      .all(workspace.id) as Array<{ id: string; kind: 'faq' | 'service' }>;
+    expect(imported).toHaveLength(2);
+    const faqId = imported.find((item) => item.kind === 'faq')!.id;
+    const serviceId = imported.find((item) => item.kind === 'service')!.id;
+    expect(
+      (
+        await request(
+          env,
+          `/api/me/knowledge/items/${faqId}`,
+          json('PUT', { answer: 'Use the approved rear car park.', status: 'draft' })
+        )
+      ).status
+    ).toBe(200);
+    expect((await request(env, `/api/me/knowledge/items/${serviceId}`, { method: 'DELETE' })).status).toBe(200);
+
+    const cleanedServices = JSON.stringify([validService]);
+    const cleanedFaqs = JSON.stringify([validFaq]);
+    // This is the compatibility Settings payload after its row readers remove
+    // malformed siblings. No supported fact changed, so save the safe legacy
+    // source but retain the raw sync marker rather than rebuilding every
+    // imported item.
+    expect(
+      (
+        await request(
+          env,
+          `/api/me/business/${workspace.id}`,
+          json('PUT', {
+            phone: '+43 1 555 0100',
+            services_json: cleanedServices,
+            faqs_json: cleanedFaqs,
+          })
+        )
+      ).status
+    ).toBe(200);
+    expect(
+      db.database.prepare('SELECT phone, services_json, faqs_json FROM businesses WHERE id=?').get(workspace.id)
+    ).toEqual({ phone: '+43 1 555 0100', services_json: cleanedServices, faqs_json: cleanedFaqs });
+    expect(
+      db.database
+        .prepare('SELECT services_json, faqs_json FROM compatibility_sync_state WHERE business_id=?')
+        .get(workspace.id)
+    ).toEqual({ services_json: mixedServices, faqs_json: mixedFaqs });
+
+    const savedWorkspace = db.database.prepare('SELECT * FROM businesses WHERE id=?').get(workspace.id) as Business;
+    const legacySettings = db.database
+      .prepare('SELECT * FROM agent_settings WHERE business_id=?')
+      .get(workspace.id) as AgentSettings;
+    const savedPrompt = buildSystemPrompt(savedWorkspace, legacySettings, new Date('2026-08-10T12:00:00Z'));
+    expect(savedPrompt).toContain('- Consultation (€40), 30 min');
+    expect(savedPrompt).toContain('Q: Where can I park?\nA: On the street.');
+    expect(savedPrompt).not.toContain('Malformed optional field');
+    expect(savedPrompt).not.toContain('Missing answer');
+
+    // The fallback is defensive even before a compatibility editor can clean
+    // old data: null and malformed siblings cannot crash or leak into a prompt.
+    const mixedPrompt = buildSystemPrompt(
+      { ...savedWorkspace, services_json: mixedServices, faqs_json: mixedFaqs },
+      legacySettings,
+      new Date('2026-08-10T12:00:00Z')
+    );
+    expect(mixedPrompt).toContain('- Consultation (€40), 30 min');
+    expect(mixedPrompt).toContain('Q: Where can I park?\nA: On the street.');
+    expect(mixedPrompt).not.toContain('Malformed optional field');
+    expect(mixedPrompt).not.toContain('Missing answer');
+
+    // An old worker can persist that same cleanup without the guarded PUT. The
+    // reconciler must compare supported projections and retain its old raw
+    // marker, the corrected draft, and the explicit deletion.
+    const oldWorkerCleanedServices = JSON.stringify([{ duration: '30 min', price: '€40', name: 'Consultation' }], null, 2);
+    const oldWorkerCleanedFaqs = JSON.stringify([{ a: 'On the street.', q: 'Where can I park?' }], null, 2);
+    db.database
+      .prepare('UPDATE businesses SET services_json=?, faqs_json=? WHERE id=?')
+      .run(oldWorkerCleanedServices, oldWorkerCleanedFaqs, workspace.id);
+    // Public lookup is the first new-worker request after the old-worker write.
+    // It must recognize that the supported projection is unchanged without a
+    // bootstrap request first warming or repairing the workspace.
+    expect((await request(env, `/api/public/agent/${workspace.slug}`, {}, '')).status).toBe(200);
+    expect(db.database.prepare('SELECT answer, status FROM knowledge_items WHERE id=?').get(faqId)).toEqual({
+      answer: 'Use the approved rear car park.',
+      status: 'draft',
+    });
+    expect(db.database.prepare('SELECT id FROM knowledge_items WHERE id=?').get(serviceId)).toBeUndefined();
+    expect(
+      db.database
+        .prepare('SELECT services_json, faqs_json FROM compatibility_sync_state WHERE business_id=?')
+        .get(workspace.id)
+    ).toEqual({ services_json: mixedServices, faqs_json: mixedFaqs });
+
+    // Conversely, public lookup alone must detect a supported-field change
+    // written by an old worker and rebuild that projection. Change only the
+    // service source so the FAQ draft also proves unrelated typed knowledge is
+    // retained.
+    const changedServices = JSON.stringify([{ name: 'Extended consultation', price: '€65' }]);
+    db.database.prepare('UPDATE businesses SET services_json=? WHERE id=?').run(changedServices, workspace.id);
+    expect((await request(env, `/api/public/agent/${workspace.slug}`, {}, '')).status).toBe(200);
+    expect(
+      db.database
+        .prepare('SELECT kind, status, title, question, answer, content FROM knowledge_items WHERE business_id=? ORDER BY kind')
+        .all(workspace.id)
+    ).toEqual([
+      {
+        kind: 'faq',
+        status: 'draft',
+        title: '',
+        question: 'Where can I park?',
+        answer: 'Use the approved rear car park.',
+        content: '',
+      },
+      {
+        kind: 'service',
+        status: 'active',
+        title: 'Extended consultation',
+        question: '',
+        answer: '',
+        content: '€65',
+      },
+    ]);
+    expect(
+      db.database
+        .prepare('SELECT services_json, faqs_json FROM compatibility_sync_state WHERE business_id=?')
+        .get(workspace.id)
+    ).toEqual({ services_json: changedServices, faqs_json: oldWorkerCleanedFaqs });
+  });
+
   it('reconciles legacy workspaces and profiles created after migration 0008', async () => {
     db.exec(`
       INSERT INTO businesses (id, user_id, slug, name, description)
@@ -772,9 +927,27 @@ describe('Calm Studio API foundation', () => {
       ).status
     ).toBe(200);
     expect((await request(env, `/api/me/assistants/${assistants[0].id}/activate`, json('POST', {}))).status).toBe(200);
+    const secondary = await data<{ id: string }>(
+      await request(env, '/api/me/assistants', json('POST', { name: 'Secondary', persona: 'brief', language: 'en' }))
+    );
+    const defaultCollection = db.database
+      .prepare('SELECT id FROM knowledge_collections WHERE business_id=? AND is_default=1')
+      .get(workspace.id) as { id: string };
     db.database
-      .prepare("INSERT INTO calls (id, business_id, assistant_id, environment) VALUES ('legacy-ticket', ?, NULL, 'live')")
-      .run(workspace.id);
+      .prepare(
+        `INSERT INTO knowledge_items (id, business_id, collection_id, kind, status, content)
+         VALUES ('rollout-note', ?, ?, 'note', 'active', 'Use the approved rollout answer.')`
+      )
+      .run(workspace.id, defaultCollection.id);
+    db.database
+      .prepare(
+        `INSERT INTO calls (id, business_id, assistant_id, environment, status) VALUES
+          ('legacy-ticket', ?, NULL, 'live', 'active'),
+          ('legacy-history', ?, NULL, 'live', 'completed'),
+          ('legacy-test', ?, NULL, 'test', 'completed'),
+          ('secondary-history', ?, ?, 'live', 'completed')`
+      )
+      .run(workspace.id, workspace.id, workspace.id, workspace.id, secondary.id);
 
     expect(
       (
@@ -786,9 +959,33 @@ describe('Calm Studio API foundation', () => {
         )
       ).status
     ).toBe(200);
-    expect(db.database.prepare("SELECT connected_at IS NOT NULL AS connected FROM calls WHERE id='legacy-ticket'").get()).toEqual({
-      connected: 1,
+    expect(
+      db.database
+        .prepare("SELECT assistant_id, connected_at IS NOT NULL AS connected FROM calls WHERE id='legacy-ticket'")
+        .get()
+    ).toEqual({ assistant_id: assistants[0].id, connected: 1 });
+    expect(db.database.prepare("SELECT assistant_id FROM calls WHERE id='legacy-history'").get()).toEqual({
+      assistant_id: assistants[0].id,
     });
+    expect(db.database.prepare("SELECT assistant_id FROM calls WHERE id='legacy-test'").get()).toEqual({ assistant_id: null });
+    expect(db.database.prepare("SELECT assistant_id FROM calls WHERE id='secondary-history'").get()).toEqual({
+      assistant_id: secondary.id,
+    });
+    // This is the same attachment path CallSession.loadSettings uses. The note
+    // exists only in the canonical assistant's active collection, not in the
+    // legacy businesses JSON fallback used by an unassigned rollout ticket.
+    expect(
+      db.database
+        .prepare(
+          `SELECT knowledge_items.content FROM calls
+            JOIN assistant_knowledge_collections
+              ON assistant_knowledge_collections.assistant_id=calls.assistant_id
+            JOIN knowledge_items
+              ON knowledge_items.collection_id=assistant_knowledge_collections.collection_id
+           WHERE calls.id='legacy-ticket' AND knowledge_items.status='active' AND knowledge_items.id='rollout-note'`
+        )
+        .get()
+    ).toEqual({ content: 'Use the approved rollout answer.' });
   });
 
   it('repairs an old-worker workspace first seen through a null-assistant live ticket', async () => {
@@ -817,9 +1014,11 @@ describe('Calm Studio API foundation', () => {
       state: 'active',
       name: 'Legacy Alex',
     });
-    expect(db.database.prepare("SELECT connected_at IS NOT NULL AS connected FROM calls WHERE id='rollout-ticket'").get()).toEqual({
-      connected: 1,
-    });
+    expect(
+      db.database
+        .prepare("SELECT assistant_id, connected_at IS NOT NULL AS connected FROM calls WHERE id='rollout-ticket'")
+        .get()
+    ).toEqual({ assistant_id: 'asst_rollout-biz', connected: 1 });
   });
 
   it('isolates live and test concurrency pools while still capping simultaneous tests', async () => {
@@ -929,6 +1128,319 @@ describe('Calm Studio API foundation', () => {
     expect(providerFetch).toHaveBeenCalledTimes(1);
   });
 
+  it('shares an instance-wide IP minute ceiling across routes and workspaces', async () => {
+    vi.setSystemTime(new Date('2026-08-10T12:00:45.250Z'));
+    const firstWorkspace = (await createWorkspace('session-1', 'First Studio')) as { id: string };
+    const secondWorkspace = (await createWorkspace('session-2', 'Second Studio')) as { id: string };
+    const firstAssistant = (
+      await data<{ assistants: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap', {}, 'session-1'))
+    ).assistants[0];
+    const ip = '198.51.100.80';
+    const minute = Math.floor(Date.now() / 1000 / 60) * 60;
+    db.database
+      .prepare('INSERT INTO rate_counters (bucket, window_start, count) VALUES (?, ?, 19)')
+      .run(`studio:ip-minute:${ip}`, minute);
+
+    const providerFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ choices: [{ message: { content: 'OK' } }] }), {
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    vi.stubGlobal('fetch', providerFetch);
+    const action = (path: string, token: string, address = ip) =>
+      request(
+        env,
+        path,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': address },
+          body: '{}',
+        },
+        token
+      );
+
+    // A test call in one workspace consumes the last shared slot. Switching
+    // accounts, workspaces, and route does not reset the source's allowance.
+    expect((await action(`/api/me/assistants/${firstAssistant.id}/test-calls`, 'session-1')).status).toBe(201);
+    const blocked = await action('/api/me/provider/check', 'session-2');
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get('Retry-After')).toBe('15');
+    expect(await blocked.json()).toEqual({
+      error: 'Too many studio actions from this connection. Please wait a minute.',
+    });
+    expect(providerFetch).not.toHaveBeenCalled();
+    expect(
+      db.database
+        .prepare('SELECT count FROM rate_counters WHERE bucket=? AND window_start=?')
+        .get(`studio:minute:${secondWorkspace.id}`, minute)
+    ).toBeUndefined();
+    expect(
+      db.database
+        .prepare('SELECT count FROM rate_counters WHERE bucket=? AND window_start=?')
+        .get(`studio:ip-minute:${ip}`, minute)
+    ).toEqual({ count: 20 });
+
+    // The ceiling is per source, not a global outage for other users.
+    expect((await action('/api/me/provider/check', 'session-2', '198.51.100.81')).status).toBe(200);
+    expect(providerFetch).toHaveBeenCalledTimes(1);
+    expect(firstWorkspace.id).not.toBe(secondWorkspace.id);
+  });
+
+  it('refuses the shared IP day ceiling before provider fetches or test-call inserts', async () => {
+    const workspace = (await createWorkspace()) as { id: string };
+    const assistant = (
+      await data<{ assistants: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'))
+    ).assistants[0];
+    const ip = '198.51.100.82';
+    const beforeMidnight = new Date('2026-08-10T23:59:59.250Z');
+    const afterMidnight = new Date('2026-08-11T00:00:00.100Z');
+    vi.setSystemTime(beforeMidnight);
+    const day = Math.floor(Date.now() / 1000 / 86_400) * 86_400;
+    db.database
+      .prepare('INSERT INTO rate_counters (bucket, window_start, count) VALUES (?, ?, 150)')
+      .run(`studio:ip-day:${ip}`, day);
+    const providerFetch = vi.fn();
+    vi.stubGlobal('fetch', providerFetch);
+    const action = (path: string) =>
+      request(env, path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip },
+        body: '{}',
+      });
+    const crossMidnightOnNextCounterRead = () => {
+      let crossedMidnight = false;
+      db.hook = (sql) => {
+        if (crossedMidnight || !sql.replace(/\s+/g, ' ').trim().startsWith('SELECT count FROM rate_counters')) {
+          return;
+        }
+        crossedMidnight = true;
+        vi.setSystemTime(afterMidnight);
+      };
+    };
+    const before = db.database.prepare("SELECT COUNT(*) AS n FROM calls WHERE business_id=? AND environment='test'").get(workspace.id);
+
+    crossMidnightOnNextCounterRead();
+    const testBlocked = await action(`/api/me/assistants/${assistant.id}/test-calls`);
+    db.hook = null;
+    expect(testBlocked.status).toBe(429);
+    expect(testBlocked.headers.get('Retry-After')).toBe('1');
+    expect(db.database.prepare("SELECT COUNT(*) AS n FROM calls WHERE business_id=? AND environment='test'").get(workspace.id)).toEqual(before);
+
+    vi.setSystemTime(beforeMidnight);
+    crossMidnightOnNextCounterRead();
+    const providerBlocked = await action('/api/me/provider/check');
+    db.hook = null;
+    expect(providerBlocked.status).toBe(429);
+    expect(providerBlocked.headers.get('Retry-After')).toBe('1');
+    expect(providerFetch).not.toHaveBeenCalled();
+    expect(
+      db.database.prepare("SELECT COUNT(*) AS n FROM rate_counters WHERE bucket LIKE 'studio:minute:%'").get()
+    ).toEqual({ n: 0 });
+    expect(
+      db.database.prepare("SELECT COUNT(*) AS n FROM rate_counters WHERE bucket=?").get(`studio:ip-minute:${ip}`)
+    ).toEqual({ n: 0 });
+    expect(db.database.prepare('SELECT count FROM rate_counters WHERE bucket=?').get(`studio:ip-day:${ip}`)).toEqual({
+      count: 150,
+    });
+    expect(fixedWindowRetryAfter(86_400, Date.parse('2026-08-10T23:59:59.250Z'))).toBe(1);
+  });
+
+  it('makes repeated known-full shared-IP refusals read-only', async () => {
+    const workspace = (await createWorkspace()) as { id: string };
+    const assistant = (
+      await data<{ assistants: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'))
+    ).assistants[0];
+    const minuteIp = '198.51.100.85';
+    const dayIp = '198.51.100.86';
+    const minute = Math.floor(Date.now() / 1000 / 60) * 60;
+    const day = Math.floor(Date.now() / 1000 / 86_400) * 86_400;
+    db.database
+      .prepare('INSERT INTO rate_counters (bucket, window_start, count) VALUES (?, ?, 20)')
+      .run(`studio:ip-minute:${minuteIp}`, minute);
+    db.database
+      .prepare('INSERT INTO rate_counters (bucket, window_start, count) VALUES (?, ?, 150)')
+      .run(`studio:ip-day:${dayIp}`, day);
+    const providerFetch = vi.fn();
+    vi.stubGlobal('fetch', providerFetch);
+    const statements: string[] = [];
+    db.hook = (sql) => statements.push(sql.replace(/\s+/g, ' ').trim());
+    const action = (path: string, ip: string) =>
+      request(env, path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip },
+        body: '{}',
+      });
+
+    for (let i = 0; i < 20; i++) {
+      expect((await action(`/api/me/assistants/${assistant.id}/test-calls`, minuteIp)).status).toBe(429);
+      expect((await action('/api/me/provider/check', dayIp)).status).toBe(429);
+    }
+    db.hook = null;
+
+    expect(statements.filter((sql) => /^(INSERT|UPDATE|DELETE)\b/.test(sql))).toEqual([]);
+    expect(providerFetch).not.toHaveBeenCalled();
+    expect(
+      db.database.prepare("SELECT COUNT(*) AS n FROM calls WHERE business_id=? AND environment='test'").get(workspace.id)
+    ).toEqual({ n: 0 });
+    expect(
+      db.database.prepare("SELECT COUNT(*) AS n FROM rate_counters WHERE bucket LIKE 'studio:minute:%'").get()
+    ).toEqual({ n: 0 });
+    expect(db.database.prepare('SELECT count FROM rate_counters WHERE bucket=?').get(`studio:ip-minute:${minuteIp}`)).toEqual({
+      count: 20,
+    });
+    expect(db.database.prepare('SELECT count FROM rate_counters WHERE bucket=?').get(`studio:ip-day:${dayIp}`)).toEqual({
+      count: 150,
+    });
+  });
+
+  it('does not charge shared or workspace spend for invalid targets or provider configuration', async () => {
+    const workspace = (await createWorkspace()) as { id: string };
+    const ip = '198.51.100.83';
+    const invalidTarget = await request(
+      env,
+      '/api/me/assistants/missing/test-calls',
+      { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip }, body: '{}' }
+    );
+    expect(invalidTarget.status).toBe(404);
+
+    const invalidProviderTarget = await request(env, '/api/me/provider/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip },
+      body: JSON.stringify({ assistantId: 'missing' }),
+    });
+    expect(invalidProviderTarget.status).toBe(409);
+
+    db.database
+      .prepare("UPDATE provider_settings SET llm_base_url='https://custom.example/v1', llm_api_key='' WHERE business_id=?")
+      .run(workspace.id);
+    db.database
+      .prepare("UPDATE agent_settings SET llm_base_url='https://custom.example/v1', llm_api_key='' WHERE business_id=?")
+      .run(workspace.id);
+    const providerFetch = vi.fn();
+    vi.stubGlobal('fetch', providerFetch);
+    const invalidProvider = await request(env, '/api/me/provider/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip },
+      body: '{}',
+    });
+    expect(invalidProvider.status).toBe(400);
+    expect(await invalidProvider.json()).toEqual({
+      error: 'A custom LLM base URL needs its own API key — this instance never sends its key to another endpoint.',
+    });
+    expect(providerFetch).not.toHaveBeenCalled();
+    expect(
+      db.database.prepare("SELECT COUNT(*) AS n FROM rate_counters WHERE bucket LIKE 'studio:%'").get()
+    ).toEqual({ n: 0 });
+  });
+
+  it('keeps a failed provider-day reservation and retry timing in the captured request window', async () => {
+    const workspace = (await createWorkspace()) as { id: string };
+    const ip = '198.51.100.84';
+    vi.setSystemTime(new Date('2026-08-10T23:59:59.250Z'));
+    const oldMinute = Math.floor(Date.now() / 1000 / 60) * 60;
+    const nextMinute = oldMinute + 60;
+    const day = Math.floor(Date.now() / 1000 / 86_400) * 86_400;
+    const nextDay = day + 86_400;
+    db.database
+      .prepare('INSERT INTO rate_counters (bucket, window_start, count) VALUES (?, ?, 7)')
+      .run(`studio:minute:${workspace.id}`, nextMinute);
+    db.database
+      .prepare('INSERT INTO rate_counters (bucket, window_start, count) VALUES (?, ?, 7)')
+      .run(`studio:ip-minute:${ip}`, nextMinute);
+
+    let reservations = 0;
+    db.hook = (sql) => {
+      if (!sql.replace(/\s+/g, ' ').trim().startsWith('INSERT INTO rate_counters')) return;
+      reservations++;
+      if (reservations !== 4) return;
+      // The provider-day preflight passed, but another request consumes its
+      // last slot before this request's final atomic reservation.
+      db.database
+        .prepare('INSERT INTO rate_counters (bucket, window_start, count) VALUES (?, ?, 50)')
+        .run(`studio:provider-day:${workspace.id}`, day);
+      vi.setSystemTime(new Date('2026-08-11T00:00:00.100Z'));
+    };
+    const providerFetch = vi.fn();
+    vi.stubGlobal('fetch', providerFetch);
+    const blocked = await request(env, '/api/me/provider/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip },
+      body: '{}',
+    });
+    db.hook = null;
+
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get('Retry-After')).toBe('1');
+    expect(providerFetch).not.toHaveBeenCalled();
+    expect(
+      db.database.prepare('SELECT count FROM rate_counters WHERE bucket=? AND window_start=?').get(
+        `studio:minute:${workspace.id}`,
+        oldMinute
+      )
+    ).toBeUndefined();
+    expect(
+      db.database.prepare('SELECT count FROM rate_counters WHERE bucket=? AND window_start=?').get(
+        `studio:ip-minute:${ip}`,
+        oldMinute
+      )
+    ).toBeUndefined();
+    expect(
+      db.database.prepare('SELECT count FROM rate_counters WHERE bucket=? AND window_start=?').get(
+        `studio:minute:${workspace.id}`,
+        nextMinute
+      )
+    ).toEqual({ count: 7 });
+    expect(
+      db.database.prepare('SELECT count FROM rate_counters WHERE bucket=? AND window_start=?').get(
+        `studio:ip-minute:${ip}`,
+        nextMinute
+      )
+    ).toEqual({ count: 7 });
+    expect(db.database.prepare('SELECT count FROM rate_counters WHERE bucket=?').get(`studio:ip-day:${ip}`)).toBeUndefined();
+    expect(
+      db.database.prepare('SELECT count FROM rate_counters WHERE bucket=? AND window_start=?').get(
+        `studio:provider-day:${workspace.id}`,
+        day
+      )
+    ).toEqual({ count: 50 });
+    expect(
+      db.database.prepare('SELECT count FROM rate_counters WHERE bucket=? AND window_start=?').get(
+        `studio:provider-day:${workspace.id}`,
+        nextDay
+      )
+    ).toBeUndefined();
+  });
+
+  it('refunds every broader reservation when the race-safe test insert finds a newly full day', async () => {
+    const workspace = (await createWorkspace()) as { id: string };
+    const assistant = (
+      await data<{ assistants: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'))
+    ).assistants[0];
+    let raced = false;
+    db.hook = (sql) => {
+      const normalized = sql.replace(/\s+/g, ' ').trim();
+      if (raced || !normalized.startsWith('INSERT INTO calls') || !normalized.includes('WHERE (SELECT COUNT(*)')) return;
+      raced = true;
+      const insert = db.database.prepare(
+        `INSERT INTO calls (id, business_id, assistant_id, environment, direction)
+         VALUES (?, ?, ?, 'test', 'inbound')`
+      );
+      for (let i = 0; i < 100; i++) insert.run(`raced-test-${i}`, workspace.id, assistant.id);
+    };
+
+    const blocked = await request(env, `/api/me/assistants/${assistant.id}/test-calls`, json('POST', {}));
+    db.hook = null;
+
+    expect(blocked.status).toBe(429);
+    expect(raced).toBe(true);
+    expect(
+      db.database.prepare("SELECT COUNT(*) AS n FROM calls WHERE business_id=? AND environment='test'").get(workspace.id)
+    ).toEqual({ n: 100 });
+    expect(db.database.prepare("SELECT COUNT(*) AS n FROM rate_counters WHERE bucket LIKE 'studio:%'").get()).toEqual({
+      n: 0,
+    });
+  });
+
   it('enforces independent daily ceilings for test calls and provider checks without creating extra work', async () => {
     const workspace = (await createWorkspace()) as { id: string };
     const { assistants } = await data<{ assistants: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'));
@@ -940,7 +1452,8 @@ describe('Calm Studio API foundation', () => {
 
     const testBlocked = await request(env, `/api/me/assistants/${assistants[0].id}/test-calls`, json('POST', {}));
     expect(testBlocked.status).toBe(429);
-    expect(testBlocked.headers.get('Retry-After')).toBe('3600');
+    expect(Number(testBlocked.headers.get('Retry-After'))).toBeGreaterThan(0);
+    expect(Number(testBlocked.headers.get('Retry-After'))).toBeLessThanOrEqual(86_400);
     expect(db.database.prepare("SELECT COUNT(*) AS n FROM calls WHERE business_id=? AND environment='test'").get(workspace.id)).toEqual({
       n: 100,
     });
@@ -953,8 +1466,13 @@ describe('Calm Studio API foundation', () => {
     vi.stubGlobal('fetch', providerFetch);
     const providerBlocked = await request(env, '/api/me/provider/check', json('POST', {}));
     expect(providerBlocked.status).toBe(429);
-    expect(providerBlocked.headers.get('Retry-After')).toBe('3600');
+    expect(providerBlocked.headers.get('Retry-After')).toBe('43200');
     expect(providerFetch).not.toHaveBeenCalled();
+    expect(
+      db.database
+        .prepare("SELECT COUNT(*) AS n FROM rate_counters WHERE bucket<>?")
+        .get(`studio:provider-day:${workspace.id}`)
+    ).toEqual({ n: 0 });
   });
 
   it('creates a caller turn as a draft FAQ and never activates it implicitly', async () => {
