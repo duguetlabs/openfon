@@ -126,7 +126,8 @@ export function registerAccountApi(app: App): void {
     const deleted = await c.env.DB.prepare(`DELETE FROM users WHERE id=? AND password_hash=?
       AND EXISTS (SELECT 1 FROM sessions WHERE token=? AND user_id=? AND expires_at>?)
       AND NOT EXISTS (SELECT 1 FROM calls JOIN businesses ON businesses.id=calls.business_id
-        WHERE businesses.user_id=? AND calls.status='active') RETURNING id`)
+        WHERE businesses.user_id=? AND (calls.status='active'
+          OR (calls.reserved_at IS NOT NULL AND calls.carrier_released_at IS NULL))) RETURNING id`)
       .bind(userId, user.password_hash, getCookie(c, 'ofs') ?? '', userId, new Date().toISOString(), userId).first<{ id: string }>();
     // D1 meta.changes includes cascades; RETURNING identifies the deleted owner
     // directly instead of treating successful dependent deletes as a conflict.

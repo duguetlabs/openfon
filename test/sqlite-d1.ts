@@ -89,7 +89,7 @@ export class SqliteD1 {
   }
 }
 
-export function applyMigrations(db: SqliteD1, from = 1, through = 8): void {
+export function applyMigrations(db: SqliteD1, from = 1, through = 9): void {
   for (let number = from; number <= through; number++) {
     const prefix = String(number).padStart(4, '0');
     const filename = new URL(`../migrations/${prefix}_${migrationNames[number]}.sql`, import.meta.url);
@@ -106,4 +106,5 @@ const migrationNames: Record<number, string> = {
   6: 'engine_profiles',
   7: 'abuse_limits',
   8: 'calm_studio_foundation',
+  9: 'telnyx_inbound',
 };
