@@ -244,63 +244,64 @@ FROM businesses;
 INSERT INTO assistant_knowledge_collections (assistant_id, collection_id, attached_at)
 SELECT 'asst_' || id, 'kc_default_' || id, created_at FROM businesses;
 
--- Existing JSON data remains on businesses for the compatibility API and is
--- copied into active knowledge items for the new prompt path.
+-- Preserve raw compatibility JSON, but project only rows accepted by the
+-- runtime service/FAQ validators. Cleanup-equivalent saves deliberately skip
+-- reprojecting knowledge, so malformed rows must never be seeded as active.
+-- char(...) is the ECMAScript trim whitespace set used by the runtime.
+WITH service_rows AS (
+  SELECT b.id AS business_id, b.created_at, j.key AS source_index,
+    json_extract(j.value, '$.name') AS name,
+    COALESCE(json_extract(j.value, '$.price'), '') AS price,
+    COALESCE(json_extract(j.value, '$.duration'), '') AS duration,
+    COALESCE(json_extract(j.value, '$.notes'), '') AS notes
+  FROM businesses b, json_each(
+    CASE WHEN json_valid(b.services_json) THEN
+      CASE WHEN json_type(b.services_json)='array' THEN b.services_json ELSE '[]' END
+    ELSE '[]' END
+  ) j
+  WHERE j.type='object' AND json_type(j.value, '$.name')='text'
+    AND (json_type(j.value, '$.price') IS NULL OR json_type(j.value, '$.price')='text')
+    AND (json_type(j.value, '$.duration') IS NULL OR json_type(j.value, '$.duration')='text')
+    AND (json_type(j.value, '$.notes') IS NULL OR json_type(j.value, '$.notes')='text')
+), whitespace AS (
+  SELECT char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279) AS chars
+), services AS (
+  SELECT business_id, created_at, source_index,
+    trim(name, chars) AS name, trim(price, chars) AS price,
+    trim(duration, chars) AS duration, trim(notes, chars) AS notes
+  FROM service_rows, whitespace
+)
 INSERT INTO knowledge_items (
   id, business_id, collection_id, kind, status, title, content,
   created_at, updated_at, activated_at
 )
-SELECT
-  'ki_service_' || b.id || '_' || j.key,
-  b.id,
-  'kc_default_' || b.id,
-  'service',
-  'active',
-  COALESCE(json_extract(j.value, '$.name'), ''),
-  trim(
-    COALESCE(json_extract(j.value, '$.price'), '') ||
-    CASE WHEN COALESCE(json_extract(j.value, '$.duration'), '') <> ''
-      THEN CASE WHEN COALESCE(json_extract(j.value, '$.price'), '') <> '' THEN ' · ' ELSE '' END || json_extract(j.value, '$.duration')
-      ELSE '' END ||
-    CASE WHEN COALESCE(json_extract(j.value, '$.notes'), '') <> ''
-      THEN CASE WHEN COALESCE(json_extract(j.value, '$.price'), '') <> '' OR COALESCE(json_extract(j.value, '$.duration'), '') <> '' THEN ' — ' ELSE '' END || json_extract(j.value, '$.notes')
-      ELSE '' END
-  ),
-  b.created_at,
-  b.created_at,
-  b.created_at
-FROM businesses b, json_each(
-  CASE
-    WHEN json_valid(b.services_json) THEN
-      CASE WHEN json_type(b.services_json) = 'array' THEN b.services_json ELSE '[]' END
-    ELSE '[]'
-  END
-) j
-WHERE j.type = 'object'
-  AND trim(COALESCE(json_extract(j.value, '$.name'), '')) <> '';
+SELECT 'ki_service_' || business_id || '_' || source_index,
+  business_id, 'kc_default_' || business_id, 'service', 'active', name,
+  price || CASE WHEN duration<>'' THEN CASE WHEN price<>'' THEN ' · ' ELSE '' END || duration ELSE '' END ||
+    CASE WHEN notes<>'' THEN CASE WHEN price<>'' OR duration<>'' THEN ' — ' ELSE '' END || notes ELSE '' END,
+  created_at, created_at, created_at
+FROM services WHERE name<>'';
 
+WITH faq_rows AS (
+  SELECT b.id AS business_id, b.created_at, j.key AS source_index,
+    json_extract(j.value, '$.q') AS question, json_extract(j.value, '$.a') AS answer
+  FROM businesses b, json_each(
+    CASE WHEN json_valid(b.faqs_json) THEN
+      CASE WHEN json_type(b.faqs_json)='array' THEN b.faqs_json ELSE '[]' END
+    ELSE '[]' END
+  ) j
+  WHERE j.type='object' AND json_type(j.value, '$.q')='text' AND json_type(j.value, '$.a')='text'
+), whitespace AS (
+  SELECT char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279) AS chars
+), faqs AS (
+  SELECT business_id, created_at, source_index, trim(question, chars) AS question, trim(answer, chars) AS answer
+  FROM faq_rows, whitespace
+)
 INSERT INTO knowledge_items (
   id, business_id, collection_id, kind, status, question, answer,
   created_at, updated_at, activated_at
 )
-SELECT
-  'ki_faq_' || b.id || '_' || j.key,
-  b.id,
-  'kc_default_' || b.id,
-  'faq',
-  'active',
-  COALESCE(json_extract(j.value, '$.q'), ''),
-  COALESCE(json_extract(j.value, '$.a'), ''),
-  b.created_at,
-  b.created_at,
-  b.created_at
-FROM businesses b, json_each(
-  CASE
-    WHEN json_valid(b.faqs_json) THEN
-      CASE WHEN json_type(b.faqs_json) = 'array' THEN b.faqs_json ELSE '[]' END
-    ELSE '[]'
-  END
-) j
-WHERE j.type = 'object'
-  AND trim(COALESCE(json_extract(j.value, '$.q'), '')) <> ''
-  AND trim(COALESCE(json_extract(j.value, '$.a'), '')) <> '';
+SELECT 'ki_faq_' || business_id || '_' || source_index,
+  business_id, 'kc_default_' || business_id, 'faq', 'active', question, answer,
+  created_at, created_at, created_at
+FROM faqs WHERE question<>'' AND answer<>'';
