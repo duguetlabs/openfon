@@ -1145,6 +1145,20 @@ export function registerStudioApi(app: StudioApp): void {
         'Retry-After': String(fixedWindowRetryAfter(DAY_SECONDS, rateLimitNow)),
       });
     }
+    // A cached assistant ID can bypass every listing/bootstrap reconciliation.
+    // Refresh mixed-version legacy settings and workspace credentials before
+    // issuing the ticket, but only after the spend gates admit this request.
+    let workspace: Workspace | null;
+    try {
+      workspace = await workspaceForUser(c.env, c.get('userId'));
+    } catch (error) {
+      await refundStudioSpend(c.env, reservations);
+      throw error;
+    }
+    if (!workspace) {
+      await refundStudioSpend(c.env, reservations);
+      return c.json({ error: 'Not found' }, 404);
+    }
     const callId = newId();
     const inserted = await c.env.DB.prepare(
       `INSERT INTO calls (id, business_id, assistant_id, channel, caller_id, environment, direction, started_at)

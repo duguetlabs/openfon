@@ -941,6 +941,36 @@ describe('Calm Studio API foundation', () => {
     expect(after.setup.firstTest).toBe(true);
   });
 
+  it.each(['primary', 'secondary'])('reconciles mixed-version settings before direct %s test-call creation', async (target) => {
+    const workspace = await createWorkspace() as { id: string };
+    const { assistants } = await data<{ assistants: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'));
+    const primaryId = assistants[0].id;
+    await request(env, `/api/me/assistants/${primaryId}`, json('PUT', { name: 'Original', persona: 'calm', language: 'en' }));
+    await request(env, `/api/me/assistants/${primaryId}/pause`, json('POST', {}));
+    const secondary = await data<{ id: string }>(await request(env, '/api/me/assistants', json('POST', {
+      name: 'Secondary', persona: 'concise', language: 'de',
+    })));
+    const targetId = target === 'primary' ? primaryId : secondary.id;
+    // Simulate an old worker writing after the client cached the target ID.
+    // Do not bootstrap or list assistants between this write and the test call.
+    db.database.prepare(`UPDATE agent_settings SET agent_name=?,greeting=?,llm_model=?,llm_base_url=?,llm_api_key=? WHERE business_id=?`)
+      .run('Updated legacy', 'New greeting', 'new-model', 'https://provider.example/v1', 'new-provider-key', workspace.id);
+    let reconciledBeforeInsert = false;
+    db.hook = (sql) => {
+      if (!sql.trim().startsWith('INSERT INTO calls')) return;
+      expect(db.database.prepare('SELECT name,greeting,llm_model,state FROM assistants WHERE id=?').get(primaryId))
+        .toEqual({ name: 'Updated legacy', greeting: 'New greeting', llm_model: 'new-model', state: 'paused' });
+      expect(db.database.prepare('SELECT llm_api_key FROM provider_settings WHERE business_id=?').get(workspace.id))
+        .toEqual({ llm_api_key: 'new-provider-key' });
+      reconciledBeforeInsert = true;
+    };
+    expect((await request(env, `/api/me/assistants/${targetId}/test-calls`, json('POST', {}))).status).toBe(201);
+    db.hook = null;
+    expect(reconciledBeforeInsert).toBe(true);
+    expect(db.database.prepare('SELECT name,persona,state FROM assistants WHERE id=?').get(secondary.id))
+      .toEqual({ name: 'Secondary', persona: 'concise', state: 'draft' });
+  });
+
   it('allows only the owning authenticated account to attach a test call', async () => {
     await createWorkspace();
     const { assistants } = await data<{ assistants: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'));
