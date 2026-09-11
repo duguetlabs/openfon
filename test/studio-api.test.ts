@@ -327,6 +327,48 @@ describe('Calm Studio API foundation', () => {
     );
   }
 
+  it('rejects malformed workspace field types without persisting invalid state', async () => {
+    const workspace = await createWorkspace() as { id: string };
+    const bootstrap = await data<{ assistants: Array<{ id: string }>; knowledgeCollections: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'));
+    const assistantId = bootstrap.assistants[0].id;
+    const collection = db.database.prepare('SELECT id FROM knowledge_collections WHERE business_id=?').get(workspace.id) as { id: string };
+    const cases: Array<[string, string, unknown]> = [
+      ['/api/me/assistants', 'POST', { name: {} }],
+      [`/api/me/assistants/${assistantId}`, 'PUT', { name: {} }],
+      [`/api/me/assistants/${assistantId}`, 'PUT', { greeting: ['invalid'] }],
+      [`/api/me/assistants/${assistantId}`, 'PUT', { take_messages: {} }],
+      ['/api/me/knowledge/collections', 'POST', { name: 'Invalid', description: {} }],
+      [`/api/me/knowledge/collections/${collection.id}`, 'PUT', { name: 5 }],
+      [`/api/me/knowledge/collections/${collection.id}/items`, 'POST', { kind: 'faq', question: {}, answer: 'Answer' }],
+      ['/api/me/provider', 'PUT', { baseUrl: {} }],
+      ['/api/me/engine-presets', 'POST', { name: 'Invalid', voice: [] }],
+      [`/api/me/business/${workspace.id}`, 'PUT', { hours_json: [] }],
+      [`/api/me/business/${workspace.id}/agent`, 'PUT', { agent_name: {} }],
+      [`/api/me/business/${workspace.id}/profiles`, 'POST', { name: 'Invalid', llm_base_url: [] }],
+    ];
+    for (const [path, method, body] of cases) {
+      const response = await request(env, path, json(method, body));
+      expect(response.status, `${method} ${path}`).toBe(400);
+      expect(await response.json()).toHaveProperty('error');
+    }
+    expect(db.database.prepare('SELECT name,greeting FROM assistants WHERE id=?').get(assistantId)).toEqual({ name: '', greeting: '' });
+    expect(db.database.prepare('SELECT COUNT(*) AS n FROM assistants').get()).toEqual({ n: 1 });
+    expect(db.database.prepare('SELECT COUNT(*) AS n FROM knowledge_collections').get()).toEqual({ n: 1 });
+    expect(db.database.prepare('SELECT COUNT(*) AS n FROM knowledge_items').get()).toEqual({ n: 0 });
+    expect(db.database.prepare('SELECT COUNT(*) AS n FROM engine_presets').get()).toEqual({ n: 0 });
+  });
+
+  it('returns JSON client errors for malformed or non-object studio bodies', async () => {
+    await createWorkspace();
+    for (const path of ['/api/me/assistants', '/api/me/knowledge/collections', '/api/me/provider/check']) {
+      for (const body of ['{', 'null', '[]', 'true', '42', '"text"']) {
+        const response = await request(env, path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        expect(response.status, `${path}: ${body}`).toBe(400);
+        expect(await response.json()).toHaveProperty('error');
+      }
+    }
+  });
+
   it('preserves a named draft primary through new onboarding and knowledge reads', async () => {
     const workspace = await createWorkspace() as { id: string; slug: string };
     expect((await request(env, `/api/me/business/${workspace.id}`, json('PUT', {
@@ -956,6 +998,36 @@ describe('Calm Studio API foundation', () => {
     db.database.prepare("UPDATE calls SET connected_at=datetime('now') WHERE id=?").run(testCall.callId);
     const after = await data<{ setup: { firstTest: boolean } }>(await request(env, '/api/me/bootstrap'));
     expect(after.setup.firstTest).toBe(true);
+  });
+
+  it.each(['primary', 'secondary'])('reconciles mixed-version settings before direct %s test-call creation', async (target) => {
+    const workspace = await createWorkspace() as { id: string };
+    const { assistants } = await data<{ assistants: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'));
+    const primaryId = assistants[0].id;
+    await request(env, `/api/me/assistants/${primaryId}`, json('PUT', { name: 'Original', persona: 'calm', language: 'en' }));
+    await request(env, `/api/me/assistants/${primaryId}/pause`, json('POST', {}));
+    const secondary = await data<{ id: string }>(await request(env, '/api/me/assistants', json('POST', {
+      name: 'Secondary', persona: 'concise', language: 'de',
+    })));
+    const targetId = target === 'primary' ? primaryId : secondary.id;
+    // Simulate an old worker writing after the client cached the target ID.
+    // Do not bootstrap or list assistants between this write and the test call.
+    db.database.prepare(`UPDATE agent_settings SET agent_name=?,greeting=?,llm_model=?,llm_base_url=?,llm_api_key=? WHERE business_id=?`)
+      .run('Updated legacy', 'New greeting', 'new-model', 'https://provider.example/v1', 'new-provider-key', workspace.id);
+    let reconciledBeforeInsert = false;
+    db.hook = (sql) => {
+      if (!sql.trim().startsWith('INSERT INTO calls')) return;
+      expect(db.database.prepare('SELECT name,greeting,llm_model,state FROM assistants WHERE id=?').get(primaryId))
+        .toEqual({ name: 'Updated legacy', greeting: 'New greeting', llm_model: 'new-model', state: 'paused' });
+      expect(db.database.prepare('SELECT llm_api_key FROM provider_settings WHERE business_id=?').get(workspace.id))
+        .toEqual({ llm_api_key: 'new-provider-key' });
+      reconciledBeforeInsert = true;
+    };
+    expect((await request(env, `/api/me/assistants/${targetId}/test-calls`, json('POST', {}))).status).toBe(201);
+    db.hook = null;
+    expect(reconciledBeforeInsert).toBe(true);
+    expect(db.database.prepare('SELECT name,persona,state FROM assistants WHERE id=?').get(secondary.id))
+      .toEqual({ name: 'Secondary', persona: 'concise', state: 'draft' });
   });
 
   it('allows only the owning authenticated account to attach a test call', async () => {
