@@ -17,6 +17,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: npm run test:telnyx
       - run: npm run build
 
   # The benchmark scoring code is Python and computes the numbers in
