@@ -1,7 +1,10 @@
 # Telnyx inbound calling implementation plan
 
-Status: proposed, not implemented or carrier-tested. Reviewed 2026-09-12 against
-working-tree source based on commit `66943f1` and current official Telnyx docs.
+Status: inbound adapter implemented on `codex/telnyx-inbound`, disabled by default;
+unit tests and the actual local workerd synthetic call pass. Not carrier-tested.
+The original design below was reviewed 2026-09-12 against source based on
+`66943f1` and official Telnyx docs. Some proposed file/interface names differ from
+the final implementation; see [current operator documentation](../telephony.md).
 No credentials were fetched, numbers purchased, account settings changed, or calls placed.
 
 ## Recommendation and launch boundary

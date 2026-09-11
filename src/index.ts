@@ -1,11 +1,15 @@
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { readWorkspaceBody } from './request-validation';
 import type { Context } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import type { Env, Business, AgentSettings } from './types';
 import { createSession, createVerifiedSession, deleteSession, getUserIdFromSession, hashPassword, newId, verifyPassword } from './auth';
 import { sameLlmEndpoint, validateLlmBaseUrl } from './providers';
 import { CallSession } from './call-session';
+import { TelnyxCall } from './telnyx-control';
+import { registerTelnyxRoutes, reconcileTelnyxCalls } from './telnyx-routes';
+import { OCCUPIED_CALL_SQL } from './telnyx-admission';
 import { registerAccountApi } from './account-api';
 import {
   ensureWorkspaceFoundation,
@@ -14,11 +18,12 @@ import {
   syncLegacyKnowledge,
 } from './studio-api';
 
-export { CallSession };
+export { CallSession, TelnyxCall };
 
 type Vars = { userId: string };
 type Ctx = Context<{ Bindings: Env; Variables: Vars }>;
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
+registerTelnyxRoutes(app);
 
 const COOKIE = 'ofs';
 
@@ -459,7 +464,7 @@ app.get('/api/me/business', async (c) => {
 });
 
 app.post('/api/me/business', async (c) => {
-  const body = await c.req.json<Partial<Business>>();
+  const body = await readWorkspaceBody<Partial<Business>>(c.req);
   if (!body.name?.trim()) return c.json({ error: 'Business name required' }, 400);
   const userId = c.get('userId');
   const existingWorkspace = () =>
@@ -537,7 +542,7 @@ app.post('/api/me/business', async (c) => {
 app.put('/api/me/business/:id', async (c) => {
   const biz = await ownedBusiness(c.env, c.get('userId'), c.req.param('id'));
   if (!biz) return c.json({ error: 'Not found' }, 404);
-  const b = await c.req.json<Partial<Business>>();
+  const b = await readWorkspaceBody<Partial<Business>>(c.req);
   const servicesChanged =
     b.services_json !== undefined &&
     !sameLegacyKnowledgeProjection('service', b.services_json, biz.services_json);
@@ -600,7 +605,7 @@ app.put('/api/me/business/:id/agent', async (c) => {
     .bind(biz.id, biz.slug)
     .first<AgentSettings & { id: string; name: string; state: 'draft' | 'active' | 'paused' }>();
   if (!cur) return c.json({ error: 'Not found' }, 404);
-  const s = await c.req.json<Partial<AgentSettings> & { clearApiKey?: boolean }>();
+  const s = await readWorkspaceBody<Partial<AgentSettings> & { clearApiKey?: boolean }>(c.req);
   if (s.clearApiKey !== undefined && typeof s.clearApiKey !== 'boolean') {
     return c.json({ error: 'clearApiKey must be a boolean' }, 400);
   }
@@ -743,7 +748,7 @@ app.get('/api/me/business/:id/profiles', async (c) => {
 app.post('/api/me/business/:id/profiles', async (c) => {
   const biz = await ownedBusiness(c.env, c.get('userId'), c.req.param('id'));
   if (!biz) return c.json({ error: 'Not found' }, 404);
-  const b = await c.req.json<Partial<ProfileFields>>();
+  const b = await readWorkspaceBody<Partial<ProfileFields>>(c.req);
   if (!b.name?.trim()) return c.json({ error: 'Profile name required' }, 400);
   const id = newId();
   // A missing/blank value means "snapshot the workspace key". Credentials are
@@ -806,7 +811,7 @@ async function ownedProfile(env: Env, userId: string, pid: string): Promise<Prof
 app.put('/api/me/profiles/:pid', async (c) => {
   const p = await ownedProfile(c.env, c.get('userId'), c.req.param('pid'));
   if (!p) return c.json({ error: 'Not found' }, 404);
-  const b = await c.req.json<Partial<ProfileFields>>();
+  const b = await readWorkspaceBody<Partial<ProfileFields>>(c.req);
   const llmKey = b.llm_api_key !== undefined && b.llm_api_key !== '' && !/^•+$/.test(b.llm_api_key) ? b.llm_api_key : p.llm_api_key;
   const llmBaseUrl = b.llm_base_url ?? p.llm_base_url;
   if (b.language !== undefined && !b.language.trim()) return c.json({ error: 'Profile language is required' }, 400);
@@ -951,7 +956,7 @@ function countConnected(
   return env.DB.prepare(
     `SELECT COUNT(*) AS n FROM calls
       WHERE business_id = ? AND id != ? AND environment = ?
-        AND status = 'active' AND connected_at IS NOT NULL`
+        AND ${OCCUPIED_CALL_SQL}`
   ).bind(businessId, exceptId, environment);
 }
 
@@ -1125,8 +1130,11 @@ app.get('/api/public/agent/:slug', async (c) => {
   });
 });
 
-app.post('/api/public/call/start', async (c) => {
-  const { slug } = await c.req.json<{ slug?: string }>();
+app.post('/api/public/call/start', bodyLimit({
+  maxSize: 4 * 1024,
+  onError: (c) => c.json({ error: 'Call-start request is too large.' }, 413),
+}), async (c) => {
+  const { slug } = await readWorkspaceBody<{ slug?: string }>(c.req);
   // The per-IP ceilings were already applied by the /api/public/* middleware.
   const addr = clientIp(c);
   const target = await activePublicAssistant(c.env, slug ?? '');
@@ -1165,7 +1173,7 @@ app.post('/api/public/call/start', async (c) => {
      SELECT ?, ?, ?, 'web', ?, 'live', 'inbound'
       WHERE (SELECT COUNT(*) FROM calls
               WHERE business_id = ? AND environment = 'live' AND started_at > datetime('now', '-1 day')
-                AND NOT (status = 'abandoned' AND connected_at IS NULL)) < ?`
+                AND NOT (status = 'abandoned' AND connected_at IS NULL AND reserved_at IS NULL)) < ?`
   )
     .bind(
       callId,
@@ -1202,7 +1210,7 @@ app.get('/ws/call/:callId', async (c) => {
   // Bounded by started_at, not just status: a callId that has sat unused past
   // the stale window is not attachable, even before the sweeper retires it.
   const call = await c.env.DB.prepare(
-    `SELECT calls.id, calls.business_id, calls.assistant_id, calls.environment,
+    `SELECT calls.id, calls.business_id, calls.assistant_id, calls.environment, calls.channel,
       businesses.user_id, businesses.slug AS workspace_slug,
       businesses.services_json, businesses.faqs_json, businesses.max_concurrent_calls
        FROM calls JOIN businesses ON businesses.id = calls.business_id
@@ -1214,13 +1222,14 @@ app.get('/ws/call/:callId', async (c) => {
       business_id: string;
       assistant_id: string | null;
       environment: 'test' | 'live';
+      channel: string;
       user_id: string;
       workspace_slug: string;
       services_json: string;
       faqs_json: string;
       max_concurrent_calls: number;
     }>();
-  if (!call) return c.json({ error: 'call not found' }, 404);
+  if (!call || call.channel === 'telnyx') return c.json({ error: 'call not found' }, 404);
   if (call.environment === 'test') {
     const userId = await getUserIdFromSession(c.env, getCookie(c, COOKIE));
     if (userId !== call.user_id) return c.json({ error: 'call not found' }, 404);
@@ -1256,7 +1265,7 @@ app.get('/ws/call/:callId', async (c) => {
   const claim = await c.env.DB.batch<{ n: number }>([
     c.env.DB.prepare(
       `UPDATE calls SET connected_at = datetime('now')
-        WHERE id = ? AND connected_at IS NULL
+        WHERE id = ? AND status='active' AND channel!='telnyx' AND connected_at IS NULL
           AND (environment = 'test' OR EXISTS (
             SELECT 1 FROM assistants
              WHERE assistants.business_id=calls.business_id
@@ -1380,7 +1389,7 @@ export async function sweepStaleCalls(env: Env, now = Date.now()): Promise<numbe
     // the only timestamp such a row has.
     env.DB.prepare(
       `UPDATE calls SET status = 'abandoned', ended_at = datetime('now')
-        WHERE status = 'active' AND connected_at IS NULL AND started_at < datetime('now', ?)`
+        WHERE status = 'active' AND channel!='telnyx' AND connected_at IS NULL AND started_at < datetime('now', ?)`
     ).bind(STALE_UNCONNECTED),
     // Connected: measured from when the session began, not when the row was
     // created. Attachment is allowed for 15 minutes after creation, so ageing
@@ -1389,7 +1398,7 @@ export async function sweepStaleCalls(env: Env, now = Date.now()): Promise<numbe
     // mislabelled as interrupted on the way out.
     env.DB.prepare(
       `UPDATE calls SET status = 'abandoned', ended_at = datetime('now')
-        WHERE status = 'active' AND connected_at IS NOT NULL AND connected_at < datetime('now', ?)`
+        WHERE status = 'active' AND (channel!='telnyx' OR carrier_released_at IS NOT NULL) AND connected_at IS NOT NULL AND connected_at < datetime('now', ?)`
     ).bind(STALE_CONNECTED),
     // Fixed-window counters are only read for the current window; a day of
     // history is plenty of slack for the longest limiter.
@@ -1414,5 +1423,6 @@ export default {
   fetch: app.fetch,
   scheduled: (_event, env, ctx) => {
     ctx.waitUntil(sweepStaleCalls(env));
+    ctx.waitUntil(reconcileTelnyxCalls(env));
   },
 } satisfies ExportedHandler<Env>;

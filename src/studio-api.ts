@@ -1,4 +1,5 @@
 import type { Hono } from 'hono';
+import { readWorkspaceBody } from './request-validation';
 import { newId } from './auth';
 import { chatComplete, LlmConfigError, resolveLlm, sameLlmEndpoint, validateLlmBaseUrl } from './providers';
 import type {
@@ -937,7 +938,7 @@ export function registerStudioApi(app: StudioApp): void {
   app.post('/api/me/assistants', async (c) => {
     const workspace = await workspaceForUser(c.env, c.get('userId'));
     if (!workspace) return c.json({ error: 'Create a workspace first' }, 409);
-    const body = await c.req.json<Partial<Assistant>>();
+    const body = await readWorkspaceBody<Partial<Assistant>>(c.req);
     if (
       (body.name !== undefined && !body.name.trim()) ||
       (body.persona !== undefined && !body.persona.trim()) ||
@@ -994,7 +995,7 @@ export function registerStudioApi(app: StudioApp): void {
   app.put('/api/me/assistants/:assistantId', async (c) => {
     const assistant = await ownedAssistant(c.env, c.get('userId'), c.req.param('assistantId'));
     if (!assistant) return c.json({ error: 'Not found' }, 404);
-    const body = await c.req.json<Partial<Assistant>>();
+    const body = await readWorkspaceBody<Partial<Assistant>>(c.req);
     if (
       (body.name !== undefined && !body.name.trim()) ||
       (body.persona !== undefined && !body.persona.trim()) ||
@@ -1145,6 +1146,20 @@ export function registerStudioApi(app: StudioApp): void {
         'Retry-After': String(fixedWindowRetryAfter(DAY_SECONDS, rateLimitNow)),
       });
     }
+    // A cached assistant ID can bypass every listing/bootstrap reconciliation.
+    // Refresh mixed-version legacy settings and workspace credentials before
+    // issuing the ticket, but only after the spend gates admit this request.
+    let workspace: Workspace | null;
+    try {
+      workspace = await workspaceForUser(c.env, c.get('userId'));
+    } catch (error) {
+      await refundStudioSpend(c.env, reservations);
+      throw error;
+    }
+    if (!workspace) {
+      await refundStudioSpend(c.env, reservations);
+      return c.json({ error: 'Not found' }, 404);
+    }
     const callId = newId();
     const inserted = await c.env.DB.prepare(
       `INSERT INTO calls (id, business_id, assistant_id, channel, caller_id, environment, direction, started_at)
@@ -1172,6 +1187,19 @@ export function registerStudioApi(app: StudioApp): void {
       });
     }
     return c.json({ callId, assistantId: assistant.id, environment: 'test' }, 201);
+  });
+
+  // Cancellation only retires an unused, owner-authenticated test ticket. The
+  // DELETE races atomically with the socket's connected_at claim: whichever
+  // wins makes the other a no-op, without terminating an established call.
+  app.delete('/api/me/test-calls/:callId', async (c) => {
+    await c.env.DB.prepare(
+      `DELETE FROM calls WHERE id=? AND environment='test' AND channel='web'
+         AND status='active' AND connected_at IS NULL
+         AND business_id IN (SELECT id FROM businesses WHERE user_id=?)`
+    ).bind(c.req.param('callId'), c.get('userId')).run();
+    // Idempotent and opaque for unknown, foreign, live, or already-used tickets.
+    return c.json({ ok: true });
   });
 
   app.get('/api/me/calls', async (c) => {
@@ -1306,7 +1334,7 @@ export function registerStudioApi(app: StudioApp): void {
   app.post('/api/me/knowledge/collections', async (c) => {
     const workspace = await workspaceForUser(c.env, c.get('userId'));
     if (!workspace) return c.json({ error: 'Create a workspace first' }, 409);
-    const body = await c.req.json<{ name?: string; description?: string }>();
+    const body = await readWorkspaceBody<{ name?: string; description?: string }>(c.req);
     if (!body.name?.trim()) return c.json({ error: 'Collection name required' }, 400);
     const duplicate = await c.env.DB.prepare('SELECT id FROM knowledge_collections WHERE business_id = ? AND name = ?')
       .bind(workspace.id, body.name.trim())
@@ -1343,7 +1371,7 @@ export function registerStudioApi(app: StudioApp): void {
   app.put('/api/me/knowledge/collections/:collectionId', async (c) => {
     const collection = await ownedCollection(c.env, c.get('userId'), c.req.param('collectionId'));
     if (!collection) return c.json({ error: 'Not found' }, 404);
-    const body = await c.req.json<{ name?: string; description?: string }>();
+    const body = await readWorkspaceBody<{ name?: string; description?: string }>(c.req);
     const name = body.name?.trim() || collection.name;
     const duplicate = await c.env.DB.prepare(
       'SELECT id FROM knowledge_collections WHERE business_id = ? AND name = ? AND id != ?'
@@ -1381,7 +1409,7 @@ export function registerStudioApi(app: StudioApp): void {
   app.post('/api/me/knowledge/collections/:collectionId/items', async (c) => {
     const collection = await ownedCollection(c.env, c.get('userId'), c.req.param('collectionId'));
     if (!collection) return c.json({ error: 'Not found' }, 404);
-    const body = await c.req.json<Partial<KnowledgeItem>>();
+    const body = await readWorkspaceBody<Partial<KnowledgeItem>>(c.req);
     const kind = normalizedKind(body.kind);
     if (!kind) return c.json({ error: 'Knowledge kind must be faq, service, or note' }, 400);
     const candidate = {
@@ -1424,7 +1452,7 @@ export function registerStudioApi(app: StudioApp): void {
   app.put('/api/me/knowledge/items/:itemId', async (c) => {
     const item = await ownedItem(c.env, c.get('userId'), c.req.param('itemId'));
     if (!item) return c.json({ error: 'Not found' }, 404);
-    const body = await c.req.json<Partial<KnowledgeItem>>();
+    const body = await readWorkspaceBody<Partial<KnowledgeItem>>(c.req);
     let collectionId = body.collection_id ?? item.collection_id;
     if (collectionId !== item.collection_id) {
       const collection = await ownedCollection(c.env, c.get('userId'), collectionId);
@@ -1470,7 +1498,7 @@ export function registerStudioApi(app: StudioApp): void {
   });
 
   app.post('/api/me/knowledge/drafts/from-turn', async (c) => {
-    const body = await c.req.json<{ callId?: string; turnId?: number; collectionId?: string }>();
+    const body = await readWorkspaceBody<{ callId?: string; turnId?: number; collectionId?: string }>(c.req);
     if (!body.callId || !Number.isInteger(body.turnId)) return c.json({ error: 'Call and caller turn required' }, 400);
     const workspace = await workspaceForUser(c.env, c.get('userId'));
     if (!workspace) return c.json({ error: 'Not found' }, 404);
@@ -1551,7 +1579,7 @@ export function registerStudioApi(app: StudioApp): void {
     const current = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
       .bind(workspace.id)
       .first<ProviderSettings>();
-    const body = await c.req.json<{ baseUrl?: string; apiKey?: string | null; clearApiKey?: boolean }>();
+    const body = await readWorkspaceBody<{ baseUrl?: string; apiKey?: string | null; clearApiKey?: boolean }>(c.req);
     if (body.clearApiKey !== undefined && typeof body.clearApiKey !== 'boolean') {
       return c.json({ error: 'clearApiKey must be a boolean' }, 400);
     }
@@ -1599,7 +1627,7 @@ export function registerStudioApi(app: StudioApp): void {
   app.post('/api/me/provider/check', async (c) => {
     const workspace = await workspaceForUser(c.env, c.get('userId'));
     if (!workspace) return c.json({ error: 'Create a workspace first' }, 409);
-    const body: { assistantId?: string } = await c.req.json<{ assistantId?: string }>().catch(() => ({}));
+    const body: { assistantId?: string } = await readWorkspaceBody<{ assistantId?: string }>(c.req, true);
     let assistant: Assistant | null = null;
     if (body.assistantId) assistant = await ownedAssistant(c.env, c.get('userId'), body.assistantId);
     else {
@@ -1721,7 +1749,7 @@ export function registerStudioApi(app: StudioApp): void {
   app.post('/api/me/engine-presets', async (c) => {
     const workspace = await workspaceForUser(c.env, c.get('userId'));
     if (!workspace) return c.json({ error: 'Create a workspace first' }, 409);
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await readWorkspaceBody<Record<string, unknown>>(c.req);
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name) return c.json({ error: 'Preset name required' }, 400);
     const id = newId();
@@ -1764,7 +1792,7 @@ export function registerStudioApi(app: StudioApp): void {
   });
 
   app.post('/api/me/engine-presets/:presetId/apply', async (c) => {
-    const body = await c.req.json<{ assistantId?: string }>();
+    const body = await readWorkspaceBody<{ assistantId?: string }>(c.req);
     if (!body.assistantId) return c.json({ error: 'Assistant id required' }, 400);
     const assistant = await ownedAssistant(c.env, c.get('userId'), body.assistantId);
     const preset = await c.env.DB.prepare(
@@ -1820,7 +1848,7 @@ export function registerStudioApi(app: StudioApp): void {
       .bind(c.req.param('presetId'), c.get('userId'))
       .first<Record<string, string>>();
     if (!preset) return c.json({ error: 'Not found' }, 404);
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await readWorkspaceBody<Record<string, unknown>>(c.req);
     const value = (key: string) => (typeof body[key] === 'string' ? body[key] as string : preset[key]);
     const name = value('name').trim() || preset.name;
     const engine = body.engine === 'realtime' ? 'realtime' : body.engine === 'pipeline' ? 'pipeline' : preset.engine;

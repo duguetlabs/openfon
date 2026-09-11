@@ -11,9 +11,10 @@ Updated 2026-09-12. **Release candidate in progress; not production-launch appro
 | Multiple assistants; draft, active and paused lifecycle | Implemented; browser persistence test passed |
 | Private Test Studio with audio/text and transcripts | Implemented; real provider call still required |
 | Knowledge collections, attachments, drafts and approval | Implemented; browser creation/approval/attachment/reload flow passed |
-| Calls, filters, summaries and caller-question draft creation | Implemented; seeded transcript flow still to verify |
+| Calls, filters, summaries and caller-question draft creation | Implemented; typed mock-provider call verifies persisted transcript, summary and detail rendering; question drafts covered by API tests |
 | Password change, private export, account deletion | Implemented; API and browser password/export/deletion flows passed |
-| Existing telephone number / Telnyx / outbound calling | Not implemented; design and carrier validation plan in telephony-plan.md |
+| Inbound Telnyx number | Implemented behind disabled rollout flag; unit and synthetic workerd tests pass; actual carrier pilot required |
+| Outbound calling / number purchasing / porting | Not implemented |
 | Calendar booking | Not implemented; only request capture |
 | Email verification / forgotten-password recovery | Not implemented |
 | Hosted support identity, production domain and legal disclosures | Operator details pending |
@@ -21,13 +22,15 @@ Updated 2026-09-12. **Release candidate in progress; not production-launch appro
 
 ## Validation evidence
 
-- Application unit/API suite after dependency upgrades: 272/272 passed across 15 files.
+- Application unit/API suite after dependency upgrades: 424/424 passed across 20 files.
 - TypeScript: passed after Workers types 5 / React Router 7 / Vitest 5 upgrades.
 - Quality benchmarks: 220 tests, one existing skip.
 - Realtime benchmarks: 206 tests; standalone report checker passed.
 - Dependency audit: zero vulnerabilities (including development dependencies at upgrade).
-- Browser tests: 4/4 passed against actual local workerd, covering public desktop/mobile, signup, private draft setup, save/publish/pause/reload, knowledge approval/attachment, every menu, password/export/deletion. Interrupted setup recovery and D1 cascade deletion counts were corrected.
-- PR #13 head a38a20e: migration field validation fixed following review; fresh Codex requested. PR-Agent not installed.
+- Browser tests: 6/6 passed against actual local workerd, covering public desktop/mobile, signup, private draft setup, save/publish/pause/reload, knowledge approval/attachment, every menu, password/export/deletion, and authenticated typed private calls with transcript/summary persistence against a local mock provider. This does not verify live-provider audio. Interrupted setup recovery and D1 cascade deletion counts were corrected.
+- PR #13 head d6ea5d2: migration field validation and direct test-call reconciliation fixed following review; exact-head Codex reports no major issues and all existing CI checks pass. PR-Agent remains unavailable and its merge gate unresolved.
+
+Read-only production inspection is recorded in [production-preflight.md](production-preflight.md): remote migrations 0007/0008 remain pending, configured secret names do not establish validity, and workers.dev probes returned 403. No remote changes or successful deployed smoke test are claimed.
 
 ## Required release gate
 
@@ -44,7 +47,7 @@ Updated 2026-09-12. **Release candidate in progress; not production-launch appro
 
 Use this repository's Cloudflare deployment, not an unrelated website host. The target account must be Duguet Labs and credentials must come from `dsecret`/the scoped environment. `npm run deploy` includes **remote migrations** and is not a preview command.
 
-Before deployment, record current Worker version and migration list, export D1, and verify backup restoration on a temporary database. Run `npm ci`, `npm run typecheck`, `npm test`, both Python benchmark suites, `npm run test:e2e`, and `npm run build`. The CI deploy job now depends on every validation job rather than only the TypeScript/application job.
+Before deployment, record current Worker version and migration list, export D1, and verify backup restoration on a temporary database. Run `npm ci`, `npm run typecheck`, `npm test`, `npm run test:telnyx`, both Python benchmark suites, `npm run test:e2e`, and `npm run build`. The browser CI job runs the local-workerd suite, and the deployment job depends on application, browser, and both benchmark checks. The workflow was published through the GitHub connector’s existing authorization; no permission expansion is required. Verify these checks on the exact release commit before deployment.
 
 After an approved release, check public root, authentication, existing-account data, draft/paused public-link rejection, private test ownership, exports and account settings. Perform one real test/live call and inspect its record. If acceptance fails, roll back Worker code to the recorded prior version, leave additive schema in place, and investigate before resuming traffic.
 
@@ -56,4 +59,4 @@ After an approved release, check public root, authentication, existing-account d
 - Whether PSTN is required for the initial public launch. The current website truthfully describes browser-only calling.
 
 - Real-provider preflight: the scoped vault credential returned HTTP 403 from the configured Kataleptic model catalog. No live provider conversation was claimed or completed; valid provider access still needs verification.
-- Telephony codec and webhook-verification helpers are separately under development; no carrier runtime is exposed by this release.
+- Inbound Telnyx control and media runtime is included behind the disabled rollout flag. The synthetic workerd harness proved ingress, bidirectional PCM, interruption, playback drain, hangup and release without external calls. The public website still describes browser calling until a real carrier pilot passes.

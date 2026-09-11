@@ -69,15 +69,17 @@ export function registerAccountApi(app: App): void {
 
   app.get('/api/me/account/export', async (c) => {
     const userId = c.get('userId');
-    const account = await c.env.DB.prepare('SELECT id, email, created_at FROM users WHERE id=?').bind(userId).first();
     const data: Record<string, RecordRow[]> = {};
-    // Keep the response below 4 MiB, leaving room for the envelope. Each SQL
-    // statement measures serialized bytes and returns JSON only within the
-    // remaining budget, from the SAME snapshot. A separate preflight query
-    // would race concurrent edits and could still materialize an oversized row.
-    let remainingBytes = EXPORT_BYTE_LIMIT - 4096;
-    for (const [table, columns] of Object.entries(EXPORT_COLUMNS)) {
-      const scope = table === 'businesses' ? 'user_id=?'
+    const tables = { users: ['id', 'email', 'created_at'], ...EXPORT_COLUMNS };
+    const ctes: string[] = [];
+    const measurements: string[] = [];
+    const payloads: string[] = [];
+    const bindings: string[] = [];
+    // One SQL statement provides a snapshot across the owner and every table.
+    // Measure all rows before returning any payload; a global byte gate prevents
+    // independently bounded tables from multiplying peak response memory.
+    for (const [table, columns] of Object.entries(tables)) {
+      const scope = table === 'users' ? 'id=?' : table === 'businesses' ? 'user_id=?'
         : table === 'call_turns' ? 'call_id IN (SELECT calls.id FROM calls JOIN businesses ON businesses.id=calls.business_id WHERE businesses.user_id=?)'
         : table === 'assistant_knowledge_collections' ? 'assistant_id IN (SELECT assistants.id FROM assistants JOIN businesses ON businesses.id=assistants.business_id WHERE businesses.user_id=?)'
         : 'business_id IN (SELECT id FROM businesses WHERE user_id=?)';
@@ -92,21 +94,51 @@ export function registerAccountApi(app: App): void {
       // large legacy rows before constructing JSON, below D1's 2 MB string
       // limit even in that worst case. Normal API writes are capped at 128 KiB.
       const rawBytes = columns.map(column => `COALESCE(length(CAST(${column} AS BLOB)), 0)`).join(' + ');
-      const result = await c.env.DB.prepare(`WITH export_rows AS (
-          SELECT CASE WHEN (${rawBytes})<=240000 THEN ${jsonRow} ELSE NULL END AS item FROM ${table} WHERE ${scope}
-        ), measured AS (
-          SELECT COUNT(*) AS row_count, COALESCE(SUM(length(CAST(item AS BLOB)) + 1), 0) + 2 AS bytes,
-            COALESCE(MAX(CASE WHEN item IS NULL THEN 1500001 ELSE length(CAST(item AS BLOB)) END), 0) AS largest_row FROM export_rows
-        ) SELECT row_count, bytes, largest_row, NULL AS payload FROM measured
-          UNION ALL
-          SELECT 0, 0, 0, item FROM export_rows, measured WHERE row_count<=? AND bytes<=? AND largest_row<=1500000`)
-        .bind(userId, rowLimit, remainingBytes).all<{ row_count: number; bytes: number; largest_row: number; payload: string | null }>();
-      const measurement = result.results.find(row => row.payload === null);
-      if (!measurement || measurement.row_count > rowLimit || measurement.bytes > remainingBytes || measurement.largest_row > 1_500_000) {
-        return c.json({ error: 'This account is too large for browser export. Ask your deployment administrator for a database export.' }, 413);
+      ctes.push(`${table}_rows AS MATERIALIZED (
+        SELECT CASE WHEN (${rawBytes})<=240000 THEN ${jsonRow} ELSE NULL END AS item
+        FROM ${table} WHERE ${scope}
+      )`);
+      bindings.push(userId);
+      measurements.push(`SELECT '${table}' AS table_name, COUNT(*) AS row_count,
+        COALESCE(SUM(length(CAST(item AS BLOB)) + 1),0)+2 AS bytes,
+        COALESCE(MAX(CASE WHEN item IS NULL THEN 1500001 ELSE length(CAST(item AS BLOB)) END),0) AS largest_row,
+        ${rowLimit} AS row_limit FROM ${table}_rows`);
+      payloads.push(`SELECT '${table}' AS table_name, item AS payload FROM ${table}_rows`);
+    }
+    // D1 caps a compound SELECT at five terms. Materialized groups also
+    // prevent the planner flattening these bounded unions into a larger one.
+    const groupedUnion = (name: string, queries: string[]) => {
+      const groups: string[] = [];
+      for (let offset=0; offset<queries.length; offset+=4) {
+        const group = `${name}_${offset}`;
+        ctes.push(`${group} AS MATERIALIZED (${queries.slice(offset,offset+4).join(' UNION ALL ')})`);
+        groups.push(`SELECT * FROM ${group}`);
       }
-      remainingBytes -= measurement.bytes;
-      data[table] = result.results.filter(row => row.payload !== null).map(row => JSON.parse(row.payload!) as RecordRow);
+      return groups.join(' UNION ALL ');
+    };
+    const measuredSql = groupedUnion('measurement_group', measurements);
+    const payloadSql = groupedUnion('payload_group', payloads);
+    const result = await c.env.DB.prepare(`WITH ${ctes.join(',')},
+      measured AS MATERIALIZED (${measuredSql}),
+      budget AS (SELECT SUM(bytes) AS bytes, MAX(largest_row) AS largest_row,
+        MAX(CASE WHEN row_count>row_limit THEN 1 ELSE 0 END) AS too_many FROM measured),
+      payloads AS MATERIALIZED (${payloadSql})
+      SELECT NULL AS table_name, NULL AS payload, bytes, largest_row, too_many FROM budget
+      UNION ALL
+      SELECT table_name, payload, 0, 0, 0 FROM payloads, budget
+        WHERE bytes<=${EXPORT_BYTE_LIMIT - 4096} AND largest_row<=1500000 AND too_many=0`)
+      .bind(...bindings).all<{ table_name: string | null; payload: string | null; bytes: number; largest_row: number; too_many: number }>();
+    const measurement = result.results.find(row => row.table_name === null);
+    if (!measurement || measurement.bytes > EXPORT_BYTE_LIMIT - 4096 || measurement.largest_row > 1_500_000 || measurement.too_many) {
+      return c.json({ error: 'This account is too large for browser export. Ask your deployment administrator for a database export.' }, 413);
+    }
+    let account: RecordRow | null = null;
+    for (const table of Object.keys(EXPORT_COLUMNS)) data[table] = [];
+    for (const row of result.results) {
+      if (row.table_name === null || row.payload === null) continue;
+      const item = JSON.parse(row.payload) as RecordRow;
+      if (row.table_name === 'users') account = item;
+      else data[row.table_name].push(item);
     }
     c.header('Content-Disposition', 'attachment; filename="openfon-account.json"');
     return c.json({ schemaVersion: 1, exportedAt: new Date().toISOString(), account, data });
@@ -126,7 +158,8 @@ export function registerAccountApi(app: App): void {
     const deleted = await c.env.DB.prepare(`DELETE FROM users WHERE id=? AND password_hash=?
       AND EXISTS (SELECT 1 FROM sessions WHERE token=? AND user_id=? AND expires_at>?)
       AND NOT EXISTS (SELECT 1 FROM calls JOIN businesses ON businesses.id=calls.business_id
-        WHERE businesses.user_id=? AND calls.status='active') RETURNING id`)
+        WHERE businesses.user_id=? AND (calls.status='active'
+          OR (calls.reserved_at IS NOT NULL AND calls.carrier_released_at IS NULL))) RETURNING id`)
       .bind(userId, user.password_hash, getCookie(c, 'ofs') ?? '', userId, new Date().toISOString(), userId).first<{ id: string }>();
     // D1 meta.changes includes cascades; RETURNING identifies the deleted owner
     // directly instead of treating successful dependent deletes as a conflict.

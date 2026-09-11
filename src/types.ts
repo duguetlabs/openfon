@@ -2,6 +2,12 @@ export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
   CALL_SESSION: DurableObjectNamespace;
+  TELNYX_CALL?: DurableObjectNamespace;
+  TELNYX_ENABLED?: string;
+  TELNYX_API_KEY?: string;
+  TELNYX_PUBLIC_KEY?: string;
+  TELNYX_CONNECTION_ID?: string;
+  TELNYX_PUBLIC_ORIGIN?: string;
   // LLM (any OpenAI-compatible API)
   DEFAULT_LLM_BASE_URL: string;
   DEFAULT_LLM_MODEL: string;

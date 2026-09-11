@@ -56,3 +56,5 @@ After an analytics provider and data policy are selected, implement event names 
 - Announcement drafts and demo script: docs/launch/copy.md.
 - Product truth and release gate: docs/launch/readiness.md.
 - Search: title/description/Open Graph metadata and robots.txt. The build generates absolute canonical/social URLs and sitemap when OPENFON_PUBLIC_URL is supplied for the chosen production hostname.
+
+- Silent UI walkthrough: [video](demo/openfon-walkthrough.mp4), [poster](demo/poster.png), and [capture notes](demo/README.md). Fictional data and the absence of a real voice demonstration are disclosed throughout.

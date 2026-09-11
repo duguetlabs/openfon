@@ -1,49 +1,120 @@
-# Real phone numbers (PSTN)
+# Telephone calling
 
-OpenFon's built-in channel is **browser calling** — it needs no phone number, carrier
-contract, or per-minute fees, which is why it's the default for self-hosters.
+Browser calling remains the default supported channel. This branch adds an opt-in
+**inbound Telnyx adapter**, disabled by default. Local tests use simulated providers;
+a real carrier pilot is required before claiming production telephone support.
+The public website continues to describe browser calling until that pilot passes.
 
-Bridging a real phone number means connecting a telephony provider's audio stream to
-the same `CallSession` voice loop (STT → LLM → TTS). The `calls.channel` column and
-the session protocol were designed for this; what differs per provider is the media
-transport.
+## Scope
 
-## Twilio (recommended for self-hosters)
+The adapter answers an operator-routed Telnyx number using a published realtime
+assistant. It verifies signed webhooks, reserves shared workspace capacity before
+answering, authenticates the media stream, converts PCMU/8 kHz to the engine's
+PCM16/24 kHz audio, and supports interruption and playback-aware hangup.
 
-Twilio [Media Streams](https://www.twilio.com/docs/voice/media-streams) sends
-bidirectional call audio over a WebSocket — a natural fit for Workers:
+Number purchasing, porting, outbound dialing, transfers, emergency handling,
+recording, Twilio, and Azure Communication Services adapters are not implemented.
+Calendar requests remain requests; no calendar booking is performed.
 
-1. Buy a number in the Twilio console, point its Voice webhook at
-   `https://your-deployment/api/twilio/voice` (returns TwiML `<Connect><Stream>`).
-2. Twilio opens a WebSocket and streams 8 kHz μ-law audio both ways.
-3. A `TwilioBridge` adapts the frames to `CallSession`: μ-law → WAV for the STT
-   request, TTS output transcoded to μ-law (Azure Speech can emit
-   `raw-8khz-8bit-mono-mulaw` directly, so no transcoding code is needed).
+## Before configuration
 
-Status: **not yet shipped** — the bridge endpoint is the next planned milestone.
-Contributions welcome; the voice loop in `src/call-session.ts` is already
-transport-agnostic (it takes audio buffers in, emits audio buffers out).
+Use a staging Worker and an authorized Telnyx Voice API application and number.
+Confirm account eligibility, pricing, and call limits directly with the provider.
+Do not buy a number or enable traffic merely to run the local tests.
 
-## Azure Communication Services
+Apply all migrations, including `0009_telnyx_inbound.sql`, before deploying this
+Worker version. The migration is additive. Carrier reservations count toward the
+same live concurrency cap as browser calls, including the interval between an
+answer and media startup and the interval before carrier release is confirmed.
 
-ACS Call Automation supports inbound PSTN calls with
-[bidirectional media streaming](https://learn.microsoft.com/azure/communication-services/concepts/call-automation/audio-streaming-concept)
-over WebSocket (PCM 16 kHz — no transcoding needed at all).
+Keep `TELNYX_ENABLED` set to `false` until the controlled pilot is ready. Configure:
 
-Caveats found while building OpenFon:
+| Binding | Purpose |
+|---|---|
+| `TELNYX_API_KEY` | Secret used only against the fixed Telnyx HTTPS API. |
+| `TELNYX_PUBLIC_KEY` | Account Ed25519 webhook verification key, raw base64. |
+| `TELNYX_CONNECTION_ID` | The expected Voice API application/connection. |
+| `TELNYX_PUBLIC_ORIGIN` | Fixed HTTPS origin, without a path, query, or fragment. |
+| `TELNYX_CALL` | Durable Object binding configured in `wrangler.jsonc`. |
 
-- **Phone-number purchase is restricted by subscription type.** Sponsorship/trial
-  Azure subscriptions are rejected with `InsufficientPermissions: the subscription is
-  unable to purchase numbers at this time`. You need a pay-as-you-go or EA
-  subscription whose billing address is in a
-  [supported country](https://learn.microsoft.com/azure/communication-services/concepts/numbers/sub-eligibility-number-capability).
-- Inbound call events arrive via Event Grid → your Worker, which then answers the
-  call with the media-streaming WebSocket URL.
+Set secret values through your authorized secret manager and `wrangler secret put`;
+never commit credentials. In this personal project use `dsecret`, not `qsecret`.
+The existing realtime provider also needs working credentials. Native engine
+voices can speak their greeting; tiers with an externally synthesized greeting
+require configured Azure server TTS. Telephone calls never fall back to browser
+speech synthesis or the browser pipeline.
 
-## Design notes for contributors
+## Route an owned number
 
-- One Durable Object instance per call, regardless of channel — keyed by `callId`.
-- Keep the channel adapters thin: their only job is audio format conversion and
-  signaling. Conversation logic stays in `CallSession`.
-- Telephony audio is half-duplex in OpenFon's model: the agent does not listen while
-  speaking (barge-in is a future enhancement).
+Configure the application's V2 webhook URL as
+`https://YOUR_ORIGIN/api/telnyx/webhooks`. The adapter sends the media URL and a
+fresh per-call token through a separate `streaming_start` command. Do not place
+that token in a URL or configure a shared media token manually.
+
+Only the instance operator provisions `telnyx_number_routes`. A business's contact
+phone number does not grant ownership or create a route. Confirm the destination
+number is assigned to the configured Telnyx application, and map it to an existing
+workspace and published assistant:
+
+```sql
+INSERT INTO telnyx_number_routes
+  (connection_id, phone_number, business_id, assistant_id, enabled)
+VALUES
+  ('YOUR_CONNECTION_ID', '+YOUR_OWNED_E164_NUMBER', 'YOUR_BUSINESS_ID', 'YOUR_ASSISTANT_ID', 0);
+```
+
+These are placeholders. Use an actual E.164 number and verified IDs. The database
+checks that the assistant belongs to the workspace. Start disabled; enable only
+the specific route for the controlled pilot, then set the Worker rollout flag.
+No tenant-facing API can claim or purchase a telephone number.
+
+## Operation and failure handling
+
+`TelnyxCall` owns carrier lifecycle, durable event processing and command retries;
+`CallSession` continues to own the conversation. Stable command IDs survive retries.
+A signed hangup or an authenticated matching provider status confirming the call
+is no longer alive releases the reservation. An ambiguous HTTP response does not.
+The scheduled sweep wakes outstanding durable owners after interrupted processing.
+
+The media adapter validates the stream token, identity, codec and ordering before
+forwarding input. It retains at most the latest second of input while the realtime
+provider starts. Missing input packets are skipped after a bounded reorder wait;
+output uses 20 ms frames and bounded queues. Interruption clears queued playback
+and invalidates old acknowledgements. The goodbye waits for current playback marks
+with a deadline. These policies still need observation on an actual carrier leg.
+
+Disable the number route to stop new admission. Set `TELNYX_ENABLED=false` for a
+broader shutdown; existing authenticated terminal callbacks can still complete
+cleanup. Confirm release in both Telnyx and OpenFon. Do not manually clear a live
+reservation to bypass account deletion or concurrency checks. If provider status
+remains ambiguous, investigate the actual carrier leg first.
+
+Failure codes are intended for the workspace owner. Carrier control IDs, stream
+tokens, webhook bodies and authorization headers must not enter public DTOs or
+logs. Avoid adding caller audio or transcript content to diagnostic logging.
+
+## Validation
+
+Run the application tests and typecheck, then the local runtime harness:
+
+```sh
+npm test
+npm run typecheck
+npm run test:telnyx
+```
+
+The harness bundles the real Worker, uses ephemeral D1 and generated signing keys,
+and replaces outbound provider services with local mocks. It makes no real calls
+and rejects unexpected outbound destinations. It complements codec, signature,
+routing, retry, admission, account-deletion and lifecycle unit tests; it is not
+proof of carrier compatibility or voice quality.
+
+Before enabling public traffic, complete the controlled handset pilot and retain
+sanitized results described in [the carrier acceptance plan](launch/telephony-plan.md).
+Check actual audio in both directions, first greeting, interruptions, goodbye,
+caller disconnect, provider failure, a cap-of-one concurrent attempt, and carrier
+release after a forced media disconnect. Record the deployment version and model.
+
+Protocol references: [Telnyx WebSocket protocol](https://developers.telnyx.com/api-reference/websockets/stream-call-media-over-websocket),
+[streaming start](https://developers.telnyx.com/api-reference/call-commands/streaming-start),
+[webhook verification](https://developers.telnyx.com/docs/development/sdk/node/webhooks).

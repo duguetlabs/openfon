@@ -1,6 +1,6 @@
 # ☎ OpenFon
 
-**Open-source AI phone agent for small businesses.** OpenFon answers your calls 24/7, answers questions from facts *you* provide, takes messages, and logs every conversation with a transcript and summary — on infrastructure you own.
+**Open-source voice assistant for small businesses.** OpenFon answers from your business information, takes messages, and records transcripts and summaries in your Cloudflare account.
 
 Think of it as an open, self-hostable alternative to services like fonio.ai: no per-seat pricing, no vendor lock-in, your call data stays in your own database.
 
@@ -20,7 +20,7 @@ Transcripts, summaries, and messages land in your dashboard (D1/SQLite). When a 
 
 ## Launch status
 
-The current launch branch adds a public website and a complete browser-call studio: assistants, private tests, knowledge approval, call review, and account controls. Browser calling is the supported channel. Telephone-number integration and email password recovery are not available yet. Do not describe booking requests as confirmed calendar appointments.
+The current launch branch adds a public website and a complete browser-call studio: assistants, private tests, knowledge approval, call review, and account controls. Browser calling is the supported channel. Inbound Telnyx integration is implemented behind a disabled rollout flag and still needs a real carrier pilot. Email password recovery is not available yet. Do not describe booking requests as confirmed calendar appointments.
 
 ## Features
 
@@ -110,7 +110,7 @@ Set this only where every account belongs to you. On an instance with tenants it
 
 ### Real phone numbers (PSTN)
 
-Browser calls are the built-in channel. Hooking up a real phone number means bridging your telephony provider's media stream into the same `CallSession` Durable Object — see [`docs/telephony.md`](docs/telephony.md) for the current state and integration notes for Twilio and Azure Communication Services.
+Browser calls remain the default supported channel. The opt-in inbound Telnyx adapter uses `TelnyxCall` for carrier lifecycle and `CallSession` for the realtime conversation. It is disabled until configured and carrier-tested. See [`docs/telephony.md`](docs/telephony.md) for operator setup and the pilot gate. Outbound dialing and other carrier adapters are not implemented.
 
 ## Development
 
@@ -122,6 +122,7 @@ npm run typecheck
 npm test
 npx playwright install chromium
 npm run test:e2e  # isolated local database and test-only credentials; no remote deployment
+npm run test:telnyx # real local Worker runtime with simulated carrier/AI services
 ```
 
 Create a `.dev.vars` file (gitignored) with the secrets above for local development.
@@ -140,6 +141,6 @@ Create a `.dev.vars` file (gitignored) with the secrets above for local developm
 
 The release gate, remaining operator configuration, marketing strategy, and prepared announcement copy live in [`docs/launch/`](docs/launch/). Private account APIs support password changes, credential-free JSON exports, and deletion with password confirmation. A large export requires an administrator’s database export; account deletion refuses pending or active calls.
 
-`npm run test:e2e` starts its own local Worker on port 8790 and uses a fresh temporary database for each run. It never runs remote migrations. `PLAYWRIGHT_CHROMIUM_EXECUTABLE` can select an already-installed compatible Chromium for local checks; CI installs the matching browser.
+`npm run test:e2e` starts its own local Worker on port 8790 and uses a fresh temporary database for each run. It never runs remote migrations. `PLAYWRIGHT_CHROMIUM_EXECUTABLE` can select an already-installed compatible Chromium for local checks. Install the matching browser with `npx playwright install chromium` before running locally; CI installs its matching browser automatically and runs this suite.
 
-For a public deployment, set `OPENFON_PUBLIC_URL` to the intended HTTPS origin when building (for example, `OPENFON_PUBLIC_URL=https://your-domain.example npm run build`). The build emits the canonical URL, absolute social-image URL, and sitemap for that origin. Without it, local previews omit canonical/sitemap metadata rather than pointing at an invented domain.
+For GitHub Actions deployment, set the repository variable `OPENFON_PUBLIC_URL`; the deploy job passes it into the build. For a local public-deployment build, set `OPENFON_PUBLIC_URL` to the intended HTTPS origin when building (for example, `OPENFON_PUBLIC_URL=https://your-domain.example npm run build`). The build emits the canonical URL, absolute social-image URL, and sitemap for that origin. Without it, local previews omit canonical/sitemap metadata rather than pointing at an invented domain.
