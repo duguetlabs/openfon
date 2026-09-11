@@ -30,7 +30,7 @@ Updated 2026-09-12. **Release candidate in progress; not production-launch appro
 - Browser tests: 6/6 passed against actual local workerd, covering public desktop/mobile, signup, private draft setup, save/publish/pause/reload, knowledge approval/attachment, every menu, password/export/deletion, and authenticated typed private calls with transcript/summary persistence against a local mock provider. This does not verify live-provider audio. Interrupted setup recovery and D1 cascade deletion counts were corrected.
 - PR #13 head d6ea5d2: migration field validation and direct test-call reconciliation fixed following review; exact-head Codex reports no major issues and all existing CI checks pass. PR-Agent remains unavailable and its merge gate unresolved.
 
-Read-only production inspection is recorded in [production-preflight.md](production-preflight.md): remote migrations 0007/0008 remain pending, configured secret names do not establish validity, and workers.dev probes returned 403. No remote changes or successful deployed smoke test are claimed.
+Read-only production inspection is recorded in [production-preflight.md](production-preflight.md): remote migrations 0007/0008 remain pending, configured secret names do not establish validity, and browser-user-agent probes returned 200 for the public site and 401 for the signed-out account endpoint. Python-user-agent probes returned 403. No remote changes, authenticated production session, or real-provider conversation are claimed.
 
 ## Required release gate
 
