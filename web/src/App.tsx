@@ -16,6 +16,7 @@ import {
   SIGN_OUT_UNCONFIRMED_MESSAGE,
   type CompatibilitySessionSnapshot,
 } from './session-load';
+import { confirmDiscardUnsaved } from './unsaved-edits';
 import { studioSetupPending } from './session-gate';
 
 interface Session {
@@ -196,6 +197,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             {tab('/account', 'Account')}
             <button
               onClick={() => {
+                if (!confirmDiscardUnsaved()) return;
                 void signOut().catch(() => {
                   // The persistent auth-screen warning owns this handled error.
                 });
