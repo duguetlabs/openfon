@@ -67,6 +67,23 @@ export function registerTelnyxRoutes(app: Hono<{ Bindings: Env; Variables: { use
     const headers = new Headers({ Upgrade: 'websocket' });
     const token = c.req.header('x-telnyx-streaming-auth-token');
     if (!token || !/^[0-9a-f]{64}$/.test(token)) return c.json({ error: 'Invalid stream authorization' }, 403);
+    // Cloudflare supplies this header at the edge. Local requests without it
+    // share a bucket; never trust caller-controlled forwarding headers.
+    const source = c.req.header('CF-Connecting-IP')?.trim() || 'unknown';
+    const window = Math.floor(Date.now() / 60_000) * 60;
+    const admitted = await c.env.DB.prepare(
+      `INSERT INTO rate_counters (bucket, window_start, count) VALUES (?, ?, 1)
+       ON CONFLICT(bucket, window_start) DO UPDATE SET count=rate_counters.count+1
+         WHERE rate_counters.count<120 RETURNING count`
+    ).bind(`telnyx-media:${source}`, window).first();
+    if (!admitted) return c.json({ error: 'Too many stream attempts' }, 429, { 'Retry-After': '60' });
+    // Reject invented object names before DO dispatch. The owner still checks
+    // the secret token and current route policy; row existence is not auth.
+    const call = await c.env.DB.prepare(
+      `SELECT id FROM calls WHERE id=? AND channel='telnyx' AND status='active'
+        AND reserved_at IS NOT NULL AND carrier_released_at IS NULL`
+    ).bind(callId).first();
+    if (!call) return c.json({ error: 'Not found' }, 404);
     headers.set('x-telnyx-streaming-auth-token', token);
     const stub = c.env.TELNYX_CALL!.get(c.env.TELNYX_CALL!.idFromName(callId));
     return stub.fetch(new Request('https://internal/media', { headers }));

@@ -275,6 +275,39 @@ describe('signed ingress and provider API contract', () => {
     expect(requests).toHaveLength(0);
   });
 
+  it('rejects invented, released and inactive carrier IDs before DO dispatch', async () => {
+    const get = vi.fn(); env.TELNYX_CALL = { idFromName: (n: string) => n, get } as unknown as DurableObjectNamespace;
+    const request = () => new Request(`https://openfon.test/ws/telnyx/${callId}`, { headers: {
+      Upgrade: 'websocket', 'x-telnyx-streaming-auth-token': 'a'.repeat(64),
+    } });
+    expect((await worker.fetch(request(), env, fakeCtx)).status).toBe(404);
+    await reserveTelnyxCall(env, callId, correlation, '+12025550101', '+12025550100');
+    db.exec("UPDATE calls SET carrier_released_at=datetime('now')");
+    expect((await worker.fetch(request(), env, fakeCtx)).status).toBe(404);
+    db.exec("UPDATE calls SET carrier_released_at=NULL,status='completed'");
+    expect((await worker.fetch(request(), env, fakeCtx)).status).toBe(404);
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it('bounds media attempts without saturated writes, preserves lifecycle ingress and recovers next minute', async () => {
+    const get = vi.fn(() => ({ fetch: async () => new Response(null, { status: 204 }) }));
+    env.TELNYX_CALL = { idFromName: (n: string) => n, get } as unknown as DurableObjectNamespace;
+    await reserveTelnyxCall(env, callId, correlation, '+12025550101', '+12025550100');
+    const request = (forwarded = 'one') => new Request(`https://openfon.test/ws/telnyx/${callId}`, { headers: {
+      Upgrade: 'websocket', 'x-telnyx-streaming-auth-token': 'a'.repeat(64), 'X-Forwarded-For': forwarded,
+    } });
+    for (let i = 0; i < 120; i++) expect((await worker.fetch(request(), env, fakeCtx)).status).toBe(204);
+    const before = db.database.prepare('SELECT total_changes() AS n').get();
+    const blocked = await worker.fetch(request('spoofed-new-ip'), env, fakeCtx);
+    expect(blocked.status).toBe(429); expect(blocked.headers.get('Retry-After')).toBe('60');
+    expect(db.database.prepare('SELECT total_changes() AS n').get()).toEqual(before);
+    expect(get).toHaveBeenCalledTimes(120);
+    expect((await worker.fetch(webhook('call.hangup'), env, fakeCtx)).status).toBe(200);
+    vi.setSystemTime(Date.now() + 60_000);
+    expect((await worker.fetch(request(), env, fakeCtx)).status).toBe(204);
+    expect(get).toHaveBeenCalledTimes(122);
+  });
+
   it('uses fixed origin, escaped control token, and fails closed on redirects/errors', async () => {
     await sendTelnyxCommand(env, 'a/b?private#fragment', { action: 'hangup', body: { command_id: 'stable' } });
     expect(requests[0].url).toBe('https://api.telnyx.com/v2/calls/a%2Fb%3Fprivate%23fragment/actions/hangup');
