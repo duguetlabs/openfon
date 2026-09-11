@@ -1189,6 +1189,19 @@ export function registerStudioApi(app: StudioApp): void {
     return c.json({ callId, assistantId: assistant.id, environment: 'test' }, 201);
   });
 
+  // Cancellation only retires an unused, owner-authenticated test ticket. The
+  // DELETE races atomically with the socket's connected_at claim: whichever
+  // wins makes the other a no-op, without terminating an established call.
+  app.delete('/api/me/test-calls/:callId', async (c) => {
+    await c.env.DB.prepare(
+      `DELETE FROM calls WHERE id=? AND environment='test' AND channel='web'
+         AND status='active' AND connected_at IS NULL
+         AND business_id IN (SELECT id FROM businesses WHERE user_id=?)`
+    ).bind(c.req.param('callId'), c.get('userId')).run();
+    // Idempotent and opaque for unknown, foreign, live, or already-used tickets.
+    return c.json({ ok: true });
+  });
+
   app.get('/api/me/calls', async (c) => {
     const workspace = await workspaceForUser(c.env, c.get('userId'));
     if (!workspace) return c.json({ items: [], nextCursor: null });

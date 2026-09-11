@@ -255,9 +255,10 @@ export class ApiError extends Error {
   }
 }
 
-async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function req<T>(method: string, path: string, body?: unknown, keepalive = false): Promise<T> {
   const res = await fetch(path, {
     method,
+    keepalive,
     headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -288,6 +289,7 @@ export const api = {
   updateAssistant: (id: string, assistant: Partial<Assistant>) => req<Assistant>('PUT', `/api/me/assistants/${id}`, assistant),
   activateAssistant: (id: string) => req<{ ok: true; state: 'active' }>('POST', `/api/me/assistants/${id}/activate`, {}),
   pauseAssistant: (id: string) => req<{ ok: true; state: 'paused' }>('POST', `/api/me/assistants/${id}/pause`, {}),
+  cancelTestCall: (id: string) => req<{ ok: true }>('DELETE', `/api/me/test-calls/${encodeURIComponent(id)}`, undefined, true),
   startTestCall: (id: string) => req<{ callId: string; assistantId: string; environment: 'test' }>('POST', `/api/me/assistants/${id}/test-calls`, {}),
   callPage: (params: URLSearchParams) => req<CallsPage>('GET', `/api/me/calls?${params.toString()}`),
   overview: (days: 7 | 30 | 90 = 30) => req<OverviewResponse>('GET', `/api/me/overview?days=${days}`),
