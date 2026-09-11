@@ -1426,6 +1426,7 @@ describe('Calm Studio API foundation', () => {
          VALUES (?, ?, ?, 'test', 'inbound')`
       );
       for (let i = 0; i < 100; i++) insert.run(`raced-test-${i}`, workspace.id, assistant.id);
+      vi.setSystemTime(new Date('2026-08-11T12:00:00Z'));
     };
 
     const blocked = await request(env, `/api/me/assistants/${assistant.id}/test-calls`, json('POST', {}));
@@ -1433,12 +1434,63 @@ describe('Calm Studio API foundation', () => {
 
     expect(blocked.status).toBe(429);
     expect(raced).toBe(true);
+    expect(blocked.headers.get('Retry-After')).toBe('86400');
     expect(
       db.database.prepare("SELECT COUNT(*) AS n FROM calls WHERE business_id=? AND environment='test'").get(workspace.id)
     ).toEqual({ n: 100 });
     expect(db.database.prepare("SELECT COUNT(*) AS n FROM rate_counters WHERE bucket LIKE 'studio:%'").get()).toEqual({
       n: 0,
     });
+  });
+
+  it('expires the rolling test allowance at its exact boundary using the request clock', async () => {
+    const workspace = (await createWorkspace()) as { id: string };
+    const { assistants } = await data<{ assistants: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'));
+    const assistant = assistants[0];
+    const insert = db.database.prepare(
+      `INSERT INTO calls (id, business_id, assistant_id, environment, started_at)
+       VALUES (?, ?, ?, 'test', ?)`
+    );
+    for (let i = 0; i < 99; i++) {
+      insert.run(`recent-${i}`, workspace.id, assistant.id, '2026-08-09 13:00:00');
+    }
+    insert.run('expired-at-boundary', workspace.id, assistant.id, '2026-08-09 12:00:00');
+
+    // Move the database/test clock while the request is awaiting its INSERT.
+    // The atomic ceiling and new call must retain the captured request instant.
+    let advanced = false;
+    db.hook = (sql) => {
+      if (advanced || !sql.trim().startsWith('INSERT INTO calls')) return;
+      advanced = true;
+      vi.setSystemTime(new Date('2026-08-11T12:00:00Z'));
+    };
+    const accepted = await request(env, `/api/me/assistants/${assistant.id}/test-calls`, json('POST', {}));
+    db.hook = null;
+    expect(accepted.status).toBe(201);
+    const { callId } = await data<{ callId: string }>(accepted);
+    expect(db.database.prepare('SELECT started_at FROM calls WHERE id=?').get(callId)).toEqual({
+      started_at: '2026-08-10 12:00:00',
+    });
+
+    vi.setSystemTime(new Date('2026-08-10T12:00:00Z'));
+    const blocked = await request(env, `/api/me/assistants/${assistant.id}/test-calls`, json('POST', {}));
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get('Retry-After')).toBe('3600');
+    vi.setSystemTime(new Date('2026-08-10T13:00:00Z'));
+    expect((await request(env, `/api/me/assistants/${assistant.id}/test-calls`, json('POST', {}))).status).toBe(201);
+  });
+
+  it('bounds daily retry hints when stored timestamps are ahead of the request clock', async () => {
+    const workspace = (await createWorkspace()) as { id: string };
+    const { assistants } = await data<{ assistants: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'));
+    const insert = db.database.prepare(
+      `INSERT INTO calls (id, business_id, assistant_id, environment, started_at)
+       VALUES (?, ?, ?, 'test', '2026-09-11 12:00:00')`
+    );
+    for (let i = 0; i < 100; i++) insert.run(`future-${i}`, workspace.id, assistants[0].id);
+    const blocked = await request(env, `/api/me/assistants/${assistants[0].id}/test-calls`, json('POST', {}));
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get('Retry-After')).toBe('86400');
   });
 
   it('enforces independent daily ceilings for test calls and provider checks without creating extra work', async () => {

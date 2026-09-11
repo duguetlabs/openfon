@@ -41,20 +41,21 @@ function rollingDayRetryAfter(oldestStartedAt: string | undefined, now = Date.no
   if (!oldestStartedAt) return DAY_SECONDS;
   const startedAt = sqliteTimestampMs(oldestStartedAt);
   if (!Number.isFinite(startedAt)) return DAY_SECONDS;
-  return Math.max(1, Math.ceil((startedAt + DAY_SECONDS * 1000 - now) / 1000));
+  return Math.min(DAY_SECONDS, Math.max(1, Math.ceil((startedAt + DAY_SECONDS * 1000 - now) / 1000)));
 }
 
 async function testCallDayState(
   env: Env,
-  businessId: string
+  businessId: string,
+  now: number
 ): Promise<{ count: number; oldest_started_at: string | null }> {
   return (
     (await env.DB.prepare(
       `SELECT COUNT(*) AS count, MIN(started_at) AS oldest_started_at FROM calls
         WHERE business_id=? AND environment='test'
-          AND started_at > datetime('now', '-1 day')`
+          AND started_at > datetime(?, 'unixepoch', '-1 day')`
     )
-      .bind(businessId)
+      .bind(businessId, now / 1000)
       .first<{ count: number; oldest_started_at: string | null }>()) ?? { count: 0, oldest_started_at: null }
   );
 }
@@ -1100,10 +1101,10 @@ export function registerStudioApi(app: StudioApp): void {
     const minuteRetryAfter = String(fixedWindowRetryAfter(60, rateLimitNow));
     // This read makes a known-full rolling day a zero-write refusal. The
     // conditional INSERT below remains the authority for concurrent requests.
-    const dayState = await testCallDayState(c.env, assistant.business_id);
+    const dayState = await testCallDayState(c.env, assistant.business_id, rateLimitNow);
     if (dayState.count >= TEST_CALLS_PER_DAY) {
       return c.json({ error: 'Daily test-call limit reached. Try again tomorrow.' }, 429, {
-        'Retry-After': String(rollingDayRetryAfter(dayState.oldest_started_at ?? undefined)),
+        'Retry-After': String(rollingDayRetryAfter(dayState.oldest_started_at ?? undefined, rateLimitNow)),
       });
     }
     const knownIpLimit = await studioIpLimitAtCapacity(c.env, c.req.header('CF-Connecting-IP'), rateLimitNow);
@@ -1146,26 +1147,28 @@ export function registerStudioApi(app: StudioApp): void {
     }
     const callId = newId();
     const inserted = await c.env.DB.prepare(
-      `INSERT INTO calls (id, business_id, assistant_id, channel, caller_id, environment, direction)
-       SELECT ?, ?, ?, 'web', ?, 'test', 'inbound'
+      `INSERT INTO calls (id, business_id, assistant_id, channel, caller_id, environment, direction, started_at)
+       SELECT ?, ?, ?, 'web', ?, 'test', 'inbound', datetime(?, 'unixepoch')
         WHERE (SELECT COUNT(*) FROM calls
                 WHERE business_id=? AND environment='test'
-                  AND started_at > datetime('now', '-1 day')) < ?`
+                  AND started_at > datetime(?, 'unixepoch', '-1 day')) < ?`
     )
       .bind(
         callId,
         assistant.business_id,
         assistant.id,
         `owner:${c.get('userId')}`,
+        rateLimitNow / 1000,
         assistant.business_id,
+        rateLimitNow / 1000,
         TEST_CALLS_PER_DAY
       )
       .run();
     if ((inserted.meta.changes ?? 0) !== 1) {
       await refundStudioSpend(c.env, reservations);
-      const currentDay = await testCallDayState(c.env, assistant.business_id);
+      const currentDay = await testCallDayState(c.env, assistant.business_id, rateLimitNow);
       return c.json({ error: 'Daily test-call limit reached. Try again tomorrow.' }, 429, {
-        'Retry-After': String(rollingDayRetryAfter(currentDay.oldest_started_at ?? undefined)),
+        'Retry-After': String(rollingDayRetryAfter(currentDay.oldest_started_at ?? undefined, rateLimitNow)),
       });
     }
     return c.json({ callId, assistantId: assistant.id, environment: 'test' }, 201);

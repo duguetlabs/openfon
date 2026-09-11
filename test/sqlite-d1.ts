@@ -40,10 +40,22 @@ class SqliteStatement {
 
 export class SqliteD1 {
   readonly database = new DatabaseSync(':memory:');
+  private readonly clockDatabase = new DatabaseSync(':memory:');
   hook: ((sql: string) => void) | null = null;
 
   constructor() {
     this.database.exec('PRAGMA foreign_keys = ON;');
+    // SQLite's native wall clock ignores Vitest's fake timers. Delegate date
+    // arithmetic to native SQLite, but resolve 'now' from the application clock
+    // so defaults, expiry checks, and request timestamps share the same instant.
+    this.database.function('datetime', { varargs: true }, (...args) => {
+      const values = (args.length ? args : ['now']).map((value) =>
+        value === 'now' ? new Date(Date.now()).toISOString() : value
+      );
+      const row = this.clockDatabase.prepare(`SELECT datetime(${values.map(() => '?').join(',')}) AS value`)
+        .get(...values) as { value: string | null };
+      return row.value;
+    });
   }
 
   prepare(sql: string): SqliteStatement {
@@ -69,6 +81,7 @@ export class SqliteD1 {
 
   close(): void {
     this.database.close();
+    this.clockDatabase.close();
   }
 }
 
