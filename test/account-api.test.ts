@@ -79,6 +79,39 @@ describe('account self service', () => {
     expect(JSON.parse(text).data.businesses).toHaveLength(1);
   });
 
+  it('reads account, calls and turns in one snapshot when finalization happens between operations', async () => {
+    db.exec("INSERT INTO calls(id,business_id,status) VALUES ('snapshot-call','biz-owner','active')");
+    let exportReads = 0;
+    db.hook = sql => {
+      // Simulate a finalizer getting its turn before the next database read.
+      // The old per-table export reads calls first, then sees new turns later.
+      if (!sql.includes('json_object(')) return;
+      exportReads++;
+      if (sql.includes('FROM call_turns')) {
+        db.exec("UPDATE calls SET status='completed',summary='Finished' WHERE id='snapshot-call'; INSERT INTO call_turns(call_id,role,text) VALUES ('snapshot-call','caller','Final transcript')");
+      }
+    };
+    const response = await call('/api/me/account/export');
+    expect(response.status).toBe(200);
+    const exported = await response.json() as { account: { id: string }; data: { calls: Array<{ status: string; summary: string }>; call_turns: Array<{ text: string }> } };
+    expect(exported.account.id).toBe('owner');
+    expect(exported.data.call_turns[0].text).toBe('Final transcript');
+    expect(exported.data.calls[0]).toMatchObject({ status: 'completed', summary: 'Finished' });
+    expect(exportReads).toBe(1);
+  });
+
+  it('enforces a combined byte budget across otherwise individually bounded tables', async () => {
+    const assistant = db.database.prepare('INSERT INTO assistants(id,business_id,public_slug,name,persona) VALUES (?,?,?,?,?)');
+    const callRow = db.database.prepare('INSERT INTO calls(id,business_id,summary) VALUES (?,?,?)');
+    for (let i=0; i<12; i++) {
+      assistant.run(`a${i}`, 'biz-owner', `slug${i}`, 'Agent', 'x'.repeat(190000));
+      callRow.run(`c${i}`, 'biz-owner', 'y'.repeat(190000));
+    }
+    const response = await call('/api/me/account/export');
+    expect(response.status).toBe(413);
+    expect((await response.text()).length).toBeLessThan(1024);
+  });
+
   it('exports wide records under the D1 function argument limit without losing null fields', async () => {
     const native = new DatabaseSync(':memory:');
     db.database.function('json_object', { varargs: true }, (...args) => {
