@@ -4,9 +4,11 @@ import { api, type Assistant, type Business, type Me } from './api';
 import { Logo, Spinner } from './ui';
 import AuthPage from './pages/Auth';
 import Onboarding from './pages/Onboarding';
-import Dashboard from './pages/Dashboard';
+import Landing from './pages/Landing';
+import { Overview, Assistants, AssistantEditor, Calls, TestStudio, Knowledge } from './pages/Studio';
 import CallDetailPage from './pages/CallDetail';
 import Settings from './pages/Settings';
+import Account from './pages/Account';
 import Widget from './pages/Widget';
 import {
   CompatibilitySessionCoordinator,
@@ -14,7 +16,7 @@ import {
   SIGN_OUT_UNCONFIRMED_MESSAGE,
   type CompatibilitySessionSnapshot,
 } from './session-load';
-import { compatibilitySetupPending } from './session-gate';
+import { studioSetupPending } from './session-gate';
 
 interface Session {
   me: Me | null;
@@ -126,22 +128,29 @@ export default function App() {
       }}
     >
       <Routes>
+        <Route path="/" element={<Landing />} />
         <Route path="/call/:slug" element={<Widget />} />
-        <Route path="/auth" element={me ? <Navigate to="/" replace /> : <AuthPage />} />
+        <Route path="/auth" element={me ? <Navigate to="/overview" replace /> : <AuthPage />} />
         <Route
           path="/*"
           element={
             !me ? (
               <Navigate to="/auth" replace />
-            ) : compatibilitySetupPending(business, workspaceReady, firstAssistantReady, firstAssistant) ? (
+            ) : studioSetupPending(business, workspaceReady, firstAssistant) ? (
               <Onboarding />
             ) : (
               <Shell>
                 <Routes>
-                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/overview" element={<Overview />} />
+                  <Route path="/assistants" element={<Assistants />} />
+                  <Route path="/assistants/:assistantId" element={<AssistantEditor />} />
+                  <Route path="/test" element={<TestStudio />} />
+                  <Route path="/knowledge" element={<Knowledge />} />
+                  <Route path="/calls" element={<Calls />} />
                   <Route path="/calls/:callId" element={<CallDetailPage />} />
                   <Route path="/settings" element={<Settings />} />
-                  <Route path="*" element={<Navigate to="/" replace />} />
+                  <Route path="/account" element={<Account />} />
+                  <Route path="*" element={<Navigate to="/overview" replace />} />
                 </Routes>
               </Shell>
             )
@@ -153,14 +162,15 @@ export default function App() {
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
-  const { business, signOut } = useSession();
+  const { signOut } = useSession();
   const nav = useNavigate();
   const loc = useLocation();
   const tab = (path: string, label: string) => (
     <Link
       to={path}
+      aria-current={(loc.pathname === path || loc.pathname.startsWith(path + '/')) ? 'page' : undefined}
       className={`rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-colors ${
-        loc.pathname === path
+        (loc.pathname === path || (path !== '/overview' && loc.pathname.startsWith(path + '/')))
           ? 'bg-wash-iris text-iris shadow-[inset_0_0_0_1px_rgb(88_73_190/0.18)]'
           : 'text-ink-soft hover:bg-wash-iris/60 hover:text-ink'
       }`}
@@ -169,25 +179,21 @@ function Shell({ children }: { children: React.ReactNode }) {
     </Link>
   );
   return (
-    <div className="atmosphere flex min-h-screen flex-col bg-base">
+    <div className="studio-theme atmosphere flex min-h-screen flex-col bg-base">
+      <a className="studio-skip" href="#workspace-content">Skip to workspace content</a>
       <header className="sticky top-0 z-10 border-b border-line bg-base/85 backdrop-blur-md">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-5 py-3">
-          <Link to="/">
+        <div className="studio-shell-header mx-auto w-full max-w-6xl px-5 py-3">
+          <Link to="/overview">
             <Logo />
           </Link>
-          <nav className="flex items-center gap-1">
-            {tab('/', 'Calls')}
+          <nav className="studio-nav" aria-label="Workspace">
+            {tab('/overview', 'Overview')}
+            {tab('/assistants', 'Assistants')}
+            {tab('/test', 'Test Studio')}
+            {tab('/calls', 'Calls')}
+            {tab('/knowledge', 'Knowledge')}
             {tab('/settings', 'Settings')}
-            {business && (
-              <a
-                href={`/call/${business.slug}`}
-                target="_blank"
-                rel="noreferrer"
-                className="ml-2 hidden rounded-lg border border-iris/30 bg-surface px-3.5 py-1.5 text-sm font-semibold text-iris shadow-lift transition-colors hover:border-iris hover:bg-iris hover:text-white sm:block"
-              >
-                Test call ↗
-              </a>
-            )}
+            {tab('/account', 'Account')}
             <button
               onClick={() => {
                 void signOut().catch(() => {
@@ -202,7 +208,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-10">{children}</main>
+      <main id="workspace-content" tabIndex={-1} className="studio-shell-main mx-auto w-full max-w-5xl flex-1 px-5 py-10">{children}</main>
       <footer className="mx-auto w-full max-w-5xl px-5 pb-8">
         <div className="callline mb-5" />
         <div className="flex flex-wrap items-center justify-between gap-2">

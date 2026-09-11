@@ -1,10 +1,10 @@
-import type { ReactNode, InputHTMLAttributes, TextareaHTMLAttributes, ButtonHTMLAttributes } from 'react';
+import { useId, type ReactNode, type InputHTMLAttributes, type TextareaHTMLAttributes, type ButtonHTMLAttributes } from 'react';
 
 export function Logo({ dark = false, size = 'md' }: { dark?: boolean; size?: 'md' | 'lg' }) {
   return (
     <span className={`inline-flex items-center gap-2 ${size === 'lg' ? 'text-3xl' : 'text-xl'}`}>
       <svg viewBox="0 0 32 32" className={size === 'lg' ? 'h-9 w-9' : 'h-7 w-7'} aria-hidden>
-        <circle cx="16" cy="16" r="15" fill={dark ? '#FAF6EF' : '#5849BE'} />
+        <circle cx="16" cy="16" r="15" fill={dark ? '#FAF6EF' : '#233fca'} />
         <path
           d="M10 9c4 0 13 9 13 13 0 1.5-2.5 4-4 4-.8 0-3-1.5-3-2.5 0-.8 1.5-2 1.5-2.7 0-1-4.3-5.3-5.3-5.3-.7 0-1.9 1.5-2.7 1.5C8.5 17 7 14.8 7 14c0-1.5 1.5-5 3-5z"
           fill={dark ? '#1F4D3A' : '#FFFFFF'}
@@ -56,12 +56,16 @@ export function Field({
   hint,
   ...props
 }: InputHTMLAttributes<HTMLInputElement> & { label: string; hint?: string }) {
+  const generatedId = useId();
+  const id = props.id || generatedId;
+  const hintId = `${id}-hint`;
+  const description = [props['aria-describedby'], hint ? hintId : undefined].filter(Boolean).join(' ') || undefined;
   return (
-    <label className="block">
-      <FieldLabel>{label}</FieldLabel>
-      <input className={inputClass} {...props} />
-      {hint && <span className="mt-1.5 block text-xs leading-relaxed text-ink-soft">{hint}</span>}
-    </label>
+    <div className="block">
+      <label htmlFor={id}><FieldLabel>{label}</FieldLabel></label>
+      <input className={inputClass} {...props} id={id} aria-describedby={description} />
+      {hint && <span id={hintId} className="mt-1.5 block text-xs leading-relaxed text-ink-soft">{hint}</span>}
+    </div>
   );
 }
 
@@ -70,12 +74,16 @@ export function TextArea({
   hint,
   ...props
 }: TextareaHTMLAttributes<HTMLTextAreaElement> & { label: string; hint?: string }) {
+  const generatedId = useId();
+  const id = props.id || generatedId;
+  const hintId = `${id}-hint`;
+  const description = [props['aria-describedby'], hint ? hintId : undefined].filter(Boolean).join(' ') || undefined;
   return (
-    <label className="block">
-      <FieldLabel>{label}</FieldLabel>
-      <textarea className={inputClass} rows={3} {...props} />
-      {hint && <span className="mt-1.5 block text-xs leading-relaxed text-ink-soft">{hint}</span>}
-    </label>
+    <div className="block">
+      <label htmlFor={id}><FieldLabel>{label}</FieldLabel></label>
+      <textarea className={inputClass} rows={3} {...props} id={id} aria-describedby={description} />
+      {hint && <span id={hintId} className="mt-1.5 block text-xs leading-relaxed text-ink-soft">{hint}</span>}
+    </div>
   );
 }
 

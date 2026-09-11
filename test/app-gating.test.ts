@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Assistant } from '../web/src/api';
-import { compatibilityAssistant, compatibilitySetupPending } from '../web/src/session-gate';
+import { compatibilityAssistant, compatibilitySetupPending, studioSetupPending } from '../web/src/session-gate';
 
 function assistant(publicSlug: string, state: Assistant['state']): Assistant {
-  return { public_slug: publicSlug, state } as Assistant;
+  return { public_slug: publicSlug, state, name: 'Alex', persona: 'Friendly', language: 'en' } as Assistant;
 }
 
 describe('compatibility UI setup gate', () => {
@@ -27,5 +27,22 @@ describe('compatibility UI setup gate', () => {
 
   it('keeps a paused primary in the activation-capable onboarding path', () => {
     expect(compatibilitySetupPending({ slug: 'primary-link' }, true, true, assistant('primary-link', 'paused'))).toBe(true);
+  });
+});
+
+
+describe('studio setup gate', () => {
+  it('allows draft and paused assistants without publishing their public line', () => {
+    for (const state of ['draft', 'paused', 'active'] as const) {
+      expect(studioSetupPending({ slug: 'primary' }, true, assistant('primary', state))).toBe(false);
+    }
+  });
+  it('resumes setup when a partial workspace has an unnamed draft', () => {
+    expect(studioSetupPending({ slug: 'primary' }, true, { ...assistant('primary', 'draft'), name: '' })).toBe(true);
+  });
+  it('still requires the workspace and first assistant to exist', () => {
+    expect(studioSetupPending(null, true, assistant('primary', 'active'))).toBe(true);
+    expect(studioSetupPending({ slug: 'primary' }, false, assistant('primary', 'active'))).toBe(true);
+    expect(studioSetupPending({ slug: 'primary' }, true, null)).toBe(true);
   });
 });

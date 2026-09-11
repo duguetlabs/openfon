@@ -25,6 +25,7 @@ export default function Settings() {
   const [closures, setClosures] = useState<ClosureRow[]>([]);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [saved, setSaved] = useState('');
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [profiles, setProfiles] = useState<EngineProfile[]>([]);
   const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
@@ -32,7 +33,9 @@ export default function Settings() {
   const [clearApiKey, setClearApiKey] = useState(false);
 
   useEffect(() => {
-    if (business) {
+    let active = true;
+    if (business) void api.business().then((business) => {
+      if (!active || !business) return;
       setBiz({ ...business });
       setHours(readHourRows(business.hours_json, []));
       setServices(readServiceRows(business.services_json));
@@ -42,12 +45,15 @@ export default function Settings() {
       setClearApiKey(false);
       void api.profiles(business.id).then(setProfiles).catch(() => {});
       void api.voices().then(setVoiceCatalog).catch(() => {});
-    }
+    }).catch((e) => { if (active) setError(e instanceof Error ? e.message : 'Could not load settings'); });
+    return () => { active = false; };
   }, [business]);
 
-  if (!biz || !agent) return null;
+  if (!biz || !agent) return <p role={error ? 'alert' : 'status'}>{error || 'Loading workspace settings…'}</p>;
 
   async function save() {
+    if (saving) return;
+    setSaving(true);
     setError('');
     setSaved('');
     try {
@@ -65,7 +71,7 @@ export default function Settings() {
       setTimeout(() => setSaved(''), 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
-    }
+    } finally { setSaving(false); }
   }
 
   const set = (patch: Partial<Business>) => setBiz({ ...biz, ...patch });
@@ -208,7 +214,7 @@ export default function Settings() {
       </section>
 
       <section className="rise rise-1">
-        <SectionTitle sub="Who picks up the phone.">Receptionist</SectionTitle>
+        <SectionTitle sub="These legacy settings apply to your first assistant. Manage additional assistants in the Assistants menu.">Primary assistant</SectionTitle>
         <Card className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Agent name" value={agent.agent_name} onChange={(e) => setA({ agent_name: e.target.value })} />
@@ -337,7 +343,7 @@ export default function Settings() {
       </section>
 
       <section className="rise rise-2">
-        <SectionTitle sub="OpenFon speaks the OpenAI API dialect — point it at Kataleptic, OpenAI, Groq, Ollama, or your own server. Empty model and endpoint fields use instance defaults; saved API keys stay until explicitly replaced or removed.">
+        <SectionTitle sub="Provider endpoint and credentials are shared by all assistants. Engine and voice settings below apply to your primary assistant. OpenFon speaks the OpenAI API dialect — point it at Kataleptic, OpenAI, Groq, Ollama, or your own server. Empty model and endpoint fields use instance defaults; saved API keys stay until explicitly replaced or removed.">
           AI provider
         </SectionTitle>
         <Card className="space-y-4">
@@ -478,7 +484,7 @@ export default function Settings() {
         <div className="flex items-center gap-3">
           {saved && <span className="text-sm font-semibold text-ok">{saved}</span>}
           {error && <span className="text-sm text-rose">{error}</span>}
-          <Button onClick={() => void save()}>Save changes</Button>
+          <Button disabled={saving} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</Button>
         </div>
       </div>
     </div>
