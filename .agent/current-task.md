@@ -3,8 +3,8 @@
 - Status: In progress
 - Owner/active agent: Codex /root; foundation_fix reviews, studio_app marketing capture
 - Branch: codex/telnyx-inbound at /tmp/openfon-telephony
-- Base commit: ff9b2444b91cb2f51fb68ae5a3e99ffefa934f2d (launch PR #14; merged into this branch)
-- Last updated: 2026-09-11T22:44:28.197904+00:00
+- Base commit: 3cad16bcd699b14979c5178bc2b587bbae30cef9 (PR #14; merged into this branch)
+- Last updated: 2026-09-11T22:53:20.383659+00:00
 - Applicable AGENTS.md: repository AGENTS.md and user-provided project instructions
 - Read first: this file, docs/launch/readiness.md, docs/telephony.md, docs/launch/production-preflight.md
 
@@ -19,7 +19,7 @@ Unapproved spending, external marketing distribution, real carrier calls without
 
 ## Confirmed facts
 - PR #13 branch agent/calm-studio-foundation at d6ea5d2: exact-head Codex no-major finding and CI green. Separate worktree /tmp/openfon-foundation-review.
-- PR #14 codex/launch-review at db7e361: all four CI jobs green including5browser scenarios; latest Codex review pending. Separate worktree /tmp/openfon-launch-review. It includes app, website, account controls, benchmark fixes and CI.
+- PR #14 codex/launch-review at3cad16b: latest review findings fixed (one-snapshot export, production-origin wiring, cancelled reservation cleanup). Local283unit/6browser pass; fresh CI/Codex pending. Earlierdb7e361 all four CI jobs green. Separate worktree /tmp/openfon-launch-review. It includes app, website, account controls, benchmark fixes and CI.
 - Mandatory PR-Agent is unavailable; personal reusable infrastructure probes returned404 and historical instructions forbid private cross-org qapture caller. User's async substitute-review question remains unanswered. Never merge around this gate.
 - Workflow OAuth scope is NO LONGER blocked: existing authorized GitHub connector published prepared CI as fabdee7 without expanding account access. Canceled old gh auth refresh; no scope grant needed.
 - Read-only Cloudflare preflight: Worker openfon exists, migrations0007/0008 pending; known workers.dev endpoint probes403. Secret names inspected only, values not read. See production-preflight.md. No deployment/migration/secret update occurred.
@@ -41,8 +41,8 @@ Unapproved spending, external marketing distribution, real carrier calls without
 - Independent review found/fixed unowned outgoing leg commands, expired-alarm hot loop, shutdown callback handling, exact number authorization, account deletion race, persistent failure reporting and arbitrary DO instantiation.
 
 ## Work remaining
-- Publish dependent Telnyx PR with actual runtime harness in CI; obtain exact-head reviews and resolve real findings.
-- Complete truthful silent UI walkthrough capture in /tmp/openfon-launch-review/docs/launch/demo/ (studio_app); root integrates after verification.
+- PR #15 open (codex/telnyx-inbound → codex/launch-review), code and security reviews requested. Actual carrier runtime harness included in CI. Obtain exact-head reviews and resolve real findings.
+- Silent UI walkthrough verified and committed in docs/launch/demo/ (31.7 seconds, no audio, fictional data caption). Marketing distribution remains unsent.
 - Continue PR #14 review; satisfy mandatory PR-Agent gate before merging any PR.
 - Confirm production identity/access/provider; backup/staging migration/rollback drill then actual provider/carrier pilot before launch. No production ready claim.
 - Eventually consolidate final verified branch into original checkout without touching user research.
@@ -52,10 +52,10 @@ Unapproved spending, external marketing distribution, real carrier calls without
 - All worktrees share dependency symlink; node_modules is untracked in /tmp worktrees and must not be committed.
 
 ## Validation
-- npm test:419/419 across19 files after merge and ingressfix.
+- npm test:424/424 across20 files after merge and ingressfix.
 - npm run typecheck:passed.
 - npm run test:telnyx:passed against actual local workerd, signed ingress, duplicate admission, valid-shaped forged token rejected, bidirectional non-silent PCM, interruption/marks/hangup and D1release. All outbound services mocked.
-- Browser test:e2e:5/5 passed on consolidated carrier branch; build included.
+- Browser test:e2e:6/6 passed on consolidated carrier branch; build included.
 - Launch CI:app, browser, scoring and realtime green atdb7e361. Python suites220(one existing skip)/206; npm audit zero after upgrades.
 - Initial runtime failures above fixed; current passing harness supersedes them.
 

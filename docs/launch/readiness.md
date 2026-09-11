@@ -22,12 +22,12 @@ Updated 2026-09-12. **Release candidate in progress; not production-launch appro
 
 ## Validation evidence
 
-- Application unit/API suite after dependency upgrades: 419/419 passed across 19 files.
+- Application unit/API suite after dependency upgrades: 424/424 passed across 20 files.
 - TypeScript: passed after Workers types 5 / React Router 7 / Vitest 5 upgrades.
 - Quality benchmarks: 220 tests, one existing skip.
 - Realtime benchmarks: 206 tests; standalone report checker passed.
 - Dependency audit: zero vulnerabilities (including development dependencies at upgrade).
-- Browser tests: 5/5 passed against actual local workerd, covering public desktop/mobile, signup, private draft setup, save/publish/pause/reload, knowledge approval/attachment, every menu, password/export/deletion, and authenticated typed private calls with transcript/summary persistence against a local mock provider. This does not verify live-provider audio. Interrupted setup recovery and D1 cascade deletion counts were corrected.
+- Browser tests: 6/6 passed against actual local workerd, covering public desktop/mobile, signup, private draft setup, save/publish/pause/reload, knowledge approval/attachment, every menu, password/export/deletion, and authenticated typed private calls with transcript/summary persistence against a local mock provider. This does not verify live-provider audio. Interrupted setup recovery and D1 cascade deletion counts were corrected.
 - PR #13 head d6ea5d2: migration field validation and direct test-call reconciliation fixed following review; exact-head Codex reports no major issues and all existing CI checks pass. PR-Agent remains unavailable and its merge gate unresolved.
 
 Read-only production inspection is recorded in [production-preflight.md](production-preflight.md): remote migrations 0007/0008 remain pending, configured secret names do not establish validity, and workers.dev probes returned 403. No remote changes or successful deployed smoke test are claimed.
@@ -47,7 +47,7 @@ Read-only production inspection is recorded in [production-preflight.md](product
 
 Use this repository's Cloudflare deployment, not an unrelated website host. The target account must be Duguet Labs and credentials must come from `dsecret`/the scoped environment. `npm run deploy` includes **remote migrations** and is not a preview command.
 
-Before deployment, record current Worker version and migration list, export D1, and verify backup restoration on a temporary database. Run `npm ci`, `npm run typecheck`, `npm test`, both Python benchmark suites, `npm run test:e2e`, and `npm run build`. The browser CI job runs the local-workerd suite, and the deployment job depends on application, browser, and both benchmark checks. The workflow was published through the GitHub connector’s existing authorization; no permission expansion is required. Verify these checks on the exact release commit before deployment.
+Before deployment, record current Worker version and migration list, export D1, and verify backup restoration on a temporary database. Run `npm ci`, `npm run typecheck`, `npm test`, `npm run test:telnyx`, both Python benchmark suites, `npm run test:e2e`, and `npm run build`. The browser CI job runs the local-workerd suite, and the deployment job depends on application, browser, and both benchmark checks. The workflow was published through the GitHub connector’s existing authorization; no permission expansion is required. Verify these checks on the exact release commit before deployment.
 
 After an approved release, check public root, authentication, existing-account data, draft/paused public-link rejection, private test ownership, exports and account settings. Perform one real test/live call and inspect its record. If acceptance fails, roll back Worker code to the recorded prior version, leave additive schema in place, and investigate before resuming traffic.
 
