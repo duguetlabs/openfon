@@ -192,7 +192,7 @@ Total generated: **13 conditions × 60 utts × 2 languages = 1560 clips, 518 MB.
 
 ```bash
 .venv/bin/python bench/quality/prepare/render_scenarios.py \
-  --scenarios $SP/scenarios_riverside.json --out $DATA/scenarios --tts say
+  --scenarios bench/quality/fixtures/scenarios.json --out $DATA/scenarios --tts say
 ```
 
 **Verified:** 10 scenarios, 35 turns, 111 s, with per-turn durations in
