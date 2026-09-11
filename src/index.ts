@@ -1126,7 +1126,10 @@ app.get('/api/public/agent/:slug', async (c) => {
   });
 });
 
-app.post('/api/public/call/start', async (c) => {
+app.post('/api/public/call/start', bodyLimit({
+  maxSize: 4 * 1024,
+  onError: (c) => c.json({ error: 'Call-start request is too large.' }, 413),
+}), async (c) => {
   const { slug } = await readWorkspaceBody<{ slug?: string }>(c.req);
   // The per-IP ceilings were already applied by the /api/public/* middleware.
   const addr = clientIp(c);
