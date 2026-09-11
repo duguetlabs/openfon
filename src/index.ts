@@ -1,10 +1,12 @@
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import type { Context } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import type { Env, Business, AgentSettings } from './types';
-import { createSession, deleteSession, getUserIdFromSession, hashPassword, newId, verifyPassword } from './auth';
+import { createSession, createVerifiedSession, deleteSession, getUserIdFromSession, hashPassword, newId, verifyPassword } from './auth';
 import { sameLlmEndpoint, validateLlmBaseUrl } from './providers';
 import { CallSession } from './call-session';
+import { registerAccountApi } from './account-api';
 import {
   ensureWorkspaceFoundation,
   registerStudioApi,
@@ -234,9 +236,45 @@ app.use('/api/public/*', async (c, next) => {
   await next();
 });
 
+// Private browser requests must originate from this deployment. SameSite
+// cookies alone do not protect against another origin on the same parent site.
+app.use('/api/*', async (c, next) => {
+  const path = new URL(c.req.url).pathname;
+  if (path === '/api/me' || path.startsWith('/api/me/') || path.startsWith('/api/auth/')) {
+    c.header('Cache-Control', 'no-store');
+    const origin = c.req.header('Origin');
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && origin && origin !== new URL(c.req.url).origin) {
+      return c.json({ error: 'This request must come from the OpenFon app.' }, 403);
+    }
+  }
+  await next();
+});
+
+app.use('/api/auth/*', bodyLimit({
+  maxSize: 16 * 1024,
+  onError: (c) => c.json({ error: 'Sign-in request is too large.' }, 413),
+}));
+
+async function credentials(c: Ctx): Promise<{ email: string; password: string } | null> {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return null;
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
+  const { email, password } = body as Record<string, unknown>;
+  if (typeof email !== 'string' || typeof password !== 'string' || email.length > 254 || password.length > 1024) {
+    return null;
+  }
+  return { email: email.trim().toLowerCase(), password };
+}
+
 // ---------- auth ----------
 app.post('/api/auth/signup', async (c) => {
-  const { email, password } = await c.req.json<{ email?: string; password?: string }>();
+  const input = await credentials(c);
+  if (!input) return c.json({ error: 'Enter a valid email and password.' }, 400);
+  const { email, password } = input;
   if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return c.json({ error: 'Valid email required' }, 400);
   if (!password || password.length < 8) return c.json({ error: 'Password must be at least 8 characters' }, 400);
   // Reserve before lookup/hash/write. In particular, do not key anything on
@@ -273,7 +311,9 @@ const TOO_MANY_LOGINS = 'Too many sign-in attempts. Please try again later.';
 const OVER_LIMIT_DELAY_MS = 1000;
 
 app.post('/api/auth/login', async (c) => {
-  const { email, password } = await c.req.json<{ email?: string; password?: string }>();
+  const input = await credentials(c);
+  if (!input) return c.json({ error: 'Enter a valid email and password.' }, 400);
+  const { email, password } = input;
   const addr = clientIp(c);
   const key = (email ?? '').toLowerCase();
 
@@ -341,7 +381,8 @@ app.post('/api/auth/login', async (c) => {
   if (!(await consume(c.env, LIMITS.loginOk, addr)).over) {
     await refundOne(c.env, LIMITS.loginIp, addr, ipTaken);
   }
-  const token = await createSession(c.env, user.id);
+  const token = await createVerifiedSession(c.env, user.id, user.password_hash);
+  if (!token) return c.json({ error: 'Your password changed during sign-in. Please try again.' }, 409);
   setCookie(c, COOKIE, token, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 86400 });
   return c.json({ id: user.id });
 });
@@ -361,6 +402,13 @@ app.use('/api/me/*', async (c, next) => {
   await next();
 });
 
+// Bound workspace facts and knowledge writes before JSON parsing. This also
+// protects legacy settings routes; account routes apply a tighter 16 KiB cap.
+app.use('/api/me/*', bodyLimit({
+  maxSize: 128 * 1024,
+  onError: (c) => c.json({ error: 'Workspace request is too large. Keep each update under 128 KiB.' }, 413),
+}));
+
 app.get('/api/me', async (c) => {
   const userId = await getUserIdFromSession(c.env, getCookie(c, COOKIE));
   if (!userId) return c.json({ error: 'Not signed in' }, 401);
@@ -369,6 +417,7 @@ app.get('/api/me', async (c) => {
 });
 
 registerStudioApi(app);
+registerAccountApi(app);
 
 app.get('/api/me/business', async (c) => {
   const biz = await c.env.DB.prepare('SELECT * FROM businesses WHERE user_id = ? ORDER BY created_at, id LIMIT 1')

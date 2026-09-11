@@ -284,6 +284,23 @@ describe('Calm Studio API foundation', () => {
     );
   }
 
+  it('preserves a named draft primary through new onboarding and knowledge reads', async () => {
+    const workspace = await createWorkspace() as { id: string; slug: string };
+    expect((await request(env, `/api/me/business/${workspace.id}`, json('PUT', {
+      name: 'Workshop', description: 'Bicycle repairs', services_json: '[]', faqs_json: '[]',
+    }))).status).toBe(200);
+    const assistants = await data<Array<{ id: string; public_slug: string }>>(await request(env, '/api/me/assistants'));
+    const primary = assistants.find(a => a.public_slug === workspace.slug)!;
+    const updated = await data<{ name: string; state: string }>(await request(env, `/api/me/assistants/${primary.id}`, json('PUT', {
+      name: 'Alex', persona: 'friendly and professional', language: 'en', greeting: '',
+    })));
+    expect(updated).toMatchObject({ name: 'Alex', state: 'draft' });
+    for (const path of ['/api/me/bootstrap', '/api/me/business', '/api/me/knowledge/collections', '/api/me/assistants']) {
+      expect((await request(env, path)).status).toBe(200);
+      expect(db.database.prepare('SELECT name,state FROM assistants WHERE id=?').get(primary.id)).toEqual({ name: 'Alex', state: 'draft' });
+    }
+  });
+
   it('creates one compatibility workspace atomically and idempotently and enforces the account boundary in D1', async () => {
     const first = await request(
       env,

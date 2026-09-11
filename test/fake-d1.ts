@@ -447,6 +447,11 @@ class FakeStatement {
       const session = this.db.sessions.find((x) => x.token === a[0]);
       return { rows: session ? [session] : [], changes: 0 };
     }
+    if (q.startsWith('DELETE FROM sessions WHERE token')) {
+      const before = this.db.sessions.length;
+      this.db.sessions = this.db.sessions.filter((s) => s.token !== a[0]);
+      return { rows: [], changes: before - this.db.sessions.length };
+    }
     if (q.startsWith('DELETE FROM sessions WHERE expires_at')) {
       // Compared as TEXT, the way SQLite actually does it, and against a cutoff
       // in whichever format the statement supplies. Parsing both sides into
@@ -461,6 +466,11 @@ class FakeStatement {
       const before = this.db.sessions.length;
       this.db.sessions = this.db.sessions.filter((s) => !(String(s.expires_at) < cut));
       return { rows: [], changes: before - this.db.sessions.length };
+    }
+    if (q.startsWith('INSERT INTO sessions') && q.includes('SELECT ?, id, ? FROM users')) {
+      if (!this.db.users.some((u) => u.id === a[2] && u.password_hash === a[3])) return { rows: [], changes: 0 };
+      this.db.sessions.push({ token: a[0], user_id: a[2], expires_at: a[1] });
+      return { rows: [], changes: 1 };
     }
     if (q.startsWith('INSERT INTO sessions')) {
       this.db.sessions.push({ token: a[0], user_id: a[1], expires_at: a[2] });
