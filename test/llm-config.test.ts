@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { chatComplete, LlmConfigError, resolveLlm, sameLlmEndpoint, validateLlmBaseUrl } from '../src/providers';
+import {
+  chatComplete,
+  LlmConfigError,
+  resolveLlm,
+  sameLlmEndpoint,
+  synthesize,
+  transcribe,
+  validateLlmBaseUrl,
+} from '../src/providers';
 import type { AgentSettings, Env } from '../src/types';
 
 // Only the LLM fields matter here; the rest of Env/AgentSettings is stubbed.
@@ -197,14 +205,18 @@ describe('chatComplete', () => {
   it('does not follow redirects, so the validated URL is the one that gets called', async () => {
     // The endpoint checks only ever see the saved URL; following a 302 would
     // let a host that passed them hand the request to an internal address.
-    const fetchStub = vi.fn(async () => new Response('', { status: 302, headers: { location: 'http://169.254.169.254/' } }));
+    const secretLocation = 'https://redirect.example/callback?token=location-secret';
+    const fetchStub = vi.fn(async () => new Response('', { status: 302, headers: { location: secretLocation } }));
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.stubGlobal('fetch', fetchStub);
     await expect(chatComplete(cfg, [{ role: 'user', content: 'hi' }])).rejects.toThrow(/redirects are not followed/);
     expect(fetchStub).toHaveBeenCalledTimes(1);
     expect((fetchStub.mock.calls[0] as unknown as [string, RequestInit])[1].redirect).toBe('manual');
-    // The target is logged, never thrown: these errors surface on a public
-    // socket, and it can name an internal host or a signed URL.
-    await expect(chatComplete(cfg, [{ role: 'user', content: 'hi' }])).rejects.not.toThrow(/169\.254/);
+    const logged = JSON.stringify(errorLog.mock.calls);
+    expect(logged).toContain('target redacted');
+    expect(logged).not.toContain(secretLocation);
+    expect(logged).not.toContain('location-secret');
+    errorLog.mockRestore();
   });
 
   it('appends the endpoint path to every shape of base URL', async () => {
@@ -231,6 +243,42 @@ describe('chatComplete', () => {
     const body = JSON.stringify({ choices: [{ message: { content: 'Good morning.' } }] });
     vi.stubGlobal('fetch', vi.fn(async () => new Response(body, { status: 200 })));
     await expect(chatComplete(cfg, [{ role: 'user', content: 'hi' }])).resolves.toBe('Good morning.');
+  });
+
+  it('never copies an upstream error body that reflects a credential', async () => {
+    const reflected = `invalid bearer ${cfg.apiKey}`;
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(reflected, { status: 401 })));
+    const error = await chatComplete(cfg, [{ role: 'user', content: 'hi' }]).catch((value: unknown) => value);
+    expect(String(error)).toContain('LLM error 401');
+    expect(String(error)).not.toContain(reflected);
+    expect(String(error)).not.toContain(cfg.apiKey);
+  });
+});
+
+describe('voice provider errors', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('redacts reflected STT and TTS credentials', async () => {
+    const secret = 'voice-key-never-log';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(`reflected ${secret}`, { status: 401 })));
+    const voiceEnv = {
+      DEFAULT_STT_BASE_URL: 'https://speech.example/v1',
+      DEFAULT_STT_MODEL: 'stt',
+      DEFAULT_STT_API_KEY: secret,
+      DEFAULT_TTS_PROVIDER: 'azure',
+      DEFAULT_TTS_VOICE: 'en-US-AvaNeural',
+      AZURE_SPEECH_KEY: secret,
+      AZURE_SPEECH_REGION: 'westeurope',
+    } as unknown as Env;
+    const sttError = await transcribe(voiceEnv, new ArrayBuffer(1), 'audio/wav').catch((value: unknown) => value);
+    expect(String(sttError)).toContain('STT error 401');
+    expect(String(sttError)).not.toContain(secret);
+
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(synthesize(voiceEnv, 'Hello', 'en-US-AvaNeural')).resolves.toBeNull();
+    expect(JSON.stringify(errorLog.mock.calls)).toContain('provider response redacted');
+    expect(JSON.stringify(errorLog.mock.calls)).not.toContain(secret);
+    errorLog.mockRestore();
   });
 });
 

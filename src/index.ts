@@ -5,6 +5,12 @@ import type { Env, Business, AgentSettings } from './types';
 import { createSession, deleteSession, getUserIdFromSession, hashPassword, newId, verifyPassword } from './auth';
 import { sameLlmEndpoint, validateLlmBaseUrl } from './providers';
 import { CallSession } from './call-session';
+import {
+  ensureWorkspaceFoundation,
+  registerStudioApi,
+  sameLegacyKnowledgeProjection,
+  syncLegacyKnowledge,
+} from './studio-api';
 
 export { CallSession };
 
@@ -22,10 +28,22 @@ function slugify(name: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 40);
-  return `${base || 'business'}-${newToken4()}`;
+  return `${base || 'business'}-${newId().replace(/-/g, '').slice(0, 12)}`;
 }
-function newToken4(): string {
-  return [...crypto.getRandomValues(new Uint8Array(2))].map((b) => b.toString(16).padStart(2, '0')).join('');
+
+function updateCompatibilitySnapshot(env: Env, businessId: string): D1PreparedStatement {
+  return env.DB.prepare(
+    `UPDATE compatibility_sync_state SET agent_snapshot=(
+       SELECT json_object(
+         'agent_name', agent_settings.agent_name, 'greeting', agent_settings.greeting,
+         'persona', agent_settings.persona, 'language', agent_settings.language,
+         'voice', agent_settings.voice, 'take_messages', agent_settings.take_messages,
+         'custom_instructions', agent_settings.custom_instructions, 'engine', agent_settings.engine,
+         'realtime_model', agent_settings.realtime_model, 'realtime_voice', agent_settings.realtime_voice,
+         'llm_model', agent_settings.llm_model
+       ) FROM agent_settings WHERE business_id=?
+     ), synced_at=datetime('now') WHERE business_id=?`
+  ).bind(businessId, businessId);
 }
 
 // ---------- abuse limits ----------
@@ -74,6 +92,11 @@ const LIMITS = {
   // so a loop of deliberately correct logins cannot run for ever.
   loginOk: { name: 'lgok', window: 900, max: 30 },
   loginEmail: { name: 'lgem', window: 900, max: 5 },
+  // Creating an account runs PBKDF2 and writes both a user and a session. Keep
+  // that public work finite across made-up email addresses. Invalid forms are
+  // rejected before consuming this allowance, while every well-formed attempt
+  // reserves before the first account lookup or password hash.
+  signupIp: { name: 'sgip', window: 3600, max: 5 },
 } satisfies Record<string, Limit>;
 
 // Call creation, counted in a second column of the *same* row as publicApi
@@ -114,7 +137,7 @@ const STALE_CONNECTED = '-90 minutes';
 function clientIp(c: Ctx): string {
   // Set by Cloudflare on every edge request; absent under `wrangler dev`, where
   // one shared bucket is the safe answer.
-  return c.req.header('CF-Connecting-IP') ?? 'local';
+  return c.req.header('CF-Connecting-IP')?.trim() || 'local';
 }
 
 function windowStart(limit: Limit, now = Date.now()): number {
@@ -216,6 +239,13 @@ app.post('/api/auth/signup', async (c) => {
   const { email, password } = await c.req.json<{ email?: string; password?: string }>();
   if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return c.json({ error: 'Valid email required' }, 400);
   if (!password || password.length < 8) return c.json({ error: 'Password must be at least 8 characters' }, 400);
+  // Reserve before lookup/hash/write. In particular, do not key anything on
+  // the attacker-controlled email first: once this IP bucket is full, changing
+  // the address must not buy another counter row or another PBKDF2 run.
+  const signupTaken = await consume(c.env, LIMITS.signupIp, clientIp(c));
+  if (signupTaken.over) {
+    return tooMany(c, 'Too many accounts created from this connection. Please try again later.', LIMITS.signupIp.window);
+  }
   const existing = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email.toLowerCase()).first();
   if (existing) return c.json({ error: 'An account with this email already exists' }, 409);
   const id = newId();
@@ -338,31 +368,71 @@ app.get('/api/me', async (c) => {
   return c.json(user);
 });
 
+registerStudioApi(app);
+
 app.get('/api/me/business', async (c) => {
-  const biz = await c.env.DB.prepare('SELECT * FROM businesses WHERE user_id = ? LIMIT 1')
+  const biz = await c.env.DB.prepare('SELECT * FROM businesses WHERE user_id = ? ORDER BY created_at, id LIMIT 1')
     .bind(c.get('userId'))
     .first<Business>();
   if (!biz) return c.json(null);
-  const settings = await c.env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?')
+  await ensureWorkspaceFoundation(c.env, biz);
+  const assistant = await c.env.DB.prepare('SELECT * FROM assistants WHERE business_id = ? AND public_slug = ? LIMIT 1')
+    .bind(biz.id, biz.slug)
+    .first<Record<string, string | number | null>>();
+  const provider = await c.env.DB.prepare('SELECT llm_base_url, llm_api_key FROM provider_settings WHERE business_id = ?')
     .bind(biz.id)
-    .first<AgentSettings>();
-  return c.json({ ...biz, agent: settings ? maskSettings(settings) : null });
+    .first<{ llm_base_url: string; llm_api_key: string }>();
+  const settings = assistant
+    ? {
+        business_id: biz.id,
+        agent_name: assistant.name,
+        greeting: assistant.greeting,
+        persona: assistant.persona,
+        language: assistant.language,
+        voice: assistant.voice,
+        take_messages: assistant.take_messages,
+        custom_instructions: assistant.custom_instructions,
+        llm_base_url: provider?.llm_base_url ?? '',
+        llm_api_key: '',
+        apiKeyConfigured: Boolean(
+          provider?.llm_api_key ||
+            ((!provider?.llm_base_url || sameLlmEndpoint(provider.llm_base_url, c.env.DEFAULT_LLM_BASE_URL)) &&
+              c.env.DEFAULT_LLM_API_KEY)
+        ),
+        workspaceApiKeyConfigured: Boolean(provider?.llm_api_key),
+        llm_model: assistant.llm_model,
+        engine: assistant.engine,
+        realtime_model: assistant.realtime_model,
+        realtime_voice: assistant.realtime_voice,
+      }
+    : null;
+  return c.json({ ...biz, agent: settings });
 });
 
 app.post('/api/me/business', async (c) => {
   const body = await c.req.json<Partial<Business>>();
   if (!body.name?.trim()) return c.json({ error: 'Business name required' }, 400);
-  const existing = await c.env.DB.prepare('SELECT id FROM businesses WHERE user_id = ?').bind(c.get('userId')).first();
-  if (existing) return c.json({ error: 'Business already exists; use PUT to update' }, 409);
+  const userId = c.get('userId');
+  const existingWorkspace = () =>
+    c.env.DB.prepare('SELECT * FROM businesses WHERE user_id = ? ORDER BY created_at, id LIMIT 1')
+      .bind(userId)
+      .first<Business>();
+  let existing = await existingWorkspace();
+  if (existing) {
+    await ensureWorkspaceFoundation(c.env, existing);
+    return c.json(existing);
+  }
   const id = newId();
   const slug = slugify(body.name);
-  await c.env.DB.prepare(
-    `INSERT INTO businesses (id, user_id, slug, name, description, address, phone, website, timezone, hours_json, services_json, faqs_json, closures_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  )
-    .bind(
+  const assistantId = `asst_${id}`;
+  const collectionId = `kc_default_${id}`;
+  const createStatements = [
+    c.env.DB.prepare(
+      `INSERT INTO businesses (id, user_id, slug, name, description, address, phone, website, timezone, hours_json, services_json, faqs_json, closures_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
       id,
-      c.get('userId'),
+      userId,
       slug,
       body.name.trim(),
       body.description ?? '',
@@ -374,9 +444,43 @@ app.post('/api/me/business', async (c) => {
       body.services_json ?? '[]',
       body.faqs_json ?? '[]',
       body.closures_json ?? '[]'
-    )
-    .run();
-  await c.env.DB.prepare('INSERT INTO agent_settings (business_id) VALUES (?)').bind(id).run();
+    ),
+    // A fresh compatibility row is deliberately incomplete, matching the draft
+    // assistant. Besides making bootstrap resumable, this gives mixed-version
+    // reconciliation an observable change even when the user accepts the old
+    // UI's Alex/friendly/en defaults verbatim.
+    c.env.DB.prepare(
+      "INSERT INTO agent_settings (business_id, agent_name, persona, language) VALUES (?, '', '', '')"
+    ).bind(id),
+    c.env.DB.prepare(
+      `INSERT INTO assistants (id, business_id, public_slug, state, name)
+       VALUES (?, ?, ?, 'draft', '')`
+    ).bind(assistantId, id, slug),
+    c.env.DB.prepare('INSERT INTO provider_settings (business_id) VALUES (?)').bind(id),
+    c.env.DB.prepare(
+      `INSERT INTO knowledge_collections (id, business_id, name, description, is_default)
+       VALUES (?, ?, 'Workspace knowledge', 'Services and answers shared by default with new assistants.', 1)`
+    ).bind(collectionId, id),
+    c.env.DB.prepare(
+      'INSERT INTO assistant_knowledge_collections (assistant_id, collection_id) VALUES (?, ?)'
+    ).bind(assistantId, collectionId),
+  ];
+  try {
+    await c.env.DB.batch(createStatements);
+  } catch (error) {
+    // Concurrent retries race at the database trigger. The winner already
+    // persisted the same onboarding stage, so return that canonical workspace
+    // instead of turning a harmless retry into a dead end.
+    existing = await existingWorkspace();
+    if (!existing) throw error;
+    await ensureWorkspaceFoundation(c.env, existing);
+    return c.json(existing);
+  }
+  await syncLegacyKnowledge(c.env, {
+    id,
+    services_json: body.services_json ?? '[]',
+    faqs_json: body.faqs_json ?? '[]',
+  });
   const biz = await c.env.DB.prepare('SELECT * FROM businesses WHERE id = ?').bind(id).first<Business>();
   return c.json(biz, 201);
 });
@@ -385,6 +489,19 @@ app.put('/api/me/business/:id', async (c) => {
   const biz = await ownedBusiness(c.env, c.get('userId'), c.req.param('id'));
   if (!biz) return c.json({ error: 'Not found' }, 404);
   const b = await c.req.json<Partial<Business>>();
+  const servicesChanged =
+    b.services_json !== undefined &&
+    !sameLegacyKnowledgeProjection('service', b.services_json, biz.services_json);
+  const faqsChanged =
+    b.faqs_json !== undefined &&
+    !sameLegacyKnowledgeProjection('faq', b.faqs_json, biz.faqs_json);
+  // Always persist the compatibility editor's cleaned source so legacy workers
+  // and prompt fallbacks stop seeing malformed rows. Projection-equivalent
+  // cleanup deliberately skips syncLegacyKnowledge below: the old raw marker
+  // remains as provenance, while explicit typed edits, drafts, and deletions
+  // remain untouched.
+  const servicesJson = b.services_json ?? biz.services_json;
+  const faqsJson = b.faqs_json ?? biz.faqs_json;
   await c.env.DB.prepare(
     `UPDATE businesses SET name=?, description=?, address=?, phone=?, website=?, timezone=?, hours_json=?, services_json=?, faqs_json=?, closures_json=?, max_concurrent_calls=?, max_calls_per_day=? WHERE id=?`
   )
@@ -396,14 +513,21 @@ app.put('/api/me/business/:id', async (c) => {
       b.website ?? biz.website,
       b.timezone ?? biz.timezone,
       b.hours_json ?? biz.hours_json,
-      b.services_json ?? biz.services_json,
-      b.faqs_json ?? biz.faqs_json,
+      servicesJson,
+      faqsJson,
       b.closures_json ?? biz.closures_json,
       clampCap(b.max_concurrent_calls, biz.max_concurrent_calls, 50),
       clampCap(b.max_calls_per_day, biz.max_calls_per_day, 100_000),
       biz.id
     )
     .run();
+  if (servicesChanged || faqsChanged) {
+    await syncLegacyKnowledge(c.env, {
+      id: biz.id,
+      services_json: servicesJson,
+      faqs_json: faqsJson,
+    }, undefined, { services: servicesChanged, faqs: faqsChanged });
+  }
   return c.json({ ok: true });
 });
 
@@ -416,27 +540,81 @@ function clampCap(v: unknown, current: number, max: number): number {
 app.put('/api/me/business/:id/agent', async (c) => {
   const biz = await ownedBusiness(c.env, c.get('userId'), c.req.param('id'));
   if (!biz) return c.json({ error: 'Not found' }, 404);
-  const cur = await c.env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?')
-    .bind(biz.id)
-    .first<AgentSettings>();
+  const cur = await c.env.DB.prepare(
+    `SELECT assistants.*,
+      assistants.name AS agent_name,
+      provider_settings.llm_base_url,
+      provider_settings.llm_api_key
+     FROM assistants LEFT JOIN provider_settings ON provider_settings.business_id = assistants.business_id
+     WHERE assistants.business_id = ? AND assistants.public_slug = ? LIMIT 1`
+  )
+    .bind(biz.id, biz.slug)
+    .first<AgentSettings & { id: string; name: string; state: 'draft' | 'active' | 'paused' }>();
   if (!cur) return c.json({ error: 'Not found' }, 404);
-  const s = await c.req.json<Partial<AgentSettings>>();
-  // "••••" placeholder from the UI means "keep the stored key"
-  const llmKey = s.llm_api_key !== undefined && !/^•+$/.test(s.llm_api_key) ? s.llm_api_key : cur.llm_api_key;
+  const s = await c.req.json<Partial<AgentSettings> & { clearApiKey?: boolean }>();
+  if (s.clearApiKey !== undefined && typeof s.clearApiKey !== 'boolean') {
+    return c.json({ error: 'clearApiKey must be a boolean' }, 400);
+  }
+  if (s.llm_api_key !== undefined && typeof s.llm_api_key !== 'string') {
+    return c.json({ error: 'API key must be a string' }, 400);
+  }
+  // Empty, omitted, and old masked-placeholder values all mean "keep". The
+  // key is write-only, so clearing it needs its own unambiguous signal; this
+  // prevents an unrelated settings save from erasing a credential the browser
+  // was deliberately never allowed to read back.
+  const submittedKey = s.llm_api_key?.trim() ?? '';
+  const replacementKey = submittedKey && !/^•+$/.test(submittedKey) ? submittedKey : null;
+  if (s.clearApiKey && replacementKey) {
+    return c.json({ error: 'Choose either a replacement API key or clearApiKey' }, 400);
+  }
+  const llmKey = s.clearApiKey ? '' : replacementKey ?? cur.llm_api_key;
   const engine = s.engine === 'realtime' ? 'realtime' : s.engine === 'pipeline' ? 'pipeline' : cur.engine;
   const realtimeModel = s.realtime_model !== undefined ? s.realtime_model : cur.realtime_model;
   const realtimeVoice = s.realtime_voice !== undefined ? s.realtime_voice : cur.realtime_voice;
   const llmBaseUrl = s.llm_base_url ?? cur.llm_base_url;
+  const effectiveName = s.agent_name ?? cur.agent_name;
+  const effectivePersona = s.persona ?? cur.persona;
+  const effectiveLanguage = s.language ?? cur.language;
+  if (cur.state === 'draft' && (!biz.name.trim() || !biz.description.trim())) {
+    return c.json({ error: 'Complete the workspace name and description first' }, 409);
+  }
+  if (!effectiveName.trim() || !effectivePersona.trim() || !effectiveLanguage.trim()) {
+    return c.json({ error: 'Assistant name, personality, and language are required' }, 400);
+  }
   const bad = llmEndpointError(c.env, llmBaseUrl, llmKey);
   if (bad) return c.json({ error: bad }, 400);
-  await c.env.DB.prepare(
-    `UPDATE agent_settings SET agent_name=?, greeting=?, persona=?, language=?, voice=?, take_messages=?, custom_instructions=?, llm_base_url=?, llm_api_key=?, llm_model=?, engine=?, realtime_model=?, realtime_voice=? WHERE business_id=?`
-  )
-    .bind(
-      s.agent_name ?? cur.agent_name,
+  const assistantUpdate = c.env.DB.prepare(
+    `UPDATE assistants SET name=?, greeting=?, persona=?, language=?, voice=?, take_messages=?, custom_instructions=?,
+      engine=?, realtime_model=?, realtime_voice=?, llm_model=?,
+      activated_at=CASE WHEN state='draft' THEN COALESCE(activated_at, datetime('now')) ELSE activated_at END,
+      state=CASE WHEN state='draft' THEN 'active' ELSE state END,
+      updated_at=datetime('now') WHERE id=?`
+  ).bind(
+      effectiveName,
       s.greeting ?? cur.greeting,
-      s.persona ?? cur.persona,
-      s.language ?? cur.language,
+      effectivePersona,
+      effectiveLanguage,
+      s.voice ?? cur.voice,
+      s.take_messages !== undefined ? (s.take_messages ? 1 : 0) : cur.take_messages,
+      s.custom_instructions ?? cur.custom_instructions,
+      engine,
+      realtimeModel,
+      realtimeVoice,
+      s.llm_model ?? cur.llm_model,
+      cur.id
+    );
+  const providerUpdate = c.env.DB.prepare(
+    `INSERT INTO provider_settings (business_id, llm_base_url, llm_api_key) VALUES (?, ?, ?)
+     ON CONFLICT(business_id) DO UPDATE SET llm_base_url=excluded.llm_base_url,
+       llm_api_key=excluded.llm_api_key, updated_at=datetime('now')`
+  ).bind(biz.id, llmBaseUrl, llmKey);
+  const legacyUpdate = c.env.DB.prepare(
+    `UPDATE agent_settings SET agent_name=?, greeting=?, persona=?, language=?, voice=?, take_messages=?, custom_instructions=?, llm_base_url=?, llm_api_key=?, llm_model=?, engine=?, realtime_model=?, realtime_voice=? WHERE business_id=?`
+  ).bind(
+      effectiveName,
+      s.greeting ?? cur.greeting,
+      effectivePersona,
+      effectiveLanguage,
       s.voice ?? cur.voice,
       s.take_messages !== undefined ? (s.take_messages ? 1 : 0) : cur.take_messages,
       s.custom_instructions ?? cur.custom_instructions,
@@ -447,8 +625,8 @@ app.put('/api/me/business/:id/agent', async (c) => {
       realtimeModel,
       realtimeVoice,
       biz.id
-    )
-    .run();
+    );
+  await c.env.DB.batch([assistantUpdate, providerUpdate, legacyUpdate, updateCompatibilitySnapshot(c.env, biz.id)]);
   return c.json({ ok: true });
 });
 
@@ -457,7 +635,7 @@ app.get('/api/me/business/:id/calls', async (c) => {
   if (!biz) return c.json({ error: 'Not found' }, 404);
   const { results } = await c.env.DB.prepare(
     `SELECT id, channel, caller_id, status, started_at, connected_at, ended_at, duration_s, summary, intent, message_json
-     FROM calls WHERE business_id = ? ORDER BY started_at DESC LIMIT 100`
+     FROM calls WHERE business_id = ? AND environment = 'live' ORDER BY started_at DESC, id DESC LIMIT 100`
   )
     .bind(biz.id)
     .all();
@@ -473,7 +651,7 @@ app.get('/api/me/calls/:callId', async (c) => {
     .first();
   if (!call) return c.json({ error: 'Not found' }, 404);
   const { results: turns } = await c.env.DB.prepare(
-    'SELECT role, text, ts FROM call_turns WHERE call_id = ? ORDER BY id'
+    'SELECT id, role, text, ts FROM call_turns WHERE call_id = ? ORDER BY id'
   )
     .bind(c.req.param('callId'))
     .all();
@@ -482,10 +660,6 @@ app.get('/api/me/calls/:callId', async (c) => {
 
 async function ownedBusiness(env: Env, userId: string, id: string): Promise<Business | null> {
   return env.DB.prepare('SELECT * FROM businesses WHERE id = ? AND user_id = ?').bind(id, userId).first<Business>();
-}
-
-function maskSettings(s: AgentSettings): AgentSettings {
-  return { ...s, llm_api_key: s.llm_api_key ? '••••••••' : '' };
 }
 
 // A custom LLM endpoint is only ever called with the key stored next to it
@@ -504,8 +678,8 @@ function llmEndpointError(env: Env, baseUrl: string, apiKey: string): string | n
 const PROFILE_FIELDS = ['engine', 'realtime_model', 'realtime_voice', 'language', 'voice', 'llm_base_url', 'llm_api_key', 'llm_model'] as const;
 type ProfileFields = Record<(typeof PROFILE_FIELDS)[number], string> & { id: string; name: string; business_id: string };
 
-function maskProfile(p: ProfileFields): ProfileFields {
-  return { ...p, llm_api_key: p.llm_api_key ? '••••••••' : '' };
+function maskProfile(p: ProfileFields): ProfileFields & { apiKeyConfigured: boolean } {
+  return { ...p, llm_api_key: '', apiKeyConfigured: Boolean(p.llm_api_key) };
 }
 
 app.get('/api/me/business/:id/profiles', async (c) => {
@@ -523,34 +697,49 @@ app.post('/api/me/business/:id/profiles', async (c) => {
   const b = await c.req.json<Partial<ProfileFields>>();
   if (!b.name?.trim()) return c.json({ error: 'Profile name required' }, 400);
   const id = newId();
-  // '••••' means "snapshot the key currently in agent_settings"
+  // A missing/blank value means "snapshot the workspace key". Credentials are
+  // never returned by an API, including as a masked placeholder.
   let llmKey = b.llm_api_key ?? '';
-  if (/^•+$/.test(llmKey)) {
-    const cur = await c.env.DB.prepare('SELECT llm_api_key FROM agent_settings WHERE business_id = ?')
+  if (!llmKey || /^•+$/.test(llmKey)) {
+    const cur = await c.env.DB.prepare('SELECT llm_api_key FROM provider_settings WHERE business_id = ?')
       .bind(biz.id)
       .first<{ llm_api_key: string }>();
     llmKey = cur?.llm_api_key ?? '';
   }
   const bad = llmEndpointError(c.env, b.llm_base_url ?? '', llmKey);
   if (bad) return c.json({ error: bad }, 400);
-  await c.env.DB.prepare(
+  const legacyProfile = c.env.DB.prepare(
     `INSERT INTO engine_profiles (id, business_id, name, engine, realtime_model, realtime_voice, language, voice, llm_base_url, llm_api_key, llm_model)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  )
-    .bind(
+  ).bind(
       id,
       biz.id,
       b.name.trim(),
       b.engine === 'realtime' ? 'realtime' : 'pipeline',
       b.realtime_model ?? '',
       b.realtime_voice ?? '',
-      b.language ?? 'en',
+      b.language?.trim() || 'en',
       b.voice ?? '',
       b.llm_base_url ?? '',
       llmKey,
       b.llm_model ?? ''
-    )
-    .run();
+    );
+  const preset = c.env.DB.prepare(
+    `INSERT INTO engine_presets (
+      id, business_id, name, engine, realtime_model, realtime_voice, language, voice, llm_model
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+      id,
+      biz.id,
+      b.name.trim(),
+      b.engine === 'realtime' ? 'realtime' : 'pipeline',
+      b.realtime_model ?? '',
+      b.realtime_voice ?? '',
+      b.language?.trim() || 'en',
+      b.voice ?? '',
+      b.llm_model ?? ''
+    );
+  await c.env.DB.batch([legacyProfile, preset]);
   const row = await c.env.DB.prepare('SELECT * FROM engine_profiles WHERE id = ?').bind(id).first<ProfileFields>();
   return c.json(maskProfile(row!), 201);
 });
@@ -569,14 +758,14 @@ app.put('/api/me/profiles/:pid', async (c) => {
   const p = await ownedProfile(c.env, c.get('userId'), c.req.param('pid'));
   if (!p) return c.json({ error: 'Not found' }, 404);
   const b = await c.req.json<Partial<ProfileFields>>();
-  const llmKey = b.llm_api_key !== undefined && !/^•+$/.test(b.llm_api_key) ? b.llm_api_key : p.llm_api_key;
+  const llmKey = b.llm_api_key !== undefined && b.llm_api_key !== '' && !/^•+$/.test(b.llm_api_key) ? b.llm_api_key : p.llm_api_key;
   const llmBaseUrl = b.llm_base_url ?? p.llm_base_url;
+  if (b.language !== undefined && !b.language.trim()) return c.json({ error: 'Profile language is required' }, 400);
   const bad = llmEndpointError(c.env, llmBaseUrl, llmKey);
   if (bad) return c.json({ error: bad }, 400);
-  await c.env.DB.prepare(
+  const legacyProfileUpdate = c.env.DB.prepare(
     `UPDATE engine_profiles SET name=?, engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_base_url=?, llm_api_key=?, llm_model=? WHERE id=?`
-  )
-    .bind(
+  ).bind(
       b.name?.trim() || p.name,
       b.engine ?? p.engine,
       b.realtime_model ?? p.realtime_model,
@@ -587,15 +776,31 @@ app.put('/api/me/profiles/:pid', async (c) => {
       llmKey,
       b.llm_model ?? p.llm_model,
       p.id
-    )
-    .run();
+    );
+  const presetUpdate = c.env.DB.prepare(
+    `UPDATE engine_presets SET name=?, engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?, updated_at=datetime('now')
+     WHERE id=?`
+  ).bind(
+      b.name?.trim() || p.name,
+      b.engine ?? p.engine,
+      b.realtime_model ?? p.realtime_model,
+      b.realtime_voice ?? p.realtime_voice,
+      b.language ?? p.language,
+      b.voice ?? p.voice,
+      b.llm_model ?? p.llm_model,
+      p.id
+    );
+  await c.env.DB.batch([legacyProfileUpdate, presetUpdate]);
   return c.json({ ok: true });
 });
 
 app.delete('/api/me/profiles/:pid', async (c) => {
   const p = await ownedProfile(c.env, c.get('userId'), c.req.param('pid'));
   if (!p) return c.json({ error: 'Not found' }, 404);
-  await c.env.DB.prepare('DELETE FROM engine_profiles WHERE id = ?').bind(p.id).run();
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM engine_profiles WHERE id = ?').bind(p.id),
+    c.env.DB.prepare('DELETE FROM engine_presets WHERE id = ?').bind(p.id),
+  ]);
   return c.json({ ok: true });
 });
 
@@ -606,11 +811,25 @@ app.post('/api/me/profiles/:pid/apply', async (c) => {
   // Profiles saved before the endpoint rules existed are re-checked here.
   const bad = llmEndpointError(c.env, p.llm_base_url, p.llm_api_key);
   if (bad) return c.json({ error: `Cannot apply "${p.name}": ${bad}` }, 400);
-  await c.env.DB.prepare(
+  if (!p.language.trim()) return c.json({ error: `Cannot apply "${p.name}": language is required` }, 400);
+  const legacySettings = c.env.DB.prepare(
     `UPDATE agent_settings SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_base_url=?, llm_api_key=?, llm_model=? WHERE business_id=?`
-  )
-    .bind(p.engine, p.realtime_model, p.realtime_voice, p.language, p.voice, p.llm_base_url, p.llm_api_key, p.llm_model, p.business_id)
-    .run();
+  ).bind(p.engine, p.realtime_model, p.realtime_voice, p.language, p.voice, p.llm_base_url, p.llm_api_key, p.llm_model, p.business_id);
+  const assistantUpdate = c.env.DB.prepare(
+    `UPDATE assistants SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?, updated_at=datetime('now')
+     WHERE business_id = ? AND public_slug = (SELECT slug FROM businesses WHERE id = ?)`
+  ).bind(p.engine, p.realtime_model, p.realtime_voice, p.language, p.voice, p.llm_model, p.business_id, p.business_id);
+  const providerUpdate = c.env.DB.prepare(
+    `INSERT INTO provider_settings (business_id, llm_base_url, llm_api_key) VALUES (?, ?, ?)
+     ON CONFLICT(business_id) DO UPDATE SET llm_base_url=excluded.llm_base_url,
+       llm_api_key=excluded.llm_api_key, updated_at=datetime('now')`
+  ).bind(p.business_id, p.llm_base_url, p.llm_api_key);
+  await c.env.DB.batch([
+    legacySettings,
+    assistantUpdate,
+    providerUpdate,
+    updateCompatibilitySnapshot(c.env, p.business_id),
+  ]);
   return c.json({ ok: true });
 });
 
@@ -674,39 +893,197 @@ const BUSY = 'All lines are busy right now. Please try again in a moment.';
 // which is not in this PR. What still holds meanwhile is the per-business daily
 // cap — it counts row creation, so session lifetime cannot dodge it — and the
 // per-IP call-start limit.
-function countLive(env: Env, businessId: string, exceptId: string) {
+function countConnected(
+  env: Env,
+  businessId: string,
+  exceptId: string,
+  environment: 'test' | 'live'
+) {
   return env.DB.prepare(
     `SELECT COUNT(*) AS n FROM calls
-      WHERE business_id = ? AND id != ? AND status = 'active' AND connected_at IS NOT NULL`
-  ).bind(businessId, exceptId);
+      WHERE business_id = ? AND id != ? AND environment = ?
+        AND status = 'active' AND connected_at IS NOT NULL`
+  ).bind(businessId, exceptId, environment);
 }
 
 async function liveCalls(env: Env, businessId: string): Promise<number> {
-  return (await countLive(env, businessId, '').first<{ n: number }>())?.n ?? 0;
+  return (await countConnected(env, businessId, '', 'live').first<{ n: number }>())?.n ?? 0;
 }
 
 // ---------- public widget API ----------
+interface PublicAssistantTarget {
+  assistant_id: string;
+  agent_name: string;
+  language: string;
+  business_id: string;
+  business_name: string;
+  workspace_slug: string;
+  max_concurrent_calls: number;
+  max_calls_per_day: number;
+  services_json: string;
+  faqs_json: string;
+  synced_services_json: string | null;
+  synced_faqs_json: string | null;
+  needs_repair: number;
+}
+
+async function activePublicAssistant(env: Env, slug: string): Promise<PublicAssistantTarget | null> {
+  const lookup = async () => {
+    const target = await env.DB.prepare(
+      `SELECT assistants.id AS assistant_id, assistants.name AS agent_name, assistants.language,
+        businesses.id AS business_id, businesses.name AS business_name, businesses.slug AS workspace_slug,
+        businesses.max_concurrent_calls, businesses.max_calls_per_day,
+        businesses.services_json, businesses.faqs_json,
+        sync.services_json AS synced_services_json, sync.faqs_json AS synced_faqs_json,
+        CASE WHEN legacy.business_id IS NULL
+          OR compatibility.id IS NULL
+          OR provider_settings.business_id IS NULL
+          OR sync.business_id IS NULL
+          OR (compatibility.state <> 'draft' AND (
+            compatibility.name <> legacy.agent_name
+            OR compatibility.greeting <> legacy.greeting
+            OR compatibility.persona <> legacy.persona
+            OR compatibility.language <> legacy.language
+            OR compatibility.voice <> legacy.voice
+            OR compatibility.take_messages <> legacy.take_messages
+            OR compatibility.custom_instructions <> legacy.custom_instructions
+            OR compatibility.engine <> legacy.engine
+            OR compatibility.realtime_model <> legacy.realtime_model
+            OR compatibility.realtime_voice <> legacy.realtime_voice
+            OR compatibility.llm_model <> legacy.llm_model
+          ))
+          OR provider_settings.llm_base_url <> legacy.llm_base_url
+          OR provider_settings.llm_api_key <> legacy.llm_api_key
+          OR default_collection.id IS NULL
+          OR sync.collection_id <> default_collection.id
+          OR sync.agent_snapshot <> json_object(
+            'agent_name', legacy.agent_name, 'greeting', legacy.greeting,
+            'persona', legacy.persona, 'language', legacy.language,
+            'voice', legacy.voice, 'take_messages', legacy.take_messages,
+            'custom_instructions', legacy.custom_instructions, 'engine', legacy.engine,
+            'realtime_model', legacy.realtime_model, 'realtime_voice', legacy.realtime_voice,
+            'llm_model', legacy.llm_model
+          )
+          THEN 1 ELSE 0 END AS needs_repair
+       FROM assistants
+       JOIN businesses ON businesses.id = assistants.business_id
+       LEFT JOIN assistants compatibility
+         ON compatibility.business_id=businesses.id AND compatibility.public_slug=businesses.slug
+       LEFT JOIN agent_settings legacy ON legacy.business_id=businesses.id
+       LEFT JOIN provider_settings ON provider_settings.business_id=businesses.id
+       LEFT JOIN compatibility_sync_state sync ON sync.business_id=businesses.id
+       LEFT JOIN knowledge_collections default_collection
+         ON default_collection.id=(
+           SELECT id FROM knowledge_collections
+            WHERE business_id=businesses.id AND is_default=1
+            ORDER BY created_at, id LIMIT 1
+         )
+       WHERE assistants.public_slug = ? AND assistants.state = 'active'`
+    )
+      .bind(slug)
+      .first<PublicAssistantTarget>();
+    if (
+      target &&
+      target.synced_services_json !== null &&
+      target.synced_faqs_json !== null &&
+      (!sameLegacyKnowledgeProjection('service', target.synced_services_json, target.services_json) ||
+        !sameLegacyKnowledgeProjection('faq', target.synced_faqs_json, target.faqs_json))
+    ) {
+      target.needs_repair = 1;
+    }
+    return target;
+  };
+  const reconcile = async (current: PublicAssistantTarget): Promise<PublicAssistantTarget> => {
+    let repaired = current;
+    for (let attempt = 0; repaired.needs_repair && attempt < 2; attempt++) {
+      await ensureWorkspaceFoundation(env, {
+        id: repaired.business_id,
+        slug: repaired.workspace_slug,
+        services_json: repaired.services_json,
+        faqs_json: repaired.faqs_json,
+      });
+      repaired = (await lookup()) ?? repaired;
+    }
+    if (repaired.needs_repair) throw new Error('Workspace configuration changed during call setup');
+    return repaired;
+  };
+  let target = await lookup();
+  if (target) return reconcile(target);
+  const existingAssistant = await env.DB.prepare(
+    `SELECT assistants.state, businesses.id AS business_id, businesses.slug AS workspace_slug,
+      businesses.services_json, businesses.faqs_json,
+      assistants.public_slug = businesses.slug AS is_compatibility,
+      CASE WHEN legacy.business_id IS NULL OR sync.business_id IS NULL
+        OR sync.agent_snapshot <> json_object(
+          'agent_name', legacy.agent_name, 'greeting', legacy.greeting,
+          'persona', legacy.persona, 'language', legacy.language,
+          'voice', legacy.voice, 'take_messages', legacy.take_messages,
+          'custom_instructions', legacy.custom_instructions, 'engine', legacy.engine,
+          'realtime_model', legacy.realtime_model, 'realtime_voice', legacy.realtime_voice,
+          'llm_model', legacy.llm_model
+        ) THEN 1 ELSE 0 END AS needs_repair
+     FROM assistants
+     JOIN businesses ON businesses.id=assistants.business_id
+     LEFT JOIN agent_settings legacy ON legacy.business_id=businesses.id
+     LEFT JOIN compatibility_sync_state sync ON sync.business_id=businesses.id
+     WHERE assistants.public_slug = ? LIMIT 1`
+  )
+    .bind(slug)
+    .first<{
+      state: 'draft' | 'active' | 'paused';
+      business_id: string;
+      workspace_slug: string;
+      services_json: string;
+      faqs_json: string;
+      is_compatibility: number;
+      needs_repair: number;
+    }>();
+  if (existingAssistant) {
+    if (
+      existingAssistant.state !== 'draft' ||
+      !existingAssistant.is_compatibility ||
+      !existingAssistant.needs_repair
+    ) {
+      return null;
+    }
+    await ensureWorkspaceFoundation(env, {
+      id: existingAssistant.business_id,
+      slug: existingAssistant.workspace_slug,
+      services_json: existingAssistant.services_json,
+      faqs_json: existingAssistant.faqs_json,
+    });
+    target = await lookup();
+    return target ? reconcile(target) : null;
+  }
+  // Repair a workspace/profile an old worker created after migration 0008 but
+  // before this worker version took traffic. The normal path above remains a
+  // read-only lookup; reconciliation runs only for a missing legacy slug.
+  const legacy = await env.DB.prepare('SELECT * FROM businesses WHERE slug = ?').bind(slug).first<Business>();
+  if (!legacy) return null;
+  await ensureWorkspaceFoundation(env, legacy);
+  target = await lookup();
+  return target ? reconcile(target) : null;
+}
+
 app.get('/api/public/agent/:slug', async (c) => {
-  const biz = await c.env.DB.prepare('SELECT id, name, slug FROM businesses WHERE slug = ?')
-    .bind(c.req.param('slug'))
-    .first<{ id: string; name: string; slug: string }>();
-  if (!biz) return c.json({ error: 'Not found' }, 404);
-  const settings = await c.env.DB.prepare('SELECT agent_name, language FROM agent_settings WHERE business_id = ?')
-    .bind(biz.id)
-    .first<{ agent_name: string; language: string }>();
-  return c.json({ businessName: biz.name, agentName: settings?.agent_name ?? 'Alex', language: settings?.language ?? 'en' });
+  const agent = await activePublicAssistant(c.env, c.req.param('slug'));
+  if (!agent) return c.json({ error: 'Not found' }, 404);
+  return c.json({
+    assistantId: agent.assistant_id,
+    businessName: agent.business_name,
+    agentName: agent.agent_name,
+    language: agent.language,
+  });
 });
 
 app.post('/api/public/call/start', async (c) => {
   const { slug } = await c.req.json<{ slug?: string }>();
   // The per-IP ceilings were already applied by the /api/public/* middleware.
   const addr = clientIp(c);
-  const biz = await c.env.DB.prepare('SELECT id, max_concurrent_calls, max_calls_per_day FROM businesses WHERE slug = ?')
-    .bind(slug ?? '')
-    .first<{ id: string; max_concurrent_calls: number; max_calls_per_day: number }>();
-  if (!biz) return c.json({ error: 'Unknown agent' }, 404);
+  const target = await activePublicAssistant(c.env, slug ?? '');
+  if (!target) return c.json({ error: 'Unknown or unavailable assistant' }, 404);
 
-  if ((await liveCalls(c.env, biz.id)) >= biz.max_concurrent_calls) {
+  if ((await liveCalls(c.env, target.business_id)) >= target.max_concurrent_calls) {
     return tooMany(c, BUSY, 30);
   }
 
@@ -735,13 +1112,20 @@ app.post('/api/public/call/start', async (c) => {
   // when the sweep retires it, not before.
   const callId = newId();
   const claim = await c.env.DB.prepare(
-    `INSERT INTO calls (id, business_id, channel, caller_id)
-     SELECT ?, ?, 'web', ?
+    `INSERT INTO calls (id, business_id, assistant_id, channel, caller_id, environment, direction)
+     SELECT ?, ?, ?, 'web', ?, 'live', 'inbound'
       WHERE (SELECT COUNT(*) FROM calls
-              WHERE business_id = ? AND started_at > datetime('now', '-1 day')
+              WHERE business_id = ? AND environment = 'live' AND started_at > datetime('now', '-1 day')
                 AND NOT (status = 'abandoned' AND connected_at IS NULL)) < ?`
   )
-    .bind(callId, biz.id, addr === 'local' ? 'anonymous' : addr, biz.id, biz.max_calls_per_day)
+    .bind(
+      callId,
+      target.business_id,
+      target.assistant_id,
+      addr === 'local' ? 'anonymous' : addr,
+      target.business_id,
+      target.max_calls_per_day
+    )
     .run();
   if ((claim.meta.changes ?? 0) !== 1) {
     return tooMany(c, 'This agent has reached its daily call limit. Please try again tomorrow.', 3600);
@@ -759,16 +1143,51 @@ app.get('/ws/call/:callId', async (c) => {
   if (c.req.header('Upgrade')?.toLowerCase() !== 'websocket') {
     return c.json({ error: 'expected websocket' }, 426);
   }
+  // The socket route sits outside /api/public/*, but an Upgrade still performs
+  // call lookup and an atomic capacity claim. Share the same per-IP request
+  // bucket so random ids and replayed tickets cannot bypass the public budget.
+  const handshake = await consumePublic(c.env, clientIp(c), false);
+  if (handshake.overAll) {
+    return tooMany(c, 'Too many requests. Please wait a moment and try again.', LIMITS.publicApi.window);
+  }
   // Bounded by started_at, not just status: a callId that has sat unused past
   // the stale window is not attachable, even before the sweeper retires it.
   const call = await c.env.DB.prepare(
-    `SELECT calls.id, calls.business_id, businesses.max_concurrent_calls
+    `SELECT calls.id, calls.business_id, calls.assistant_id, calls.environment,
+      businesses.user_id, businesses.slug AS workspace_slug,
+      businesses.services_json, businesses.faqs_json, businesses.max_concurrent_calls
        FROM calls JOIN businesses ON businesses.id = calls.business_id
       WHERE calls.id = ? AND calls.status = 'active' AND calls.started_at > datetime('now', ?)`
   )
     .bind(callId, STALE_UNCONNECTED)
-    .first<{ id: string; business_id: string; max_concurrent_calls: number }>();
+    .first<{
+      id: string;
+      business_id: string;
+      assistant_id: string | null;
+      environment: 'test' | 'live';
+      user_id: string;
+      workspace_slug: string;
+      services_json: string;
+      faqs_json: string;
+      max_concurrent_calls: number;
+    }>();
   if (!call) return c.json({ error: 'call not found' }, 404);
+  if (call.environment === 'test') {
+    const userId = await getUserIdFromSession(c.env, getCookie(c, COOKIE));
+    if (userId !== call.user_id) return c.json({ error: 'call not found' }, 404);
+  }
+  if (call.environment === 'live' && !call.assistant_id) {
+    // During a rolling deploy, an old worker can create both the workspace and
+    // a live ticket after migration 0008, before any new-worker public lookup
+    // has materialized its compatibility assistant. Repair that canonical
+    // assistant before the atomic active-state claim below.
+    await ensureWorkspaceFoundation(c.env, {
+      id: call.business_id,
+      slug: call.workspace_slug,
+      services_json: call.services_json,
+      faqs_json: call.faqs_json,
+    });
+  }
   // The Durable Object — and every provider request it makes — starts here, so
   // this is where the concurrency cap has to bite. Checking only at /call/start
   // would let a minute's worth of call ids become that many simultaneous
@@ -786,8 +1205,23 @@ app.get('/ws/call/:callId', async (c) => {
   // socket swap — is fixed separately; refusing at the route is cheap and does
   // not depend on which lands first.)
   const claim = await c.env.DB.batch<{ n: number }>([
-    c.env.DB.prepare("UPDATE calls SET connected_at = datetime('now') WHERE id = ? AND connected_at IS NULL").bind(callId),
-    countLive(c.env, call.business_id, callId),
+    c.env.DB.prepare(
+      `UPDATE calls SET connected_at = datetime('now')
+        WHERE id = ? AND connected_at IS NULL
+          AND (environment = 'test' OR EXISTS (
+            SELECT 1 FROM assistants
+             WHERE assistants.business_id=calls.business_id
+               AND assistants.state='active'
+               AND (
+                 assistants.id=calls.assistant_id
+                 OR (
+                   calls.assistant_id IS NULL
+                   AND assistants.public_slug=(SELECT slug FROM businesses WHERE id=calls.business_id)
+                 )
+               )
+          ))`
+    ).bind(callId),
+    countConnected(c.env, call.business_id, callId, call.environment),
   ]);
   if ((claim[0].meta.changes ?? 0) !== 1) {
     return c.json({ error: 'call already connected' }, 409);

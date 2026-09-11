@@ -122,6 +122,26 @@ describe('POST /api/public/call/start burst', () => {
   });
 });
 
+describe('GET /ws/call/:id handshake budget', () => {
+  it('bounds random and replayed upgrade lookups in the shared public bucket', async () => {
+    const { db, call } = setup();
+    for (let i = 0; i < 30; i++) {
+      expect(
+        (await call(`/ws/call/missing-${i}`, { headers: { Upgrade: 'websocket' } })).status
+      ).toBe(404);
+    }
+    const blocked = await call('/ws/call/missing-over-limit', { headers: { Upgrade: 'websocket' } });
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get('Retry-After')).toBe('60');
+
+    const settled = db.rowsWritten;
+    for (let i = 0; i < 50; i++) {
+      expect((await call('/ws/call/replayed', { headers: { Upgrade: 'websocket' } })).status).toBe(429);
+    }
+    expect(db.rowsWritten).toBe(settled);
+  });
+});
+
 describe('per-business call caps', () => {
   it('turns callers away once the concurrency cap is reached', async () => {
     const { db, attach, start } = setup();
@@ -534,6 +554,62 @@ describe('sweepStaleCalls', () => {
     worker.scheduled!({} as any, fakeEnv(db), { waitUntil: (p: Promise<unknown>) => waits.push(p) } as any);
     await Promise.all(waits);
     expect(db.calls[0].status).toBe('abandoned');
+  });
+});
+
+describe('POST /api/auth/signup', () => {
+  function signupHarness() {
+    const { db, call } = setup();
+    const signup = (email: string, ip?: string) =>
+      call('/api/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(ip ? { 'CF-Connecting-IP': ip } : {}),
+        },
+        body: JSON.stringify({ email, password: 'correct-horse-battery' }),
+      });
+    return { db, signup };
+  }
+
+  it('bounds account creation across attacker-selected email addresses', async () => {
+    const { db, signup } = signupHarness();
+    for (let i = 0; i < 5; i++) {
+      expect((await signup(`owner-${i}@example.test`, '198.51.100.70')).status).toBe(200);
+    }
+
+    const blocked = await signup('owner-5@example.test', '198.51.100.70');
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get('Retry-After')).toBe('3600');
+    expect(db.users).toHaveLength(5);
+    expect(db.sessions).toHaveLength(5);
+  });
+
+  it('does no lookup, hash-triggering work, or write after the IP gate refuses', async () => {
+    const { db, signup } = signupHarness();
+    // No connecting-IP header deliberately exercises the safe shared local
+    // bucket used by development and self-hosted requests without edge headers.
+    for (let i = 0; i < 5; i++) expect((await signup(`local-${i}@example.test`)).status).toBe(200);
+
+    const users = db.users.length;
+    const sessions = db.sessions.length;
+    const writes = db.rowsWritten;
+    const statements: string[] = [];
+    db.hook = (sql) => statements.push(sql);
+
+    for (let i = 0; i < 20; i++) {
+      expect((await signup(`blocked-${i}@example.test`)).status).toBe(429);
+    }
+    db.hook = null;
+
+    // The saturated upsert is a no-op. Nothing reaches the user lookup that
+    // precedes hashing, and no user/session or attacker-keyed row is created.
+    expect(statements).toHaveLength(20);
+    expect(statements.every((sql) => sql.startsWith('INSERT INTO rate_counters'))).toBe(true);
+    expect(db.rowsWritten).toBe(writes);
+    expect(db.users).toHaveLength(users);
+    expect(db.sessions).toHaveLength(sessions);
+    expect([...db.counters.keys()].filter((key) => key.startsWith('sgip:'))).toHaveLength(1);
   });
 });
 

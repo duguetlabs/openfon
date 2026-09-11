@@ -59,6 +59,68 @@ export interface AgentSettings {
   realtime_voice: string; // tier-specific voice id, passed verbatim; empty = tier default
 }
 
+export type AssistantState = 'draft' | 'active' | 'paused';
+export type CallEnvironment = 'test' | 'live';
+export type CallDirection = 'inbound' | 'outbound';
+export type KnowledgeKind = 'faq' | 'service' | 'note';
+export type KnowledgeStatus = 'draft' | 'active';
+
+export interface Assistant {
+  id: string;
+  business_id: string;
+  public_slug: string;
+  state: AssistantState;
+  name: string;
+  greeting: string;
+  persona: string;
+  language: string;
+  voice: string;
+  take_messages: number;
+  custom_instructions: string;
+  engine: string;
+  realtime_model: string;
+  realtime_voice: string;
+  llm_model: string;
+  created_at: string;
+  updated_at: string;
+  activated_at: string | null;
+}
+
+export interface ProviderSettings {
+  business_id: string;
+  llm_base_url: string;
+  llm_api_key: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeCollection {
+  id: string;
+  business_id: string;
+  name: string;
+  description: string;
+  is_default: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeItem {
+  id: string;
+  business_id: string;
+  collection_id: string;
+  kind: KnowledgeKind;
+  status: KnowledgeStatus;
+  title: string;
+  question: string;
+  answer: string;
+  content: string;
+  source_call_id: string | null;
+  source_turn_id: number | null;
+  created_at: string;
+  updated_at: string;
+  activated_at: string | null;
+}
+
 export interface LlmConfig {
   baseUrl: string;
   apiKey: string;

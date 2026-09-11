@@ -7,6 +7,7 @@ dist/
 .env
 .env.*
 .claude/
+references/
 
 # Benchmark audio corpora — regenerate with bench/quality/prepare/ recipes
 # (see docs/research/voice-eval-datasets.md). Never commit the audio itself.

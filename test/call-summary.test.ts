@@ -68,18 +68,29 @@ function session(failure: string | null) {
   return { s: s as unknown as { finalize(): Promise<void> }, calls };
 }
 
-// bind order: status, ended_at, duration_s, summary, intent, message_json, id
+// bind order: status, ended_at, duration_s, summary, intent, message_json,
+// outcome, failure_code, failure_message, id
 function written(calls: Bound[]): { status: string | null; summary: string | null } {
   const update = calls.find((c) => c.sql.startsWith('UPDATE calls'));
   return { status: (update?.args[0] ?? null) as string | null, summary: (update?.args[3] ?? null) as string | null };
 }
 
+function finalUpdate(calls: Bound[]): Bound {
+  const update = calls.find((c) => c.sql.includes('outcome = ?'));
+  if (!update) throw new Error('final call update was not written');
+  return update;
+}
+
 describe('finalize', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  function stubSummary(text: string) {
-    const body = JSON.stringify({ choices: [{ message: { content: JSON.stringify({ summary: text, intent: 'booking' }) } }] });
+  function stubSummaryResult(result: Record<string, unknown>) {
+    const body = JSON.stringify({ choices: [{ message: { content: JSON.stringify(result) } }] });
     vi.stubGlobal('fetch', vi.fn(async () => new Response(body, { status: 200 })));
+  }
+
+  function stubSummary(text: string) {
+    stubSummaryResult({ summary: text, intent: 'booking' });
   }
 
   it('marks the row failed and keeps the diagnostic, even mid-conversation', async () => {
@@ -97,6 +108,7 @@ describe('finalize', () => {
     expect(summary).toContain('Caller booked a cleaning for Friday.');
     // The failure leads: the call log truncates this row.
     expect(summary?.startsWith('Call failed:')).toBe(true);
+    expect(finalUpdate(calls).args[6]).toBe('failed');
   });
 
   it('records the failure alone when summary generation also fails', async () => {
@@ -111,5 +123,59 @@ describe('finalize', () => {
     const { s, calls } = session(null);
     await s.finalize();
     expect(written(calls)).toEqual({ status: 'completed', summary: 'Caller booked a cleaning for Friday.' });
+    expect(finalUpdate(calls).args[6]).toBe('booking_requested');
+  });
+
+  it.each([null, '   '])(
+    'classifies booking contact details without a real message as booking_requested (message %j)',
+    async (message) => {
+      stubSummaryResult({
+        summary: 'Maria asked to book a cleaning and shared her contact details.',
+        intent: 'booking',
+        caller_name: 'Maria',
+        caller_phone: '0664 1234567',
+        message,
+      });
+      const { s, calls } = session(null);
+      await s.finalize();
+
+      const update = finalUpdate(calls);
+      expect(update.args[4]).toBe('booking');
+      expect(JSON.parse(String(update.args[5]))).toEqual({
+        caller_name: 'Maria',
+        caller_phone: '0664 1234567',
+        message,
+      });
+      expect(update.args[6]).toBe('booking_requested');
+    }
+  );
+
+  it('uses message_taken when the parsed summary contains an actual callback message', async () => {
+    stubSummaryResult({
+      summary: 'Maria left a callback message about a crown.',
+      intent: 'message',
+      caller_name: 'Maria',
+      caller_phone: '0664 1234567',
+      message: 'Please call me back about a crown.',
+    });
+    const { s, calls } = session(null);
+    await s.finalize();
+
+    const update = finalUpdate(calls);
+    expect(String(update.args[5])).toContain('Please call me back about a crown.');
+    expect(update.args[6]).toBe('message_taken');
+  });
+
+  it('keeps an answered question classified as answered', async () => {
+    stubSummaryResult({
+      summary: 'Caller asked about opening hours.',
+      intent: 'question',
+      caller_name: null,
+      caller_phone: null,
+      message: null,
+    });
+    const { s, calls } = session(null);
+    await s.finalize();
+    expect(finalUpdate(calls).args[6]).toBe('answered');
   });
 });

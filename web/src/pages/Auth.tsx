@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useSession } from '../App';
+import { authSubmissionBlocked, SIGN_OUT_PENDING_MESSAGE } from '../session-load';
 import { Button, Field, Logo } from '../ui';
 
 export default function AuthPage() {
@@ -10,11 +11,15 @@ export default function AuthPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const { refresh } = useSession();
+  const { refresh, signOut, signOutPending, signOutWarning } = useSession();
   const nav = useNavigate();
+  const authLocked = authSubmissionBlocked(signOutPending, Boolean(signOutWarning));
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    // Native disabled controls stop user input, while this guard also covers a
+    // programmatic submission during pending or unconfirmed server sign-out.
+    if (authSubmissionBlocked(signOutPending, Boolean(signOutWarning))) return;
     setBusy(true);
     setError('');
     try {
@@ -80,46 +85,87 @@ export default function AuthPage() {
       {/* form panel */}
       <div className="atmosphere flex flex-1 items-center justify-center p-8">
         <form onSubmit={submit} className="rise rise-2 w-full max-w-sm">
-          <div className="rounded-2xl border border-line bg-surface p-7 shadow-raise sm:p-8">
-            <div className="mb-6">
-              <h2 className="font-display text-3xl font-semibold tracking-tight text-ink">
-                {mode === 'signup' ? 'Set up your line' : 'Welcome back'}
-              </h2>
-              <p className="mt-1.5 text-sm text-ink-soft">
-                {mode === 'signup' ? 'Free, on your own infrastructure.' : 'Sign in to your dashboard.'}
-              </p>
+          {signOutWarning && (
+            <div
+              className="mb-4 rounded-[10px] border border-rose/25 bg-wash-rose px-4 py-3 text-sm text-rose"
+              role="alert"
+            >
+              <p>{signOutWarning}</p>
+              <button
+                type="button"
+                className="mt-2 font-semibold underline decoration-rose/30 underline-offset-2 hover:decoration-rose disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={signOutPending}
+                onClick={() => {
+                  void signOut().catch(() => {
+                    // The alert remains visible and offers another retry.
+                  });
+                }}
+              >
+                {signOutPending ? 'Retrying sign-out…' : 'Retry sign-out'}
+              </button>
             </div>
-            <div className="space-y-4">
-              <Field
-                label="Email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@business.com"
-              />
-              <Field
-                label="Password"
-                type="password"
-                required
-                minLength={8}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 8 characters"
-              />
-              {error && (
-                <p className="rounded-[10px] border border-rose/20 bg-wash-rose px-3 py-2 text-sm text-rose">{error}</p>
-              )}
-              <Button type="submit" disabled={busy} className="w-full">
-                {busy ? 'One moment…' : mode === 'signup' ? 'Create account' : 'Sign in'}
-              </Button>
+          )}
+          {signOutPending && (
+            <p
+              id="sign-out-pending-status"
+              className="mb-4 rounded-[10px] border border-iris/20 bg-wash-iris px-4 py-3 text-sm text-ink-soft"
+              role="status"
+              aria-live="polite"
+            >
+              {SIGN_OUT_PENDING_MESSAGE}
+            </p>
+          )}
+          <fieldset
+            disabled={authLocked}
+            aria-busy={signOutPending}
+            aria-describedby={signOutPending ? 'sign-out-pending-status' : undefined}
+            className="m-0 min-w-0 border-0 p-0 transition-opacity disabled:cursor-wait disabled:opacity-60"
+          >
+            <div className="rounded-2xl border border-line bg-surface p-7 shadow-raise sm:p-8">
+              <div className="mb-6">
+                <h2 className="font-display text-3xl font-semibold tracking-tight text-ink">
+                  {mode === 'signup' ? 'Set up your line' : 'Welcome back'}
+                </h2>
+                <p className="mt-1.5 text-sm text-ink-soft">
+                  {mode === 'signup' ? 'Free, on your own infrastructure.' : 'Sign in to your dashboard.'}
+                </p>
+              </div>
+              <div className="space-y-4">
+                <Field
+                  label="Email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@business.com"
+                />
+                <Field
+                  label="Password"
+                  type="password"
+                  required
+                  minLength={8}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="At least 8 characters"
+                />
+                {error && (
+                  <p className="rounded-[10px] border border-rose/20 bg-wash-rose px-3 py-2 text-sm text-rose">
+                    {error}
+                  </p>
+                )}
+                <Button type="submit" disabled={busy || authLocked} className="w-full">
+                  {busy ? 'One moment…' : mode === 'signup' ? 'Create account' : 'Sign in'}
+                </Button>
+              </div>
             </div>
-          </div>
+          </fieldset>
           <p className="mt-5 text-center text-sm text-ink-soft">
             {mode === 'signup' ? 'Already have an account?' : 'New here?'}{' '}
             <button
               type="button"
-              className="font-semibold text-iris underline decoration-iris/30 underline-offset-2 hover:decoration-iris"
+              className="font-semibold text-iris underline decoration-iris/30 underline-offset-2 hover:decoration-iris disabled:cursor-wait disabled:opacity-60"
+              disabled={authLocked}
+              aria-describedby={signOutPending ? 'sign-out-pending-status' : undefined}
               onClick={() => setMode(mode === 'signup' ? 'login' : 'signup')}
             >
               {mode === 'signup' ? 'Sign in' : 'Create one'}
