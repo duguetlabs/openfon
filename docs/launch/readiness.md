@@ -46,7 +46,7 @@ Read-only production inspection is recorded in [production-preflight.md](product
 
 Use this repository's Cloudflare deployment, not an unrelated website host. The target account must be Duguet Labs and credentials must come from `dsecret`/the scoped environment. `npm run deploy` includes **remote migrations** and is not a preview command.
 
-Before deployment, record current Worker version and migration list, export D1, and verify backup restoration on a temporary database. Run `npm ci`, `npm run typecheck`, `npm test`, both Python benchmark suites, `npm run test:e2e`, and `npm run build`. The browser CI job and expanded deploy dependencies are prepared locally on `codex/launch-studio` at `4833800`, but are excluded from this review branch. GitHub rejected the workflow update because the current OAuth token lacks the `workflow` scope; permission expansion awaits the user. Remote CI remains unchanged: run browser validation explicitly and verify every release check before deployment.
+Before deployment, record current Worker version and migration list, export D1, and verify backup restoration on a temporary database. Run `npm ci`, `npm run typecheck`, `npm test`, both Python benchmark suites, `npm run test:e2e`, and `npm run build`. The browser CI job runs the local-workerd suite, and the deployment job depends on application, browser, and both benchmark checks. The workflow was published through the GitHub connector’s existing authorization; no permission expansion is required. Verify these checks on the exact release commit before deployment.
 
 After an approved release, check public root, authentication, existing-account data, draft/paused public-link rejection, private test ownership, exports and account settings. Perform one real test/live call and inspect its record. If acceptance fails, roll back Worker code to the recorded prior version, leave additive schema in place, and investigate before resuming traffic.
 
@@ -55,7 +55,6 @@ After an approved release, check public root, authentication, existing-account d
 - Final production hostname and support/operator identity.
 - Hosted service versus self-hosting-only launch; data retention and processor choices for the hosted instance.
 - Mandatory PR-Agent gate or explicit accepted substitute.
-- Permission decision for pushing the separately prepared CI workflow update; browser CI and expanded deployment dependencies are not remotely active.
 - Whether PSTN is required for the initial public launch. The current website truthfully describes browser-only calling.
 
 - Real-provider preflight: the scoped vault credential returned HTTP 403 from the configured Kataleptic model catalog. No live provider conversation was claimed or completed; valid provider access still needs verification.

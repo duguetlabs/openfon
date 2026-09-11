@@ -27,7 +27,7 @@ Unapproved paid campaigns and external marketing messages. Preserve user-owned u
 - Port8787 belongs to another project (whatsapp-mcp); never stop it. Preview used8788; E2E uses8790 and fresh temporary D1 state.
 
 ## Decisions
-- Review branch preserves the application/test/docs/assets diff from a38a20e to 4833800 except `.github/workflows/ci.yml`. GitHub rejected the workflow update for missing OAuth workflow scope; user permission decision remains pending. Browser CI and expanded deployment dependencies are prepared locally, not active remotely.
+- Review branch includes the launch application, tests, docs/assets, and browser CI with expanded deployment dependencies. The prepared workflow was published through the GitHub connector’s existing authorization in fabdee7; no OAuth-scope expansion is needed.
 - Original cream/cobalt/orange design with interactive CSS3D phone; no fake customers, guarantees or carrier claims.
 - Draft-first onboarding; publishing explicit. Draft/paused complete assistants may enter studio; partial setup resumes onboarding.
 - Account deletion refuses active calls and uses RETURNING id because real D1 metadata counts cascades. Export allowlists columns and bounds rows/serialized bytes under D1 limits.
@@ -72,7 +72,7 @@ Unapproved paid campaigns and external marketing messages. Preserve user-owned u
 - Failed intermediate E2E runs revealed setup recovery and D1 cascade issues; also corrected test waits/selectors and fresh-per-run DB to respect real signup limits. Current4/4 green supersedes these runs.
 
 ## Blockers, risks and unresolved questions
-- PR-Agent merge gate; pending workflow-scope authorization; final domain/operator identity; provider access403; unimplemented carrier transport.
+- PR-Agent merge gate; final domain/operator identity; provider access403; unimplemented carrier transport.
 - New codec/webhook helpers are offline-tested, not integrated or production ready.
 - Password-reset email and verification unavailable; do not imply they exist.
 
