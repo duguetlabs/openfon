@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { readWorkspaceBody } from './request-validation';
 import type { Context } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import type { Env, Business, AgentSettings } from './types';
@@ -459,7 +460,7 @@ app.get('/api/me/business', async (c) => {
 });
 
 app.post('/api/me/business', async (c) => {
-  const body = await c.req.json<Partial<Business>>();
+  const body = await readWorkspaceBody<Partial<Business>>(c.req);
   if (!body.name?.trim()) return c.json({ error: 'Business name required' }, 400);
   const userId = c.get('userId');
   const existingWorkspace = () =>
@@ -537,7 +538,7 @@ app.post('/api/me/business', async (c) => {
 app.put('/api/me/business/:id', async (c) => {
   const biz = await ownedBusiness(c.env, c.get('userId'), c.req.param('id'));
   if (!biz) return c.json({ error: 'Not found' }, 404);
-  const b = await c.req.json<Partial<Business>>();
+  const b = await readWorkspaceBody<Partial<Business>>(c.req);
   const servicesChanged =
     b.services_json !== undefined &&
     !sameLegacyKnowledgeProjection('service', b.services_json, biz.services_json);
@@ -600,7 +601,7 @@ app.put('/api/me/business/:id/agent', async (c) => {
     .bind(biz.id, biz.slug)
     .first<AgentSettings & { id: string; name: string; state: 'draft' | 'active' | 'paused' }>();
   if (!cur) return c.json({ error: 'Not found' }, 404);
-  const s = await c.req.json<Partial<AgentSettings> & { clearApiKey?: boolean }>();
+  const s = await readWorkspaceBody<Partial<AgentSettings> & { clearApiKey?: boolean }>(c.req);
   if (s.clearApiKey !== undefined && typeof s.clearApiKey !== 'boolean') {
     return c.json({ error: 'clearApiKey must be a boolean' }, 400);
   }
@@ -743,7 +744,7 @@ app.get('/api/me/business/:id/profiles', async (c) => {
 app.post('/api/me/business/:id/profiles', async (c) => {
   const biz = await ownedBusiness(c.env, c.get('userId'), c.req.param('id'));
   if (!biz) return c.json({ error: 'Not found' }, 404);
-  const b = await c.req.json<Partial<ProfileFields>>();
+  const b = await readWorkspaceBody<Partial<ProfileFields>>(c.req);
   if (!b.name?.trim()) return c.json({ error: 'Profile name required' }, 400);
   const id = newId();
   // A missing/blank value means "snapshot the workspace key". Credentials are
@@ -806,7 +807,7 @@ async function ownedProfile(env: Env, userId: string, pid: string): Promise<Prof
 app.put('/api/me/profiles/:pid', async (c) => {
   const p = await ownedProfile(c.env, c.get('userId'), c.req.param('pid'));
   if (!p) return c.json({ error: 'Not found' }, 404);
-  const b = await c.req.json<Partial<ProfileFields>>();
+  const b = await readWorkspaceBody<Partial<ProfileFields>>(c.req);
   const llmKey = b.llm_api_key !== undefined && b.llm_api_key !== '' && !/^•+$/.test(b.llm_api_key) ? b.llm_api_key : p.llm_api_key;
   const llmBaseUrl = b.llm_base_url ?? p.llm_base_url;
   if (b.language !== undefined && !b.language.trim()) return c.json({ error: 'Profile language is required' }, 400);
@@ -1126,7 +1127,7 @@ app.get('/api/public/agent/:slug', async (c) => {
 });
 
 app.post('/api/public/call/start', async (c) => {
-  const { slug } = await c.req.json<{ slug?: string }>();
+  const { slug } = await readWorkspaceBody<{ slug?: string }>(c.req);
   // The per-IP ceilings were already applied by the /api/public/* middleware.
   const addr = clientIp(c);
   const target = await activePublicAssistant(c.env, slug ?? '');

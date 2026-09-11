@@ -327,6 +327,48 @@ describe('Calm Studio API foundation', () => {
     );
   }
 
+  it('rejects malformed workspace field types without persisting invalid state', async () => {
+    const workspace = await createWorkspace() as { id: string };
+    const bootstrap = await data<{ assistants: Array<{ id: string }>; knowledgeCollections: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'));
+    const assistantId = bootstrap.assistants[0].id;
+    const collection = db.database.prepare('SELECT id FROM knowledge_collections WHERE business_id=?').get(workspace.id) as { id: string };
+    const cases: Array<[string, string, unknown]> = [
+      ['/api/me/assistants', 'POST', { name: {} }],
+      [`/api/me/assistants/${assistantId}`, 'PUT', { name: {} }],
+      [`/api/me/assistants/${assistantId}`, 'PUT', { greeting: ['invalid'] }],
+      [`/api/me/assistants/${assistantId}`, 'PUT', { take_messages: {} }],
+      ['/api/me/knowledge/collections', 'POST', { name: 'Invalid', description: {} }],
+      [`/api/me/knowledge/collections/${collection.id}`, 'PUT', { name: 5 }],
+      [`/api/me/knowledge/collections/${collection.id}/items`, 'POST', { kind: 'faq', question: {}, answer: 'Answer' }],
+      ['/api/me/provider', 'PUT', { baseUrl: {} }],
+      ['/api/me/engine-presets', 'POST', { name: 'Invalid', voice: [] }],
+      [`/api/me/business/${workspace.id}`, 'PUT', { hours_json: [] }],
+      [`/api/me/business/${workspace.id}/agent`, 'PUT', { agent_name: {} }],
+      [`/api/me/business/${workspace.id}/profiles`, 'POST', { name: 'Invalid', llm_base_url: [] }],
+    ];
+    for (const [path, method, body] of cases) {
+      const response = await request(env, path, json(method, body));
+      expect(response.status, `${method} ${path}`).toBe(400);
+      expect(await response.json()).toHaveProperty('error');
+    }
+    expect(db.database.prepare('SELECT name,greeting FROM assistants WHERE id=?').get(assistantId)).toEqual({ name: '', greeting: '' });
+    expect(db.database.prepare('SELECT COUNT(*) AS n FROM assistants').get()).toEqual({ n: 1 });
+    expect(db.database.prepare('SELECT COUNT(*) AS n FROM knowledge_collections').get()).toEqual({ n: 1 });
+    expect(db.database.prepare('SELECT COUNT(*) AS n FROM knowledge_items').get()).toEqual({ n: 0 });
+    expect(db.database.prepare('SELECT COUNT(*) AS n FROM engine_presets').get()).toEqual({ n: 0 });
+  });
+
+  it('returns JSON client errors for malformed or non-object studio bodies', async () => {
+    await createWorkspace();
+    for (const path of ['/api/me/assistants', '/api/me/knowledge/collections', '/api/me/provider/check']) {
+      for (const body of ['{', 'null', '[]', 'true', '42', '"text"']) {
+        const response = await request(env, path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        expect(response.status, `${path}: ${body}`).toBe(400);
+        expect(await response.json()).toHaveProperty('error');
+      }
+    }
+  });
+
   it('preserves a named draft primary through new onboarding and knowledge reads', async () => {
     const workspace = await createWorkspace() as { id: string; slug: string };
     expect((await request(env, `/api/me/business/${workspace.id}`, json('PUT', {
