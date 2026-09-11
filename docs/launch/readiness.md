@@ -23,6 +23,7 @@ Updated 2026-09-12. **Release candidate in progress; not production-launch appro
 ## Validation evidence
 
 - Application unit/API suite after dependency upgrades: 424/424 passed across 20 files.
+- Local synthetic migration rehearsal: upgrade 0006 → 0009 preserved public slugs, completed history, transcripts, settings and compatibility data. Binary backup/restore, SQL dump/restore, pre-upgrade restore and re-upgrade passed integrity and foreign-key checks. The 0008 migration regression group also passed 10 tests. This does not replace a staging D1 rehearsal using the production backup.
 - TypeScript: passed after Workers types 5 / React Router 7 / Vitest 5 upgrades.
 - Quality benchmarks: 220 tests, one existing skip.
 - Realtime benchmarks: 206 tests; standalone report checker passed.

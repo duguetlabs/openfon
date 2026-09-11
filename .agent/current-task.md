@@ -1,7 +1,7 @@
 # OpenFon launch preparation
 
 - Status: In progress
-- Owner/active agent: Codex /root; foundation_fix review monitoring, benchmark_hardening local migration rehearsal
+- Owner/active agent: Codex /root; foundation_fix unsaved-edit fix and review follow-up; benchmark_hardening rehearsal complete
 - Branch: codex/launch-studio at /Users/cristian/projects/fun/openfon; verified carrier review branch codex/telnyx-inbound at /tmp/openfon-telephony
 - Base commit: 3cad16bcd699b14979c5178bc2b587bbae30cef9 (PR #14; merged into this branch)
 - Last updated: 2026-09-11T22:58:50.154256+00:00
@@ -43,7 +43,9 @@ Unapproved spending, external marketing distribution, real carrier calls without
 
 ## Work remaining
 - PR #15 open (codex/telnyx-inbound → codex/launch-review), all four CI jobs green at a59f1ff; latest code and security reviews pending. Actual carrier runtime harness included in CI. Obtain exact-head reviews and resolve real findings.
-- Continue PR #14 review; satisfy mandatory PR-Agent gate before merging any PR.
+- PR #14 review found unsaved assistant edits lost on navigation (3994044623). foundation_fix owns the router/unload guard and browser regression in /tmp/openfon-launch-review; integrate its validated commit into carrier/root and retrigger reviews.
+- PR #15 P1 3994041617 is false: official Telnyx Connected Frame contract includes the configured streaming token in both header and frame. Evidence rebuttal 3994044459 posted and explicit reconsideration requested in issuecomment-5641596366. No authentication weakened. Still await clean exact-head review.
+- Satisfy mandatory PR-Agent gate before merging any PR.
 - Confirm production identity/access/provider; backup/staging migration/rollback drill then actual provider/carrier pilot before launch. No production ready claim.
 - Verified carrier and launch branches consolidated into this original checkout; user research remains untracked and untouched.
 
@@ -53,6 +55,7 @@ Unapproved spending, external marketing distribution, real carrier calls without
 
 ## Validation
 - npm test:424/424 across20 files after merge and ingressfix.
+- Local synthetic legacy migration/backup rehearsal passed: 0006 → 0009, preserved slugs/history/settings, binary and SQL restore, rollback/re-upgrade, integrity/foreign-key checks. Script: /tmp/openfon-launch-qa/migration-rehearsal.py; invocation python3 SCRIPT /Users/cristian/projects/fun/openfon. Migration 0008 regression group: 10 passed. Production D1 rehearsal remains required.
 - npm run typecheck:passed.
 - npm run test:telnyx:passed against actual local workerd, signed ingress, duplicate admission, valid-shaped forged token rejected, bidirectional non-silent PCM, interruption/marks/hangup and D1release. All outbound services mocked.
 - Browser test:e2e:6/6 passed on consolidated carrier branch; build included.
@@ -63,4 +66,4 @@ Unapproved spending, external marketing distribution, real carrier calls without
 Missing mandatory reviewer, final operator/domain/privacy details, unverified real-provider access (local credential preflight 403), absent real carrier configuration/pilot. Tombstones retain provider correlation for replay suppression; no live-carrier readiness claimed.
 
 ## Recommended next action
-Verify worktree/agent/remote PR state, collect latest-head reviews on PRs #14/#15, address confirmed findings, and finish the local migration rehearsal. No merge or production launch until gates pass.
+Verify worktree/agent/remote PR state, collect latest-head reviews on PRs #14/#15, address confirmed findings, and integrate the pending validated unsaved-edit fix from foundation_fix. No merge or production launch until gates pass.
