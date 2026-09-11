@@ -230,6 +230,49 @@ describe('Calm Studio migration 0008', () => {
     db.close();
   });
 
+  it('filters malformed legacy fields before seeding active knowledge and preserves cleanup-equivalent edits', async () => {
+    const db = new SqliteD1();
+    try {
+      applyMigrations(db, 1, 7);
+      db.exec(`INSERT INTO users (id,email,password_hash) VALUES ('user-1','migration@example.test','hash');
+        INSERT INTO businesses (id,user_id,slug,name) VALUES ('migration-biz','user-1','migration-slug','Migration');
+        INSERT INTO agent_settings (business_id) VALUES ('migration-biz');`);
+      const validServices = [
+        { name: '  Consultation\t', price: ' €40 ', duration: ' 30 min ', notes: ' Call ahead ' },
+        { name: 'Repair' },
+      ];
+      const validFaqs = [{ q: '\u00a0Open today?\n', a: ' Yes.\t' }];
+      const services = [...validServices,
+        { name: 'Bad price', price: 5 }, { name: 'Bad duration', duration: false },
+        { name: 'Bad notes', notes: {} }, { name: 'Null optional', price: null },
+        { name: 12 }, { name: '\t\u00a0' }, null, 'not an object', ['nested']];
+      const faqs = [...validFaqs, { q: 'Bad answer', a: 5 }, { q: false, a: 'Bad question' },
+        { q: 'Blank answer', a: '\t\u00a0' }, { q: '\n', a: 'Blank question' }, null, 'not an object'];
+      db.database.prepare('UPDATE businesses SET services_json=?,faqs_json=? WHERE id=?')
+        .run(JSON.stringify(services), JSON.stringify(faqs), 'migration-biz');
+      applyMigrations(db, 8, 8);
+      expect(db.database.prepare('SELECT title,content FROM knowledge_items WHERE kind=? ORDER BY id').all('service')).toEqual([
+        { title: 'Consultation', content: '€40 · 30 min — Call ahead' }, { title: 'Repair', content: '' },
+      ]);
+      expect(db.database.prepare('SELECT question,answer FROM knowledge_items WHERE kind=?').all('faq')).toEqual([
+        { question: 'Open today?', answer: 'Yes.' },
+      ]);
+      db.database.prepare("UPDATE knowledge_items SET status='draft',content='Reviewed price' WHERE id=?")
+        .run('ki_service_migration-biz_0');
+      db.database.prepare('INSERT INTO sessions (token,user_id,expires_at) VALUES (?,?,?)')
+        .run('session-1', 'user-1', new Date(Date.now() + 3600_000).toISOString());
+      const env = makeEnv(db);
+      const saved = await request(env, '/api/me/business/migration-biz', json('PUT', {
+        services_json: JSON.stringify(validServices), faqs_json: JSON.stringify(validFaqs),
+      }));
+      expect(saved.status).toBe(200);
+      expect((await request(env, '/api/me/bootstrap')).status).toBe(200);
+      expect(db.database.prepare('SELECT COUNT(*) AS n FROM knowledge_items').get()).toEqual({ n: 3 });
+      expect(db.database.prepare('SELECT status,content FROM knowledge_items WHERE id=?').get('ki_service_migration-biz_0'))
+        .toEqual({ status: 'draft', content: 'Reviewed price' });
+    } finally { db.close(); }
+  });
+
   it('ignores valid legacy JSON values that are not arrays of records', () => {
     const db = new SqliteD1();
     applyMigrations(db, 1, 7);
