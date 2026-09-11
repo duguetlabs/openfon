@@ -37,6 +37,25 @@ describe('Telnyx media bridge', () => {
     expect(f.carrier).toEqual([]);
   });
 
+  it('retains only the latest second while a provider handshake receives continuous carrier audio', async () => {
+    const f = fixture();
+    await f.receive(connected);
+    await f.receive(start);
+    for (let chunk = 1; chunk <= 150; chunk++) {
+      await f.receive(media(chunk));
+      vi.advanceTimersByTime(20);
+    }
+    expect(f.onEnd).not.toHaveBeenCalled();
+    expect(f.session).toEqual(['{"type":"start"}']);
+    f.server(ready);
+    const buffered = f.session.filter((value): value is ArrayBuffer => value instanceof ArrayBuffer);
+    expect(buffered.reduce((bytes, frame) => bytes + frame.byteLength, 0)).toBe(48000);
+    await f.receive(media(151));
+    expect(f.session.at(-1)).toEqual(new ArrayBuffer(960));
+    expect(f.onEnd).not.toHaveBeenCalled();
+    f.adapter.close();
+  });
+
   it.each([
     { ...connected, version: '9.0' },
     { ...connected, connected: { 'x-telnyx-streaming-auth-token': 'wrong' } },
@@ -84,8 +103,8 @@ describe('Telnyx media bridge', () => {
     for (const raw of ['{', ' '.repeat(8193), new ArrayBuffer(10), '[]']) {
       const f = fixture(); await f.adapter.carrierMessage(raw); expect(f.onEnd).toHaveBeenCalledTimes(1);
     }
-    const f = fixture(); await f.receive(connected); await f.receive(start);
-    for (let i = 1; i <= 51; i++) await f.receive(media(i));
+    const f = fixture(); await f.boot();
+    f.server(pcm(500)); f.server(pcm(2));
     expect(f.onEnd).toHaveBeenCalledTimes(1);
   });
 

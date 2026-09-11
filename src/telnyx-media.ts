@@ -134,7 +134,12 @@ export class TelnyxMediaAdapter {
       const pcm = this.up.push(packet.payload);
       if (this.ready) this.options.sessionSend(pcm.buffer as ArrayBuffer);
       else {
-        if (this.preReadyBytes + pcm.length > 48000) throw new Error('startup_audio_overflow');
+        // The carrier emits continuous audio, including silence, while the
+        // provider connects. Retain the latest second until readiness instead
+        // of treating an ordinary multi-second handshake as queue overflow.
+        while (this.preReadyBytes + pcm.length > 48000 && this.preReady.length) {
+          this.preReadyBytes -= this.preReady.shift()!.length;
+        }
         this.preReady.push(pcm);
         this.preReadyBytes += pcm.length;
       }
