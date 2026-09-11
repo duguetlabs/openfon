@@ -40,8 +40,34 @@ test('new workspace remains private, assistant edits persist, pause survives rel
   await page.getByRole('link', { name: 'Configure →' }).first().click();
   await page.getByLabel('Opening greeting').fill('Hello from the workshop test.');
   await expect(page.getByRole('button', { name: 'Publish assistant' })).toBeDisabled();
+  const editorUrl = page.url();
+  const rejectDiscard = async (action: () => Promise<unknown>, type = 'confirm') => {
+    const dialog = page.waitForEvent('dialog');
+    const navigation = action().catch(() => undefined); // cancelled reload rejects navigation
+    const prompt = await dialog;
+    expect(prompt.type()).toBe(type);
+    await prompt.dismiss();
+    await navigation;
+    await expect(page).toHaveURL(editorUrl);
+    await expect(page.getByLabel('Opening greeting')).toHaveValue('Hello from the workshop test.');
+  };
+  await rejectDiscard(() => page.getByRole('link', { name: 'Open Test Studio →' }).click());
+  await rejectDiscard(() => page.getByRole('navigation', { name: 'Workspace' }).getByRole('link', { name: 'Knowledge', exact: true }).click());
+  await rejectDiscard(() => page.goBack());
+  await rejectDiscard(() => page.reload({ timeout: 1500 }), 'beforeunload');
+  await rejectDiscard(() => page.getByRole('button', { name: 'Sign out', exact: true }).click());
+  expect((await page.request.get('/api/me')).status()).toBe(200);
+
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Assistant saved');
+  // Explicit discard proceeds; cancelling above preserved the same draft.
+  await page.getByLabel('Opening greeting').fill('This edit should be discarded.');
+  page.once('dialog', dialog => void dialog.accept());
+  await page.getByRole('link', { name: 'Manage knowledge →' }).click();
+  await expect(page).toHaveURL(/\/knowledge$/);
+  await page.goBack();
+  await expect(page.getByLabel('Opening greeting')).toHaveValue('Hello from the workshop test.');
+
   await page.reload();
   await expect(page.getByLabel('Opening greeting')).toHaveValue('Hello from the workshop test.');
   await page.getByRole('button', { name: 'Publish assistant' }).click();
