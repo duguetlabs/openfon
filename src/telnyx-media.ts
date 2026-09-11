@@ -187,7 +187,8 @@ export class TelnyxMediaAdapter {
           this.endingDeadline = setTimeout(() => this.close('drain_timeout'), 12000);
         }
         this.armDrain();
-      } else if (msg.type === 'ended' || msg.type === 'error') this.close('session_ended');
+      } else if (msg.type === 'ended') this.close('session_ended');
+      else if (msg.type === 'error') this.close('session_error');
       // Transcripts, agent text, tool metadata and browser controls stay private.
     } catch { this.close('invalid_session_frame'); }
   }
@@ -241,6 +242,9 @@ export function createTelnyxMediaBridge(input: {
   callLegId: string; callSessionId: string; streamToken: string;
   onStart?: () => void | Promise<void>; onEnded: (reason: string) => void;
 }): { close: (reason?: string) => void } {
+  // Modern workerd WebSockets default to Blob. Force synchronous PCM buffers
+  // before messages arrive, preserving audio/control ordering without async reads.
+  input.session.binaryType = 'arraybuffer';
   const checkedSend = (socket: WebSocket, data: string | ArrayBuffer) => {
     // Workers does not expose bufferedAmount; the adapter independently caps
     // queued frames and unacknowledged marks. Check it on runtimes that do.

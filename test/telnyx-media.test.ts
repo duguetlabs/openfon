@@ -148,14 +148,21 @@ describe('Telnyx media bridge', () => {
     expect(h.onEnd).toHaveBeenCalledTimes(1);
   });
 
+  it('distinguishes session failure from normal completion', async () => {
+    const f = fixture(); await f.boot(); f.server({type:'error',message:'private failure'});
+    expect(f.onEnd).toHaveBeenCalledWith('session_error');
+  });
+
   it('socket wrapper forwards close once and removes all owned listeners', async () => {
     class Socket extends EventTarget {
+      binaryType = 'blob';
       readyState = 1; bufferedAmount = 0; sent: unknown[] = [];
       send(data: unknown) { this.sent.push(data); }
       close() { this.readyState = 3; this.dispatchEvent(new Event('close')); }
     }
     const carrier = new Socket(); const session = new Socket(); const onEnded = vi.fn();
     const bridge = createTelnyxMediaBridge({ carrier: carrier as unknown as WebSocket, session: session as unknown as WebSocket, callId: 'call', callControlId: 'control', callSessionId: 'session', callLegId: 'leg', streamToken: identity.authToken, onEnded });
+    expect(session.binaryType).toBe('arraybuffer');
     carrier.close(); bridge.close();
     carrier.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(connected) }));
     vi.advanceTimersByTime(20000);
