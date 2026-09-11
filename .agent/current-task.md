@@ -3,7 +3,7 @@
 - Status: In progress
 - Owner/active agent: Codex /root; foundation_fix reviews, studio_app marketing capture
 - Branch: codex/telnyx-inbound at /tmp/openfon-telephony
-- Base commit: db7e36165c64737698e197b763252a3d49b6ab76 (launch PR #14; merged into this branch)
+- Base commit: ff9b2444b91cb2f51fb68ae5a3e99ffefa934f2d (launch PR #14; merged into this branch)
 - Last updated: 2026-09-11T22:44:28.197904+00:00
 - Applicable AGENTS.md: repository AGENTS.md and user-provided project instructions
 - Read first: this file, docs/launch/readiness.md, docs/telephony.md, docs/launch/production-preflight.md
