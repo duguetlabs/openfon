@@ -69,7 +69,7 @@ test('knowledge draft, approval and attachment survive reload; all app menus wor
   await expect(page.getByRole('checkbox', { name: 'Alex', exact: true })).toBeChecked();
   await expect(page.getByRole('status')).toContainText('Assistant knowledge updated');
   await page.reload();
-  await page.getByRole('combobox', { name: 'Collection', exact: true }).selectOption({ label: 'Workshop services (1 items)' });
+  await page.getByRole('combobox', { name: 'Collection', exact: true }).selectOption({ label: 'Workshop services (1 item)' });
   await expect(page.getByRole('checkbox', { name: 'Alex', exact: true })).toBeChecked();
   await expect(page.getByText('Do you fix punctures?', { exact: true })).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('knowledge-desktop.png'), fullPage: true });
@@ -105,4 +105,43 @@ test('account can change password, export data without credentials, and delete',
   await page.getByRole('button', { name: 'Permanently delete account', exact: true }).click();
   await expect(page).toHaveURL('/auth');
   expect((await page.request.get('/api/me')).status()).toBe(401);
+});
+
+
+test('private test call traverses Worker websocket and persists transcript and summary', async ({ page }) => {
+  await signup(page);
+  const result = await page.evaluate(async () => {
+    const bootstrap = await (await fetch('/api/me/bootstrap')).json();
+    const assistantId = bootstrap.assistants[0].id;
+    const saved = await fetch(`/api/me/assistants/${assistantId}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({engine:'pipeline'})});
+    if (!saved.ok) throw new Error(`Assistant update failed: ${saved.status}`);
+    const reserved = await fetch(`/api/me/assistants/${assistantId}/test-calls`, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    if (!reserved.ok) throw new Error(`Call reservation failed: ${reserved.status}`);
+    const {callId} = await reserved.json();
+    const events = await new Promise<Record<string, unknown>[]>((resolve, reject) => {
+      const socket = new WebSocket(`${location.origin.replace('http', 'ws')}/ws/call/${callId}`);
+      const seen: Record<string, unknown>[] = [];
+      const timer = setTimeout(() => { socket.close(); reject(new Error('Call timeout')); }, 15000);
+      socket.onopen = () => socket.send(JSON.stringify({type:'start'}));
+      socket.onerror = () => { clearTimeout(timer); reject(new Error('Socket failed')); };
+      socket.onmessage = event => {
+        if (typeof event.data !== 'string') return;
+        const message = JSON.parse(event.data);
+        seen.push(message);
+        if (message.type === 'error') { clearTimeout(timer); socket.close(); reject(new Error(String(message.message))); }
+        if (message.type === 'ready') socket.send(JSON.stringify({type:'text', text:'Do you repair bicycles?'}));
+        if (message.type === 'agent_text') socket.send(JSON.stringify({type:'hangup'}));
+        if (message.type === 'ended') { clearTimeout(timer); socket.close(); resolve(seen); }
+      };
+    });
+    return {callId, events};
+  });
+  expect(result.events).toContainEqual(expect.objectContaining({type:'agent_text',text:'Yes, we repair bicycles during opening hours.'}));
+  await expect.poll(async () => (await (await page.request.get(`/api/me/calls/${result.callId}`)).json()).status).toBe('completed');
+  const call = await (await page.request.get(`/api/me/calls/${result.callId}`)).json();
+  expect(call.environment).toBe('test');
+  expect(call.summary).toBe('Caller asked about bicycle repairs.');
+  expect(call.turns).toEqual(expect.arrayContaining([expect.objectContaining({role:'caller',text:'Do you repair bicycles?'}),expect.objectContaining({role:'agent',text:'Yes, we repair bicycles during opening hours.'})]));
+  await page.goto(`/calls/${result.callId}`);
+  await expect(page.getByText('Do you repair bicycles?', {exact:true})).toBeVisible();
 });

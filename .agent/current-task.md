@@ -4,7 +4,7 @@
 - Owner/active agent: Codex /root (desktop task)
 - Branch: codex/launch-review, based on agent/calm-studio-foundation; source branch codex/launch-studio at 4833800 is preserved separately
 - Base commit: a38a20e1cd8b09c31eacf6a97ebc9ed63edb03f5 (PR #13)
-- Last updated: 2026-09-12T00:11:00+02:00
+- Last updated: 2026-09-12T00:24:00+02:00
 - Applicable AGENTS.md: repository AGENTS.md and user-provided global instructions
 - Read first: this file; docs/launch/readiness.md; docs/launch/telephony-plan.md
 
@@ -43,8 +43,13 @@ Unapproved paid campaigns and external marketing messages. Preserve user-owned u
 - PR #13 isolated fix worktree /tmp/openfon-foundation-review; branch agent/calm-studio-foundation, commit a38a20e pushed. node_modules symlink there is untracked, not a secret.
 - Independent local account review found export limits/D1 function limit issues; fixed and re-reviewed with no major issue.
 
+## Active review and integration state
+- PR #14 opened: https://github.com/duguetlabs/openfon/pull/14, branch codex/launch-review in /tmp/openfon-launch-review. Foundation fix d6ea5d2 propagated as adea131; review retriggered after fix. Root owns new local-provider WebSocket E2E work there; foundation agent owns reviewer loop for #13/#14.
+- Separate /tmp/openfon-telephony branch codex/telnyx-inbound based on cdc76ab. Root owns CallSession carrier capability guard, studio_app owns control/schema/admission/account carrier gate, benchmark_hardening owns media protocol/codec. Helpers copied from original root; originals remain untracked and must not be added to launch PR.
+- Telephony must later receive foundation d6ea5d2 after agent edits; no real carrier test or credentials available.
+
 ## Work remaining
-- Commit/push launch PR based on #13, obtain fresh GitHub Codex/security and mandatory reviewer gate, resolve every real finding and re-trigger after every fix.
+- Launch PR #14 pushed; obtain fresh GitHub Codex/security and mandatory reviewer gate, resolve every real finding and re-trigger after every fix.
 - Continue #13 review until green; merge only if user resolves missing PR-Agent gate or valid infra exists. Launch PR then retarget main if appropriate.
 - Independent review/polish ongoing codec/signature helpers; integrate carrier transport with number/config authorization, durable idempotency and media admission per plan.
 - Production hostname/operator/legal disclosures, valid provider key, real-provider audio/text and deployed smoke checks.

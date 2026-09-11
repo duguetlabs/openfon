@@ -89,7 +89,7 @@ export default function CallDetailPage() {
               >
                 {t.role === 'agent' ? 'agent' : 'caller'}
               </p>
-              {t.text}
+              <p className="whitespace-pre-wrap">{t.text}</p>
               {t.role === 'caller' && <button disabled={drafting !== null} className="mt-3 block text-xs text-iris underline disabled:opacity-50" onClick={async()=>{setDrafting(t.id);setError('');setSaved('');try{await api.draftKnowledgeFromTurn({callId:call.id,turnId:t.id,...(collectionId?{collectionId}:{})});setSaved('Question saved as a draft.');}catch(e){setError(e instanceof Error?e.message:'Could not save draft.');}finally{setDrafting(null);}}}>{drafting===t.id?'Saving…':'Save question to knowledge'}</button>}
             </div>
           </div>
