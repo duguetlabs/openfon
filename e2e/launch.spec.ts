@@ -145,3 +145,33 @@ test('private test call traverses Worker websocket and persists transcript and s
   await page.goto(`/calls/${result.callId}`);
   await expect(page.getByText('Do you repair bicycles?', {exact:true})).toBeVisible();
 });
+
+for (const leave of ['end', 'navigate'] as const) {
+  test(`cancel a real pending test reservation on ${leave}`, async ({ page }) => {
+    await signup(page);
+    await page.goto('/test');
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    let reservedId = '';
+    await page.route('**/api/me/assistants/*/test-calls', async route => {
+      const response = await route.fetch(); // Actual API reservation and database insert.
+      expect(response.status()).toBe(201);
+      reservedId = (await response.json()).callId;
+      await held;
+      await route.fulfill({ response });
+    });
+    await page.getByRole('button', { name: 'Start test call', exact: true }).click();
+    await expect.poll(() => reservedId).not.toBe('');
+    if (leave === 'end') {
+      await page.getByRole('button', { name: 'End test call', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Start test call', exact: true })).toBeVisible();
+    } else {
+      await page.getByRole('navigation', { name: 'Workspace' }).getByRole('link', { name: 'Overview', exact: true }).click();
+      await expect(page).toHaveURL('/overview');
+    }
+    release();
+    await expect.poll(async () => (await page.request.get(`/api/me/calls/${reservedId}`)).status()).toBe(404);
+    const calls = await (await page.request.get('/api/me/calls?environment=test')).json();
+    expect(calls.items).toHaveLength(0);
+  });
+}
