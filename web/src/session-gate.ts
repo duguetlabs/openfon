@@ -24,3 +24,14 @@ export function compatibilitySetupPending(
     assistant?.state !== 'active'
   );
 }
+
+// The studio can edit draft assistants and intentionally paused lines. Publication
+// is a per-assistant action, never a prerequisite for entering the workspace.
+export function studioSetupPending(
+  business: Pick<Business, 'slug'> | null,
+  workspaceReady: boolean,
+  assistant: Pick<Assistant, 'state' | 'name' | 'persona' | 'language'> | null
+): boolean {
+  return !business || !workspaceReady || !assistant ||
+    !assistant.name.trim() || !assistant.persona.trim() || !assistant.language.trim();
+}

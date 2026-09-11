@@ -18,19 +18,23 @@ caller's mic ──► Cloudflare Worker (Durable Object per call)
 
 Transcripts, summaries, and messages land in your dashboard (D1/SQLite). When a call ends, the LLM writes a 1–2 sentence summary, classifies the intent (question / booking / message), and extracts any callback details the caller left.
 
+## Launch status
+
+The current launch branch adds a public website and a complete browser-call studio: assistants, private tests, knowledge approval, call review, and account controls. Browser calling is the supported channel. Telephone-number integration and email password recovery are not available yet. Do not describe booking requests as confirmed calendar appointments.
+
 ## Features
 
 - 🗣 **Browser voice calls** — WebSocket + voice-activity detection, live captions, text fallback for callers without a mic
-- ⚡ **Two voice engines** — the default *Pipeline* (STT → LLM → TTS, works with any provider) or opt-in *Realtime* (continuous audio streaming to an OpenAI Realtime-compatible endpoint: sub-second replies and callers can interrupt the agent mid-sentence); switchable per business in Settings
+- ⚡ **Two voice engines** — the default *Pipeline* (STT → LLM → TTS, works with compatible speech and language-model providers) or opt-in *Realtime* (continuous audio streaming to an OpenAI Realtime-compatible endpoint: streamed replies and interruption support; latency depends on the provider and model); switchable per business in Settings
 - 🧠 **Bring your own AI** — defaults to [Kataleptic](https://api.kataleptic.com), works with OpenAI, Groq, Ollama, vLLM, or anything OpenAI-compatible; configurable per business from the dashboard
-- 📋 **Grounded answers** — the agent only answers from your business facts (hours, services, prices, FAQ); unknown questions become messages
+- 📋 **Grounded answers** — the agent is instructed to answer from your business facts (hours, services, prices, FAQ); unknown questions become messages
 - 📞 **Call log** — transcripts, summaries, intent badges, messages with caller name & phone
 - 🌍 **Multi-language** — English, German, Spanish, French out of the box
-- 🪶 **Tiny footprint** — one Cloudflare Worker + D1; comfortably inside Cloudflare's free tier
+- 🪶 **Tiny footprint** — one Cloudflare Worker + D1; usage-based infrastructure; AI and speech provider charges are separate
 
 ## Self-hosting (10 minutes)
 
-You need a free [Cloudflare account](https://dash.cloudflare.com/sign-up) and Node 20+.
+You need a free [Cloudflare account](https://dash.cloudflare.com/sign-up) and Node 22.13+.
 
 ```sh
 git clone https://github.com/duguetlabs/openfon
@@ -115,6 +119,9 @@ npm run db:migrate:local
 npm run dev:worker   # API on :8787
 npm run dev          # Vite dev server on :5173 (proxies /api and /ws)
 npm run typecheck
+npm test
+npx playwright install chromium
+npm run test:e2e  # isolated local database and test-only credentials; no remote deployment
 ```
 
 Create a `.dev.vars` file (gitignored) with the secrets above for local development.
@@ -128,3 +135,11 @@ Create a `.dev.vars` file (gitignored) with the secrets above for local developm
 ## License
 
 [MIT](LICENSE) © Duguet Labs
+
+## Launch operations
+
+The release gate, remaining operator configuration, marketing strategy, and prepared announcement copy live in [`docs/launch/`](docs/launch/). Private account APIs support password changes, credential-free JSON exports, and deletion with password confirmation. A large export requires an administrator’s database export; account deletion refuses pending or active calls.
+
+`npm run test:e2e` starts its own local Worker on port 8790 and uses a fresh temporary database for each run. It never runs remote migrations. `PLAYWRIGHT_CHROMIUM_EXECUTABLE` can select an already-installed compatible Chromium for local checks; Install the matching browser with `npx playwright install chromium` before running locally. A browser CI job is prepared on the local launch branch but excluded from this review branch pending authorization to expand the GitHub token workflow scope.
+
+For a public deployment, set `OPENFON_PUBLIC_URL` to the intended HTTPS origin when building (for example, `OPENFON_PUBLIC_URL=https://your-domain.example npm run build`). The build emits the canonical URL, absolute social-image URL, and sitemap for that origin. Without it, local previews omit canonical/sitemap metadata rather than pointing at an invented domain.

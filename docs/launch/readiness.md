@@ -1,0 +1,60 @@
+# OpenFon release readiness
+
+Updated 2026-09-12. **Release candidate in progress; not production-launch approved.**
+
+## Product truth
+
+| Capability | State |
+|---|---|
+| Public website with original CSS 3D telephone, interactive examples, responsive layout | Implemented; desktop/mobile inspected |
+| Workspace signup and setup | Implemented; browser flow passed |
+| Multiple assistants; draft, active and paused lifecycle | Implemented; browser persistence test passed |
+| Private Test Studio with audio/text and transcripts | Implemented; real provider call still required |
+| Knowledge collections, attachments, drafts and approval | Implemented; browser creation/approval/attachment/reload flow passed |
+| Calls, filters, summaries and caller-question draft creation | Implemented; seeded transcript flow still to verify |
+| Password change, private export, account deletion | Implemented; API and browser password/export/deletion flows passed |
+| Existing telephone number / Telnyx / outbound calling | Not implemented; design and carrier validation plan in telephony-plan.md |
+| Calendar booking | Not implemented; only request capture |
+| Email verification / forgotten-password recovery | Not implemented |
+| Hosted support identity, production domain and legal disclosures | Operator details pending |
+| Marketing strategy, social asset and announcement drafts | Prepared; not distributed |
+
+## Validation evidence
+
+- Application unit/API suite after dependency upgrades: 272/272 passed across 15 files.
+- TypeScript: passed after Workers types 5 / React Router 7 / Vitest 5 upgrades.
+- Quality benchmarks: 220 tests, one existing skip.
+- Realtime benchmarks: 206 tests; standalone report checker passed.
+- Dependency audit: zero vulnerabilities (including development dependencies at upgrade).
+- Browser tests: 4/4 passed against actual local workerd, covering public desktop/mobile, signup, private draft setup, save/publish/pause/reload, knowledge approval/attachment, every menu, password/export/deletion. Interrupted setup recovery and D1 cascade deletion counts were corrected.
+- PR #13 head a38a20e: migration field validation fixed following review; fresh Codex requested. PR-Agent not installed.
+
+## Required release gate
+
+1. Resolve every confirmed test/review finding and rerun the relevant matrix against the final commit.
+2. Satisfy the repository review requirement. Current instructions require PR-Agent and Codex; the former is unavailable. User decision on substitute review is pending. Do not merge around it.
+3. Choose the real hostname and operator/support identity. Set absolute canonical/Open Graph URLs and an origin-correct sitemap. Write accurate hosting/privacy terms using actual operator and processor details; obtain any needed review.
+4. Confirm the production Cloudflare account, Worker, D1 binding, migration status and configured provider secrets through scoped tools. Never output values or use credentials from old plaintext files.
+5. Export a production database backup to a restricted location before migration. Run migrations on staging first, verifying an existing-account upgrade and preserved public slugs.
+6. Verify a real provider test on the intended configuration: mic allow/deny, text fallback, interruption, hangup, transcript/summary persistence, unknown question and message capture. Then verify a consented live browser call on the target HTTPS origin.
+7. Verify application/log error reporting and a rollback path to the previous Worker version. Keep additive schema compatibility when rolling back code.
+8. Start with a small consented pilot. Do not launch phone-number marketing until the carrier transport passes its separate release gate.
+
+## Deployment procedure (prepared, not executed)
+
+Use this repository's Cloudflare deployment, not an unrelated website host. The target account must be Duguet Labs and credentials must come from `dsecret`/the scoped environment. `npm run deploy` includes **remote migrations** and is not a preview command.
+
+Before deployment, record current Worker version and migration list, export D1, and verify backup restoration on a temporary database. Run `npm ci`, `npm run typecheck`, `npm test`, both Python benchmark suites, `npm run test:e2e`, and `npm run build`. The browser CI job and expanded deploy dependencies are prepared locally on `codex/launch-studio` at `4833800`, but are excluded from this review branch. GitHub rejected the workflow update because the current OAuth token lacks the `workflow` scope; permission expansion awaits the user. Remote CI remains unchanged: run browser validation explicitly and verify every release check before deployment.
+
+After an approved release, check public root, authentication, existing-account data, draft/paused public-link rejection, private test ownership, exports and account settings. Perform one real test/live call and inspect its record. If acceptance fails, roll back Worker code to the recorded prior version, leave additive schema in place, and investigate before resuming traffic.
+
+## Operator decisions still needed
+
+- Final production hostname and support/operator identity.
+- Hosted service versus self-hosting-only launch; data retention and processor choices for the hosted instance.
+- Mandatory PR-Agent gate or explicit accepted substitute.
+- Permission decision for pushing the separately prepared CI workflow update; browser CI and expanded deployment dependencies are not remotely active.
+- Whether PSTN is required for the initial public launch. The current website truthfully describes browser-only calling.
+
+- Real-provider preflight: the scoped vault credential returned HTTP 403 from the configured Kataleptic model catalog. No live provider conversation was claimed or completed; valid provider access still needs verification.
+- Telephony codec and webhook-verification helpers are separately under development; no carrier runtime is exposed by this release.

@@ -1,3 +1,10 @@
+export interface AccountExport {
+  schemaVersion: number;
+  exportedAt: string;
+  account: { id: string; email: string; created_at: string };
+  data: Record<string, Array<Record<string, unknown>>>;
+}
+
 export interface Me {
   id: string;
   email: string;
@@ -260,6 +267,9 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 }
 
 export const api = {
+  changePassword: (body: { currentPassword: string; newPassword: string }) => req<{ ok: true }>('POST', '/api/me/account/password', body),
+  exportAccount: () => req<AccountExport>('GET', '/api/me/account/export'),
+  deleteAccount: (body: { currentPassword: string; confirmation: 'DELETE' }) => req<{ ok: true }>('DELETE', '/api/me/account', body),
   me: () => req<Me>('GET', '/api/me'),
   signup: (email: string, password: string) => req<Me>('POST', '/api/auth/signup', { email, password }),
   login: (email: string, password: string) => req<Me>('POST', '/api/auth/login', { email, password }),

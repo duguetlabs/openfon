@@ -27,10 +27,18 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  const [saltB64, hashB64] = stored.split(':');
-  if (!saltB64 || !hashB64) return false;
-  const bits = new Uint8Array(await pbkdf2(password, fromB64(saltB64)));
-  const expected = fromB64(hashB64);
+  const [saltB64, hashB64, extra] = stored.split(':');
+  if (!saltB64 || !hashB64 || extra !== undefined) return false;
+  let salt: Uint8Array;
+  let expected: Uint8Array;
+  try {
+    salt = fromB64(saltB64);
+    expected = fromB64(hashB64);
+  } catch {
+    return false;
+  }
+  if (salt.length !== 16 || expected.length !== 32) return false;
+  const bits = new Uint8Array(await pbkdf2(password, salt));
   if (bits.length !== expected.length) return false;
   let diff = 0;
   for (let i = 0; i < bits.length; i++) diff |= bits[i] ^ expected[i];
@@ -57,13 +65,25 @@ export async function createSession(env: Env, userId: string): Promise<string> {
   return token;
 }
 
+// A login that verified the old password must not create a new session after
+// a concurrent password change has revoked sessions for that credential.
+export async function createVerifiedSession(env: Env, userId: string, passwordHash: string): Promise<string | null> {
+  const token = newToken();
+  const expires = new Date(Date.now() + SESSION_DAYS * 86400_000).toISOString();
+  const inserted = await env.DB.prepare(`INSERT INTO sessions (token, user_id, expires_at)
+    SELECT ?, id, ? FROM users WHERE id=? AND password_hash=?`)
+    .bind(token, expires, userId, passwordHash).run();
+  return inserted.meta.changes === 1 ? token : null;
+}
+
 export async function getUserIdFromSession(env: Env, token: string | undefined): Promise<string | null> {
   if (!token) return null;
   const row = await env.DB.prepare('SELECT user_id, expires_at FROM sessions WHERE token = ?')
     .bind(token)
     .first<{ user_id: string; expires_at: string }>();
   if (!row) return null;
-  if (new Date(row.expires_at).getTime() < Date.now()) {
+  const expiresAt = Date.parse(row.expires_at);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
     await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(token).run();
     return null;
   }

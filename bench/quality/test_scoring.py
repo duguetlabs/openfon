@@ -39,7 +39,7 @@ from score_slots import (  # noqa: E402
     times_mentioned,
 )
 from score_wer import normalize  # noqa: E402
-from summarize import pct, sibling  # noqa: E402
+from summarize import pct, sibling, strict_num  # noqa: E402
 
 # The Track A matrix as the study declares it. Written out rather than derived
 # from `results/asr.jsonl`, because an expectation read off the file it checks
@@ -50,6 +50,15 @@ ASR_ARMS_ALL = ("native-gpt-realtime-2,native-gpt-realtime-21,"
                 "native-gpt-realtime-21-mini,vl-gpt41mini,vl-gpt41mini-dns")
 ASR_CONDITIONS = ("cafe_snr0,cafe_snr10,cafe_snr20,cafe_snr5,clean,tel,"
                   "tel_cafe_snr10,tel_loss3")
+
+
+class TestFinitePassFailInputs(unittest.TestCase):
+    def test_nonfinite_values_cannot_enter_the_success_conjunction(self):
+        for value in ("nan", "NaN", "inf", "-inf", "Infinity", "1e999"):
+            for field in ("n_slots", "slots_all_heard", "forbidden_hit"):
+                with self.subTest(value=value, field=field), self.assertRaises(SystemExit):
+                    strict_num(value, field, ("arm", "scenario", 0))
+        self.assertEqual(strict_num("0", "n_slots", ("a", "s", 0)), 0)
 
 
 class TestNormalize(unittest.TestCase):

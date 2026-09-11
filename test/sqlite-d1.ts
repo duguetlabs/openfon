@@ -33,8 +33,12 @@ class SqliteStatement {
 
   async run(): Promise<{ results: unknown[]; success: true; meta: { changes: number } }> {
     this.beforeExecute();
-    const result = this.database.prepare(this.sql).run(...this.values);
-    return { results: [], success: true, meta: { changes: Number(result.changes) } };
+    // D1 reports sqlite3_total_changes(), including FK cascades and triggers,
+    // whereas node:sqlite Statement.run().changes counts only direct writes.
+    const changes = () => (this.database.prepare('SELECT total_changes() AS n').get() as { n: number }).n;
+    const before = changes();
+    this.database.prepare(this.sql).run(...this.values);
+    return { results: [], success: true, meta: { changes: changes() - before } };
   }
 }
 
