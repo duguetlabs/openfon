@@ -100,7 +100,7 @@ Run the application tests and typecheck, then the local runtime harness:
 ```sh
 npm test
 npm run typecheck
-node scripts/telnyx-smoke.mjs
+npm run test:telnyx
 ```
 
 The harness bundles the real Worker, uses ephemeral D1 and generated signing keys,

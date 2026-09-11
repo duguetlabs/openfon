@@ -124,7 +124,7 @@ try {
   const stream=await wait(()=>commands.find(x=>x.action==='streaming_start'),'streaming command');
   assert.equal(stream.body.stream_codec,'PCMU');
   const mediaUrl=stream.body.stream_url.replace(/^wss:/,'https:');
-  const rejected=await mf.dispatchFetch(mediaUrl,{headers:{Upgrade:'websocket','x-telnyx-streaming-auth-token':'invalid'}});
+  const rejected=await mf.dispatchFetch(mediaUrl,{headers:{Upgrade:'websocket','x-telnyx-streaming-auth-token':'0'.repeat(64)}});
   assert.equal(rejected.status,403,'reject unauthenticated carrier upgrade');
   const upgrade=await mf.dispatchFetch(mediaUrl,{headers:{Upgrade:'websocket','x-telnyx-streaming-auth-token':stream.body.stream_auth_token}});
   assert.equal(upgrade.status,101,await upgrade.text());

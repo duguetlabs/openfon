@@ -1,80 +1,66 @@
-# OpenFon overnight launch preparation
+# OpenFon launch preparation
 
 - Status: In progress
-- Owner/active agent: Codex /root (desktop task)
-- Branch: codex/launch-review, based on agent/calm-studio-foundation; source branch codex/launch-studio at 4833800 is preserved separately
-- Base commit: a38a20e1cd8b09c31eacf6a97ebc9ed63edb03f5 (PR #13)
-- Last updated: 2026-09-12T00:24:00+02:00
-- Applicable AGENTS.md: repository AGENTS.md and user-provided global instructions
-- Read first: this file; docs/launch/readiness.md; docs/launch/telephony-plan.md
+- Owner/active agent: Codex /root; foundation_fix reviews, studio_app marketing capture
+- Branch: codex/telnyx-inbound at /tmp/openfon-telephony
+- Base commit: db7e36165c64737698e197b763252a3d49b6ab76 (launch PR #14; merged into this branch)
+- Last updated: 2026-09-11T22:44:28.197904+00:00
+- Applicable AGENTS.md: repository AGENTS.md and user-provided project instructions
+- Read first: this file, docs/launch/readiness.md, docs/telephony.md, docs/launch/production-preflight.md
 
 ## Objective
-Complete missing app flows, resolve technical bugs/open PRs, build an original dimensional website, and prepare launch marketing. User authorizes overnight work and parallel agents. Hourly heartbeat openfon-overnight-launch-preparation continues until 2026-09-12 08:00 Europe/Vienna, then should pause and report.
+Finish launch app/technical work, original website and marketing assets; user authorizes overnight parallel agents. Hourly heartbeat openfon-overnight-launch-preparation continues until2026-09-12 08:00 Europe/Vienna, then pauses and reports.
 
 ## Scope
-Backend consolidation, issues #6/#12 and PRs #10/#13, authenticated app, website, marketing, release validation, then Telnyx integration. Current user request supersedes historical serial implementation plan; review gates remain required before merges.
+App completion, bugs/issues #6/#12, PRs #10/#13, website/marketing, disabled inbound Telnyx implementation and release verification.
 
 ## Out of scope
-Unapproved paid campaigns and external marketing messages. Preserve user-owned untracked docs/research/sim-ai-voice-gateway-2026-09-08.md. No real carrier calls or number purchases without configured credentials/number and verified transport.
+Unapproved spending, external marketing distribution, real carrier calls without configured authorized number/provider. Preserve original user research file docs/research/sim-ai-voice-gateway-2026-09-08.md. No outbound dialing, number purchasing/porting, calendar booking or email recovery implemented.
 
 ## Confirmed facts
-- Foundation rate-limit clock fixed in 66943f1; migration validation fixed in a38a20e. PR #13 pushed/reopened and Codex re-requested after each fix.
-- Latest #13 Codex migration finding was real and fixed. Its expired-fixture finding was false because test SQLite datetime(now) now uses JS frozen time; rebuttal posted with actual September12 test evidence.
-- Mandatory PR-Agent is not installed. Old handoff forbids private cross-org qapture caller. User was asked asynchronously whether independent review + Codex + CI may substitute; NO answer yet. Do not merge without satisfying gate.
-- Desktop process outside Herdr; its skill prohibits outside control. No Herdr agents dispatched.
-- Domain/operator/support information was asked asynchronously; NO answer yet.
-- Scoped vault provider preflight to configured Kataleptic models returned HTTP403. No real-provider call completed.
-- Port8787 belongs to another project (whatsapp-mcp); never stop it. Preview used8788; E2E uses8790 and fresh temporary D1 state.
+- PR #13 branch agent/calm-studio-foundation at d6ea5d2: exact-head Codex no-major finding and CI green. Separate worktree /tmp/openfon-foundation-review.
+- PR #14 codex/launch-review at db7e361: all four CI jobs green including5browser scenarios; latest Codex review pending. Separate worktree /tmp/openfon-launch-review. It includes app, website, account controls, benchmark fixes and CI.
+- Mandatory PR-Agent is unavailable; personal reusable infrastructure probes returned404 and historical instructions forbid private cross-org qapture caller. User's async substitute-review question remains unanswered. Never merge around this gate.
+- Workflow OAuth scope is NO LONGER blocked: existing authorized GitHub connector published prepared CI as fabdee7 without expanding account access. Canceled old gh auth refresh; no scope grant needed.
+- Read-only Cloudflare preflight: Worker openfon exists, migrations0007/0008 pending; known workers.dev endpoint probes403. Secret names inspected only, values not read. See production-preflight.md. No deployment/migration/secret update occurred.
+- Local scoped Kataleptic credential returned403; no real-provider call completed. Final hostname/operator/support/privacy details still await user input.
+- Desktop process outside Herdr; no Herdr control dispatched. Codex agents used. Port8787 belongs to whatsapp-mcp; never stop it.
 
 ## Decisions
-- Review branch includes the launch application, tests, docs/assets, and browser CI with expanded deployment dependencies. The prepared workflow was published through the GitHub connector’s existing authorization in fabdee7; no OAuth-scope expansion is needed.
-- Original cream/cobalt/orange design with interactive CSS3D phone; no fake customers, guarantees or carrier claims.
-- Draft-first onboarding; publishing explicit. Draft/paused complete assistants may enter studio; partial setup resumes onboarding.
-- Account deletion refuses active calls and uses RETURNING id because real D1 metadata counts cascades. Export allowlists columns and bounds rows/serialized bytes under D1 limits.
-- Dependabot-style upgrades removed all npm audit findings; Node minimum22.13, Vitest5, Workers types5, React Router7.
-- Telephony helper work is kept separate from launch UI/runtime; no carrier endpoint exposed yet.
+- Public marketing remains browser-first until real carrier pilot; no fake results/testimonials.
+- Telnyx rollout defaults false; explicit operator-owned number routes, signed inbox, shared admission, durable retries and release confirmation. Carrier control IDs remain in separate private storage.
+- Realtime-only audible carrier sessions; no browser-TTS/pipeline fallback. MediaPCM converted with bounded buffers, rolling pre-ready second,20ms pacing and generation-aware playback marks.
+- Existing GitHub app tools may publish workflow edits with their already-granted permissions; no account permission expansion.
 
 ## Work completed
-- App: overview, assistants/editor/lifecycle, private Test Studio, conversations/filtering/review, caller-question knowledge drafts, collection/item CRUD+approval+attachments, settings, account password/export/delete.
-- Auth input/origin/session security, microphone/socket cleanup, unsaved editor protections, setup recovery.
-- Website, social card/favicons/robots, configurable canonical+sitemap build metadata.
-- Marketing strategy, announcement drafts, demonstration script, release gate and screenshots in docs/launch/.
-- Issues #6/#12 benchmark hardening complete; PR #10 evidence overclaims consolidated in launch commits, not yet closed.
-- PR #13 isolated fix worktree /tmp/openfon-foundation-review; branch agent/calm-studio-foundation, commit a38a20e pushed. node_modules symlink there is untracked, not a secret.
-- Independent local account review found export limits/D1 function limit issues; fixed and re-reviewed with no major issue.
-
-## Active review and integration state
-- PR #14 opened: https://github.com/duguetlabs/openfon/pull/14, branch codex/launch-review in /tmp/openfon-launch-review. Foundation fix d6ea5d2 propagated as adea131; review retriggered after fix. Root owns new local-provider WebSocket E2E work there; foundation agent owns reviewer loop for #13/#14.
-- Separate /tmp/openfon-telephony branch codex/telnyx-inbound based on cdc76ab. Root owns CallSession carrier capability guard, studio_app owns control/schema/admission/account carrier gate, benchmark_hardening owns media protocol/codec. Helpers copied from original root; originals remain untracked and must not be added to launch PR.
-- Telephony must later receive foundation d6ea5d2 after agent edits; no real carrier test or credentials available.
+- Studio overview, assistant lifecycle/editor/private testing, calls/review, knowledge approval/attachments, settings, password/export/delete; auth/input/teardown/race fixes.
+- Original cream/cobalt/orange dimensional website, social/search assets, marketing strategy/copy and inspected screenshots.
+- Benchmark fixes #6/#12 and qualified #10 claims integrated into #14; do not close #10 before replacement is reviewed/merged.
+- Telnyx control4b0bd46, capability guard3138370, codec/signature/media c6048df, startupbuffer2e60c3e, actualworkerd harness a029e6f, ingressabusefix6f09669.
+- Runtime harness found and fixed workerd unsupported redirect:error and defaultBlob WebSocket input. No external providers contacted.
+- Independent review found/fixed unowned outgoing leg commands, expired-alarm hot loop, shutdown callback handling, exact number authorization, account deletion race, persistent failure reporting and arbitrary DO instantiation.
 
 ## Work remaining
-- Launch PR #14 pushed; obtain fresh GitHub Codex/security and mandatory reviewer gate, resolve every real finding and re-trigger after every fix.
-- Continue #13 review until green; merge only if user resolves missing PR-Agent gate or valid infra exists. Launch PR then retarget main if appropriate.
-- Independent review/polish ongoing codec/signature helpers; integrate carrier transport with number/config authorization, durable idempotency and media admission per plan.
-- Production hostname/operator/legal disclosures, valid provider key, real-provider audio/text and deployed smoke checks.
-- No public launch, remote migration/deployment, campaign distribution or phone-number claim yet.
+- Publish dependent Telnyx PR with actual runtime harness in CI; obtain exact-head reviews and resolve real findings.
+- Complete truthful silent UI walkthrough capture in /tmp/openfon-launch-review/docs/launch/demo/ (studio_app); root integrates after verification.
+- Continue PR #14 review; satisfy mandatory PR-Agent gate before merging any PR.
+- Confirm production identity/access/provider; backup/staging migration/rollback drill then actual provider/carrier pilot before launch. No production ready claim.
+- Eventually consolidate final verified branch into original checkout without touching user research.
 
-## Files changed / ownership
-- root owns integration, launch docs/website, package/CI/E2E and current-task.
-- foundation_fix: account/auth and #13 migration fixes complete, available for further backend work.
-- benchmark_hardening: src/telephony-audio.ts + test/telephony-audio.test.ts (untracked building block); codecs9 tests pass.
-- studio_app: src/telnyx-webhook.ts + test/telnyx-webhook.test.ts (untracked building block); signature/parser71 tests pass.
-- Do not accidentally include these untracked telephony modules in launch PR until planned separately.
+## Files changed
+- This branch contains src/telnyx-*, src/telephony-audio.ts, migration0009, CallSession carrier guards, shared admission/account guards, tests, synthetic harness and docs.
+- All worktrees share dependency symlink; node_modules is untracked in /tmp worktrees and must not be committed.
 
 ## Validation
-- Tracked launch application tests: 272/272 across15 files (git ls-files test files piped to Vitest), actual2026-09-12.
-- Foundation isolated suite:233/233; migration regression fails old code then passes fix.
-- Typecheck/build and Worker dry-run bundle pass.
-- Browser actual local workerd:4/4 pass, desktop/mobile artifacts in docs/launch/previews.
-- Quality Python:220 tests,1 existing skip. Realtime Python:206 tests; standalone report checker passed.
-- npm audit:zero vulnerabilities after upgrades.
-- Failed intermediate E2E runs revealed setup recovery and D1 cascade issues; also corrected test waits/selectors and fresh-per-run DB to respect real signup limits. Current4/4 green supersedes these runs.
+- npm test:419/419 across19 files after merge and ingressfix.
+- npm run typecheck:passed.
+- npm run test:telnyx:passed against actual local workerd, signed ingress, duplicate admission, valid-shaped forged token rejected, bidirectional non-silent PCM, interruption/marks/hangup and D1release. All outbound services mocked.
+- Browser test:e2e:5/5 passed on consolidated carrier branch; build included.
+- Launch CI:app, browser, scoring and realtime green atdb7e361. Python suites220(one existing skip)/206; npm audit zero after upgrades.
+- Initial runtime failures above fixed; current passing harness supersedes them.
 
 ## Blockers, risks and unresolved questions
-- PR-Agent merge gate; final domain/operator identity; provider access403; unimplemented carrier transport.
-- New codec/webhook helpers are offline-tested, not integrated or production ready.
-- Password-reset email and verification unavailable; do not imply they exist.
+Missing mandatory reviewer, final operator/domain/privacy details, provider403 and publicendpoint403, absent real carrier configuration/pilot. Tombstones retain provider correlation for replay suppression; no live-carrier readiness claimed.
 
 ## Recommended next action
-Verify git and agents, push reviewable launch PR excluding telephony helper files, then continue carrier work in an isolated dependent worktree while GitHub reviews run. Never merge past missing review authorization.
+Verify worktree/agent/remote PR state, publish reviewed disabled carrier work, run CI including local runtime harness, and continue review loops. No merge or production launch until gates pass.

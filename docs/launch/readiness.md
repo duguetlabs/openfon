@@ -13,7 +13,8 @@ Updated 2026-09-12. **Release candidate in progress; not production-launch appro
 | Knowledge collections, attachments, drafts and approval | Implemented; browser creation/approval/attachment/reload flow passed |
 | Calls, filters, summaries and caller-question draft creation | Implemented; typed mock-provider call verifies persisted transcript, summary and detail rendering; question drafts covered by API tests |
 | Password change, private export, account deletion | Implemented; API and browser password/export/deletion flows passed |
-| Existing telephone number / Telnyx / outbound calling | Not implemented; design and carrier validation plan in telephony-plan.md |
+| Inbound Telnyx number | Implemented behind disabled rollout flag; unit and synthetic workerd tests pass; actual carrier pilot required |
+| Outbound calling / number purchasing / porting | Not implemented |
 | Calendar booking | Not implemented; only request capture |
 | Email verification / forgotten-password recovery | Not implemented |
 | Hosted support identity, production domain and legal disclosures | Operator details pending |
@@ -21,7 +22,7 @@ Updated 2026-09-12. **Release candidate in progress; not production-launch appro
 
 ## Validation evidence
 
-- Application unit/API suite after dependency upgrades: 276/276 passed across 15 files.
+- Application unit/API suite after dependency upgrades: 419/419 passed across 19 files.
 - TypeScript: passed after Workers types 5 / React Router 7 / Vitest 5 upgrades.
 - Quality benchmarks: 220 tests, one existing skip.
 - Realtime benchmarks: 206 tests; standalone report checker passed.
@@ -58,4 +59,4 @@ After an approved release, check public root, authentication, existing-account d
 - Whether PSTN is required for the initial public launch. The current website truthfully describes browser-only calling.
 
 - Real-provider preflight: the scoped vault credential returned HTTP 403 from the configured Kataleptic model catalog. No live provider conversation was claimed or completed; valid provider access still needs verification.
-- Telephony codec and webhook-verification helpers are separately under development; no carrier runtime is exposed by this release.
+- Inbound Telnyx control and media runtime is included behind the disabled rollout flag. The synthetic workerd harness proved ingress, bidirectional PCM, interruption, playback drain, hangup and release without external calls. The public website still describes browser calling until a real carrier pilot passes.
