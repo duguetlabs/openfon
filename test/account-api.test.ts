@@ -120,6 +120,12 @@ describe('account self service', () => {
     expect(db.database.prepare('SELECT id FROM users WHERE id=?').get('owner')).toEqual({ id: 'owner' });
   });
 
+  it('models D1 cascade change counts separately from direct deleted rows', async () => {
+    const result = await db.prepare('DELETE FROM users WHERE id=?').bind('other').run();
+    // The user, workspace, and session are three changes for one deleted owner.
+    expect(result.meta.changes).toBe(3);
+  });
+
   it('cascades deletion through owned data and preserves another account', async () => {
     // Bootstrap creates the actual foundation graph: assistant, provider,
     // compatibility snapshots, and default knowledge collection.

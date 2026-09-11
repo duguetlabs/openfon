@@ -126,9 +126,11 @@ export function registerAccountApi(app: App): void {
     const deleted = await c.env.DB.prepare(`DELETE FROM users WHERE id=? AND password_hash=?
       AND EXISTS (SELECT 1 FROM sessions WHERE token=? AND user_id=? AND expires_at>?)
       AND NOT EXISTS (SELECT 1 FROM calls JOIN businesses ON businesses.id=calls.business_id
-        WHERE businesses.user_id=? AND calls.status='active')`)
-      .bind(userId, user.password_hash, getCookie(c, 'ofs') ?? '', userId, new Date().toISOString(), userId).run();
-    if (deleted.meta.changes !== 1) return c.json({ error: 'Finish active calls and wait for pending calls to expire before deleting. If your account changed, sign in again.' }, 409);
+        WHERE businesses.user_id=? AND calls.status='active') RETURNING id`)
+      .bind(userId, user.password_hash, getCookie(c, 'ofs') ?? '', userId, new Date().toISOString(), userId).first<{ id: string }>();
+    // D1 meta.changes includes cascades; RETURNING identifies the deleted owner
+    // directly instead of treating successful dependent deletes as a conflict.
+    if (!deleted) return c.json({ error: 'Finish active calls and wait for pending calls to expire before deleting. If your account changed, sign in again.' }, 409);
     deleteCookie(c, 'ofs', { path: '/' });
     return c.json({ ok: true });
   });
