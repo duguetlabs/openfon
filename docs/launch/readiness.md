@@ -11,7 +11,7 @@ Updated 2026-09-12. **Release candidate in progress; not production-launch appro
 | Multiple assistants; draft, active and paused lifecycle | Implemented; browser persistence test passed |
 | Private Test Studio with audio/text and transcripts | Implemented; real provider call still required |
 | Knowledge collections, attachments, drafts and approval | Implemented; browser creation/approval/attachment/reload flow passed |
-| Calls, filters, summaries and caller-question draft creation | Implemented; seeded transcript flow still to verify |
+| Calls, filters, summaries and caller-question draft creation | Implemented; typed mock-provider call verifies persisted transcript, summary and detail rendering; question drafts covered by API tests |
 | Password change, private export, account deletion | Implemented; API and browser password/export/deletion flows passed |
 | Existing telephone number / Telnyx / outbound calling | Not implemented; design and carrier validation plan in telephony-plan.md |
 | Calendar booking | Not implemented; only request capture |
@@ -21,13 +21,15 @@ Updated 2026-09-12. **Release candidate in progress; not production-launch appro
 
 ## Validation evidence
 
-- Application unit/API suite after dependency upgrades: 272/272 passed across 15 files.
+- Application unit/API suite after dependency upgrades: 276/276 passed across 15 files.
 - TypeScript: passed after Workers types 5 / React Router 7 / Vitest 5 upgrades.
 - Quality benchmarks: 220 tests, one existing skip.
 - Realtime benchmarks: 206 tests; standalone report checker passed.
 - Dependency audit: zero vulnerabilities (including development dependencies at upgrade).
-- Browser tests: 4/4 passed against actual local workerd, covering public desktop/mobile, signup, private draft setup, save/publish/pause/reload, knowledge approval/attachment, every menu, password/export/deletion. Interrupted setup recovery and D1 cascade deletion counts were corrected.
-- PR #13 head a38a20e: migration field validation fixed following review; fresh Codex requested. PR-Agent not installed.
+- Browser tests: 5/5 passed against actual local workerd, covering public desktop/mobile, signup, private draft setup, save/publish/pause/reload, knowledge approval/attachment, every menu, password/export/deletion, and authenticated typed private calls with transcript/summary persistence against a local mock provider. This does not verify live-provider audio. Interrupted setup recovery and D1 cascade deletion counts were corrected.
+- PR #13 head d6ea5d2: migration field validation and direct test-call reconciliation fixed following review; exact-head Codex reports no major issues and all existing CI checks pass. PR-Agent remains unavailable and its merge gate unresolved.
+
+Read-only production inspection is recorded in [production-preflight.md](production-preflight.md): remote migrations 0007/0008 remain pending, configured secret names do not establish validity, and workers.dev probes returned 403. No remote changes or successful deployed smoke test are claimed.
 
 ## Required release gate
 
