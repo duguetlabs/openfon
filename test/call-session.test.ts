@@ -100,6 +100,7 @@ const SETTINGS_ROW = {
 function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline', settings: Partial<typeof SETTINGS_ROW> = {}) {
   const writes: { sql: string; args: unknown[] }[] = [];
   const ctl = {
+    channel: 'web',
     failUpdates: false, // transient failure writing the finished call row
     failCallReads: false, // transient failure inside loadCall()
     failFinalizeReads: false, // transient failure on finalize's own row read
@@ -123,7 +124,7 @@ function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline', settings: Partial<
                 if (ctl.failFinalizeReads && sql.includes('SELECT started_at')) throw new Error('D1 unavailable');
                 // finalize selects `... AND status = 'active'`; a swept row misses.
                 if (!ctl.callRowActive && sql.includes("status = ?")) return null;
-                return CALL_ROW;
+                return { ...CALL_ROW, channel: ctl.channel };
               }
               if (sql.includes('FROM businesses')) return BIZ_ROW;
               if (sql.includes('FROM agent_settings')) return { ...SETTINGS_ROW, engine, ...settings };
@@ -236,14 +237,15 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function newSession(engine: 'pipeline' | 'realtime' = 'pipeline', settings: Partial<typeof SETTINGS_ROW> = {}) {
+function newSession(engine: 'pipeline' | 'realtime' = 'pipeline', settings: Partial<typeof SETTINGS_ROW> = {}, envOverrides: Partial<Env> = {}) {
   const backing = fakeDb(engine, settings);
   const storage = new FakeStorage();
   const state = { storage } as unknown as DurableObjectState;
-  const session = new CallSession(state, fakeEnv(backing.db));
+  const sessionEnv = { ...fakeEnv(backing.db), ...envOverrides };
+  const session = new CallSession(state, sessionEnv);
   const { ctl, writes, turnWrites, callUpdates } = backing;
   /** Rebuild the object on the same storage and D1, as an eviction would. */
-  const evictAndRebuild = () => new CallSession(state, fakeEnv(backing.db));
+  const evictAndRebuild = () => new CallSession(state, sessionEnv);
   return { session, storage, ctl, writes, turnWrites, callUpdates, evictAndRebuild };
 }
 
@@ -1946,3 +1948,125 @@ describe('watchdog alarm', () => {
 //   * The /ws/call/:callId route in src/index.ts, which decides who reaches the
 //     DO at all — that guard belongs to the abuse-limits work.
 // Closing those needs @cloudflare/vitest-pool-workers and a miniflare D1.
+
+
+describe('telephone audio capabilities', () => {
+  it('rejects a pipeline telephone call before advertising readiness', async () => {
+    const { session, ctl, callUpdates } = newSession();
+    ctl.channel = 'telnyx';
+    await session.fetch(upgradeRequest());
+    serverSockets[0].receive({ type: 'start' });
+    await flush(100);
+    expect(serverSockets[0].countOf('ready')).toBe(0);
+    expect(serverSockets[0].countOf('ended')).toBe(1);
+    expect(callUpdates().some(w => w.args.includes('failed'))).toBe(true);
+  });
+
+  it('does not fall back to browser pipeline when the realtime connection fails', async () => {
+    const { session, ctl } = newSession('realtime');
+    ctl.channel = 'telnyx';
+    vi.spyOn(session as never, 'startRealtime').mockResolvedValue(false as never);
+    await session.fetch(upgradeRequest());
+    serverSockets[0].receive({ type: 'start' });
+    await flush(100);
+    expect(serverSockets[0].countOf('ready')).toBe(0);
+    expect(serverSockets[0].countOf('ended')).toBe(1);
+  });
+
+  it('rejects a realtime tier whose greeting would require browser speech synthesis', async () => {
+    const { session, ctl } = newSession('realtime');
+    ctl.channel = 'telnyx';
+    vi.spyOn(session as never, 'startRealtime').mockResolvedValue(true as never);
+    vi.spyOn(session as never, 'engineGreets').mockReturnValue(false as never);
+    await session.fetch(upgradeRequest());
+    serverSockets[0].receive({ type: 'start' });
+    await flush(100);
+    expect(serverSockets[0].countOf('ready')).toBe(0);
+    expect(serverSockets[0].countOf('ended')).toBe(1);
+  });
+
+  it('finalizes a telephone call when server synthesis returns empty audio', async () => {
+    const { session, ctl, callUpdates } = newSession('realtime', {}, {DEFAULT_TTS_PROVIDER:'azure', AZURE_SPEECH_KEY:'synthetic-unit-test-key'});
+    ctl.channel = 'telnyx';
+    vi.spyOn(session as never, 'startRealtime').mockResolvedValue(true as never);
+    vi.spyOn(session as never, 'engineGreets').mockReturnValue(false as never);
+    globalThis.fetch = vi.fn(async () => ({ok:true, arrayBuffer:async () => new ArrayBuffer(0)})) as unknown as typeof fetch;
+    await session.fetch(upgradeRequest());
+    serverSockets[0].receive({ type: 'start' });
+    await flush(100);
+    expect(serverSockets[0].countOf('ended')).toBe(1);
+    expect(serverSockets[0].binaryCount()).toBe(0);
+    expect(serverSockets[0].countOf('ready')).toBe(0);
+    expect(callUpdates().some(w => w.args.includes('Telephone greeting audio could not be generated.'))).toBe(true);
+  });
+
+  it('holds carrier readiness through delayed synthesis, then queues greeting immediately', async () => {
+    const { session, ctl } = newSession('realtime', {}, {DEFAULT_TTS_PROVIDER:'azure', AZURE_SPEECH_KEY:'synthetic-unit-test-key'});
+    ctl.channel = 'telnyx';
+    vi.spyOn(session as never, 'startRealtime').mockResolvedValue(true as never);
+    vi.spyOn(session as never, 'engineGreets').mockReturnValue(false as never);
+    const audio = new ArrayBuffer(4800);
+    let release!: (audio: ArrayBuffer) => void;
+    const pending = new Promise<ArrayBuffer>(resolve => { release = resolve; });
+    const synth = vi.fn(async () => ({ok:true, arrayBuffer: () => pending}));
+    globalThis.fetch = synth as unknown as typeof fetch;
+    await session.fetch(upgradeRequest());
+    const socket = serverSockets[0];
+    socket.receive({ type: 'start' });
+    await flush(100);
+    expect(synth).toHaveBeenCalledOnce();
+    expect(socket.countOf('ready')).toBe(0);
+    expect(socket.binaryCount()).toBe(0);
+    // A ready consumer resumes on the next microtask: PCM must already be queued.
+    const send = socket.send.bind(socket);
+    let queuedAtReady = false;
+    vi.spyOn(socket, 'send').mockImplementation(data => {
+      send(data);
+      if (typeof data === 'string' && JSON.parse(data).type === 'ready') {
+        queueMicrotask(() => { queuedAtReady = socket.sent.at(-1) === audio; });
+      }
+    });
+    release(audio);
+    await flush(100);
+    expect(socket.countOf('ready')).toBe(1);
+    expect(queuedAtReady).toBe(true);
+    expect(socket.binaryCount()).toBe(1);
+    socket.receive({type:'hangup'});
+    await flush(100);
+  });
+
+  it('does not announce readiness or send late greeting after hangup during synthesis', async () => {
+    const { session, ctl } = newSession('realtime', {}, {DEFAULT_TTS_PROVIDER:'azure', AZURE_SPEECH_KEY:'synthetic-unit-test-key'});
+    ctl.channel = 'telnyx';
+    vi.spyOn(session as never, 'startRealtime').mockResolvedValue(true as never);
+    vi.spyOn(session as never, 'engineGreets').mockReturnValue(false as never);
+    let release!: (audio: ArrayBuffer) => void;
+    const pending = new Promise<ArrayBuffer>(resolve => { release = resolve; });
+    globalThis.fetch = vi.fn(async () => ({ok:true, arrayBuffer: () => pending})) as unknown as typeof fetch;
+    await session.fetch(upgradeRequest());
+    const socket = serverSockets[0];
+    socket.receive({type:'start'});
+    await flush(100);
+    socket.receive({type:'hangup'});
+    await flush(100);
+    release(new ArrayBuffer(4800));
+    await flush(100);
+    expect(socket.countOf('ready')).toBe(0);
+    expect(socket.binaryCount()).toBe(0);
+    expect(socket.countOf('ended')).toBe(1);
+  });
+
+  it('allows native realtime greeting audio without a browser TTS provider', async () => {
+    const { session, ctl } = newSession('realtime');
+    ctl.channel = 'telnyx';
+    vi.spyOn(session as never, 'startRealtime').mockResolvedValue(true as never);
+    vi.spyOn(session as never, 'engineGreets').mockReturnValue(true as never);
+    await session.fetch(upgradeRequest());
+    serverSockets[0].receive({ type: 'start' });
+    await flush(100);
+    expect(serverSockets[0].messages().find(m => m.type === 'ready')).toMatchObject({mode: 'realtime', greeting: ''});
+    expect(serverSockets[0].countOf('ended')).toBe(0);
+    serverSockets[0].receive({type:'hangup'});
+    await flush(100);
+  });
+});

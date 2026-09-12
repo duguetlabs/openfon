@@ -153,6 +153,19 @@ describe('account self service', () => {
     expect(db.database.prepare('SELECT id FROM users WHERE id=?').get('owner')).toEqual({ id: 'owner' });
   });
 
+  it('atomically blocks deletion when a carrier reservation races the account request', async () => {
+    let raced = false;
+    db.hook = sql => {
+      if (raced || !sql.startsWith('DELETE FROM users')) return;
+      raced = true;
+      db.database.prepare("INSERT INTO calls(id,business_id,status,channel,reserved_at) VALUES ('carrier','biz-owner','completed','telnyx',datetime('now'))").run();
+    };
+    expect((await call('/api/me/account', 'DELETE', { currentPassword: password, confirmation: 'DELETE' })).status).toBe(409);
+    expect(db.database.prepare("SELECT id FROM users WHERE id='owner'").get()).toEqual({ id: 'owner' });
+    db.database.prepare("UPDATE calls SET carrier_released_at=datetime('now') WHERE id='carrier'").run();
+    expect((await call('/api/me/account', 'DELETE', { currentPassword: password, confirmation: 'DELETE' })).status).toBe(200);
+  });
+
   it('models D1 cascade change counts separately from direct deleted rows', async () => {
     const result = await db.prepare('DELETE FROM users WHERE id=?').bind('other').run();
     // The user, workspace, and session are three changes for one deleted owner.

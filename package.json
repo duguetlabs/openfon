@@ -14,7 +14,8 @@
     "test": "vitest run",
     "db:migrate:local": "wrangler d1 migrations apply openfon --local",
     "db:migrate": "wrangler d1 migrations apply openfon --remote",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:telnyx": "node scripts/telnyx-smoke.mjs"
   },
   "dependencies": {
     "hono": "^4.6.0",

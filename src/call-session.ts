@@ -92,6 +92,7 @@ interface CallRow {
   id: string;
   business_id: string;
   assistant_id: string | null;
+  channel: string;
   status: string;
   started_at: string;
 }
@@ -220,6 +221,7 @@ export class CallSession implements DurableObject {
   private announced = false; // `ready` sent: the session exists, retries are off
   private lang = 'en'; // follows the caller; starts as the business default
   private mode: 'pipeline' | 'realtime' = 'pipeline';
+  private requiresCarrierAudio = false;
   private upstream: WebSocket | null = null; // realtime engine connection
   private failure: string | null = null; // owner-facing reason, stored as the call's summary
 
@@ -386,10 +388,13 @@ export class CallSession implements DurableObject {
   }
 
   private async loadCall(): Promise<void> {
-    const call = await this.env.DB.prepare('SELECT id, business_id, assistant_id, status, started_at FROM calls WHERE id = ?')
+    const call = await this.env.DB.prepare('SELECT id, business_id, assistant_id, status, started_at, channel FROM calls WHERE id = ?')
       .bind(this.callId)
       .first<CallRow>();
     if (!call || call.status !== 'active') throw new Error('call not found or not active');
+    // Persisted admission decides capabilities; a client cannot opt into another
+    // channel using a query parameter or WebSocket message.
+    this.requiresCarrierAudio = call.channel === 'telnyx';
     this.biz = await this.env.DB.prepare('SELECT * FROM businesses WHERE id = ?')
       .bind(call.business_id)
       .first<Business>();
@@ -499,6 +504,10 @@ export class CallSession implements DurableObject {
       await this.finalize();
       return;
     }
+    if (this.requiresCarrierAudio && this.settings!.engine !== 'realtime') {
+      await this.failCarrierAudio('Telephone calls require a realtime assistant.');
+      return;
+    }
     // Armed only once the call is actually going ahead — nothing to watch over
     // a call that is being torn down at pickup.
     await this.armWatchdog();
@@ -509,7 +518,7 @@ export class CallSession implements DurableObject {
 
     if (this.settings!.engine === 'realtime') {
       const ok = await this.startRealtime(systemPrompt, greeting).catch((err) => {
-        console.error('realtime engine failed, falling back to pipeline:', err);
+        console.error('realtime engine startup failed:', err);
         return false;
       });
       if (this.ended) {
@@ -527,17 +536,30 @@ export class CallSession implements DurableObject {
           this.sendReady({ mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
           return;
         }
+        if (this.requiresCarrierAudio && !(this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY)) {
+          await this.failCarrierAudio('This realtime tier requires server speech synthesis for telephone greetings.');
+          return;
+        }
         this.history = [
           { role: 'system', content: systemPrompt },
           { role: 'assistant', content: greeting },
         ];
         const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-        this.sendReady({ mode: 'realtime', ttsMode, greeting, engine: engineLabel });
+        if (!this.requiresCarrierAudio) this.sendReady({ mode: 'realtime', ttsMode, greeting, engine: engineLabel });
         await this.saveTurn('agent', greeting);
         // The greeting is ours, not the model's: synthesize it deterministically
         // and stream it as PCM so it matches the realtime audio path.
         const voice = voiceForReply(this.env, this.lang, this.settings!.language, this.settings!.voice || '');
         const audio = await synthesize(this.env, greeting, voice, 'pcm24');
+        if (this.ended) return; // caller hung up while synthesis was pending
+        if (this.requiresCarrierAudio && !audio?.byteLength) {
+          await this.failCarrierAudio('Telephone greeting audio could not be generated.');
+          return;
+        }
+        // The carrier bridge releases buffered input on ready. Queue ready and
+        // greeting PCM in the same turn, only after synthesis succeeds, so no
+        // caller response can overtake the greeting during the awaited work.
+        if (this.requiresCarrierAudio) this.sendReady({ mode: 'realtime', ttsMode, greeting, engine: engineLabel });
         if (audio && this.ws) {
           // PCM16 @ 24 kHz = 48000 bytes/s; shield the greeting from
           // noise-triggered barge-in flushes for its playback duration.
@@ -552,6 +574,10 @@ export class CallSession implements DurableObject {
       }
     }
 
+    if (this.requiresCarrierAudio) {
+      await this.failCarrierAudio('The realtime provider could not start this telephone call.');
+      return;
+    }
     this.mode = 'pipeline';
     this.history = [
       {
@@ -570,6 +596,12 @@ export class CallSession implements DurableObject {
     });
     await this.saveTurn('agent', greeting);
     await this.speak(greeting);
+  }
+
+  private async failCarrierAudio(reason: string): Promise<void> {
+    this.failure = reason;
+    this.sendError('Telephone audio is unavailable.');
+    await this.finalize();
   }
 
   // ---- realtime engine bridge (OpenAI Realtime wire protocol) ----
