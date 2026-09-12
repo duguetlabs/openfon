@@ -1,11 +1,13 @@
 // Pluggable AI providers. LLM and STT speak the OpenAI-compatible wire format,
 // so OpenFon works with Kataleptic (default), OpenAI, Azure OpenAI, Groq, Ollama,
 // vLLM, or anything else that implements /chat/completions and /audio/transcriptions.
-import type { Env, AgentSettings, ChatMessage, LlmConfig } from './types';
+import type { Env, AgentSettings, ChatMessage, LlmConfig, WorkspaceSpeechSettings } from './types';
 
 // Raised when a business's AI-provider settings cannot be turned into a usable
 // config. Callers surface the message to the user instead of failing opaquely.
 export class LlmConfigError extends Error {}
+// Only these locally composed messages may be shown by connection checks.
+export class LlmRequestError extends Error {}
 
 // Two base URLs mean the same endpoint if only a trailing slash or host casing
 // differs — otherwise "https://api.host/v1/" would count as a custom endpoint
@@ -190,7 +192,12 @@ export async function chatComplete(
     // Provider bodies are untrusted and may reflect the Authorization header,
     // signed query data, or internal diagnostics. Call failures are logged and
     // stored for the owner, so carry only the status across that boundary.
-    throw new Error(`LLM error ${res.status}: provider request failed`);
+    const hint = res.status === 401 || res.status === 403 ? 'check the API key and model permissions'
+      : res.status === 402 ? 'check your provider billing or credits'
+      : res.status === 404 ? 'check the base URL and model identifier'
+      : res.status === 429 ? 'provider rate limit or quota reached; retry later or check your quota'
+      : res.status === 400 ? 'check model support for chat completions and JSON responses' : 'provider request failed; retry later';
+    throw new LlmRequestError(`LLM error ${res.status}: ${hint}`);
   }
   const data = (await res.json()) as { choices: { message: { content: string } }[] };
   return data.choices[0]?.message?.content ?? '';
@@ -350,15 +357,26 @@ export function detectLang(text: string): string | null {
 // Language is auto-detected per utterance so callers can speak any supported
 // language regardless of the business's configured default. `prompt` biases
 // recognition toward business-specific vocabulary.
-export async function transcribe(env: Env, audio: ArrayBuffer, contentType: string, prompt?: string): Promise<Transcription> {
+export async function transcribe(env: Env, audio: ArrayBuffer, contentType: string, prompt?: string, settings?: WorkspaceSpeechSettings | null): Promise<Transcription> {
+  const custom = settings?.stt_provider && settings.stt_provider !== 'instance';
+  const baseUrl = custom ? settings.stt_base_url || '' : env.DEFAULT_STT_BASE_URL;
+  const apiKey = custom ? settings.stt_api_key || '' : env.DEFAULT_STT_API_KEY || '';
+  const model = custom ? settings.stt_model || '' : env.DEFAULT_STT_MODEL;
+  if (custom) {
+    const bad = validateLlmBaseUrl(baseUrl);
+    if (bad) throw new LlmConfigError(`STT URL ${bad}`);
+    if (!apiKey || !model) throw new LlmConfigError('STT provider needs its own API key and model.');
+    if (settings.stt_provider === 'openai' && baseUrl !== 'https://api.openai.com/v1') throw new LlmConfigError('OpenAI STT endpoint must be https://api.openai.com/v1');
+  }
   const form = new FormData();
   const ext = contentType.includes('mp4') ? 'mp4' : contentType.includes('wav') ? 'wav' : 'webm';
   form.append('file', new Blob([audio], { type: contentType }), `utterance.${ext}`);
-  form.append('model', env.DEFAULT_STT_MODEL);
+  form.append('model', model);
   if (prompt) form.append('prompt', prompt);
-  const res = await fetch(`${env.DEFAULT_STT_BASE_URL}/audio/transcriptions`, {
+  const res = await fetch(completionsUrl(baseUrl).replace('/chat/completions', '/audio/transcriptions'), {
     method: 'POST',
-    headers: { Authorization: `Bearer ${env.DEFAULT_STT_API_KEY || ''}` },
+    redirect: 'manual',
+    headers: { Authorization: `Bearer ${apiKey}` },
     body: form,
   });
   if (!res.ok) {

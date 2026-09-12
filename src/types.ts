@@ -27,6 +27,7 @@ export interface Env {
   AZURE_SPEECH_REGION: string;
   DEFAULT_TTS_VOICE: string;
   // Realtime engine (any OpenAI Realtime-compatible WebSocket endpoint)
+  REALTIME_PROVIDER?: 'kataleptic' | 'openai' | 'custom';
   REALTIME_BASE_URL: string;
   REALTIME_MODEL: string;
   REALTIME_API_KEY?: string; // falls back to DEFAULT_LLM_API_KEY
@@ -50,7 +51,17 @@ export interface Business {
   max_calls_per_day: number;
 }
 
-export interface AgentSettings {
+export interface WorkspaceSpeechSettings {
+  realtime_provider?: 'instance' | 'kataleptic' | 'openai' | 'custom';
+  realtime_base_url?: string;
+  realtime_api_key?: string;
+  stt_provider?: 'instance' | 'openai' | 'custom';
+  stt_base_url?: string;
+  stt_api_key?: string;
+  stt_model?: string;
+}
+
+export interface AgentSettings extends WorkspaceSpeechSettings {
   business_id: string;
   agent_name: string;
   greeting: string;
@@ -94,7 +105,8 @@ export interface Assistant {
   activated_at: string | null;
 }
 
-export interface ProviderSettings {
+export interface ProviderSettings extends WorkspaceSpeechSettings {
+  llm_model?: string;
   business_id: string;
   llm_base_url: string;
   llm_api_key: string;

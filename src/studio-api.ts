@@ -1,7 +1,8 @@
+import { providerUpdate, ProviderInputError, TEXT_PRESETS } from './provider-settings';
 import type { Hono } from 'hono';
 import { readWorkspaceBody } from './request-validation';
 import { newId } from './auth';
-import { chatComplete, LlmConfigError, resolveLlm, sameLlmEndpoint, validateLlmBaseUrl } from './providers';
+import { chatComplete, LlmConfigError, LlmRequestError, resolveLlm, sameLlmEndpoint, validateLlmBaseUrl } from './providers';
 import type {
   AgentSettings,
   Assistant,
@@ -798,7 +799,7 @@ function settingsForProvider(assistant: Assistant, provider: ProviderSettings | 
     custom_instructions: assistant.custom_instructions,
     llm_base_url: provider?.llm_base_url ?? '',
     llm_api_key: provider?.llm_api_key ?? '',
-    llm_model: assistant.llm_model,
+    llm_model: assistant.llm_model || provider?.llm_model || '',
     engine: assistant.engine,
     realtime_model: assistant.realtime_model,
     realtime_voice: assistant.realtime_voice,
@@ -1569,6 +1570,16 @@ export function registerStudioApi(app: StudioApp): void {
       usesInstanceDefault: !provider?.llm_base_url || sameLlmEndpoint(provider.llm_base_url, c.env.DEFAULT_LLM_BASE_URL),
       apiKeyConfigured: providerConfigured(c.env, provider),
       workspaceApiKeyConfigured: Boolean(provider?.llm_api_key),
+      model: provider?.llm_model ?? '',
+      presets: TEXT_PRESETS,
+      realtime_provider: provider?.realtime_provider ?? 'instance',
+      realtime_base_url: provider?.realtime_base_url ?? '',
+      realtime_api_key_configured: Boolean(provider?.realtime_api_key),
+      stt_provider: provider?.stt_provider ?? 'instance',
+      stt_base_url: provider?.stt_base_url ?? '',
+      stt_model: provider?.stt_model ?? '',
+      stt_api_key_configured: Boolean(provider?.stt_api_key),
+      tts_provider: c.env.DEFAULT_TTS_PROVIDER,
       updatedAt: provider?.updated_at ?? null,
     });
   });
@@ -1579,40 +1590,36 @@ export function registerStudioApi(app: StudioApp): void {
     const current = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
       .bind(workspace.id)
       .first<ProviderSettings>();
-    const body = await readWorkspaceBody<{ baseUrl?: string; apiKey?: string | null; clearApiKey?: boolean }>(c.req);
-    if (body.clearApiKey !== undefined && typeof body.clearApiKey !== 'boolean') {
-      return c.json({ error: 'clearApiKey must be a boolean' }, 400);
-    }
-    if (body.apiKey !== undefined && body.apiKey !== null && typeof body.apiKey !== 'string') {
-      return c.json({ error: 'API key must be a string or null' }, 400);
-    }
-    const baseUrl = body.baseUrl !== undefined ? body.baseUrl.trim() : current?.llm_base_url ?? '';
-    const replacementKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
-    const clearApiKey = body.clearApiKey === true || body.apiKey === null;
-    if (clearApiKey && replacementKey) {
-      return c.json({ error: 'Choose either a replacement API key or clearApiKey' }, 400);
-    }
-    // A blank or omitted write-only field is not evidence that the owner meant
-    // to delete a secret they cannot read back. Null remains an explicit clear
-    // for existing typed clients; the UI uses the named clearApiKey signal.
-    const apiKey = clearApiKey ? '' : replacementKey || current?.llm_api_key || '';
-    const bad = providerValidationError(c.env, baseUrl, apiKey);
-    if (bad) return c.json({ error: bad }, 400);
-    await c.env.DB.batch([
+    const body = await readWorkspaceBody<Record<string, unknown>>(c.req);
+    let next: ProviderSettings;
+    try { next = providerUpdate(c.env, current, body); }
+    catch (e) { if (e instanceof ProviderInputError) return c.json({ error: e.message }, 400); throw e; }
+    const baseUrl = next.llm_base_url;
+    const apiKey = next.llm_api_key;
+    const statements = [
       c.env.DB.prepare(
-        `INSERT INTO provider_settings (business_id, llm_base_url, llm_api_key)
-         VALUES (?, ?, ?)
+        `INSERT INTO provider_settings (business_id, llm_base_url, llm_api_key, llm_model,
+          realtime_provider, realtime_base_url, realtime_api_key, stt_provider, stt_base_url, stt_api_key, stt_model)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(business_id) DO UPDATE SET
-           llm_base_url=excluded.llm_base_url,
-           llm_api_key=excluded.llm_api_key,
+           llm_base_url=excluded.llm_base_url, llm_api_key=excluded.llm_api_key, llm_model=excluded.llm_model,
+           realtime_provider=excluded.realtime_provider, realtime_base_url=excluded.realtime_base_url,
+           realtime_api_key=excluded.realtime_api_key, stt_provider=excluded.stt_provider,
+           stt_base_url=excluded.stt_base_url, stt_api_key=excluded.stt_api_key, stt_model=excluded.stt_model,
            updated_at=datetime('now')`
-      ).bind(workspace.id, baseUrl, apiKey),
-      c.env.DB.prepare('UPDATE agent_settings SET llm_base_url=?, llm_api_key=? WHERE business_id=?').bind(
-        baseUrl,
-        apiKey,
-        workspace.id
-      ),
-    ]);
+      ).bind(workspace.id, baseUrl, apiKey, next.llm_model, next.realtime_provider, next.realtime_base_url,
+        next.realtime_api_key, next.stt_provider, next.stt_base_url, next.stt_api_key, next.stt_model),
+      c.env.DB.prepare('UPDATE agent_settings SET llm_base_url=?, llm_api_key=? WHERE business_id=?').bind(baseUrl, apiKey, workspace.id),
+    ];
+    // Gateway model/voice presets cannot be carried into OpenAI's protocol.
+    // Custom assistant models remain untouched. Blank uses the adapter default.
+    if (next.realtime_provider === 'openai' && current?.realtime_provider !== 'openai') {
+      for (const table of ['assistants', 'agent_settings']) statements.push(c.env.DB.prepare(
+        `UPDATE ${table} SET realtime_model='', realtime_voice='' WHERE business_id=?
+         AND (realtime_model LIKE 'kataleptic-%' OR realtime_model='gpt-realtime-2')`
+      ).bind(workspace.id));
+    }
+    await c.env.DB.batch(statements);
     return c.json({
       ok: true,
       apiKeyConfigured: providerConfigured(c.env, {
@@ -1731,6 +1738,7 @@ export function registerStudioApi(app: StudioApp): void {
       return c.json({ ok: true, model: cfg.model });
     } catch (error) {
       if (error instanceof LlmConfigError) return c.json({ error: error.message }, 400);
+      if (error instanceof LlmRequestError) return c.json({ error: error.message }, 502);
       return c.json({ error: 'Provider check failed. Verify the endpoint, API key, and model.' }, 502);
     }
   });

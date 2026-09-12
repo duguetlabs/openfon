@@ -1,3 +1,4 @@
+import { OPENAI_REALTIME_VOICES, retainedProviderKey, ProviderInputError } from './provider-settings';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { readWorkspaceBody } from './request-validation';
@@ -624,7 +625,11 @@ app.put('/api/me/business/:id/agent', async (c) => {
   if (s.clearApiKey && replacementKey) {
     return c.json({ error: 'Choose either a replacement API key or clearApiKey' }, 400);
   }
-  const llmKey = s.clearApiKey ? '' : replacementKey ?? cur.llm_api_key;
+  let llmKey: string;
+  try { llmKey = retainedProviderKey(cur.llm_base_url || c.env.DEFAULT_LLM_BASE_URL,
+    s.llm_base_url || (s.llm_base_url === '' ? c.env.DEFAULT_LLM_BASE_URL : cur.llm_base_url) || c.env.DEFAULT_LLM_BASE_URL,
+    cur.llm_api_key, replacementKey || '', Boolean(s.clearApiKey)); }
+  catch (e) { if (e instanceof ProviderInputError) return c.json({ error: e.message }, 400); throw e; }
   const engine = s.engine === 'realtime' ? 'realtime' : s.engine === 'pipeline' ? 'pipeline' : cur.engine;
   const realtimeModel = s.realtime_model !== undefined ? s.realtime_model : cur.realtime_model;
   const realtimeVoice = s.realtime_voice !== undefined ? s.realtime_voice : cur.realtime_voice;
@@ -758,10 +763,12 @@ app.post('/api/me/business/:id/profiles', async (c) => {
   // never returned by an API, including as a masked placeholder.
   let llmKey = b.llm_api_key ?? '';
   if (!llmKey || /^•+$/.test(llmKey)) {
-    const cur = await c.env.DB.prepare('SELECT llm_api_key FROM provider_settings WHERE business_id = ?')
+    const cur = await c.env.DB.prepare('SELECT llm_base_url, llm_api_key FROM provider_settings WHERE business_id = ?')
       .bind(biz.id)
-      .first<{ llm_api_key: string }>();
-    llmKey = cur?.llm_api_key ?? '';
+      .first<{ llm_base_url: string; llm_api_key: string }>();
+    try { llmKey = retainedProviderKey(cur?.llm_base_url || c.env.DEFAULT_LLM_BASE_URL,
+      b.llm_base_url || c.env.DEFAULT_LLM_BASE_URL, cur?.llm_api_key ?? '', '', false); }
+    catch (e) { if (e instanceof ProviderInputError) return c.json({ error: e.message }, 400); throw e; }
   }
   const bad = llmEndpointError(c.env, b.llm_base_url ?? '', llmKey);
   if (bad) return c.json({ error: bad }, 400);
@@ -815,7 +822,11 @@ app.put('/api/me/profiles/:pid', async (c) => {
   const p = await ownedProfile(c.env, c.get('userId'), c.req.param('pid'));
   if (!p) return c.json({ error: 'Not found' }, 404);
   const b = await readWorkspaceBody<Partial<ProfileFields>>(c.req);
-  const llmKey = b.llm_api_key !== undefined && b.llm_api_key !== '' && !/^•+$/.test(b.llm_api_key) ? b.llm_api_key : p.llm_api_key;
+  let llmKey: string;
+  try { llmKey = retainedProviderKey(p.llm_base_url || c.env.DEFAULT_LLM_BASE_URL,
+    (b.llm_base_url ?? p.llm_base_url) || c.env.DEFAULT_LLM_BASE_URL, p.llm_api_key,
+    b.llm_api_key && !/^•+$/.test(b.llm_api_key) ? b.llm_api_key : '', false); }
+  catch (e) { if (e instanceof ProviderInputError) return c.json({ error: e.message }, 400); throw e; }
   const llmBaseUrl = b.llm_base_url ?? p.llm_base_url;
   if (b.language !== undefined && !b.language.trim()) return c.json({ error: 'Profile language is required' }, 400);
   const bad = llmEndpointError(c.env, llmBaseUrl, llmKey);
@@ -894,6 +905,16 @@ app.post('/api/me/profiles/:pid/apply', async (c) => {
 let voicesCache: { data: unknown; at: number } | null = null;
 
 app.get('/api/me/voices', async (c) => {
+  const workspace = await c.env.DB.prepare('SELECT id FROM businesses WHERE user_id = ?').bind(c.get('userId')).first<{ id: string }>();
+  const provider = workspace ? await c.env.DB.prepare('SELECT realtime_provider, realtime_base_url FROM provider_settings WHERE business_id = ?')
+    .bind(workspace.id).first<{ realtime_provider: string; realtime_base_url: string }>() : null;
+  const mode = provider?.realtime_provider && provider.realtime_provider !== 'instance' ? provider.realtime_provider : c.env.REALTIME_PROVIDER || 'kataleptic';
+  if (mode === 'openai' || mode === 'custom') return c.json({
+    cascade: [], native: mode === 'openai' ? OPENAI_REALTIME_VOICES.map(id => ({ id, label: id })) : [], azure: [], hdDefault: '',
+  });
+  // Explicit gateway endpoints get no catalog network request: custom voice IDs
+  // remain editable and no unrelated instance endpoint is contacted.
+  if (provider?.realtime_provider === 'kataleptic') return c.json({ cascade: [], native: [], azure: [], hdDefault: '' });
   if (voicesCache && Date.now() - voicesCache.at < 3_600_000) return c.json(voicesCache.data);
   const out: {
     cascade: { id: string; label: string }[];

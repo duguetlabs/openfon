@@ -198,7 +198,33 @@ export interface KnowledgeItem {
   activated_at: string | null;
 }
 
+export interface ProviderUpdate {
+  baseUrl?: string;
+  model?: string;
+  apiKey?: string | null;
+  clearApiKey?: boolean;
+  realtime_provider?: string;
+  realtime_base_url?: string;
+  realtime_api_key?: string | null;
+  realtime_clear_api_key?: boolean;
+  stt_provider?: string;
+  stt_base_url?: string;
+  stt_api_key?: string | null;
+  stt_clear_api_key?: boolean;
+  stt_model?: string;
+}
+
 export interface ProviderView {
+  model: string;
+  presets: { id: string; label: string; baseUrl: string; model: string }[];
+  realtime_provider: string;
+  realtime_base_url: string;
+  realtime_api_key_configured: boolean;
+  stt_provider: string;
+  stt_base_url: string;
+  stt_model: string;
+  stt_api_key_configured: boolean;
+  tts_provider: string;
   baseUrl: string;
   usesInstanceDefault: boolean;
   apiKeyConfigured: boolean;
@@ -305,7 +331,7 @@ export const api = {
   attachKnowledgeCollection: (assistantId: string, collectionId: string) => req<{ ok: true }>('POST', `/api/me/assistants/${assistantId}/knowledge-collections/${collectionId}`, {}),
   detachKnowledgeCollection: (assistantId: string, collectionId: string) => req<{ ok: true }>('DELETE', `/api/me/assistants/${assistantId}/knowledge-collections/${collectionId}`),
   provider: () => req<ProviderView>('GET', '/api/me/provider'),
-  updateProvider: (body: { baseUrl?: string; apiKey?: string | null; clearApiKey?: boolean }) =>
+  updateProvider: (body: ProviderUpdate) =>
     req<{ ok: true; apiKeyConfigured: boolean; workspaceApiKeyConfigured: boolean }>('PUT', '/api/me/provider', body),
   checkProvider: (assistantId?: string) => req<{ ok: true; model: string }>('POST', '/api/me/provider/check', assistantId ? { assistantId } : {}),
   enginePresets: () => req<EnginePreset[]>('GET', '/api/me/engine-presets'),

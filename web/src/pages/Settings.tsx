@@ -1,3 +1,4 @@
+import ProviderSettings from './ProviderSettings';
 import { useEffect, useState } from 'react';
 import { api, type Agent, type Business, type EngineProfile, type VoiceCatalog } from '../api';
 import { useSession } from '../App';
@@ -30,7 +31,6 @@ export default function Settings() {
   const [profiles, setProfiles] = useState<EngineProfile[]>([]);
   const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
   const [newProfileName, setNewProfileName] = useState('');
-  const [clearApiKey, setClearApiKey] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -42,7 +42,6 @@ export default function Settings() {
       setFaqs(readFaqRows(business.faqs_json, []));
       setClosures(readClosureRows(business.closures_json));
       setAgent(business.agent ? { ...business.agent } : null);
-      setClearApiKey(false);
       void api.profiles(business.id).then(setProfiles).catch(() => {});
       void api.voices().then(setVoiceCatalog).catch(() => {});
     }).catch((e) => { if (active) setError(e instanceof Error ? e.message : 'Could not load settings'); });
@@ -64,8 +63,8 @@ export default function Settings() {
         faqs_json: serializeFaqRows(faqs),
         closures_json: serializeClosureRows(closures),
       });
-      await api.updateAgent(biz!.id, { ...agent!, ...(clearApiKey ? { clearApiKey: true } : {}) });
-      setClearApiKey(false);
+      const { llm_base_url: _url, llm_api_key: _key, ...assistant } = agent!;
+      await api.updateAgent(biz!.id, assistant);
       await refresh();
       setSaved('Saved.');
       setTimeout(() => setSaved(''), 2000);
@@ -84,6 +83,7 @@ export default function Settings() {
         <h1 className="mt-1 font-display text-4xl font-semibold tracking-tight text-ink">Settings</h1>
         <div className="callline-accent mt-3 w-16" />
       </div>
+      <ProviderSettings onSaved={refresh} />
       <section className="rise">
         <SectionTitle sub="The facts your agent answers from.">Business</SectionTitle>
         <Card className="space-y-4">
@@ -358,7 +358,7 @@ export default function Settings() {
                   onChange={() => setA({ engine: 'pipeline' })}
                 />
                 <span>
-                  <strong>Pipeline</strong> <span className="text-ink-soft">— transcribe → think → speak. Works with any provider, cheapest, ~2–4 s per reply.</span>
+                  <strong>Pipeline</strong> <span className="text-ink-soft">— transcribe → think → speak. Uses separate transcription, text generation, and speech synthesis settings.</span>
                 </span>
               </label>
               <label className="flex items-start gap-2.5 text-sm">
@@ -371,7 +371,7 @@ export default function Settings() {
                 <span>
                   <strong>Realtime</strong>{' '}
                   <span className="text-ink-soft">
-                    — streams audio both ways, sub-second replies, callers can interrupt the agent. Needs a realtime-capable provider; falls back to Pipeline if unavailable.
+                    — streams audio both ways and supports interruptions. Requires a configured realtime provider.
                   </span>
                 </span>
               </label>
@@ -419,61 +419,8 @@ export default function Settings() {
               </label>
             )}
           </div>
-          <Field
-            label="Base URL"
-            value={agent.llm_base_url}
-            onChange={(e) => setA({ llm_base_url: e.target.value })}
-            placeholder="https://api.kataleptic.com/v1"
-            hint="Your own endpoint must be https and needs its own API key below — this instance never sends its key to another URL."
-          />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Model" value={agent.llm_model} onChange={(e) => setA({ llm_model: e.target.value })} placeholder="llama-3.3-70b" />
-            <div>
-              <Field
-                label="API key"
-                type="password"
-                value={agent.llm_api_key}
-                onChange={(e) => {
-                  setClearApiKey(false);
-                  setA({ llm_api_key: e.target.value });
-                }}
-                placeholder={
-                  clearApiKey
-                    ? 'Saved key will be removed'
-                    : agent.workspaceApiKeyConfigured
-                      ? 'Configured — enter a new key to replace it'
-                      : agent.apiKeyConfigured
-                        ? 'Using the instance key'
-                        : 'sk-…'
-                }
-              />
-              {agent.workspaceApiKeyConfigured && !clearApiKey && (
-                <button
-                  type="button"
-                  className="mt-2 text-xs font-semibold text-rose underline decoration-rose/30 underline-offset-2 hover:decoration-rose"
-                  onClick={() => {
-                    setA({ llm_api_key: '' });
-                    setClearApiKey(true);
-                  }}
-                >
-                  Remove saved key
-                </button>
-              )}
-              {clearApiKey && (
-                <p className="mt-2 text-xs text-ink-soft" role="status">
-                  The saved key will be removed when you save. Use the instance-default Base URL first if you want to
-                  fall back to its key.{' '}
-                  <button
-                    type="button"
-                    className="font-semibold text-iris underline decoration-iris/30 underline-offset-2 hover:decoration-iris"
-                    onClick={() => setClearApiKey(false)}
-                  >
-                    Undo
-                  </button>
-                </p>
-              )}
-            </div>
-          </div>
+          <Field label="Assistant text model override" value={agent.llm_model} onChange={e => setA({ llm_model: e.target.value })} hint="Blank uses the workspace text model above." />
+
         </Card>
       </section>
 

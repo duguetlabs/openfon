@@ -327,6 +327,21 @@ describe('Calm Studio API foundation', () => {
     );
   }
 
+  it('does not carry a retained workspace/profile key to another endpoint through legacy settings', async () => {
+    const workspace = await createWorkspace() as { id: string };
+    expect((await request(env, '/api/me/provider', json('PUT', { baseUrl: 'https://first.example/v1', apiKey: 'workspace-private' }))).status).toBe(200);
+    const changed = await request(env, `/api/me/business/${workspace.id}/agent`, json('PUT', { llm_base_url: 'https://other.example/v1' }));
+    expect(changed.status).toBe(400);
+    expect(await changed.text()).toContain('Endpoint changed');
+    const profile = await request(env, `/api/me/business/${workspace.id}/profiles`, json('POST', { name: 'Moved endpoint', llm_base_url: 'https://other.example/v1' }));
+    expect(profile.status).toBe(400);
+    expect(await profile.text()).toContain('Endpoint changed');
+    const good = await data<{ id: string }>(await request(env, `/api/me/business/${workspace.id}/profiles`, json('POST', { name: 'Original endpoint', llm_base_url: 'https://first.example/v1' })));
+    const moved = await request(env, `/api/me/profiles/${good.id}`, json('PUT', { llm_base_url: 'https://other.example/v1' }));
+    expect(moved.status).toBe(400);
+    expect(await moved.text()).toContain('Endpoint changed');
+  });
+
   it('rejects malformed workspace field types without persisting invalid state', async () => {
     const workspace = await createWorkspace() as { id: string };
     const bootstrap = await data<{ assistants: Array<{ id: string }>; knowledgeCollections: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'));
