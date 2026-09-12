@@ -1,3 +1,4 @@
+import { assertPresetWriteBudget, PRESET_LIST_COLUMNS } from './preset-budgets';
 import { OPENAI_REALTIME_VOICES, presetCompatibilityError, retainedProviderKey, ProviderInputError } from './provider-settings';
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -29,6 +30,12 @@ type Ctx = Context<{ Bindings: Env; Variables: Vars }>;
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 app.onError((error, c) => {
   if (error instanceof HTTPException) return error.getResponse();
+  if (error.message.includes('OPENFON_PRESET_STORAGE_LIMIT')) {
+    return c.json({ error: 'Workspace presets are limited to 64 presets and 512 KiB per compatibility table. Delete or shorten presets first.' }, 409);
+  }
+  if (error.message.includes('OPENFON_PRESET_WRITE_LIMIT')) {
+    return c.json({ error: 'Workspace presets allow 400 compatibility row writes per UTC day (normally 200 saves). Try again tomorrow.' }, 429);
+  }
   if (error.message.includes('OPENFON_ASSISTANT_STORAGE_LIMIT')) {
     return c.json({ error: 'Workspace assistants are limited to 32 assistants and 1 MiB of configuration text. Shorten existing configurations or remove an unused assistant first.' }, 409);
   }
@@ -768,7 +775,7 @@ function maskProfile(p: ProfileFields): ProfileFields & { apiKeyConfigured: bool
 app.get('/api/me/business/:id/profiles', async (c) => {
   const biz = await ownedBusiness(c.env, c.get('userId'), c.req.param('id'));
   if (!biz) return c.json({ error: 'Not found' }, 404);
-  const { results } = await c.env.DB.prepare('SELECT * FROM engine_profiles WHERE business_id = ? ORDER BY created_at')
+  const { results } = await c.env.DB.prepare(`SELECT ${PRESET_LIST_COLUMNS}, '' AS llm_base_url, '' AS llm_api_key FROM engine_profiles WHERE business_id = ? ORDER BY created_at,id LIMIT 64`)
     .bind(biz.id)
     .all<ProfileFields>();
   return c.json(results.map(maskProfile));
@@ -812,6 +819,11 @@ app.post('/api/me/business/:id/profiles', async (c) => {
       b.voice ?? '',
       b.llm_model ?? ''
     );
+  await assertPresetWriteBudget(c.env, biz.id, {
+    id, name:b.name.trim(), engine:b.engine === 'realtime' ? 'realtime' : 'pipeline',
+    realtime_model:b.realtime_model ?? '', realtime_voice:b.realtime_voice ?? '',
+    language:b.language?.trim() || 'en', voice:b.voice ?? '', llm_model:b.llm_model ?? '',
+  }, true);
   await c.env.DB.batch([legacyProfile, preset]);
   const row = await c.env.DB.prepare('SELECT * FROM engine_profiles WHERE id = ?').bind(id).first<ProfileFields>();
   return c.json(maskProfile(row!), 201);
@@ -859,6 +871,11 @@ app.put('/api/me/profiles/:pid', async (c) => {
       b.llm_model ?? p.llm_model,
       p.id
     );
+  await assertPresetWriteBudget(c.env, p.business_id, {
+    ...p, name:b.name?.trim() || p.name, engine:b.engine ?? p.engine,
+    realtime_model:b.realtime_model ?? p.realtime_model, realtime_voice:b.realtime_voice ?? p.realtime_voice,
+    language:b.language ?? p.language, voice:b.voice ?? p.voice, llm_model:b.llm_model ?? p.llm_model,
+  }, false);
   await c.env.DB.batch([legacyProfileUpdate, presetUpdate]);
   return c.json({ ok: true });
 });

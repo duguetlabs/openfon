@@ -250,6 +250,7 @@ export interface EnginePreset {
 }
 
 export interface EngineProfile {
+  preview_only?: number;
   id: string;
   name: string;
   engine: string;

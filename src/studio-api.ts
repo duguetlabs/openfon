@@ -1,3 +1,4 @@
+import { PRESET_RECONCILIATION_SQL, PRESET_CHANGED_SQL, assertPresetWriteBudget, PRESET_LIST_COLUMNS, PRESET_ROW_BYTES } from './preset-budgets';
 import { providerUpdate, presetCompatibilityError, ProviderInputError, TEXT_PRESETS, OPENAI_REALTIME_VOICES } from './provider-settings';
 import type { Hono } from 'hono';
 import { readWorkspaceBody } from './request-validation';
@@ -182,22 +183,6 @@ async function studioIpLimitAtCapacity(
   }
   return null;
 }
-
-const LEGACY_PROFILE_FIELDS = [
-  'name',
-  'engine',
-  'realtime_model',
-  'realtime_voice',
-  'language',
-  'voice',
-  'llm_model',
-] as const;
-
-type LegacyProfile = Record<(typeof LEGACY_PROFILE_FIELDS)[number], string> & {
-  id: string;
-  business_id: string;
-  created_at: string;
-};
 
 function recordArray(raw: string): Record<string, unknown>[] {
   try {
@@ -415,30 +400,17 @@ export async function syncLegacyKnowledge(
   await env.DB.batch(statements);
 }
 
-function profileSignature(profiles: LegacyProfile[]): string {
-  return JSON.stringify(
-    profiles
-      .map((profile) => ({
-        id: profile.id,
-        business_id: profile.business_id,
-        ...Object.fromEntries(LEGACY_PROFILE_FIELDS.map((field) => [field, profile[field]])),
-      }))
-      .sort((a, b) => a.id.localeCompare(b.id))
-  );
-}
-
 export async function ensureWorkspaceFoundation(
   env: Env,
   workspace: Pick<Business, 'id' | 'slug' | 'services_json' | 'faqs_json'>
 ): Promise<void> {
-  let [legacy, assistant, provider, legacyProfilesResult, presetsResult, defaultCollection] = await Promise.all([
+  let [legacy, assistant, provider, presetReconciliation, defaultCollection] = await Promise.all([
     env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?').bind(workspace.id).first<AgentSettings>(),
     env.DB.prepare('SELECT * FROM assistants WHERE business_id = ? AND public_slug = ? LIMIT 1')
       .bind(workspace.id, workspace.slug)
       .first<Assistant>(),
     env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?').bind(workspace.id).first<ProviderSettings>(),
-    env.DB.prepare('SELECT * FROM engine_profiles WHERE business_id = ? ORDER BY id').bind(workspace.id).all<LegacyProfile>(),
-    env.DB.prepare('SELECT * FROM engine_presets WHERE business_id = ? ORDER BY id').bind(workspace.id).all<LegacyProfile>(),
+    env.DB.prepare(PRESET_RECONCILIATION_SQL).bind(workspace.id).first<{ needed: number }>(),
     env.DB.prepare('SELECT id FROM knowledge_collections WHERE business_id=? AND is_default=1 LIMIT 1')
       .bind(workspace.id).first<{ id: string }>(),
   ]);
@@ -653,25 +625,21 @@ export async function ensureWorkspaceFoundation(
       ).bind(workspace.id, workspace.id),
     );
   }
-  if (profileSignature(legacyProfilesResult.results) !== profileSignature(presetsResult.results)) {
+  if (presetReconciliation?.needed) {
     statements.push(
-      env.DB.prepare(
-        `INSERT INTO engine_presets (
-          id, business_id, name, engine, realtime_model, realtime_voice, language,
-          voice, llm_model, created_at, updated_at
-         )
-         SELECT id, business_id, name, engine, realtime_model, realtime_voice,
-           language, voice, llm_model, created_at, datetime('now')
-           FROM engine_profiles WHERE business_id = ?
-         ON CONFLICT(id) DO UPDATE SET name=excluded.name, engine=excluded.engine,
-           realtime_model=excluded.realtime_model, realtime_voice=excluded.realtime_voice,
-           language=excluded.language, voice=excluded.voice, llm_model=excluded.llm_model,
-           updated_at=datetime('now')`
-      ).bind(workspace.id),
-      env.DB.prepare(
-        `DELETE FROM engine_presets WHERE business_id=?
-          AND NOT EXISTS (SELECT 1 FROM engine_profiles WHERE engine_profiles.id=engine_presets.id)`
-      ).bind(workspace.id)
+      env.DB.prepare(`DELETE FROM engine_presets WHERE business_id=?
+        AND NOT EXISTS(SELECT 1 FROM engine_profiles l WHERE l.id=engine_presets.id AND l.business_id=engine_presets.business_id)`)
+        .bind(workspace.id),
+      ...['<=','>'].map(comparison => env.DB.prepare(`UPDATE engine_presets AS p SET (name, engine, realtime_model, realtime_voice, language, voice, llm_model)=
+        (SELECT name, engine, realtime_model, realtime_voice, language, voice, llm_model FROM engine_profiles l WHERE l.id=p.id AND l.business_id=p.business_id), updated_at=datetime('now')
+        WHERE p.business_id=? AND EXISTS(SELECT 1 FROM engine_profiles l
+          WHERE l.id=p.id AND l.business_id=p.business_id AND NOT (${PRESET_CHANGED_SQL})
+          AND (${PRESET_ROW_BYTES('l')}) ${comparison} (${PRESET_ROW_BYTES('p')}))`)
+        .bind(workspace.id)),
+      env.DB.prepare(`INSERT INTO engine_presets (id,business_id,name, engine, realtime_model, realtime_voice, language, voice, llm_model,created_at,updated_at)
+        SELECT id,business_id,name, engine, realtime_model, realtime_voice, language, voice, llm_model,created_at,datetime('now') FROM engine_profiles l
+        WHERE business_id=? AND NOT EXISTS(SELECT 1 FROM engine_presets p WHERE p.id=l.id)`)
+        .bind(workspace.id),
     );
   }
   if (!defaultCollection) {
@@ -1826,7 +1794,7 @@ export function registerStudioApi(app: StudioApp): void {
     const workspace = await workspaceForUser(c.env, c.get('userId'));
     if (!workspace) return c.json([]);
     const { results } = await c.env.DB.prepare(
-      'SELECT * FROM engine_presets WHERE business_id = ? ORDER BY created_at, id'
+      `SELECT ${PRESET_LIST_COLUMNS},updated_at FROM engine_presets WHERE business_id = ? ORDER BY created_at, id LIMIT 64`
     )
       .bind(workspace.id)
       .all();
@@ -1834,7 +1802,9 @@ export function registerStudioApi(app: StudioApp): void {
   });
 
   app.post('/api/me/engine-presets', async (c) => {
-    const workspace = await workspaceForUser(c.env, c.get('userId'));
+    // Creation needs only ownership; reconciliation must not write before a quota refusal.
+    const workspace = await c.env.DB.prepare('SELECT id FROM businesses WHERE user_id=? ORDER BY created_at,id LIMIT 1')
+      .bind(c.get('userId')).first<{ id: string }>();
     if (!workspace) return c.json({ error: 'Create a workspace first' }, 409);
     const body = await readWorkspaceBody<Record<string, unknown>>(c.req);
     const name = typeof body.name === 'string' ? body.name.trim() : '';
@@ -1846,6 +1816,8 @@ export function registerStudioApi(app: StudioApp): void {
     const language = typeof body.language === 'string' ? body.language.trim() || 'en' : 'en';
     const voice = typeof body.voice === 'string' ? body.voice : '';
     const llmModel = typeof body.llm_model === 'string' ? body.llm_model : '';
+    await assertPresetWriteBudget(c.env, workspace.id, { id, name, engine,
+      realtime_model:realtimeModel, realtime_voice:realtimeVoice, language, voice, llm_model:llmModel }, true);
     await c.env.DB.batch([
       c.env.DB.prepare(
       `INSERT INTO engine_presets (
@@ -1946,6 +1918,8 @@ export function registerStudioApi(app: StudioApp): void {
     if (!language.trim()) return c.json({ error: 'Preset language is required' }, 400);
     const voice = value('voice');
     const llmModel = value('llm_model');
+    await assertPresetWriteBudget(c.env, preset.business_id as string, { id:preset.id, name, engine,
+      realtime_model:realtimeModel, realtime_voice:realtimeVoice, language, voice, llm_model:llmModel }, false);
     await c.env.DB.batch([
       c.env.DB.prepare(
         `UPDATE engine_presets SET name=?, engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?, updated_at=datetime('now')

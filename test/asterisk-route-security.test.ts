@@ -1,3 +1,4 @@
+import { AsteriskAuthBudget, asteriskAuthBudget } from '../src/asterisk-auth-budget';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import worker from '../src/index';
 import { hashPassword } from '../src/auth';
@@ -10,6 +11,7 @@ const password = 'synthetic-password-with-at-least-32-bytes';
 const authorization = 'Basic ' + btoa('pbx:' + password);
 const dispatch = vi.fn(async () => new Response(null));
 beforeEach(async () => {
+  const budget=new AsteriskAuthBudget();vi.spyOn(asteriskAuthBudget,'acquire').mockImplementation(()=>budget.acquire());
   db = new SqliteD1(); applyMigrations(db); dispatch.mockClear();
   db.exec(`INSERT INTO users(id,email,password_hash) VALUES('owner','owner@example.invalid','unused');
     INSERT INTO businesses(id,user_id,slug,name) VALUES('biz','owner','biz','Business');
@@ -18,7 +20,7 @@ beforeEach(async () => {
   env = { ...fakeEnv(undefined as never), DB: db as unknown as D1Database, ASTERISK_ENABLED: 'true',
     ASTERISK_CALL: { idFromName: (id: string) => id, get: () => ({ fetch: dispatch }) } } as unknown as Env;
 });
-afterEach(() => db.close());
+afterEach(() => { vi.restoreAllMocks(); db.close(); });
 function connect(auth?: string, route = 'pbx') {
   return worker.fetch(new Request(`https://example.invalid/ws/asterisk/${route}?call=test`, { headers: {
     Upgrade: 'websocket', 'CF-Connecting-IP': '192.0.2.1', ...(auth ? { Authorization: auth } : {}),

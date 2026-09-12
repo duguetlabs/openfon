@@ -302,14 +302,16 @@ export default function Settings() {
           Engine profiles
         </SectionTitle>
         <Card className="space-y-3">
+          <p className="text-xs text-ink-soft">Up to 64 profiles are shown. Long historical values are previews and cannot be renamed here; applying uses the full saved configuration. Delete unused profiles to reveal more.</p>
           {profiles.length === 0 && <p className="text-sm text-ink-soft">No profiles yet. Configure the engine below, then save it here under a name.</p>}
           {profiles.map((p) => (
             <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-wash-iris/50 px-3 py-2">
               <input
                 className="min-w-32 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-ink outline-none hover:border-line-strong focus:border-iris focus:bg-surface focus:ring-[3px] focus:ring-iris/15"
                 value={p.name}
+                readOnly={Boolean(p.preview_only)}
                 onChange={(e) => setProfiles(profiles.map((x) => (x.id === p.id ? { ...x, name: e.target.value } : x)))}
-                onBlur={(e) => void api.updateProfile(p.id, { name: e.target.value })}
+                onBlur={(e) => { if (!p.preview_only) void api.updateProfile(p.id, { name: e.target.value }).catch(err => setError(err instanceof Error ? err.message : 'Rename failed')); }}
               />
               <span className="font-mono text-[11px] text-ink-soft">
                 {p.engine === 'realtime' ? `realtime · ${p.realtime_model || 'default'}` : 'pipeline'} · {p.language}
@@ -334,7 +336,11 @@ export default function Settings() {
               <button
                 className="px-1 text-ink-faint transition-colors hover:text-rose"
                 aria-label="Delete profile"
-                onClick={() => void api.deleteProfile(p.id).then(() => setProfiles(profiles.filter((x) => x.id !== p.id)))}
+                onClick={() => {
+                  if (!business) return;
+                  const businessId = business.id;
+                  void api.deleteProfile(p.id).then(() => api.profiles(businessId)).then(setProfiles).catch(err => setError(err instanceof Error ? err.message : 'Delete failed'));
+                }}
               >
                 ✕
               </button>

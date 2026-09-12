@@ -76,3 +76,5 @@ Record release commit, date, endpoint origin (no credentials), provider/adapter 
 For an **independent provider** claim, remove all Kataleptic credentials and block its endpoints in the test environment. Verify the voice catalog, greeting, transcription, response, summary, errors and saved results. Note any unsupported capability explicitly. Store a sanitized report alongside the [pilot evaluation](launch/pilot-evaluation.md); a mock transport or successful dropdown selection is insufficient.
 
 Engine presets now store behavior only, validate against the currently selected realtime provider before application, and never copy workspace credentials. Migration0016 erases obsolete legacy profile URL/key snapshots while preserving current workspace credentials. PBX operators must follow the [migration0014 rotation instructions](asterisk.md#configure-an-existing-installation); prior fast hashes no longer authenticate. These migrations are locally validated and have not changed staging or production.
+
+Engine preset storage and compatibility reconciliation now have [workspace quotas and historical recovery limits](preset-limits.md), introduced by migration0017.

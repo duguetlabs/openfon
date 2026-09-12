@@ -291,3 +291,35 @@ test('provider save refresh preserves sibling drafts while updating untouched as
   await expect(page.getByLabel('Personality', { exact: true })).toHaveValue('Unsaved assistant personality');
   await expect(page.getByLabel('Realtime voice (optional)', { exact: true })).toHaveValue('');
 });
+
+test('historical profile previews do not overwrite names and deletion reloads later entries', async ({ page }) => {
+  await page.goto('/auth');
+  await page.getByLabel('Email').fill(`profile-recovery-${Date.now()}@example.invalid`);
+  await page.getByLabel('Password', { exact: true }).fill('Synthetic-Profile-Password-1234');
+  await page.getByRole('button', { name: 'Create account', exact: true }).click();
+  await page.getByLabel('Business name', { exact: true }).fill('Profile recovery workshop');
+  await page.getByLabel('What do you do?').fill('Synthetic profile recovery validation');
+  await page.getByRole('button', { name: 'Continue →' }).click();
+  await page.getByRole('button', { name: 'Continue →' }).click();
+  await page.getByRole('button', { name: /Create.*assistant|Save.*assistant|Open.*studio/i }).click();
+  await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
+  await expect(page).toHaveURL('/overview');
+  let reads=0, renamed=0, deleted=false;
+  await page.route('**/api/me/business/*/profiles', route => {
+    reads++;
+    return route.fulfill({json:[{id:deleted?'later':'old',name:deleted?'Later historical profile':'Historical preview',engine:'pipeline',language:'en',voice:'',realtime_voice:'',realtime_model:'',llm_model:'',llm_base_url:'',llm_api_key:'',preview_only:deleted?0:1}]});
+  });
+  await page.route('**/api/me/profiles/*', route => {
+    if(route.request().method()==='PUT') renamed++;
+    if(route.request().method()==='DELETE') deleted=true;
+    return route.fulfill({json:{ok:true}});
+  });
+  await page.goto('/settings');
+  const preview=page.locator('input[value="Historical preview"]');
+  await expect(preview).toHaveAttribute('readonly','');
+  await preview.focus();await page.getByRole('heading',{name:'Engine profiles'}).click();
+  expect(renamed).toBe(0);
+  await page.getByRole('button',{name:'Delete profile',exact:true}).click();
+  await expect(page.locator('input[value="Later historical profile"]')).toBeVisible();
+  expect(reads).toBe(2);expect(deleted).toBe(true);expect(renamed).toBe(0);
+});
