@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, createContext, useContext } from 'react';
 import { Routes, Route, Navigate, useNavigate, Link, useLocation } from 'react-router-dom';
-import { api, ApiError, type Assistant, type Business, type Me } from './api';
+import { api, ApiError, type BootstrapAssistant, type Business, type Me } from './api';
 import { Logo, Spinner } from './ui';
 import AuthPage from './pages/Auth';
 import Onboarding from './pages/Onboarding';
@@ -23,7 +23,7 @@ interface Session {
   me: Me | null;
   business: Business | null;
   workspaceReady: boolean;
-  firstAssistant: Assistant | null;
+  firstAssistant: BootstrapAssistant | null;
   firstAssistantReady: boolean;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -49,7 +49,7 @@ export default function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [business, setBusiness] = useState<Business | null>(null);
   const [workspaceReady, setWorkspaceReady] = useState(false);
-  const [firstAssistant, setFirstAssistant] = useState<Assistant | null>(null);
+  const [firstAssistant, setFirstAssistant] = useState<BootstrapAssistant | null>(null);
   const [firstAssistantReady, setFirstAssistantReady] = useState(false);
   const [signOutPending, setSignOutPending] = useState(false);
   const [signOutWarning, setSignOutWarning] = useState<string | null>(null);

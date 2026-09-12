@@ -142,10 +142,12 @@ export interface CallDetail extends CallRow {
   turns: { id: number; role: 'caller' | 'agent'; text: string; ts: string }[];
 }
 
+export type AssistantListItem = Pick<Assistant, 'id'|'business_id'|'public_slug'|'state'|'name'|'persona'|'language'|'engine'|'created_at'|'updated_at'|'last_test_at'|'last_live_call_at'>;
+export type BootstrapAssistant = Pick<Assistant, 'id' | 'business_id' | 'public_slug' | 'state' | 'name' | 'persona' | 'language'> & { essentials_ready?: number };
 export interface Bootstrap {
   account: Me;
   workspace: Business | null;
-  assistants: Assistant[];
+  assistants: BootstrapAssistant[];
   setup: { account: boolean; workspace: boolean; firstAssistant: boolean; firstTest: boolean };
   readiness: { providerConfigured: boolean; liveAssistantCount: number };
 }
@@ -310,7 +312,8 @@ export const api = {
     req<{ ok: true }>('PUT', `/api/me/business/${id}/agent`, a),
   calls: (id: string) => req<CallRow[]>('GET', `/api/me/business/${id}/calls`),
   call: (callId: string) => req<CallDetail>('GET', `/api/me/calls/${callId}`),
-  assistants: () => req<Assistant[]>('GET', '/api/me/assistants'),
+  assistants: (offset = 0) => req<AssistantListItem[]>('GET', `/api/me/assistants${offset ? `?offset=${offset}` : ''}`),
+  deleteAssistant: (id: string) => req<{ok: boolean}>('DELETE', `/api/me/assistants/${id}`),
   assistant: (id: string) => req<Assistant>('GET', `/api/me/assistants/${id}`),
   createAssistant: (assistant: Partial<Assistant>) => req<Assistant>('POST', '/api/me/assistants', assistant),
   updateAssistant: (id: string, assistant: Partial<Assistant>) => req<Assistant>('PUT', `/api/me/assistants/${id}`, assistant),

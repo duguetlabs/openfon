@@ -1,12 +1,12 @@
-import type { Assistant, Business } from './api';
+import type { Assistant, BootstrapAssistant, Business } from './api';
 
 // The compatibility dashboard and its public-link card are both scoped to the
 // assistant whose slug matches the workspace's legacy public URL. A secondary
 // active assistant must not make that primary link look live.
 export function compatibilityAssistant(
   business: Pick<Business, 'slug'> | null,
-  assistants: Assistant[]
-): Assistant | null {
+  assistants: BootstrapAssistant[]
+): BootstrapAssistant | null {
   if (!business) return null;
   return assistants.find((assistant) => assistant.public_slug === business.slug) ?? null;
 }
@@ -30,8 +30,9 @@ export function compatibilitySetupPending(
 export function studioSetupPending(
   business: Pick<Business, 'slug'> | null,
   workspaceReady: boolean,
-  assistant: Pick<Assistant, 'state' | 'name' | 'persona' | 'language'> | null
+  assistant: (Pick<Assistant, 'state' | 'name' | 'persona' | 'language'> & { essentials_ready?: number }) | null
 ): boolean {
-  return !business || !workspaceReady || !assistant ||
-    !assistant.name.trim() || !assistant.persona.trim() || !assistant.language.trim();
+  return !business || !workspaceReady || !assistant || (assistant.essentials_ready !== undefined
+    ? !assistant.essentials_ready
+    : !assistant.name.trim() || !assistant.persona.trim() || !assistant.language.trim());
 }

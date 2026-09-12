@@ -1,12 +1,12 @@
 # Integration checkpoint
 
-- Status: In progress — 6ff5058 validated and independently quota-closed; preparing exact-head full reviews
+- Status: In progress — 1428a50 published and frozen for required full reviews; application6ff5058 independently quota-closed
 - Owner: openfon-integration, gpt-6-astra / medium
 - Branch/worktree: codex/integrated-release, /Users/cristian/projects/fun/openfon-worktrees/integration
 - Updated: 2026-09-12
 - Application candidate: 6ff505837cbf090f5dceb29bc62abf273ff18b6c
-- Published PR16 head: 7a8cb53c167d20e33b9f71ee4937182bdbecc5d7 (unchanged while corrections are local)
-- Validation slot: released by QA; no validation process running
+- Published PR16 head: 1428a50046eb06cf6c348fa672ebbd8c396b6f56 (documentation-only finalization over application6ff5058)
+- Validation slot: Telnyx exclusively after Asterisk release; integration runs no validation
 - Ports: integration8814/9254, optional real-PBX proxy8824; never8787
 - Read first: root orchestration-rules/current-task/manifest (read-only), this file, docs/launch/readiness.md
 - Earlier detailed milestones and failures remain in this file's history through ccdd85d and the linked original review reports. This checkpoint records current state.
@@ -85,3 +85,22 @@ Next: receive QA runtime/scoped result and fix any actual issue; finish current 
 
 ## Independent quota closure and publication readiness
 QA's exact6ff5058 checkpoint records unchanged recovery probe SHA25609d27e915cd82475e4d69a1d02a2f1fc8a70900fc0d8ee40d3a777f5bd38b4c6 and original failing ccdd output. Collection metadata limits and atomic repair passed independent actual-workerd checks; no new major/security issue found in the bounded delta. Both runtimes disposed; QA explicitly released the sole slot. All prior evidence/failures remain in git history. Documentation-only finalization follows the validated application; publish exact head and obtain fresh hosted code/security, genuine official full review and CI before merge. Staging remains b15/0012 and production untouched.
+
+## Published freeze1428a50
+Remote PR16 independently read back1428a50046eb06cf6c348fa672ebbd8c396b6f56. Normal OAuth push rejected workflow scope; existing authorized GitHub connector advanced the ref non-force without auth expansion. PR body refreshed; security follow-up documents independent repair/metadata closure. Close/reopen completed; hosted code5646894534/security5646894642 requested, security disposition3996698725 posted. QA confirms one genuine unchanged official full run launched after verifying exact remote head and clean official source. CI34702910714/34702950980 are running on the frozen head. No application changes or local validation process after publication; this checkpoint update remains local during freeze.
+
+## Official1428a50 verification assignments
+Original full report5646912988 published unchanged:3chunks/3calls438448tokens, no failed chunk warning; explicit weak-password security concern and Telnyx socket-close/normal-hangup classification claim. No clean official verdict. Telnyx owner verifies lifecycle ordering and fixes true failure classification without losing abnormal failure/reservation/retirement semantics. Asterisk owner verifies route credential provisioning and fast SHA256/length-only acceptance; owns bounded credential-storage fix if real, preserving auth-before-write and disabled rollout. Source work may proceed concurrently; Asterisk has first sole validation slot, Telnyx waits for explicit release/grant. No new inference until next validated published head; hosted1428 reviews may finish. Staging remains unchanged.
+
+Asterisk confirms security concern real.0014 reserved exclusively: preserve routes/assignments, discard old SHA256 hashes and disable legacy routes; nullable password_hash only for disabled entries, salted existing PBKDF2 for reprovisioning, no insecure fallback. Owner authorized migration/docs/provisioning/helper/fixture changes; integration owns registry/rehearsal/CI advancement. Explicit rotation requirement, no production/staging mutation. Both1428 CI34702910714/34702950980 green; deploy skipped.
+
+Shared source registry/rehearsal/CI targets0014_asterisk_credentials locally, validation deferred until owner completion. Owner source uses additive password_hash plus randomized obsolete SHA256 placeholders, avoiding table rebuild while disabling old routes; authentication must ignore obsolete column entirely. No remote/staging migration.
+
+Asterisk reports final71 focused +worker/web typechecks +actual-workerd retirement/startup/restart pass; earlier KDF call smoke passed. Original1428 fast-hash acceptance and pre-ASCII helper negatives fail correctly; fixed helper/auth share printableASCII32–512 contract. Owner committing; slot released and explicitly granted to Telnyx for focused negatives/control+media/typecheck only.
+
+## Hosted1428 follow-ups assigned
+Completed code5187021813/security5187021327: security3996742229 assistant persistence quota; code3996742890 unbounded assistant bootstrap;3996742892 credential snapshots in presets;3996742896 incompatible preset application;3996742898 unbounded upstream realtime audio;3996742903 misleading full-config text-only check. Integration owns assistant quota/bootstrap and Studio label, reserving0015 if schema needed. Presets owns narrow credential snapshot + apply-provider validation hunks/tests in studio-api (coordinate distinct sections); realtime owns upstream event/audio bounds. Source work concurrent; only Telnyx currently validates, remaining owners request slot. No clean hosted verdict, remote1428 unchanged; both CI green. Asterisk095a0b3 assembled02fb3e2, sole import conflict resolved using new default14 registry rather than double-applying14 in control fixture. Registry/rehearsal/CI and route-security fixture remain integration-owned local work.
+
+Current source work:0015 assistants32/count,1MiB aggregate config,200 accepted saves/day; bounded bootstrap metadata and paged list previews, guarded nonprimary assistant deletion preserving history. Studio check explicitly text-only. Tests written, not run.0016 reserved presets for one-time legacy profile credential/URL scrub preserving behavior/IDs/current workspace keys. Realtime reports142 focused/both typechecks/oversized +normal direct/gateway synthetic runtime pass, original7 negatives fail; slot released then explicitly granted to presets. Integration no runner.
+
+Assistant source/tests ready for review:0015 indexed-table32/1MiB/200-day SQL budgets, rollback and deletion/history guards,32-row bounded bootstrap metadata (primary first) +paged list previews, editor full configuration separate, onboarding compatibility fields preserved, explicit text-only check label. New boundary/UTF8/day/batch/history/legacy-bootstrap tests written, no runner yet. Known non-API missing-primary-at-cap requires operator repair; primary deletion API forbidden. QA source-only review requested before integration slot.

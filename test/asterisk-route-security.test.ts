@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import worker from '../src/index';
-import { asteriskDigest } from '../src/asterisk-routes';
+import { hashPassword } from '../src/auth';
 import { applyMigrations, SqliteD1 } from './sqlite-d1';
 import { fakeEnv, fakeCtx } from './fake-d1';
 import type { Env } from '../src/types';
@@ -14,7 +14,7 @@ beforeEach(async () => {
   db.exec(`INSERT INTO users(id,email,password_hash) VALUES('owner','owner@example.invalid','unused');
     INSERT INTO businesses(id,user_id,slug,name) VALUES('biz','owner','biz','Business');
     INSERT INTO assistants(id,business_id,public_slug,state,name,persona,language) VALUES('assistant','biz','assistant','active','Alex','Helpful','en');`);
-  await db.prepare("INSERT INTO asterisk_routes VALUES('pbx','biz','assistant',?,1)").bind(await asteriskDigest(password)).run();
+  await db.prepare("INSERT INTO asterisk_routes(id,business_id,assistant_id,password_sha256,enabled,password_hash) VALUES('pbx','biz','assistant',lower(hex(randomblob(32))),1,?)").bind(await hashPassword(password)).run();
   env = { ...fakeEnv(undefined as never), DB: db as unknown as D1Database, ASTERISK_ENABLED: 'true',
     ASTERISK_CALL: { idFromName: (id: string) => id, get: () => ({ fetch: dispatch }) } } as unknown as Env;
 });
@@ -37,13 +37,13 @@ it('rejects missing, invalid and revoked PBX credentials without any D1 writes o
   const revoked = changes();
   expect((await connect(authorization)).status).toBe(401);
   expect(changes()).toEqual(revoked);
-  expect(db.database.prepare('SELECT count(*) AS n FROM rate_counters').get()).toEqual({ n: 0 });
+  expect(db.database.prepare("SELECT count(*) AS n FROM rate_counters WHERE bucket LIKE 'asterisk:%'").get()).toEqual({ n: 0 });
   expect(dispatch).not.toHaveBeenCalled();
 });
 it('retains the rate cap for authenticated PBX requests', async () => {
   expect((await connect(authorization)).status).toBe(200);
   expect(dispatch).toHaveBeenCalledTimes(1);
-  db.exec('UPDATE rate_counters SET count=120');
+  db.exec("UPDATE rate_counters SET count=120 WHERE bucket LIKE 'asterisk:%'");
   const before = changes();
   expect((await connect(authorization)).status).toBe(429);
   expect(changes()).toEqual(before);

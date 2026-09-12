@@ -949,14 +949,15 @@ export function registerStudioApi(app: StudioApp): void {
         readiness: { providerConfigured: Boolean(c.env.DEFAULT_LLM_API_KEY), liveAssistantCount: 0 },
       });
     }
-    const [{ results: assistants }, provider, test] = await Promise.all([
-      c.env.DB.prepare('SELECT * FROM assistants WHERE business_id = ? ORDER BY created_at, id').bind(workspace.id).all<Assistant>(),
+    const [{ results: assistants }, provider, test, assistantStatus] = await Promise.all([
+      c.env.DB.prepare("SELECT id,business_id,public_slug,state,substr(name,1,256) AS name,substr(persona,1,2048) AS persona,substr(language,1,64) AS language, (trim(name,char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>'' AND trim(persona,char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>'' AND trim(language,char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>'') AS essentials_ready FROM assistants WHERE business_id = ? ORDER BY public_slug=? DESC,created_at,id LIMIT 32").bind(workspace.id,workspace.slug).all<Pick<Assistant, 'id'|'business_id'|'public_slug'|'state'|'name'|'persona'|'language'>>(),
       c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?').bind(workspace.id).first<ProviderSettings>(),
       c.env.DB.prepare(
         "SELECT 1 AS found FROM calls WHERE business_id = ? AND environment = 'test' AND connected_at IS NOT NULL LIMIT 1"
       )
         .bind(workspace.id)
         .first<{ found: number }>(),
+      c.env.DB.prepare("SELECT COUNT(CASE WHEN state='active' THEN 1 END) AS live, COUNT(CASE WHEN trim(name,char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>'' AND trim(persona,char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>'' AND trim(language,char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>'' THEN 1 END) AS ready FROM assistants WHERE business_id=?").bind(workspace.id).first<{live:number;ready:number}>(),
     ]);
     return c.json({
       account,
@@ -965,12 +966,12 @@ export function registerStudioApi(app: StudioApp): void {
       setup: {
         account: true,
         workspace: Boolean(workspace.name.trim() && workspace.description.trim()),
-        firstAssistant: assistants.some((a) => Boolean(a.name.trim() && a.language.trim() && a.persona.trim())),
+        firstAssistant: Boolean(assistantStatus?.ready),
         firstTest: Boolean(test),
       },
       readiness: {
         providerConfigured: providerConfigured(c.env, provider),
-        liveAssistantCount: assistants.filter((a) => a.state === 'active').length,
+        liveAssistantCount: assistantStatus?.live || 0,
       },
     });
   });
@@ -978,13 +979,16 @@ export function registerStudioApi(app: StudioApp): void {
   app.get('/api/me/assistants', async (c) => {
     const workspace = await workspaceForUser(c.env, c.get('userId'));
     if (!workspace) return c.json([]);
+    const offset = Number(c.req.query('offset') || 0);
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset > 100000) return c.json({ error: 'Invalid assistant offset' }, 400);
     const { results } = await c.env.DB.prepare(
-      `SELECT assistants.*,
+      `SELECT id,business_id,public_slug,state,substr(name,1,256) AS name,substr(persona,1,2048) AS persona,
+        substr(language,1,64) AS language,engine,created_at,updated_at,
         (SELECT MAX(started_at) FROM calls WHERE calls.assistant_id = assistants.id AND environment = 'live') AS last_live_call_at,
         (SELECT MAX(started_at) FROM calls WHERE calls.assistant_id = assistants.id AND environment = 'test') AS last_test_at
-       FROM assistants WHERE business_id = ? ORDER BY created_at, id`
+       FROM assistants WHERE business_id = ? ORDER BY created_at, id LIMIT 32 OFFSET ?`
     )
-      .bind(workspace.id)
+      .bind(workspace.id, offset)
       .all();
     return c.json(results);
   });
@@ -1116,6 +1120,19 @@ export function registerStudioApi(app: StudioApp): void {
     await c.env.DB.batch(statements);
     const row = await c.env.DB.prepare('SELECT * FROM assistants WHERE id = ?').bind(assistant.id).first<Assistant>();
     return c.json(row);
+  });
+
+  app.delete('/api/me/assistants/:assistantId', async (c) => {
+    const assistant = await ownedAssistant(c.env, c.get('userId'), c.req.param('assistantId'));
+    if (!assistant) return c.json({ error: 'Not found' }, 404);
+    if (await isCompatibilityAssistant(c.env, assistant)) return c.json({ error: 'The workspace primary assistant cannot be deleted. Edit its configuration instead.' }, 409);
+    const deleted = await c.env.DB.prepare(`DELETE FROM assistants WHERE id=? AND state<>'active'
+      AND NOT EXISTS(SELECT 1 FROM calls WHERE assistant_id=assistants.id AND (status='active' OR (channel IN ('telnyx','asterisk') AND reserved_at IS NOT NULL AND carrier_released_at IS NULL)))
+      AND NOT EXISTS(SELECT 1 FROM asterisk_routes WHERE assistant_id=assistants.id)
+      AND NOT EXISTS(SELECT 1 FROM telnyx_number_routes WHERE assistant_id=assistants.id)
+      RETURNING id`).bind(assistant.id).first();
+    if (!deleted) return c.json({ error: 'Pause this assistant, finish its calls, and remove any carrier routes before deleting it.' }, 409);
+    return c.json({ ok: true });
   });
 
   app.post('/api/me/assistants/:assistantId/activate', async (c) => {

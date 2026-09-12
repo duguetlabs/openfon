@@ -1,4 +1,4 @@
-import { api, type Assistant, type Bootstrap, type Business, type Me } from './api';
+import { api, type BootstrapAssistant, type Bootstrap, type Business, type Me } from './api';
 import { compatibilityAssistant } from './session-gate';
 
 type SessionApi = Pick<typeof api, 'me' | 'business' | 'bootstrap'>;
@@ -7,7 +7,7 @@ export interface CompatibilitySessionSnapshot {
   me: Me;
   business: Business | null;
   workspaceReady: boolean;
-  firstAssistant: Assistant | null;
+  firstAssistant: BootstrapAssistant | null;
   firstAssistantReady: boolean;
 }
 

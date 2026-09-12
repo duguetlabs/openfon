@@ -36,12 +36,12 @@ export default function Onboarding() {
   const [hours, setHours] = useState<HourRow[]>(() => readHourRows(business?.hours_json, defaultHours));
   const [services, setServices] = useState<ServiceRow[]>(() => readServiceRows(business?.services_json));
   const [faqs, setFaqs] = useState<FaqRow[]>(() => readFaqRows(business?.faqs_json, [{ q: '', a: '' }]));
-  const [agentName, setAgentName] = useState(firstAssistant?.name || business?.agent?.agent_name || 'Alex');
+  const [agentName, setAgentName] = useState(business?.agent?.agent_name || 'Alex');
   const [persona, setPersona] = useState(
-    firstAssistant?.persona || business?.agent?.persona || 'friendly and professional'
+    business?.agent?.persona || 'friendly and professional'
   );
-  const [language, setLanguage] = useState(firstAssistant?.language || business?.agent?.language || 'en');
-  const [greeting, setGreeting] = useState(firstAssistant?.greeting || business?.agent?.greeting || '');
+  const [language, setLanguage] = useState(business?.agent?.language || 'en');
+  const [greeting, setGreeting] = useState(business?.agent?.greeting || '');
 
   const draft = JSON.stringify({ name, description, address, phone, hours, services, faqs, agentName, persona, language, greeting });
   const savedDraft = useRef(draft);
