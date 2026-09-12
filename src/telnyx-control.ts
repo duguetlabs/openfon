@@ -398,12 +398,48 @@ export class TelnyxCall implements DurableObject {
     });
   }
 
+  private async connectSession(callId: string): Promise<WebSocket> {
+    let expired = false;
+    const abort = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const opening = Promise.resolve().then(async () => {
+      const stub = this.env.CALL_SESSION.get(this.env.CALL_SESSION.idFromName(callId));
+      const response = await stub.fetch(new Request(`https://internal/?call=${callId}`, {
+        headers: { Upgrade: 'websocket' }, signal: abort.signal,
+      }));
+      const socket = response.webSocket;
+      if (socket) {
+        try { socket.accept(); } catch {
+          try { socket.close(); } catch { /* already gone */ }
+          throw new Error('session_unavailable');
+        }
+      }
+      if (expired || response.status !== 101 || !socket) {
+        try { socket?.close(); } catch { /* late or rejected upgrade */ }
+        void response.body?.cancel().catch(() => {});
+        throw new Error('session_unavailable');
+      }
+      return socket;
+    });
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        expired = true;
+        abort.abort();
+        reject(new Error('session_connect_timeout'));
+      }, 5000);
+    });
+    // Keep opening's late-result handler: abort is best effort, and a late
+    // successful upgrade must be accepted/closed instead of leaking a socket.
+    try { return await Promise.race([opening, deadline]); }
+    finally { clearTimeout(timer!); }
+  }
+
   private async media(request: Request): Promise<Response> {
     if (request.method !== 'GET' || request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return new Response(null, { status: 426 });
-    return this.exclusive(async () => {
+    const claim = await this.exclusive(async () => {
       if (await this.retired()) return new Response(null, { status: 403 });
       const s = await this.load();
-      if (this.env.TELNYX_ENABLED !== 'true' || !s || !s.admitted || s.ending || !s.answered ||
+      if (this.env.TELNYX_ENABLED !== 'true' || !s || !s.admitted || s.terminal || s.ending || !s.answered ||
           Date.now() >= s.tokenExpiresAt || !equalStreamToken(request.headers.get('x-telnyx-streaming-auth-token'), s.streamToken)) {
         return new Response(null, { status: 403 });
       }
@@ -414,18 +450,29 @@ export class TelnyxCall implements DurableObject {
       s.mediaClaimed = true;
       this.recoveryChecked = true;
       await this.persist(s);
-      let session: WebSocket | null = null;
-      let carrier: WebSocket | null = null;
-      try {
-        const stub = this.env.CALL_SESSION.get(this.env.CALL_SESSION.idFromName(s.callId));
-        const response = await stub.fetch(new Request(`https://internal/?call=${s.callId}`, { headers: { Upgrade: 'websocket' } }));
-        if (response.status !== 101 || !response.webSocket) throw new Error('session_unavailable');
-        session = response.webSocket;
-        session.accept();
+      return { callId: s.callId, streamToken: s.streamToken };
+    });
+    if (claim instanceof Response) return claim;
+
+    let session: WebSocket | null = null;
+    const carrierRef: { socket: WebSocket | null } = { socket: null };
+    let installed = false;
+    try {
+      // No lifecycle lock over external I/O: signed hangup, alarm and duplicate
+      // upgrades must progress even if the conversation object never responds.
+      session = await this.connectSession(claim.callId);
+      return await this.exclusive(async () => {
+        if (await this.retired()) throw new Error('call_ended');
+        const s = await this.load();
+        if (this.env.TELNYX_ENABLED !== 'true' || !s || s.callId !== claim.callId ||
+            !s.admitted || s.terminal || s.ending || !s.answered || !s.mediaClaimed || s.mediaValidated || this.bridge ||
+            Date.now() >= s.tokenExpiresAt || Date.now() >= s.setupDeadline || Date.now() >= s.hardDeadline ||
+            !equalStreamToken(claim.streamToken, s.streamToken) || session!.readyState !== 1) throw new Error('call_ended');
+        if (!await telnyxMediaAllowed(this.env, s.callId)) throw new Error('assistant_unavailable');
         const pair = new WebSocketPair();
-        carrier = pair[1]; carrier.accept();
+        const carrier = pair[1]; carrierRef.socket = carrier; carrier.accept();
         this.bridge = createTelnyxMediaBridge({
-          carrier, session, callId: s.callId, callControlId: s.call.callControlId,
+          carrier, session: session!, callId: s.callId, callControlId: s.call.callControlId,
           callLegId: s.call.callLegId, callSessionId: s.call.callSessionId, streamToken: s.streamToken,
           onStart: () => this.exclusive(async () => {
             const current = await this.load();
@@ -437,12 +484,20 @@ export class TelnyxCall implements DurableObject {
           }),
           onEnded: reason => { this.state.waitUntil(this.terminate(reason)); },
         });
-        return new Response(null, { status: 101, webSocket: pair[0] });
-      } catch {
-        try { session?.close(); carrier?.close(); } catch { /* best effort; durable hangup below */ }
-        this.end(s, 'media_bridge_failed'); await this.persist(s);
-        return new Response(null, { status: 502 });
+        const response = new Response(null, { status: 101, webSocket: pair[0] });
+        installed = true;
+        return response;
+      });
+    } catch {
+      // Reload under the lock; never write a pre-connect snapshot over a
+      // terminal event/retirement that completed while the fetch was pending.
+      await this.terminate('media_bridge_failed');
+      return new Response(null, { status: 502 });
+    } finally {
+      if (!installed) {
+        try { session?.close(); } catch { /* caller/session already gone */ }
+        try { carrierRef.socket?.close(); } catch { /* independent socket cleanup */ }
       }
-    });
+    }
   }
 }

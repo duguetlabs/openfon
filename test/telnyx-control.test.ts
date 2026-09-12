@@ -351,6 +351,114 @@ describe('durable carrier control', () => {
   });
 });
 
+describe('bounded media session connection', () => {
+  async function pendingMedia() {
+    vi.useFakeTimers({toFake:['Date','setTimeout','clearTimeout']});
+    const o = owner();
+    await o.event('call.initiated'); await o.drain();
+    await o.event('call.answered'); await o.drain();
+    const control = await o.storage.get<{streamToken:string}>('control');
+    let resolve!: (response: Response) => void;
+    let reject!: (error: Error) => void;
+    const stubFetch = vi.fn(() => new Promise<Response>((yes, no) => {resolve=yes;reject=no;}));
+    env.CALL_SESSION = {idFromName:()=>callId,get:()=>({fetch:stubFetch})} as unknown as DurableObjectNamespace;
+    const request = () => new Request('https://internal/media', {headers:{Upgrade:'websocket','x-telnyx-streaming-auth-token':control!.streamToken}});
+    let settled = false;
+    const pending = o.object.fetch(request()).then(response => {settled=true;return response;});
+    for (let i=0;i<100 && !stubFetch.mock.calls.length;i++) await Promise.resolve();
+    expect(stubFetch).toHaveBeenCalledOnce();
+    const socket = {readyState:1,accept:vi.fn(),close:vi.fn()};
+    const reply = () => resolve({status:101,webSocket:socket} as unknown as Response);
+    return {o,pending,stubFetch,request,socket,reply,reject,settled:()=>settled};
+  }
+
+  it('processes signed hangup while stub fetch is pending, then closes its late upgrade', async () => {
+    const f = await pendingMedia();
+    env.TELNYX_CALL = {idFromName:()=>callId,get:()=>({fetch:(r:Request)=>f.o.object.fetch(r)})} as unknown as DurableObjectNamespace;
+    expect((await worker.fetch(webhook('call.hangup'),env,fakeCtx)).status).toBe(200);
+    await f.o.drain();
+    expect(f.settled()).toBe(false);
+    expect(await occupied()).toBe(0);
+    const terminal = await f.o.storage.get('control');
+    f.reply();
+    expect((await f.pending).status).toBe(502);
+    expect(f.socket.accept).toHaveBeenCalledOnce();
+    expect(f.socket.close).toHaveBeenCalledOnce();
+    expect(await f.o.storage.get('control')).toEqual(terminal);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('runs the setup alarm and carrier hangup command without waiting for the session', async () => {
+    const f = await pendingMedia();
+    vi.setSystemTime(Date.now()+61_000);
+    await f.o.object.alarm();
+    expect(f.settled()).toBe(false);
+    expect(requests.at(-1)!.url).toContain('/hangup');
+    expect(await occupied()).toBe(1); // accepted command is not carrier release
+    f.reply(); expect((await f.pending).status).toBe(502);
+    expect(f.socket.close).toHaveBeenCalledOnce();
+    expect(await f.o.storage.get('control')).toMatchObject({reason:'media_setup_timeout',ending:true});
+  });
+
+  it('rejects a duplicate upgrade immediately while the claimed session fetch is pending', async () => {
+    const f = await pendingMedia();
+    expect((await f.o.object.fetch(f.request())).status).toBe(409);
+    expect(f.stubFetch).toHaveBeenCalledOnce();
+    expect(f.settled()).toBe(false);
+    f.reject(new Error('unavailable'));
+    expect((await f.pending).status).toBe(502);
+    expect(await occupied()).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('times out after five seconds, retains reservation, and closes an upgrade returned after timeout', async () => {
+    const f = await pendingMedia();
+    await vi.advanceTimersByTimeAsync(4999); expect(f.settled()).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect((await f.pending).status).toBe(502);
+    expect((f.stubFetch.mock.calls[0][0] as Request).signal.aborted).toBe(true);
+    expect(await f.o.storage.get('control')).toMatchObject({ending:true,reason:'media_bridge_failed'});
+    expect(await occupied()).toBe(1);
+    f.reply(); for(let i=0;i<30;i++) await Promise.resolve();
+    expect(f.socket.accept).toHaveBeenCalledOnce();
+    expect(f.socket.close).toHaveBeenCalledOnce();
+    await f.o.object.alarm();
+    expect(requests.at(-1)!.url).toContain('/hangup');
+    await f.o.event('call.hangup'); await f.o.drain();
+    expect(await occupied()).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['route','assistant','flag','token','deadline','socket'])('revalidates %s before installing a returned session', async change => {
+    const f = await pendingMedia();
+    if(change==='route') db.exec('UPDATE telnyx_number_routes SET enabled=0');
+    if(change==='assistant') db.exec("UPDATE assistants SET state='paused'");
+    if(change==='flag') env.TELNYX_ENABLED='false';
+    if(change==='token') {
+      const s=await f.o.storage.get<Record<string,unknown>>('control');
+      await f.o.storage.put('control',{...s,streamToken:'b'.repeat(64)});
+    }
+    if(change==='deadline') vi.setSystemTime(Date.now()+61_000);
+    if(change==='socket') f.socket.readyState=3;
+    f.reply(); expect((await f.pending).status).toBe(502);
+    expect(f.socket.close).toHaveBeenCalledOnce();
+    expect(await occupied()).toBe(1);
+    expect(await f.o.storage.get('control')).toMatchObject({ending:true,mediaValidated:false});
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('does not recreate retired state when the pending fetch eventually returns', async () => {
+    const f=await pendingMedia();
+    await f.o.event('call.hangup'); await f.o.drain();
+    vi.setSystemTime(Date.now()+36*60_000); await f.o.object.alarm();
+    expect([...f.o.storage.data]).toEqual([['retired',true]]);
+    f.reply(); expect((await f.pending).status).toBe(502);
+    expect(f.socket.close).toHaveBeenCalledOnce();
+    expect([...f.o.storage.data]).toEqual([['retired',true]]);
+    expect(f.o.storage.alarm).toBeNull();
+  });
+});
+
 describe('signed ingress and provider API contract', () => {
   it('never touches a DO or carrier for invalid signatures or another application', async () => {
     const get = vi.fn(); env.TELNYX_CALL = { idFromName: (n: string) => n, get } as unknown as DurableObjectNamespace;
