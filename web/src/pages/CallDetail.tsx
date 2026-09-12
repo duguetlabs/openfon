@@ -16,8 +16,20 @@ export default function CallDetailPage() {
   useEffect(() => {
     let active = true;
     setCall(null); setError(''); setSaved('');
-    if (callId) void api.call(callId).then(c => { if (active) setCall(c); }).catch(e => { if (active) setError(e.message); });
-    return () => { active = false; };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    async function refreshCall() {
+      if (!callId) return;
+      try {
+        const next = await api.call(callId);
+        if (!active) return;
+        setCall(next); setError('');
+        if (next.status === 'active') timer = setTimeout(refreshCall, 1500);
+      } catch (e) {
+        if (active) { setError(e instanceof Error ? e.message : 'Could not refresh call.'); timer = setTimeout(refreshCall, 3000); }
+      }
+    }
+    void refreshCall();
+    return () => { active = false; clearTimeout(timer); };
   }, [callId]);
 
   if (error && !call) return <p role="alert" className="text-rose">{error}</p>;
@@ -49,6 +61,8 @@ export default function CallDetailPage() {
         <div className="callline-accent mt-3 w-16" />
       </div>
 
+      {call.status === 'active' && <p role="status">Waiting for the conversation to finish saving…</p>}
+      {error && <p role="alert" className="text-rose">{error}</p>}
       {message && (
         <Card className="rise rise-1 mb-8 border-rose/20 bg-wash-rose">
           <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-rose">☎ Message taken</p>

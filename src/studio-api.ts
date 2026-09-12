@@ -822,6 +822,18 @@ function decodeCursor(raw: string | undefined): [string, string] | null {
   }
 }
 
+async function knowledgePage(env: Env, collectionId: string, rawCursor?: string) {
+  const decoded = rawCursor ? decodeCursor(rawCursor) : null;
+  const position = decoded?.[0].split('|');
+  if (rawCursor && (rawCursor.length > 2048 || !decoded || position?.length !== 2 || !['active','draft'].includes(position[0]) || !position[1] || !decoded[1])) return null;
+  const query = env.DB.prepare(`SELECT * FROM knowledge_items WHERE collection_id=?
+    ${decoded ? 'AND (status,created_at,id) > (?,?,?)' : ''}
+    ORDER BY status,created_at,id LIMIT 21`);
+  const { results } = await (decoded ? query.bind(collectionId, position![0], position![1], decoded[1]) : query.bind(collectionId)).all<KnowledgeItem>();
+  const items = results.slice(0,20); const last = items[items.length - 1];
+  return { items, nextCursor: results.length > 20 && last ? encodeCursor(`${last.status}|${last.created_at}`, last.id) : null };
+}
+
 function likeTerm(value: string): string {
   return `%${value.replace(/[\\%_]/g, '\\$&')}%`;
 }
@@ -1353,11 +1365,8 @@ export function registerStudioApi(app: StudioApp): void {
   app.get('/api/me/knowledge/collections/:collectionId', async (c) => {
     const collection = await ownedCollection(c.env, c.get('userId'), c.req.param('collectionId'));
     if (!collection) return c.json({ error: 'Not found' }, 404);
-    const { results: items } = await c.env.DB.prepare(
-      'SELECT * FROM knowledge_items WHERE collection_id = ? ORDER BY status, created_at, id'
-    )
-      .bind(collection.id)
-      .all();
+    const page = await knowledgePage(c.env, collection.id, c.req.query('cursor'));
+    if (!page) return c.json({ error: 'Invalid knowledge cursor' }, 400);
     const { results: assistants } = await c.env.DB.prepare(
       `SELECT assistants.id, assistants.name, assistants.state FROM assistants
         JOIN assistant_knowledge_collections ON assistant_knowledge_collections.assistant_id = assistants.id
@@ -1365,7 +1374,7 @@ export function registerStudioApi(app: StudioApp): void {
     )
       .bind(collection.id)
       .all();
-    return c.json({ ...collection, items, assistants });
+    return c.json({ ...collection, ...page, assistants });
   });
 
   app.put('/api/me/knowledge/collections/:collectionId', async (c) => {
@@ -1398,12 +1407,10 @@ export function registerStudioApi(app: StudioApp): void {
   app.get('/api/me/knowledge/collections/:collectionId/items', async (c) => {
     const collection = await ownedCollection(c.env, c.get('userId'), c.req.param('collectionId'));
     if (!collection) return c.json({ error: 'Not found' }, 404);
-    const { results } = await c.env.DB.prepare(
-      'SELECT * FROM knowledge_items WHERE collection_id = ? ORDER BY status, created_at, id'
-    )
-      .bind(collection.id)
-      .all();
-    return c.json(results);
+    const page = await knowledgePage(c.env, collection.id, c.req.query('cursor'));
+    if (!page) return c.json({ error: 'Invalid knowledge cursor' }, 400);
+    if (page.nextCursor) c.header('X-Next-Cursor', page.nextCursor);
+    return c.json(page.items);
   });
 
   app.post('/api/me/knowledge/collections/:collectionId/items', async (c) => {

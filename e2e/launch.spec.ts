@@ -140,7 +140,16 @@ test('knowledge draft, approval and attachment survive reload; all app menus wor
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: test.info().outputPath('knowledge-mobile.png'), fullPage: true });
+  let failAssistants = true;
+  await page.route('**/api/me/assistants', async route => {
+    if (failAssistants) { failAssistants = false; await route.fulfill({status:503,json:{error:'Temporary list failure'}}); }
+    else await route.continue();
+  });
   await page.goto('/calls');
+  await expect(page.getByRole('alert')).toContainText('Temporary list failure');
+  await page.getByRole('button', {name:'Refresh calls'}).click();
+  await expect(page.getByRole('combobox', {name:'Assistant', exact:true}).getByRole('option', {name:'Alex'})).toHaveCount(1);
+  await page.unroute('**/api/me/assistants');
   await page.getByLabel('Search conversations').fill('first');
   await page.getByRole('button', { name: 'Search', exact: true }).click();
   await page.getByLabel('Search conversations').fill('second');
@@ -214,8 +223,17 @@ test('private test call traverses Worker websocket and persists transcript and s
   expect(call.environment).toBe('test');
   expect(call.summary).toBe('Caller asked about bicycle repairs.');
   expect(call.turns).toEqual(expect.arrayContaining([expect.objectContaining({role:'caller',text:'Do you repair bicycles?'}),expect.objectContaining({role:'agent',text:'Yes, we repair bicycles during opening hours.'})]));
+  let detailReads = 0;
+  await page.route(`**/api/me/calls/${result.callId}`, async route => {
+    detailReads++;
+    if (detailReads === 1) await route.fulfill({json:{...call,status:'active',summary:null,turns:[]}});
+    else await route.continue();
+  });
   await page.goto(`/calls/${result.callId}`);
+  await expect(page.getByText('Waiting for the conversation to finish saving…')).toBeVisible();
   await expect(page.getByText('Do you repair bicycles?', {exact:true})).toBeVisible();
+  await expect(page.getByRole('heading', {level:1})).toContainText('Caller asked about bicycle repairs.');
+  expect(detailReads).toBeGreaterThan(1);
 });
 
 test('cancel real pending test reservations on end and navigation', async ({ page }) => {
