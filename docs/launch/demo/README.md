@@ -23,4 +23,6 @@ The script checks that ports 8791 and 9233 are free before starting. Override `D
 
 ## Audible demonstration
 
-The approved Northwheel scenario was recorded in one bounded real-provider staging conversation. The [68-second audible capture and result report](audible/README.md) include synthetic caller disclosure, actual Kataleptic replies, lossless original audio and two retained failures: conflicting hours setup and literal `null` phone display. It is review evidence, not a clean release-acceptance pass. No further conversation is authorized. The original silent MP4 above remains UI evidence only.
+The [79-second corrective capture](corrected/README.md) contains real Kataleptic replies to a disclosed synthetic caller. The canonical Saturday-hours and missing-phone checks passed; interruption follow-up remains inconclusive because of capture sequencing. It includes lossless original audio, the verified fixture and saved result.
+
+The [original failed capture](audible/README.md) is preserved unchanged, including its conflicting-hours setup and literal `null` phone display. Neither recording implies physical-microphone, handset or PSTN acceptance. The original silent MP4 above remains UI evidence only.

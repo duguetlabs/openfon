@@ -33,7 +33,7 @@ Provide commit/version, engine, channel, sanitized reproduction steps and expect
 
 - Actual operator/legal and support contact, final hostname, selected processors and retention policy.
 - Maintainer availability, pilot duration, participant agreement and spend cap.
-- The [audible staging capture](demo/audible/README.md) used the approved fictional Northwheel scenario and working provider. Its known failures require correction before clean voice acceptance. The two-conversation allowance is exhausted; no new live run is authorized.
+- The [corrective audible capture](demo/corrected/README.md) verifies consistent hours and fixed missing-phone handling using the approved Northwheel scenario. Interruption follow-up remains inconclusive; preserve that limitation in pilot expectations. Root’s corrective run was completed without uncontrolled retries.
 - Final release/review evidence and channel-specific runtime results.
 
 These inputs block dependent publication or recording, not independent documentation work. Announcements remain [drafts](copy.md).

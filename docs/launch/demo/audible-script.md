@@ -1,6 +1,6 @@
 # Audible demo — 60–90 seconds
 
-**Approved script.** An [actual audible staging capture](audible/README.md) is now available with known failures retained; it does not pass clean release acceptance. The earlier walkthrough MP4 remains silent synthetic UI evidence. Root approved the existing fictional Northwheel scenario for this demonstration on 2026-09-12; no further scenario approval is needed. The authorized working configuration was used for one bounded capture; the conversation allowance is now exhausted. Do not make a new take without renewed root authorization. No real customer data, invented testimonial or overdubbed assistant answer.
+**Approved script.** The [corrective audible staging capture](corrected/README.md) passes the hours and missing-phone checks, with interruption follow-up still inconclusive. The [original failed capture](audible/README.md) is preserved unchanged. The earlier walkthrough MP4 remains silent synthetic UI evidence. Root approved the existing fictional Northwheel scenario for this demonstration on 2026-09-12; no further scenario approval is needed. The working configuration was used for the original and one root-authorized corrective capture. Root clarified that the original two-call ceiling was an operational batch bound, not a user spending restriction. No automatic retries are part of this script. No real customer data, invented testimonial or overdubbed assistant answer.
 
 ## Approved fictional fixture
 

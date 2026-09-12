@@ -1,6 +1,6 @@
 # Launch workstream
 
-- Status: Complete — launch assets and actual audible capture delivered; clean voice/release acceptance remains gated
+- Status: Complete — launch assets and original/corrective audible captures delivered; hours/contact corrective checks pass, interruption follow-up inconclusive
 - Owner: openfon-launch
 - Branch: codex/launch-kit
 - Starting commit: a9b33c5c46ccb441e4c07f50b81469354d3cf700
@@ -13,7 +13,7 @@ README/landing identity and provider disclosure; quickstart; capability/telephon
 
 Launch commits:52b73ee,45fb33a,24d8321,7f9c30c,7267d13 plus current audible artifact commit. Integration received all prior commits. Owner alone changes runtime/schema/shared release branches.
 
-## Actual audible evidence
+## Original audible evidence — preserved
 Root approved existing fictional Northwheel scenario, with no additional scenario approval required. Realtime preflight consumed one conversation and handed exclusive ownership of the final one to launch; integration verified working staging configuration. Launch made exactly one call, no retry. **Remaining conversation allowance: ZERO.**
 
 - Origin:https://openfon-staging.duguetlabs.workers.dev
@@ -42,4 +42,16 @@ Root approved existing fictional Northwheel scenario, with no additional scenari
 Launch-owned README.md,CONTRIBUTING.md,web/src/pages/Landing.tsx,docs/quickstart.md,docs/providers.md,docs/launch/copy.md,pilot.md,pilot-evaluation.md,costs.md,demo/README.md,demo/audible-script.md,demo/audible/* and this checkpoint. Existing node_modules symlink not committed. Restricted temporary setup/session/raw capture under /tmp/openfon-audible-prep; no cookie/key/password exported to repository. No vault credential fetched by launch; staging secret injection stayed integration-owned.
 
 ## Remaining / next action
-Integration consumes artifact commit, updates consolidated live-provider evidence with these specific limitations and drives release review. Clean acceptance needs consistent canonical fixture and fixed contact handling plus newly authorized voice test; no retry authorized now. Hosted operator/support/legal/domain inputs remain factual release decisions, never invented. Publish nothing under this implementation task. Actual Asterisk local PBX used mocked AI; direct OpenAI remains synthetic-tested; SIP/PSTN remains pending. These recordings do not change those evidence levels.
+Integration consumes the distinct corrective artifact and updates consolidated evidence. Canonical-hours and contact-normalization corrective checks now pass on526be52/a1bc90ea. Capture sequencing leaves interruption follow-up inconclusive; no general voice-quality or clean whole-release verdict. Original failed artifacts remain unchanged. Hosted operator/support/legal/domain inputs stay factual release decisions. No uncontrolled retries, external distribution, physical-mic/directOpenAI/PSTN claims or production routing.
+
+## Root-authorized corrective run — preparation
+Root clarified previous two-call ceiling was an operational batch bound and explicitly authorized ONE further short corrective Northwheel staging acceptance/capture. No additional user permission needed. Original e42531a artifacts remain unchanged. Launch prepares canonical hours/facts/timezone verification and distinct corrected capture outputs; integration subsequently supplied exclusive ownership/version confirmation with696a34a deployed; corrective run completed as recorded below. No new account/provider purchase or uncontrolled retries.
+
+Corrective preflight passed: persisted Saturday09:00–14:00/closedfalse, Europe/Vienna, no closures; description, instructions, active default knowledge and expected answers consistent. Readback at14:24+ local Saturday after closing distinguishes regular Saturday hours from closed now. Private draft realtime/gpt-realtime-2/blank voice. Integration exclusive freeze source526be52ab15785dfa4ec0c7c87a958295a5ce4b6/versiona1bc90ea-dad0-4677-abc0-e8e34cdc9c51 includes696a34a. Local caller+output mixing/playback-drain selftest passed without provider call. Initiating ONE root-authorized corrective call now; no automatic retry. Distinct raw path /tmp/openfon-audible-corrected; original committed artifacts untouched.
+
+Corrective result: session722e6aff-a154-4d86-ad80-a80e83cf7dec completed68s/12turns at frozen526be52/a1bc90ea, correct spoken Saturday09–14 and after-closing context, actual caller_phone JSONnull with clean UI, unknown-service no-information reply, Alex Example message/summary persistence. Original artifacts untouched. New79.2s video/67.499s lossless audio under docs/launch/demo/corrected/. Local ASR recovers full final message; playback drained before hangup.
+
+Remaining capture limitation: interruption follow-up is inconclusive. Capture script's completion predicate compares cumulative playback source count and quietness; old service-response chunks can satisfy it after interruption. It advanced to the next prompt at+32.151s; saved filler “Let me think” appears12:26:37, after that next prompt began. Thus it did not establish completion of a substantive same-day-repair follow-up. Local source inspection found no hardcoded filler; do not infer a provider/app defect or clean barge-in acceptance. Diagnose sequencing locally; no live retry. The two corrective targets (canonical hours and phone normalization) passed.
+
+
+Corrective delivery validation: new79.2s H.264/AAC video and67.499s lossless FLAC; FLAC-decoded samples SHA-match captured WAV exactly, full MP4 decode passes. Offline base.en ASR recovers correct hours/context, unknown response and complete final message. Persisted-result assertions pass completed/message_taken, correct hours, actual JSONnull phone, Alex Example and no failure. Corrected poster/result visually inspected. Original docs/launch/demo/audible files unchanged frome42531a. Updated demo index/script/pilot/announcement drafts to point to corrected scope and retain interruption qualification. Local links and git diff --check pass. No application code changed or further live calls made.
