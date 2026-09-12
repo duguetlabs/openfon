@@ -2070,3 +2070,90 @@ describe('telephone audio capabilities', () => {
     await flush(100);
   });
 });
+
+describe('direct OpenAI realtime independence', () => {
+  const directSettings = {
+    realtime_provider: 'openai', realtime_api_key: 'synthetic-openai-key',
+    realtime_model: '', realtime_voice: 'marin',
+    llm_base_url: 'https://api.openai.com/v1', llm_api_key: 'synthetic-text-key', llm_model: 'gpt-4o-mini',
+  };
+  it('runs greeting, PCM, interruption, tool hangup and persisted summary with gateway endpoints unavailable', async () => {
+    vi.useFakeTimers();
+    const upstream = new FakeSocket();
+    const requests: { url: string; init: RequestInit }[] = [];
+    globalThis.fetch = vi.fn(async (url, init) => {
+      requests.push({ url: String(url), init: init! });
+      if (String(url) === 'https://api.openai.com/v1/realtime?model=gpt-realtime') return { status: 101, webSocket: upstream } as never;
+      if (String(url) === 'https://api.openai.com/v1/chat/completions') return {
+        ok: true, status: 200,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify({ summary: 'Caller requested a callback.', intent: 'message', message: 'Please call tomorrow.' }) } }] }),
+      } as never;
+      throw new Error('Non-OpenAI network destination blocked');
+    });
+    const { session, turnWrites, callUpdates } = newSession('realtime', directSettings, {
+      REALTIME_BASE_URL: 'wss://unavailable.kataleptic.invalid/v1/realtime',
+      DEFAULT_LLM_BASE_URL: 'https://unavailable.kataleptic.invalid/v1',
+      DEFAULT_LLM_API_KEY: '', REALTIME_API_KEY: '', AZURE_SPEECH_KEY: '',
+    });
+    await session.fetch(upgradeRequest());
+    const caller = serverSockets[0];
+    caller.receive({ type: 'start' });
+    await flush(50);
+    expect(upstreamSockets).toHaveLength(0); // direct path uses header-authenticated Worker upgrade
+    expect(requests[0].init.headers).toEqual({ Upgrade: 'websocket', Authorization: 'Bearer synthetic-openai-key' });
+    expect(requests[0].init.redirect).toBe('manual');
+    const update = upstream.messages().find(m => m.type === 'session.update')!;
+    expect(update.session).toMatchObject({ output_modalities: ['audio'], audio: { input: { transcription: { model: 'whisper-1' } }, output: { voice: 'marin', format: { type: 'audio/pcm', rate: 24000 } } } });
+    expect(caller.countOf('ready')).toBe(0);
+    expect(upstream.countOf('response.create')).toBe(0);
+    upstream.receive({ type: 'session.updated', session: update.session });
+    await flush();
+    expect(caller.countOf('ready')).toBe(1);
+    expect(upstream.countOf('response.create')).toBe(1);
+    upstream.receive({ type: 'response.output_audio_transcript.done', transcript: 'Hello, how may I help?' });
+    upstream.receive({ type: 'response.output_audio.delta', item_id: 'greeting-item', content_index: 0, delta: 'AAAAAA==' });
+    await flush();
+    expect(caller.binaryCount()).toBe(1);
+    upstream.receive({ type: 'input_audio_buffer.speech_started' });
+    expect(caller.countOf('flush')).toBe(1);
+    expect(upstream.messages().find(m => m.type === 'conversation.item.truncate')).toMatchObject({ item_id: 'greeting-item', content_index: 0, audio_end_ms: 0 });
+    upstream.receive({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'Please call me tomorrow.' });
+    await flush();
+    upstream.receive({ type: 'response.output_audio_transcript.done', transcript: 'I will pass along your message. Goodbye.' });
+    upstream.receive({ type: 'response.function_call_arguments.done', name: 'end_call', call_id: 'tool-1', arguments: '{}' });
+    await flush();
+    expect(caller.countOf('ending')).toBe(1);
+    caller.receive({ type: 'hangup' });
+    await flush(100);
+    expect(turnWrites()).toHaveLength(3);
+    expect(callUpdates().some(w => w.args.includes('Caller requested a callback.'))).toBe(true);
+    expect(caller.countOf('ended')).toBe(1);
+    expect(requests).toHaveLength(2); // no greeting synthesis, STT catalog or gateway request
+  });
+
+  it.each(['reject', 'redirect', 'session-error', 'session-mismatch', 'session-timeout'])('fails closed on %s without pipeline fallback', async failure => {
+    vi.useFakeTimers();
+    const up = new FakeSocket();
+    const requests: string[] = [];
+    globalThis.fetch = vi.fn(async url => {
+      requests.push(String(url));
+      if (failure === 'reject') throw new Error('Authorization: private material');
+      return { status: failure === 'redirect' ? 302 : 101, webSocket: failure === 'redirect' ? null : up } as never;
+    });
+    const { session, callUpdates } = newSession('realtime', directSettings);
+    await session.fetch(upgradeRequest());
+    serverSockets[0].receive({ type: 'start' });
+    await flush(50);
+    if (failure === 'session-error') up.receive({ type: 'error', error: { message: 'private material' } });
+    if (failure === 'session-mismatch') {
+      const sent = up.messages().find(m => m.type === 'session.update')!.session as Record<string, unknown>;
+      up.receive({ type: 'session.updated', session: { ...sent, audio: {} } });
+    }
+    if (failure === 'session-timeout') await vi.advanceTimersByTimeAsync(5001);
+    await flush(80);
+    expect(serverSockets[0].countOf('ready')).toBe(0);
+    expect(serverSockets[0].countOf('ended')).toBe(1);
+    expect(requests).toHaveLength(1);
+    expect(JSON.stringify(callUpdates())).not.toContain('private material');
+  });
+});

@@ -1,27 +1,48 @@
 # Realtime provider workstream
 
-- Status: In progress
+- Status: Implementation complete; integration pending; live-provider validation blocked
 - Owner: openfon-realtime
 - Branch: codex/realtime-providers
-- Base/current commit at arrival: a9b33c5c46ccb441e4c07f50b81469354d3cf700
-- Updated: 2026-09-12
-- Scope: explicit Kataleptic and direct OpenAI realtime adapters, session integration and tests; independent greeting/catalog/summary workflow.
-- Coordination: presets owns configuration/schema/UI; Telnyx and Asterisk own carrier adapters; integration owns consolidation. Root shared documents remain untouched.
-- Evidence: read root handoff, orchestration rules/current task/manifest, strategy and readiness. Worktree clean except existing untracked node_modules dependency symlink. No worktree AGENTS.md; root AGENTS.md requires dsecret.
-- Validation: git status --short --branch and git rev-parse HEAD completed. No implementation tests or live calls yet.
-- Ports: test 8813; inspector 9253; never 8787.
-- Next action: agree provider contract with presets and session edit boundaries with carrier owners; inspect existing runtime and official OpenAI Realtime protocol.
+- Base at arrival: a9b33c5c46ccb441e4c07f50b81469354d3cf700
+- Updated: 2026-09-12T11:44:00Z
+- Rules: root AGENTS.md, orchestration-rules.md/current-task/manifest, assigned handoff, strategy and readiness read. Root shared documents untouched.
+- Ports: 8813 test, 9253 inspector; never 8787.
 
-## Agreed interface direction
-Accept presets additive realtime_provider=instance|kataleptic|openai|custom (default instance), realtime_base_url/realtime_api_key; assistant model/voice unchanged. Propose custom explicitly uses OpenAI GA protocol (experimental), kataleptic uses gateway protocol; instance resolves Env REALTIME_PROVIDER default kataleptic. Explicit non-instance choices never inherit instance credentials; OpenAI endpoint pinned to api.openai.com/v1/realtime. Presets owns loading these fields into AgentSettings as well as API/UI and migration. Realtime owns new src/realtime-providers.ts resolver/adapters and CallSession integration. Telnyx owns only runStart synthesized-greeting readiness ordering; preserve that boundary.
-Presets confirmed contract: realtime owns CallSession SELECT/loading (also stt_provider/base_url/api_key/model and assistant llm_model || provider llm_model), and passes settings as fifth transcribe argument. Presets adds optional shared types and transcribe implementation. dsecret --list contains no OpenAI credential; direct live verification blocked, synthetic tests continue.
+## Scope and contract
+Explicit Kataleptic gateway and independent direct OpenAI realtime resolver, authentication, capabilities and CallSession integration; provider-aware Telnyx admission; regression tests and reproducible runtime smoke. Presets owns schema/API/UI and migration 0010. Telnyx owns synthesized greeting readiness ordering; Asterisk owns carrier channel predicate. Those CallSession regions are preserved for integration.
 
-## Implementation checkpoint
-- New src/realtime-providers.ts resolves explicit provider/credential/protocol/capabilities; OpenAI uses Worker fetch Upgrade with Authorization header, manual redirects, bounded connection wait. Gateway token URL behavior preserved.
-- CallSession direct path waits for session.updated before greeting/ready, uses native PCM24 greeting/transcription, and fails closed instead of silently entering instance pipeline. SELECT includes agreed provider/STT/workspace text model fields (requires presets migration).
-- Validation: npm run typecheck passed; npm test -- test/realtime-providers.test.ts test/call-session.test.ts: 99/99 passed, synthetic only. Complete synthetic direct call blocks every non-OpenAI URL and verifies greeting, PCM, interruption flush, end_call, transcript and summary persistence; startup rejection/redirect/session error fail closed.
-- Found telnyx-admission.ts uses instance credential guard and model-name SQL greeting gate. Realtime will own narrowly replacing provider eligibility guard with shared resolver/capability check; retain atomic admission quota SQL. Asterisk should use same exported eligibility helper.
-- Next: interruption truncation, admission provider eligibility, actual workerd upgrade smoke; integrate presets type/STT changes when ready. Live OpenAI credential remains unavailable.
-- Full npm test before presets dependency: 422 passed / 24 failed; failures are Telnyx SQLite admission reads of missing provider_settings.realtime_provider (0010 not yet present). Taking read-only snapshots of presets in-progress migration/types/provider helper/test migration registry into this worktree for validation only; these files remain presets-owned and will not be committed by realtime.
-- Actual workerd synthetic direct smoke: node scripts/realtime-smoke.mjs passed using ports 8813/9253. Worker fetch Upgrade Authorization verified, no token query; signed Telnyx admission with no instance AI credentials, PCM, interruption, tool hangup, D1 turns and summary all passed. All outbound traffic intercepted; unmatched hosts blocked. This is real local runtime evidence with synthetic provider/carrier, not live OpenAI or PSTN.
-- With presets dependency snapshots full suite exposed 13 Telnyx fixture failures: fakeEnv intentionally had empty REALTIME_BASE_URL, now checked by resolver. Corrected local Telnyx fixture to a valid synthetic WebSocket URL; added direct workspace admission and missing-own-key rejection tests.
+Agreed provider fields: realtime_provider=instance|kataleptic|openai|custom (default instance), realtime_base_url/api_key. Env REALTIME_PROVIDER defaults kataleptic. Explicit choices require own key; custom is experimental GA protocol. Assistant model/voice overrides remain. Blank direct model -> gpt-realtime. Presets owns static direct catalogs and independent text/STT settings. Realtime owns SELECT/loading including workspace llm_model fallback and STT fifth argument.
+
+## Completed
+- Commit 18d3638: new src/realtime-providers.ts, resolver/capability/telephone eligibility tests and first checkpoint. Shared telephoneRealtimeAvailable helper sent to Asterisk/integration.
+- Direct Worker fetch Upgrade uses Authorization header, refuses redirects, and requires matching session.updated before readiness/greeting. Key never enters URL. Gateway token-query path retained.
+- Native direct greeting, whisper-1 caller transcription, PCM24, tools, existing recovery/finalization and saved turns/summary. Direct startup fails closed without instance pipeline fallback.
+- Direct interruption flush + last-item truncation using bounded elapsed-delivery estimate. Existing media protocol cannot report exact per-item playback position; this limitation is documented.
+- CallSession loads realtime/STT fields and workspace text-model fallback, including legacy call-row loading. No carrier transport format changes.
+- Telnyx admission now checks resolved workspace provider credentials/greeting capabilities while retaining atomic quota SQL and durable reservation retry behavior.
+- docs/realtime-providers.md contains official references, deployment/independence recipe and explicit evidence limits.
+- scripts/realtime-smoke.mjs uses actual workerd/D1/DO/WebSockets and intercepted synthetic upstreams; --gateway checks preserved gateway transport on the same reserved ports.
+
+## Files owned
+src/realtime-providers.ts; src/call-session.ts; src/telnyx-admission.ts; test/realtime-providers.test.ts; test/call-session.test.ts; test/telnyx-control.test.ts; scripts/realtime-smoke.mjs; docs/realtime-providers.md; this checkpoint.
+
+## Dependencies present for validation only
+Copied with presets owner's acknowledgment from its in-progress worktree: src/types.ts, src/providers.ts, src/provider-settings.ts, migrations/0010_provider_capabilities.sql, test/sqlite-d1.ts. These remain presets-owned, are NOT in realtime commits, and must come from presets' final commit during consolidation. Existing untracked node_modules dependency symlink remains untouched.
+
+## Validation
+- npm run typecheck — passed with presets dependency snapshot.
+- npm test — 450/450 passed across 21 files with dependency snapshot.
+- npm test -- test/call-session.test.ts test/telnyx-control.test.ts test/realtime-providers.test.ts — 143/143 passed.
+- node scripts/realtime-smoke.mjs — passed actual workerd, synthetic direct OpenAI/carrier only: header auth, signed/idempotent telephone admission with no instance AI/Azure credentials, bidirectional PCM, interruption, end_call, drain/hangup, D1 release, transcripts and summary. Unmatched outbound traffic blocked.
+- node scripts/realtime-smoke.mjs --gateway — passed same actual runtime workflow using preserved gateway token auth.
+- git diff --check — passed.
+- Earlier full-suite failures resolved: missing 0010 caused 24 SQLite failures; after snapshot 13 Telnyx fixtures lacked a REALTIME_BASE_URL now checked by resolver. Added valid synthetic fixture URL and direct workspace admission tests. No assertion was weakened.
+
+## Remaining / limitations
+- No OpenAI credential listed by dsecret --list. No live OpenAI, audible browser or PSTN call claimed. Telnyx account browser remains desktop-owned.
+- Presets owns independent static catalog API/UI validation; integration must verify full consolidated workflow using its final commit.
+- Exact playback truncation awaits a per-item media acknowledgement contract; current implementation is an explicit estimate.
+- Integration alone consolidates branches, drives both required reviews and merges. No PR or deployment opened here.
+
+## Next action
+Integrate provider module commit, presets final shared commit, then realtime session/admission commit; preserve Telnyx greeting and Asterisk predicate changes. Run both runtime smoke variants sequentially and the consolidated suite. Obtain authorized direct provider credential for live acceptance when available.

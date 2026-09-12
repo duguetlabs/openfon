@@ -58,6 +58,7 @@ beforeEach(async () => {
     INSERT INTO telnyx_number_routes(connection_id,phone_number,business_id,assistant_id,enabled) VALUES ('connection-one','+12025550101','biz','assistant',1);`);
   env = { ...fakeEnv(), DB: db as unknown as D1Database, TELNYX_ENABLED: 'true', TELNYX_API_KEY: 'synthetic-api-key', TELNYX_PUBLIC_KEY: publicKey, TELNYX_CONNECTION_ID: 'connection-one', TELNYX_PUBLIC_ORIGIN: 'https://openfon.test' };
   env.DEFAULT_LLM_API_KEY = 'synthetic-realtime-key';
+  env.REALTIME_BASE_URL = 'wss://realtime.test/v1/realtime';
   requests = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => { requests.push({ url: String(url), init }); return Response.json({ data: { result: 'ok' } }); }));
   callId = await telnyxLocalCallId(correlation);
@@ -65,6 +66,15 @@ beforeEach(async () => {
 afterEach(() => { db.close(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe('carrier admission and isolation', () => {
+  it('admits workspace OpenAI with no instance provider credentials or Azure greeting', async () => {
+    env.DEFAULT_LLM_API_KEY = ''; env.REALTIME_API_KEY = ''; env.AZURE_SPEECH_KEY = '';
+    db.exec("INSERT INTO provider_settings(business_id,realtime_provider,realtime_api_key) VALUES('biz','openai','synthetic-direct-key'); UPDATE assistants SET realtime_model='';");
+    expect(await reserveTelnyxCall(env, callId, correlation, '+12025550101', 'caller')).toBe(true);
+  });
+  it('rejects a workspace direct provider missing its own key despite a valid instance key', async () => {
+    db.exec("INSERT INTO provider_settings(business_id,realtime_provider) VALUES('biz','openai'); UPDATE assistants SET realtime_model='';");
+    expect(await reserveTelnyxCall(env, callId, correlation, '+12025550101', 'caller')).toBe(false);
+  });
   it('reserves before pickup and shares capacity with browser calls', async () => {
     expect(await reserveTelnyxCall(env, callId, correlation, '+12025550101', '+12025550100')).toBe(true);
     expect(await occupied()).toBe(1);

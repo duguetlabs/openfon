@@ -12,7 +12,9 @@
 //   server JSON  {type:"agent_text", text}      agent reply text (always sent)
 //   server BINARY <mp3>                         spoken version of the last agent_text (azure mode)
 //   server JSON  {type:"thinking"} | {type:"error", message} | {type:"ended"}
-import type { Env, Business, AgentSettings, ChatMessage } from './types';
+import type { Env, Business, AgentSettings, ChatMessage, ProviderSettings } from './types';
+import { resolveRealtime, realtimeConnection, realtimeCapabilities } from './realtime-providers';
+import type { RealtimeConfig } from './realtime-providers';
 import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './prompt';
 import type { PromptKnowledgeItem } from './prompt';
 import { chatComplete, detectLang, isFarewell, isVocabEcho, LlmConfigError, normalizeLang, piperVoiceFor, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
@@ -351,7 +353,14 @@ export class CallSession implements DurableObject {
           assistants.custom_instructions,
           COALESCE(provider_settings.llm_base_url, '') AS llm_base_url,
           COALESCE(provider_settings.llm_api_key, '') AS llm_api_key,
-          assistants.llm_model,
+          COALESCE(NULLIF(assistants.llm_model, ''), provider_settings.llm_model, '') AS llm_model,
+          provider_settings.realtime_provider,
+          provider_settings.realtime_base_url,
+          provider_settings.realtime_api_key,
+          provider_settings.stt_provider,
+          provider_settings.stt_base_url,
+          provider_settings.stt_api_key,
+          provider_settings.stt_model,
           assistants.engine,
           assistants.realtime_model,
           assistants.realtime_voice
@@ -383,6 +392,20 @@ export class CallSession implements DurableObject {
       this.settings = await this.env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?')
         .bind(businessId)
         .first<AgentSettings>();
+      const workspace = await this.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
+        .bind(businessId).first<ProviderSettings>();
+      if (this.settings && workspace) {
+        this.settings = { ...this.settings,
+          llm_base_url: workspace.llm_base_url,
+          llm_api_key: workspace.llm_api_key,
+          llm_model: this.settings.llm_model || workspace.llm_model || '',
+          realtime_provider: workspace.realtime_provider,
+          realtime_base_url: workspace.realtime_base_url,
+          realtime_api_key: workspace.realtime_api_key,
+          stt_provider: workspace.stt_provider, stt_base_url: workspace.stt_base_url,
+          stt_api_key: workspace.stt_api_key, stt_model: workspace.stt_model,
+        };
+      }
       this.knowledge = undefined;
     }
   }
@@ -487,6 +510,7 @@ export class CallSession implements DurableObject {
     // caller mid-conversation (realtime calls would only notice at summary time).
     try {
       resolveLlm(this.env, this.settings);
+      if (this.settings?.engine === 'realtime') this.realtimeConfig = resolveRealtime(this.env, this.settings);
     } catch (err) {
       if (!(err instanceof LlmConfigError)) throw err;
       // The diagnostic is for the owner, not the caller: it can name the
@@ -517,8 +541,9 @@ export class CallSession implements DurableObject {
     const systemPrompt = buildSystemPrompt(this.biz!, this.settings!, new Date(), this.knowledge);
 
     if (this.settings!.engine === 'realtime') {
+      this.history = [{ role: 'system', content: systemPrompt }];
       const ok = await this.startRealtime(systemPrompt, greeting).catch((err) => {
-        console.error('realtime engine startup failed:', err);
+        console.error('realtime engine startup failed: provider details redacted');
         return false;
       });
       if (this.ended) {
@@ -531,7 +556,6 @@ export class CallSession implements DurableObject {
         if (this.engineGreets()) {
           // Engine speaks the greeting in its own voice; the greeting text and
           // transcript turn arrive through the normal event stream.
-          this.history = [{ role: 'system', content: systemPrompt }];
           const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
           this.sendReady({ mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
           return;
@@ -574,8 +598,8 @@ export class CallSession implements DurableObject {
       }
     }
 
-    if (this.requiresCarrierAudio) {
-      await this.failCarrierAudio('The realtime provider could not start this telephone call.');
+    if (this.requiresCarrierAudio || this.realtimeConfig?.protocol === 'openai') {
+      await this.failCarrierAudio('The realtime provider could not start this call.');
       return;
     }
     this.mode = 'pipeline';
@@ -600,7 +624,7 @@ export class CallSession implements DurableObject {
 
   private async failCarrierAudio(reason: string): Promise<void> {
     this.failure = reason;
-    this.sendError('Telephone audio is unavailable.');
+    this.sendError(this.requiresCarrierAudio ? 'Telephone audio is unavailable.' : 'Realtime audio is unavailable.');
     await this.finalize();
   }
 
@@ -831,6 +855,7 @@ export class CallSession implements DurableObject {
       type: 'session.update',
       session: {
         type: 'realtime',
+        ...(this.realtimeConfig?.protocol === 'openai' ? { output_modalities: ['audio'] } : {}),
         instructions,
         ...(this.toolsSupported()
           ? {
@@ -862,7 +887,7 @@ export class CallSession implements DurableObject {
             // 24 kHz: the lowest rate every tier accepts (native S2S models reject 16 kHz)
             format: { type: 'audio/pcm', rate: 24000 },
             // Per-tier, from the measurements — see TURN_DETECTION_BY_TIER.
-            turn_detection: turnDetectionFor(this.realtimeModel),
+            turn_detection: this.realtimeConfig?.protocol === 'openai' ? SERVER_VAD : turnDetectionFor(this.realtimeModel),
             transcription: {
               // Native S2S tiers only support their own transcription models;
               // forcing ours silently disables caller transcripts there.
@@ -873,7 +898,7 @@ export class CallSession implements DurableObject {
               // azure-speech; name it ourselves and the prompt goes upstream
               // intact, where Azure rejects the **entire** session.update —
               // instructions, voice and tools with it.
-              model: this.realtimeModel.startsWith('gpt-realtime') ? 'whisper-1' : this.env.DEFAULT_STT_MODEL,
+              model: (this.realtimeConfig && realtimeCapabilities(this.realtimeConfig).transcriptionModel) || (this.realtimeModel.startsWith('gpt-realtime') ? 'whisper-1' : this.env.DEFAULT_STT_MODEL),
               // Not sent on HD, where it cannot take effect: Azure Voice Live
               // answers `prompt is not yet supported for azure-speech`, and its
               // transcription config is latched by the first `session.update`
@@ -882,7 +907,7 @@ export class CallSession implements DurableObject {
               // HD call about a field nobody can apply. If Kataleptic stops
               // spending that first update, this can go back to unconditional —
               // and `phrase_list` becomes the supported spelling of it there.
-              ...(this.realtimeModel === 'kataleptic-realtime-hd' ? {} : { prompt: this.biz && this.settings ? sttVocab(this.biz, this.settings, this.knowledge) : undefined }),
+              ...(this.realtimeConfig?.protocol !== 'openai' && this.realtimeModel === 'kataleptic-realtime-hd' ? {} : { prompt: this.biz && this.settings ? sttVocab(this.biz, this.settings, this.knowledge) : undefined }),
               // On cascade tiers this is a greeting seed + STT accuracy hint,
               // not a pin: per-utterance detection overrides it once the caller
               // speaks (verified 2026-06-13 after Kataleptic's fix).
@@ -922,11 +947,16 @@ export class CallSession implements DurableObject {
   // True when the engine should speak the greeting itself: its reply voice is
   // not an Azure voice (so our synthesized greeting would not match), and its
   // first-token latency is low enough for an instant pickup.
+  private realtimeConfig: RealtimeConfig | null = null;
+  private outputAudio: { socket: WebSocket; itemId: string; contentIndex: number; startedAt: number; bytes: number } | null = null;
+
   private engineGreets(): boolean {
+    if (this.realtimeConfig) return realtimeCapabilities(this.realtimeConfig).engineGreeting;
     return this.realtimeModel === 'kataleptic-realtime' || this.realtimeModel.startsWith('gpt-realtime');
   }
 
   private isCascade(): boolean {
+    if (this.realtimeConfig) return realtimeCapabilities(this.realtimeConfig).cascade;
     return this.realtimeModel !== 'kataleptic-realtime-hd' && !this.realtimeModel.startsWith('gpt-realtime');
   }
 
@@ -966,11 +996,11 @@ export class CallSession implements DurableObject {
   }
 
   private async startRealtime(systemPrompt: string, greeting: string): Promise<boolean> {
-    const key = this.env.REALTIME_API_KEY || this.env.DEFAULT_LLM_API_KEY || '';
-    const model = this.settings?.realtime_model || this.env.REALTIME_MODEL;
+    this.realtimeConfig ??= resolveRealtime(this.env, this.settings);
+    const model = this.realtimeConfig.model;
     this.realtimeModel = model;
     console.log(`call ${this.callId}: realtime engine, model ${model}`);
-    const isHd = model === 'kataleptic-realtime-hd';
+    const isHd = realtimeCapabilities(this.realtimeConfig).managedVoice;
     const isCascade = this.isCascade();
     // Explicit per-business realtime voice wins; on the Azure-backed HD tier we
     // manage the voice (matches the synthesized greeting); Piper cascades get a
@@ -982,7 +1012,7 @@ export class CallSession implements DurableObject {
       (isHd
         ? voiceForReply(this.env, this.lang, this.settings?.language ?? 'en', this.settings?.voice || '')
         : isCascade
-          ? await piperVoiceFor(this.env, this.lang)
+          ? await piperVoiceFor({ ...this.env, REALTIME_BASE_URL: this.realtimeConfig.baseUrl }, this.lang)
           : '');
     const toolNote = this.toolsSupported()
       ? '\n\nWhen the conversation is finished and you have said goodbye, call the end_call function.'
@@ -1010,9 +1040,19 @@ export class CallSession implements DurableObject {
 
   // Instructions may be a thunk so a rotation can snapshot the conversation at
   // handover rather than at dial time — see runRecovery.
-  private openUpstream(instructions: string | (() => string), greetWith: string | null): Promise<boolean> {
-    const key = this.env.REALTIME_API_KEY || this.env.DEFAULT_LLM_API_KEY || '';
-    const url = `${this.env.REALTIME_BASE_URL}?model=${encodeURIComponent(this.realtimeModel)}&token=${encodeURIComponent(key)}`;
+  private async openUpstream(instructions: string | (() => string), greetWith: string | null): Promise<boolean> {
+    const config = this.realtimeConfig ?? resolveRealtime(this.env, this.settings);
+    const connection = realtimeConnection({ ...config, model: this.realtimeModel });
+    let upgraded: WebSocket | null = null;
+    if (connection.headers) {
+      try {
+        const response = await fetch(connection.url, {
+          headers: connection.headers, redirect: 'manual', signal: AbortSignal.timeout(5000),
+        });
+        if (response.status !== 101 || !response.webSocket) return false;
+        upgraded = response.webSocket;
+      } catch { return false; }
+    }
     return new Promise<boolean>((resolve) => {
       let settled = false;
       const settle = (ok: boolean) => {
@@ -1023,7 +1063,7 @@ export class CallSession implements DurableObject {
       };
       let ws: WebSocket;
       try {
-        ws = new WebSocket(url);
+        ws = upgraded ?? new WebSocket(connection.url);
       } catch {
         settle(false);
         return;
@@ -1039,30 +1079,50 @@ export class CallSession implements DurableObject {
         this.abandonUpstream(ws);
         settle(false);
       }, 5000);
-      ws.addEventListener('open', () => {
+      const ready = () => {
+        if (abandoned || opened) return;
         clearTimeout(timer);
-        if (abandoned) return; // we already gave up on this one and closed it
         opened = true;
+        this.upstream = ws;
+        if (greetWith) this.sendUpstream({
+          type: 'response.create',
+          response: { instructions: `Greet the caller by saying exactly this, then wait for them to speak: "${greetWith}"` },
+        }, ws);
+        settle(true);
+      };
+      let configured = false;
+      const onOpen = () => {
+        if (abandoned || configured) return;
+        configured = true;
         // Snapshot now, not at dial time. The outgoing connection stayed live
         // through the connect window, so `history` may have gained turns since
         // — and taking it before we route means the replacement is briefed on
         // everything that happened up to the moment it takes over.
         const briefing = typeof instructions === 'function' ? instructions() : instructions;
-        this.upstream = ws; // handover: from here we write to the new socket
+        if (config.protocol === 'gateway') this.upstream = ws;
         this.sendSessionUpdate(this.sessionVoice, briefing, ws);
-        if (greetWith) {
-          this.sendUpstream(
-            {
-              type: 'response.create',
-              response: { instructions: `Greet the caller by saying exactly this, then wait for them to speak: "${greetWith}"` },
-            },
-            ws
-          );
-        }
-        settle(true);
-      });
+        if (config.protocol === 'gateway') ready();
+      };
+      ws.addEventListener('open', onOpen);
       ws.addEventListener('message', (ev) => {
         if (!this.readableUpstreams.has(ws)) return; // abandoned or rotated out
+        if (config.protocol === 'openai' && !opened && typeof ev.data === 'string') {
+          try {
+            const event = JSON.parse(ev.data) as { type?: string; session?: SessionConfig };
+            if (event.type === 'error') {
+              abandoned = true; clearTimeout(timer); this.abandonUpstream(ws); settle(false); return;
+            }
+            if (event.type === 'session.updated' && event.session?.instructions === this.sessionState.get(ws)?.sent.instructions) {
+              const differences = CallSession.diffSession(this.sessionState.get(ws)?.sent, event.session, 'session');
+              if (differences.length) {
+                // A direct provider must confirm the actual requested format,
+                // transcription and tools before we tell a telephone caller ready.
+                abandoned = true; clearTimeout(timer); this.abandonUpstream(ws); settle(false); return;
+              }
+              ready();
+            }
+          } catch { /* malformed events are handled below without logging their payload */ }
+        }
         this.onUpstreamMessage(ev, ws).catch(() =>
           console.error('upstream handler error: provider response redacted')
         );
@@ -1085,6 +1145,7 @@ export class CallSession implements DurableObject {
           void this.recoverUpstream();
         }
       });
+      if (upgraded) { ws.accept(); onOpen(); }
     });
   }
 
@@ -1177,6 +1238,8 @@ export class CallSession implements DurableObject {
     const msg = JSON.parse(ev.data) as {
       type: string;
       delta?: string;
+      item_id?: string;
+      content_index?: number;
       transcript?: string;
       language?: string;
       item?: { type?: string; name?: string };
@@ -1188,7 +1251,14 @@ export class CallSession implements DurableObject {
       case 'response.output_audio.delta':
         if (msg.delta && this.ws) {
           try {
-            this.ws.send(b64decode(msg.delta));
+            const audio = b64decode(msg.delta);
+            if (this.realtimeConfig?.protocol === 'openai' && msg.item_id) {
+              if (this.outputAudio?.itemId !== msg.item_id || this.outputAudio.socket !== from) {
+                this.outputAudio = { socket: from, itemId: msg.item_id, contentIndex: msg.content_index ?? 0, startedAt: Date.now(), bytes: 0 };
+              }
+              this.outputAudio.bytes += audio.byteLength;
+            }
+            this.ws.send(audio);
           } catch {
             /* caller gone */
           }
@@ -1200,6 +1270,16 @@ export class CallSession implements DurableObject {
         // blip would cut off the agent's opening line for nothing.
         if (Date.now() < this.greetingGuardUntil) break;
         this.send({ type: 'flush' });
+        if (this.realtimeConfig?.protocol === 'openai' && this.outputAudio?.socket === from) {
+          const output = this.outputAudio;
+          // The media contract has no per-item playback acknowledgements. Use
+          // elapsed delivery time capped at emitted PCM duration; this is an
+          // estimate, not a claim of exact handset/browser playback position.
+          const audioEndMs = Math.max(0, Math.floor(Math.min(Date.now() - output.startedAt, output.bytes / 48)));
+          this.sendUpstream({ type: 'conversation.item.truncate', item_id: output.itemId,
+            content_index: output.contentIndex, audio_end_ms: audioEndMs }, from);
+          this.outputAudio = null;
+        }
         this.send({ type: 'speaking', who: 'caller' });
         break;
       case 'conversation.item.input_audio_transcription.completed':
@@ -1296,7 +1376,7 @@ export class CallSession implements DurableObject {
     try {
       this.send({ type: 'thinking' });
       const vocab = this.biz && this.settings ? sttVocab(this.biz, this.settings, this.knowledge) : undefined;
-      const { text, language } = await transcribe(this.env, audio, this.pendingContentType, vocab);
+      const { text, language } = await transcribe(this.env, audio, this.pendingContentType, vocab, this.settings);
       if (!text) {
         this.busy = false;
         return;

@@ -1,4 +1,5 @@
-import type { Env } from './types';
+import { telephoneRealtimeAvailable } from './realtime-providers';
+import type { AgentSettings, Env } from './types';
 import type { TelnyxCallCorrelation } from './telnyx-webhook';
 
 // A completed AI session can still own a paid carrier leg. Keep that reservation
@@ -18,7 +19,7 @@ export async function reserveTelnyxCall(
   to: string,
   from: string,
 ): Promise<boolean> {
-  if (!/^\+[1-9]\d{1,14}$/.test(to) || !(env.REALTIME_API_KEY || env.DEFAULT_LLM_API_KEY)) return false;
+  if (!/^\+[1-9]\d{1,14}$/.test(to)) return false;
   // Retrying after a crash between D1 commit and DO commit must reuse the row,
   // even if a later operator edit disables the number. Media rechecks policy.
   const existing = await env.DB.prepare(
@@ -26,6 +27,15 @@ export async function reserveTelnyxCall(
        AND call_leg_id=? AND call_session_id=? AND call_control_id=?`
   ).bind(callId, call.connectionId, call.callLegId, call.callSessionId, call.callControlId).first();
   if (existing) return true;
+  const settings = await env.DB.prepare(
+    `SELECT assistants.engine, assistants.realtime_model,
+       provider_settings.realtime_provider, provider_settings.realtime_base_url, provider_settings.realtime_api_key
+     FROM telnyx_number_routes route JOIN assistants ON assistants.id=route.assistant_id
+     LEFT JOIN provider_settings ON provider_settings.business_id=route.business_id
+     WHERE route.connection_id=? AND route.phone_number=? AND route.enabled=1
+       AND assistants.business_id=route.business_id AND assistants.state='active'`
+  ).bind(call.connectionId, to).first<AgentSettings>();
+  if (!telephoneRealtimeAvailable(env, settings)) return false;
   await env.DB.batch([
     env.DB.prepare(
       `INSERT OR IGNORE INTO calls
@@ -36,8 +46,6 @@ export async function reserveTelnyxCall(
         WHERE route.connection_id=? AND route.phone_number=? AND route.enabled=1
           AND assistants.business_id=route.business_id AND assistants.state='active'
           AND assistants.engine='realtime'
-          AND (?=1 OR COALESCE(NULLIF(assistants.realtime_model,''), ?)='kataleptic-realtime'
-            OR COALESCE(NULLIF(assistants.realtime_model,''), ?) GLOB 'gpt-realtime*')
           AND trim(assistants.name)<>'' AND trim(assistants.persona)<>''
           AND trim(assistants.language)<>''
           AND (SELECT COUNT(*) FROM calls WHERE business_id=route.business_id AND environment='live'
@@ -45,7 +53,7 @@ export async function reserveTelnyxCall(
           AND (SELECT COUNT(*) FROM calls WHERE business_id=route.business_id AND environment='live'
                  AND started_at > datetime('now', '-1 day')
                  AND NOT (status='abandoned' AND connected_at IS NULL AND reserved_at IS NULL)) < businesses.max_calls_per_day`
-    ).bind(callId, from, call.connectionId, to, env.DEFAULT_TTS_PROVIDER === 'azure' && env.AZURE_SPEECH_KEY ? 1 : 0, env.REALTIME_MODEL, env.REALTIME_MODEL),
+    ).bind(callId, from, call.connectionId, to),
     env.DB.prepare(
       `INSERT OR IGNORE INTO telnyx_call_links
         (call_id, connection_id, call_leg_id, call_session_id, call_control_id, phone_number)
