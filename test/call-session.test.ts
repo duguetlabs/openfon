@@ -2191,7 +2191,7 @@ describe('direct OpenAI realtime independence', () => {
     if (phase === 'rotation') expect(first.closed).not.toBeNull();
   });
 
-  it.each(['error', 'timeout'])('keeps the acknowledged socket when replacement handshake fails by %s', async failure => {
+  it.each(['error', 'timeout', 'oversized-json', 'oversized-audio'])('keeps the acknowledged socket when replacement handshake fails by %s', async failure => {
     vi.useFakeTimers();
     const old = new FakeSocket();
     const replacement = new FakeSocket();
@@ -2209,6 +2209,8 @@ describe('direct OpenAI realtime independence', () => {
     replacement.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' });
     replacement.receive({ type: 'response.function_call_arguments.done', name: 'end_call' });
     if (failure === 'error') replacement.receive({ type: 'error' });
+    else if (failure === 'oversized-json') replacement.emit('message', { data: ' '.repeat(1024 * 1024 + 1) });
+    else if (failure === 'oversized-audio') replacement.receive({ type: 'response.output_audio.delta', delta: 'A'.repeat(640004) });
     else await vi.advanceTimersByTimeAsync(5001);
     await flush(50);
     expect(replacement.closed).not.toBeNull();
@@ -2224,6 +2226,38 @@ describe('direct OpenAI realtime independence', () => {
     expect(turnWrites()).toHaveLength(2);
     expect(old.messages().some(m => m.type === 'conversation.item.create')).toBe(true);
     expect(upgrades).toBe(2);
+  });
+
+  it.each(['pending-json', 'pending-audio', 'ready-audio', 'ready-json', 'greeting-audio'])('fails closed before forwarding oversized %s', async phase => {
+    const up = new FakeSocket();
+    globalThis.fetch = vi.fn(async () => ({ status: 101, webSocket: up })) as unknown as typeof fetch;
+    const { session, ctl, callUpdates } = newSession('realtime', directSettings);
+    if (phase === 'greeting-audio') ctl.channel = 'telnyx';
+    await session.fetch(upgradeRequest());
+    const caller = serverSockets[0]; caller.receive({ type: 'start' });
+    await flush(50);
+    if (!phase.startsWith('pending')) {
+      up.receive({ type: 'session.updated', session: up.messages().find(m => m.type === 'session.update')!.session });
+      await flush(50);
+    }
+    const parse = vi.spyOn(JSON, 'parse');
+    const decode = vi.spyOn(globalThis, 'atob');
+    const payload = phase.endsWith('json') ? ' '.repeat(1024 * 1024 + 1)
+      : JSON.stringify({ type: 'response.output_audio.delta', delta: 'A'.repeat(640004) });
+    let parses = 0, decodes = 0;
+    try {
+      up.emit('message', { data: payload });
+      parses = parse.mock.calls.length; decodes = decode.mock.calls.length;
+    } finally { parse.mockRestore(); decode.mockRestore(); }
+    expect(decodes).toBe(0);
+    if (phase.endsWith('json')) expect(parses).toBe(0);
+    // A same-tick subsequent valid audio event cannot escape after rejection.
+    up.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' });
+    await flush(100);
+    expect(caller.binaryCount()).toBe(0);
+    if (!phase.startsWith('ready')) expect(caller.countOf('ready')).toBe(0);
+    expect(up.closed).not.toBeNull();
+    expect(callUpdates().some(write => write.args[0] === 'failed')).toBe(true);
   });
 
   it.each(['reject', 'redirect', 'session-error', 'session-mismatch', 'session-timeout'])('fails closed on %s without pipeline fallback', async failure => {

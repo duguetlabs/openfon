@@ -19,6 +19,7 @@ import type { RealtimeConfig } from './realtime-providers';
 import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './prompt';
 import type { PromptKnowledgeItem } from './prompt';
 import { loadCallKnowledge } from './call-knowledge';
+import { parseRealtimeMessage, decodeRealtimeAudio, RealtimeInputError } from './realtime-input';
 import { chatComplete, detectLang, isFarewell, isVocabEcho, LlmConfigError, normalizeLang, piperVoiceFor, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
 
 // WebSocket binary payloads vary by runtime: ArrayBuffer, ArrayBufferView, or Blob.
@@ -42,11 +43,17 @@ function b64encode(buf: ArrayBuffer): string {
   return btoa(s);
 }
 
-function b64decode(s: string): ArrayBuffer {
-  const bin = atob(s);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out.buffer;
+interface UpstreamMessage {
+  type: string;
+  delta?: string;
+  item_id?: string;
+  content_index?: number;
+  transcript?: string;
+  language?: string;
+  item?: { type?: string; name?: string };
+  name?: string;
+  session?: SessionConfig;
+  error?: { message?: string };
 }
 
 interface SummaryResult {
@@ -1121,11 +1128,23 @@ export class CallSession implements DurableObject {
         if (config.protocol === 'gateway') ready();
       };
       ws.addEventListener('open', onOpen);
+      const rejectMessage = () => {
+        abandoned = true; clearTimeout(timer);
+        if (opened) {
+          this.readableUpstreams.delete(ws);
+          this.failInternally(new RealtimeInputError());
+          this.abandonUpstream(ws);
+        }
+        else this.abandonUpstream(ws);
+        settle(false);
+      };
       ws.addEventListener('message', (ev) => {
         if (!this.readableUpstreams.has(ws)) return; // abandoned or rotated out
-        if (config.protocol === 'openai' && !opened && typeof ev.data === 'string') {
+        let event: UpstreamMessage;
+        try { event = parseRealtimeMessage(ev.data) as unknown as UpstreamMessage; }
+        catch { rejectMessage(); return; }
+        if (config.protocol === 'openai' && !opened) {
           try {
-            const event = JSON.parse(ev.data) as { type?: string; session?: SessionConfig };
             if (event.type === 'error') {
               abandoned = true; clearTimeout(timer); this.abandonUpstream(ws); settle(false); return;
             }
@@ -1144,9 +1163,10 @@ export class CallSession implements DurableObject {
         // application output must remain inert until its own configuration is
         // confirmed. The acknowledged old socket remains live during rotation.
         if (config.protocol === 'openai' && !opened) return;
-        this.onUpstreamMessage(ev, ws).catch(() =>
-          console.error('upstream handler error: provider response redacted')
-        );
+        this.onUpstreamMessage(event, ws).catch(error => {
+          if (error instanceof RealtimeInputError) rejectMessage();
+          else console.error('upstream handler error: provider response redacted');
+        });
       });
       ws.addEventListener('error', () => {
         clearTimeout(timer);
@@ -1255,25 +1275,12 @@ export class CallSession implements DurableObject {
     }
   }
 
-  private async onUpstreamMessage(ev: MessageEvent, from: WebSocket): Promise<void> {
-    if (typeof ev.data !== 'string') return;
-    const msg = JSON.parse(ev.data) as {
-      type: string;
-      delta?: string;
-      item_id?: string;
-      content_index?: number;
-      transcript?: string;
-      language?: string;
-      item?: { type?: string; name?: string };
-      name?: string;
-      session?: SessionConfig;
-      error?: { message?: string };
-    };
+  private async onUpstreamMessage(msg: UpstreamMessage, from: WebSocket): Promise<void> {
     switch (msg.type) {
       case 'response.output_audio.delta':
         if (msg.delta && this.ws) {
+          const audio = decodeRealtimeAudio(msg.delta);
           try {
-            const audio = b64decode(msg.delta);
             if (this.realtimeConfig?.protocol === 'openai' && msg.item_id) {
               if (this.outputAudio?.itemId !== msg.item_id || this.outputAudio.socket !== from) {
                 this.outputAudio = { socket: from, itemId: msg.item_id, contentIndex: msg.content_index ?? 0, startedAt: Date.now(), bytes: 0 };

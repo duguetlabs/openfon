@@ -14,6 +14,7 @@ import { build } from 'esbuild';
 import { unstable_splitSqlQuery } from 'wrangler';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 const gateway = process.argv.includes('--gateway');
+const oversizedUpstream = process.argv.includes('--oversized-upstream');
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const temp = await mkdtemp(resolve(tmpdir(), 'openfon-realtime-smoke-'));
 const commands = [];
@@ -55,6 +56,11 @@ export default { async fetch(request, env) {
         send({type:'session.updated',session:msg.session});
       }
       if (msg.type === 'response.create') setTimeout(() => {
+        if (${oversizedUpstream}) {
+          send({type:'response.output_audio.delta',delta:'A'.repeat(640004)});
+          send({type:'response.output_audio.delta',delta:audio});
+          return;
+        }
         greetingEmitted = true;
         send({type:'response.output_audio.delta',delta:audio});
         send({type:'response.output_audio_transcript.done',transcript:'Synthetic greeting.'});
@@ -161,13 +167,16 @@ try {
   carrier.send(JSON.stringify({event:'connected',version:'1.0.0',connected:{'x-telnyx-streaming-auth-token':stream.body.stream_auth_token}}));
   carrier.send(JSON.stringify({event:'start',sequence_number:'1',stream_id:'smoke-stream',start:{...call,media_format:{encoding:'PCMU',sample_rate:8000,channels:1}}}));
   carrier.send(JSON.stringify({event:'media',sequence_number:'2',stream_id:'smoke-stream',media:{track:'inbound',chunk:'1',timestamp:'0',payload:Buffer.alloc(160,255).toString('base64')}}));
+  if (!oversizedUpstream) {
   await wait(()=>received.some(x=>x.event==='media'),'realtime greeting PCM');
   assert.ok(received.some(x=>x.event==='media' && [...Buffer.from(x.media.payload,'base64')].some(byte=>byte!==255)), 'non-silent tone survives codec');
   await wait(()=>telemetry.some(x=>x.path==='/input'),'PCM reaches realtime');
   assert.equal(telemetry.find(x=>x.path==='/input').body.bytes,960);
   assert.equal(telemetry.find(x=>x.path==='/input').body.greetingEmitted,true,'buffered carrier input must not overtake native greeting');
   await wait(()=>received.some(x=>x.event==='clear'),'barge-in clear');
+  }
   await wait(()=>commands.find(x=>x.action==='hangup'),'terminal carrier command');
+  if (oversizedUpstream) assert.equal(received.filter(x=>x.event==='media').length,0,'oversized first PCM and following same-tick PCM must not reach carrier');
   const before=await db.prepare("SELECT status,carrier_released_at FROM calls WHERE channel='telnyx'").first();
   assert.equal(before.carrier_released_at,null,'retain reservation until signed carrier confirmation');
   await webhook('call.hangup');
@@ -176,11 +185,13 @@ try {
   assert.equal(rows.n,1,'duplicate initiated must not create another call');
   assert.equal(commands.filter(x=>x.action==='answer').length,1);
   assert.equal(telemetry.filter(x=>x.path==='/unexpected').length,0,'all outbound requests matched local mocks');
-  const result = await db.prepare("SELECT summary FROM calls WHERE channel='telnyx'").first();
-  assert.equal(result.summary, 'Synthetic call completed.');
+  const result = await db.prepare("SELECT summary,status FROM calls WHERE channel='telnyx'").first();
+  if (oversizedUpstream) assert.equal(result.status,'failed','invalid upstream must fail closed');
+  else assert.equal(result.summary, 'Synthetic call completed.');
   const turns = await db.prepare("SELECT COUNT(*) AS n FROM call_turns").first();
-  assert.equal(turns.n, 3, 'only acknowledged greeting, caller and reply persisted');
-  console.log(`PASS ${gateway ? 'gateway' : 'direct OpenAI'} realtime workerd smoke (synthetic upstreams): ${gateway ? '' : 'authenticated static voice catalog, '}signed ingress, idempotent admission, authenticated media, realtime PCM, clear/marks/drain, carrier hangup, D1 release. No external requests.`);
+  assert.equal(turns.n, oversizedUpstream ? 0 : 3, 'only acknowledged valid turns persisted');
+  if (oversizedUpstream) console.log(`PASS ${gateway ? 'gateway' : 'direct OpenAI'} oversized-upstream workerd regression: zero carrier PCM, failed call, carrier hangup and D1 release. Synthetic upstreams only; no external requests.`);
+  else console.log(`PASS ${gateway ? 'gateway' : 'direct OpenAI'} realtime workerd smoke (synthetic upstreams): ${gateway ? '' : 'authenticated static voice catalog, '}signed ingress, idempotent admission, authenticated media, realtime PCM, clear/marks/drain, carrier hangup, D1 release. No external requests.`);
 } finally {
   try { carrier?.close(); } catch {}
   await mf?.dispose();
