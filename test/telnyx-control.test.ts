@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateKeyPairSync, sign } from 'node:crypto';
-import worker from '../src/index';
+import mainWorker from '../src/index';
+import { Hono } from 'hono';
+import { registerTelnyxRoutes } from '../src/telnyx-routes';
+let mediaApp: Hono<{ Bindings: Env; Variables: { userId: string } }>;
+const worker = { fetch(request: Request, env: Env, ctx: ExecutionContext) {
+  return new URL(request.url).pathname.startsWith('/ws/telnyx/')
+    ? mediaApp.fetch(request, env, ctx) : mainWorker.fetch(request, env, ctx);
+} };
 import { TelnyxCall, sendTelnyxCommand, telnyxCallEnded, equalStreamToken, type TelnyxControlEvent } from '../src/telnyx-control';
 import { OCCUPIED_CALL_SQL, reserveTelnyxCall, telnyxLocalCallId, telnyxMediaAllowed } from '../src/telnyx-admission';
 import { applyMigrations, SqliteD1 } from './sqlite-d1';
@@ -63,6 +70,7 @@ function webhook(type: string, patch: Record<string, unknown> = {}) {
 
 beforeEach(async () => {
   vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-12T00:00:00Z'));
+  mediaApp = new Hono(); registerTelnyxRoutes(mediaApp);
   db = new SqliteD1(); applyMigrations(db);
   db.exec(`INSERT INTO users(id,email,password_hash) VALUES ('owner','owner@example.invalid','hash');
     INSERT INTO businesses(id,user_id,slug,name,description,max_concurrent_calls,max_calls_per_day) VALUES ('biz','owner','public-one','Workshop','Repairs',1,100);
@@ -581,6 +589,7 @@ describe('signed ingress and provider API contract', () => {
         Upgrade:'websocket','x-telnyx-streaming-auth-token':'a'.repeat(64),'CF-Connecting-IP':`192.0.2.${i+1}`,
       }}),env,fakeCtx);
       expect(response.status).toBe(404);
+      vi.setSystemTime(Date.now() + 500); // exercise all rejected lookups within admission budget
     }
     expect(db.database.prepare('SELECT total_changes() AS n').get()).toEqual(before);
     expect(get).not.toHaveBeenCalled();
@@ -602,6 +611,7 @@ describe('signed ingress and provider API contract', () => {
         Upgrade:'websocket','x-telnyx-streaming-auth-token':bogus,'CF-Connecting-IP':`192.0.2.${i+1}`,
       }}),env,fakeCtx);
       expect(response.status).toBe(403);
+      vi.setSystemTime(Date.now() + 500);
     }
     expect(get).toHaveBeenCalledTimes(125); // real owner performed authentication
     expect(db.database.prepare('SELECT total_changes() AS n').get()).toEqual(before);

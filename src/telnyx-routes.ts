@@ -1,4 +1,5 @@
 import type { Hono } from 'hono';
+import { TelnyxMediaAdmission } from './telnyx-media-admission';
 import type { Env } from './types';
 import { verifyTelnyxWebhook, TelnyxWebhookError, TELNYX_WEBHOOK_MAX_BYTES } from './telnyx-webhook';
 import { telnyxConfigured, telnyxControlEvent } from './telnyx-control';
@@ -28,6 +29,7 @@ async function boundedBody(request: Request): Promise<Uint8Array> {
 }
 
 export function registerTelnyxRoutes(app: Hono<{ Bindings: Env; Variables: { userId: string } }>): void {
+  const mediaAdmission = new TelnyxMediaAdmission();
   app.post('/api/telnyx/webhooks', async c => {
     c.header('Cache-Control', 'no-store');
     if (!c.env.TELNYX_CALL || !c.env.TELNYX_PUBLIC_KEY || !c.env.TELNYX_CONNECTION_ID) return c.json({ error: 'Carrier ingress unavailable' }, 503);
@@ -67,15 +69,18 @@ export function registerTelnyxRoutes(app: Hono<{ Bindings: Env; Variables: { use
     const headers = new Headers({ Upgrade: 'websocket' });
     const token = c.req.header('x-telnyx-streaming-auth-token');
     if (!token || !/^[0-9a-f]{64}$/.test(token)) return c.json({ error: 'Invalid stream authorization' }, 403);
-    // No public D1 write-based limiter: even well-formed bogus credentials
-    // must not consume the database write budget. Lookup is read-only; the
-    // owner authenticates the token and rejects duplicate claims before writes.
-    // Reject invented object names before DO dispatch. The owner still checks
-    // the secret token and current route policy; row existence is not auth.
-    const call = await c.env.DB.prepare(
-      `SELECT id FROM calls WHERE id=? AND channel='telnyx' AND status='active'
-        AND reserved_at IS NOT NULL AND carrier_released_at IS NULL`
-    ).bind(callId).first();
+    // Admission precedes all D1/DO work and never writes persistent counters.
+    const release = mediaAdmission.acquire();
+    if (!release) return c.json({ error: 'Too many stream attempts' }, 429, { 'Retry-After': '1' });
+    let call;
+    try {
+      // Row existence is not authentication; owner token/claim checks follow.
+      call = await c.env.DB.prepare(
+        `SELECT id FROM calls WHERE id=? AND channel='telnyx' AND status='active'
+          AND reserved_at IS NOT NULL AND carrier_released_at IS NULL`
+      ).bind(callId).first();
+    } finally { release(); }
+    // Do not hold a lookup permit for the owner upgrade or socket lifetime.
     if (!call) return c.json({ error: 'Not found' }, 404);
     headers.set('x-telnyx-streaming-auth-token', token);
     const stub = c.env.TELNYX_CALL!.get(c.env.TELNYX_CALL!.idFromName(callId));
