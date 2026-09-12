@@ -1,12 +1,12 @@
 # Audible demo — 60–90 seconds
 
-**Prepared script, not a recording or voice evidence.** The existing MP4 is a silent synthetic UI walkthrough. Record only after a working provider is authorized and the fictional scenario below is explicitly approved. No real customer data, invented testimonial or overdubbed assistant answer.
+**Prepared script, not a recording or voice evidence.** The existing MP4 is a silent synthetic UI walkthrough. Root approved the existing fictional Northwheel scenario for this demonstration on 2026-09-12; no further scenario approval is needed. Record once authorized working provider configuration is available, using bounded test usage. No real customer data, invented testimonial or overdubbed assistant answer.
 
-## Proposed fictional fixture (approval pending)
+## Approved fictional fixture
 
 Northwheel Bicycle Workshop. Saturday hours: 09:00–14:00. Services: puncture repairs and basic bicycle servicing. Repair timing requires staff confirmation. No approved information about vintage espresso-machine repairs. The assistant can capture a callback request; it cannot confirm a booking or make a transfer. Caller name: Alex Example. Use only a fictional callback identifier accepted by the app; do not invent a dialable personal number or place a callback.
 
-Greeting: “Hello, this is Northwheel’s AI assistant. I can answer workshop questions or take a message for the team.” Approve the fixture knowledge before recording and keep the assistant private.
+Greeting: “Hello, this is Northwheel’s AI assistant. I can answer workshop questions or take a message for the team.” Mark the fixture knowledge approved in the application before recording and keep the assistant private. This is a knowledge-publication step, not another scenario permission request.
 
 ## Run of show
 
@@ -26,4 +26,4 @@ If the interaction runs long, shorten narration or record another disclosed take
 
 Record date, commit, provider/adapter/model/voice, browser/device, audio capture method and test report path. Verify that both caller and assistant are audible, the microphone is real, no secret is visible, and the saved result belongs to that call. Listen to the full export. Label it browser audio; a phone-agent demo separately needs a consented handset call and carrier evidence.
 
-Publication also requires scenario/participant approval and the applicable release gates. Kataleptic disclosure if used: “Voice provided through Kataleptic, the founder’s optional paid inference service.” If an independent provider is used, name the actual route and attach its independence test; do not imply it from the model name.
+The fictional scenario is approved. Keep the AI/fictional disclosure and applicable release gates; do not externally distribute the recording under this implementation task. If adding another person’s voice, obtain that participant’s consent. Kataleptic disclosure if used: “Voice provided through Kataleptic, the founder’s optional paid inference service.” If an independent provider is used, name the actual route and attach its independence test; do not imply it from the model name.

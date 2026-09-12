@@ -20,7 +20,7 @@ A small business shouldn’t need a black box to answer a simple question.
 
 OpenFon is an open-source voice assistant: your facts, a private test studio, a browser call link, and transcripts you can learn from. Deploy in your Cloudflare account. MIT licensed. Check the documented provider capabilities before switching services. Built by Duguet Labs; the default Kataleptic inference service is the founder’s optional paid offering.
 
-Browser calls first; telephone-number integration is still in development.
+Browser calls first. Experimental telephone adapters have synthetic test coverage; real telephone pilots remain pending.
 
 Explore the source: https://github.com/duguetlabs/openfon
 
@@ -30,7 +30,7 @@ Title: Show HN: OpenFon – a self-hostable browser voice assistant for small bu
 
 Body: I’m building a small Cloudflare Worker + D1 app for turning business FAQs into a voice conversation. It has a React studio for configuring assistants, testing privately, reviewing transcripts and approving new knowledge. The code is MIT licensed. Provider support is capability-specific; see the compatibility table for what has actually been verified. I also run Kataleptic, the default paid inference service; it is optional and billed separately.
 
-The useful loop is test → review → improve → publish. The current channel is a browser link, not a PSTN number. Hosting and AI usage are separate from the free software. I’d appreciate feedback on the self-hosting experience and where the conversation workflow breaks down.
+The useful loop is test → review → improve → publish. The demonstrated product workflow uses a browser link. Experimental Telnyx and Asterisk adapters and direct OpenAI realtime are implemented, with local synthetic tests; real-provider audio and telephone pilots remain unverified. Hosting and AI usage are separate from the free software. I’d appreciate feedback on the self-hosting experience and where the conversation workflow breaks down.
 
 Source: https://github.com/duguetlabs/openfon
 

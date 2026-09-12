@@ -15,7 +15,7 @@ Own README, public landing copy, CONTRIBUTING.md and launch/onboarding docs; avo
 ## Work completed / remaining dependencies
 Finished quickstart, evidence-scoped compatibility, pilot/support guidance, evaluation and costs formulas, audible script, contribution guide and announcement drafts. Tightened README/landing claims without replacing website architecture. No runtime/schema edits.
 
-Integration must refresh compatibility/configuration against consolidated provider/Asterisk commits, add exact adapter recipe links, and run final release gates. Audible recording remains blocked by authorized working provider and explicit approval of fictional scenario; operator/domain/support/legal inputs remain missing. No invented recordings, bills or testimonials.
+Integration must refresh compatibility/configuration against consolidated provider/Asterisk commits, add exact adapter recipe links, and run final release gates. Root approved the existing fictional Northwheel scenario on 2026-09-12; no further scenario approval is required. Audible recording awaits authorized working provider configuration only; operator/domain/support/legal inputs remain missing. No invented recordings, bills or testimonials.
 
 ## Files changed
 - README.md: identity, paid-provider affiliation, bounded compatibility, quickstart links and explicit local ports.
@@ -43,3 +43,10 @@ Integration cherry-picks launch commit, refreshes baseline compatibility with fi
 Read presets’ final persisted/API contract and realtime owner’s recipe on 2026-09-12. Added an explicitly incoming section to docs/providers.md with exact text preset URLs/models, independent STT/realtime configuration, model precedence, key retention/removal and owner-reported evidence. Added quickstart routing to it. Final provider commit ce62114 and realtime implementation 13f037b (helper 18d3638) received; updated docs with final owner-reported unit/browser/runtime results. Baseline claims remain intact pending consolidation and no live-provider success is inferred. Launch did not rerun the other owners’ tests. Integration should resolve the incoming/baseline distinction when consolidating final commits.
 
 Follow-up validation: relative links in docs/providers.md and docs/quickstart.md resolve; git diff --check passed. Documentation only, no repeat application suite needed.
+
+## Integrated release wording audit
+Read integrated commit 9efef65 and its provider/Asterisk/realtime recipes. Provider table now correctly describes assembled adapters with synthetic-only evidence and links to both recipes. Integration reports 491 unit/API and 7 browser tests plus carrier/realtime smokes, but QA has an unresolved pre-session.updated audio finding; no final release approval inferred. Found stale quickstart “awaiting integration” wording and corrected the launch-owned paragraph for consolidation. Updated source/short announcement drafts to acknowledge implemented experimental adapters without live claims. Corrected Northwheel approval wording in demo script, demo README and pilot inputs. No provider is currently evidenced as authorized and working for an audible recording; no audio fabricated or marketing distributed.
+
+Root clarification replaces the earlier artificial scenario blocker. Remaining real inputs: working provider configuration for recording; final operator/support/domain details for hosted release. Scenario and launch-material authoring are already authorized.
+
+Audit validation: 45 relative paths/Markdown anchors across 13 integrated README/provider/telephony/launch documents passed at inspected 9efef65; git diff --check passed. No application code changed. Final hosted publication remains gated by integration's release process; complete source/announcement/pilot/demo drafts are supplied without invented identity or outcomes.

@@ -2,7 +2,7 @@
 
 This guide targets the Cloudflare Worker + D1 application in this repository. It is a setup recipe, not evidence of a fresh-install or real-voice pass. Start with fictional information and a private assistant. No telephone number is needed. See [readiness](launch/readiness.md) for outstanding release gates.
 
-The [workspace settings contract](providers.md#workspace-settings-contract) describes the new text/STT/realtime presets awaiting integration. The steps below remain valid for the baseline instance configuration. After the matching migration and code are integrated, use workspace settings for separate provider choices and check existing assistant model overrides. Do not assume a preset dropdown alone verifies provider access.
+The [workspace settings contract](providers.md#workspace-settings-contract) describes separate text, transcription and realtime choices. Apply its migrations with the matching consolidated code, then use workspace settings and check existing assistant model overrides. This recipe starts with instance defaults; a preset selection alone does not verify provider access.
 
 ## 1. Prepare your accounts and configuration
 
@@ -16,7 +16,7 @@ npx wrangler login
 npx wrangler d1 create openfon
 ```
 
-In `wrangler.jsonc`, replace the example `database_id` with the ID of **your new database**, and check `name` and `database_name` before any remote operation. Keep `TELNYX_ENABLED` set to `false` for this browser recipe. Do not apply these steps to an existing deployment without a backup and the [upgrade/release procedure](launch/readiness.md#deployment-procedure-prepared-not-executed).
+In `wrangler.jsonc`, replace the example `database_id` with the ID of **your new database**, and check `name` and `database_name` before any remote operation. Keep `TELNYX_ENABLED` and, on the consolidated release, `ASTERISK_ENABLED` set to `false` for this browser recipe. Do not apply these steps to an existing deployment without a backup and the [upgrade/release procedure](launch/readiness.md#deployment-procedure-prepared-not-executed).
 
 Choose text generation and transcription separately using the [provider guide](providers.md). The shipped URLs point to Kataleptic, the founder’s optional paid service. To use another service, configure both endpoint URLs and model IDs for that service; changing only the text model does not switch speech or realtime traffic. Use a model available to your account, not an assumed model from a tutorial.
 
