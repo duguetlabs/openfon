@@ -1,4 +1,5 @@
 import type { Hono } from 'hono';
+import { readWorkspaceBody } from './request-validation';
 import { newId } from './auth';
 import { chatComplete, LlmConfigError, resolveLlm, sameLlmEndpoint, validateLlmBaseUrl } from './providers';
 import type {
@@ -821,6 +822,18 @@ function decodeCursor(raw: string | undefined): [string, string] | null {
   }
 }
 
+async function knowledgePage(env: Env, collectionId: string, rawCursor?: string) {
+  const decoded = rawCursor ? decodeCursor(rawCursor) : null;
+  const position = decoded?.[0].split('|');
+  if (rawCursor && (rawCursor.length > 2048 || !decoded || position?.length !== 2 || !['active','draft'].includes(position[0]) || !position[1] || !decoded[1])) return null;
+  const query = env.DB.prepare(`SELECT * FROM knowledge_items WHERE collection_id=?
+    ${decoded ? 'AND (status,created_at,id) > (?,?,?)' : ''}
+    ORDER BY status,created_at,id LIMIT 21`);
+  const { results } = await (decoded ? query.bind(collectionId, position![0], position![1], decoded[1]) : query.bind(collectionId)).all<KnowledgeItem>();
+  const items = results.slice(0,20); const last = items[items.length - 1];
+  return { items, nextCursor: results.length > 20 && last ? encodeCursor(`${last.status}|${last.created_at}`, last.id) : null };
+}
+
 function likeTerm(value: string): string {
   return `%${value.replace(/[\\%_]/g, '\\$&')}%`;
 }
@@ -937,7 +950,7 @@ export function registerStudioApi(app: StudioApp): void {
   app.post('/api/me/assistants', async (c) => {
     const workspace = await workspaceForUser(c.env, c.get('userId'));
     if (!workspace) return c.json({ error: 'Create a workspace first' }, 409);
-    const body = await c.req.json<Partial<Assistant>>();
+    const body = await readWorkspaceBody<Partial<Omit<Assistant, 'take_messages'>> & { take_messages?: number | boolean }>(c.req);
     if (
       (body.name !== undefined && !body.name.trim()) ||
       (body.persona !== undefined && !body.persona.trim()) ||
@@ -963,7 +976,7 @@ export function registerStudioApi(app: StudioApp): void {
         body.persona?.trim() || 'friendly and professional',
         body.language?.trim() || 'en',
         body.voice ?? '',
-        body.take_messages === 0 ? 0 : 1,
+        body.take_messages === 0 || body.take_messages === false ? 0 : 1,
         body.custom_instructions ?? '',
         body.engine === 'realtime' ? 'realtime' : 'pipeline',
         body.realtime_model ?? '',
@@ -994,7 +1007,7 @@ export function registerStudioApi(app: StudioApp): void {
   app.put('/api/me/assistants/:assistantId', async (c) => {
     const assistant = await ownedAssistant(c.env, c.get('userId'), c.req.param('assistantId'));
     if (!assistant) return c.json({ error: 'Not found' }, 404);
-    const body = await c.req.json<Partial<Assistant>>();
+    const body = await readWorkspaceBody<Partial<Omit<Assistant, 'take_messages'>> & { take_messages?: number | boolean }>(c.req);
     if (
       (body.name !== undefined && !body.name.trim()) ||
       (body.persona !== undefined && !body.persona.trim()) ||
@@ -1188,6 +1201,19 @@ export function registerStudioApi(app: StudioApp): void {
     return c.json({ callId, assistantId: assistant.id, environment: 'test' }, 201);
   });
 
+  // Cancellation only retires an unused, owner-authenticated test ticket. The
+  // DELETE races atomically with the socket's connected_at claim: whichever
+  // wins makes the other a no-op, without terminating an established call.
+  app.delete('/api/me/test-calls/:callId', async (c) => {
+    await c.env.DB.prepare(
+      `DELETE FROM calls WHERE id=? AND environment='test' AND channel='web'
+         AND status='active' AND connected_at IS NULL
+         AND business_id IN (SELECT id FROM businesses WHERE user_id=?)`
+    ).bind(c.req.param('callId'), c.get('userId')).run();
+    // Idempotent and opaque for unknown, foreign, live, or already-used tickets.
+    return c.json({ ok: true });
+  });
+
   app.get('/api/me/calls', async (c) => {
     const workspace = await workspaceForUser(c.env, c.get('userId'));
     if (!workspace) return c.json({ items: [], nextCursor: null });
@@ -1269,7 +1295,7 @@ export function registerStudioApi(app: StudioApp): void {
     const [metrics, recent] = await Promise.all([
       c.env.DB.prepare(
         `SELECT
-          COUNT(*) AS total,
+          COALESCE(SUM(CASE WHEN connected_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS total,
           COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed,
           COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed,
           COALESCE(SUM(CASE
@@ -1320,7 +1346,7 @@ export function registerStudioApi(app: StudioApp): void {
   app.post('/api/me/knowledge/collections', async (c) => {
     const workspace = await workspaceForUser(c.env, c.get('userId'));
     if (!workspace) return c.json({ error: 'Create a workspace first' }, 409);
-    const body = await c.req.json<{ name?: string; description?: string }>();
+    const body = await readWorkspaceBody<{ name?: string; description?: string }>(c.req);
     if (!body.name?.trim()) return c.json({ error: 'Collection name required' }, 400);
     const duplicate = await c.env.DB.prepare('SELECT id FROM knowledge_collections WHERE business_id = ? AND name = ?')
       .bind(workspace.id, body.name.trim())
@@ -1339,11 +1365,8 @@ export function registerStudioApi(app: StudioApp): void {
   app.get('/api/me/knowledge/collections/:collectionId', async (c) => {
     const collection = await ownedCollection(c.env, c.get('userId'), c.req.param('collectionId'));
     if (!collection) return c.json({ error: 'Not found' }, 404);
-    const { results: items } = await c.env.DB.prepare(
-      'SELECT * FROM knowledge_items WHERE collection_id = ? ORDER BY status, created_at, id'
-    )
-      .bind(collection.id)
-      .all();
+    const page = await knowledgePage(c.env, collection.id, c.req.query('cursor'));
+    if (!page) return c.json({ error: 'Invalid knowledge cursor' }, 400);
     const { results: assistants } = await c.env.DB.prepare(
       `SELECT assistants.id, assistants.name, assistants.state FROM assistants
         JOIN assistant_knowledge_collections ON assistant_knowledge_collections.assistant_id = assistants.id
@@ -1351,13 +1374,13 @@ export function registerStudioApi(app: StudioApp): void {
     )
       .bind(collection.id)
       .all();
-    return c.json({ ...collection, items, assistants });
+    return c.json({ ...collection, ...page, assistants });
   });
 
   app.put('/api/me/knowledge/collections/:collectionId', async (c) => {
     const collection = await ownedCollection(c.env, c.get('userId'), c.req.param('collectionId'));
     if (!collection) return c.json({ error: 'Not found' }, 404);
-    const body = await c.req.json<{ name?: string; description?: string }>();
+    const body = await readWorkspaceBody<{ name?: string; description?: string }>(c.req);
     const name = body.name?.trim() || collection.name;
     const duplicate = await c.env.DB.prepare(
       'SELECT id FROM knowledge_collections WHERE business_id = ? AND name = ? AND id != ?'
@@ -1384,18 +1407,16 @@ export function registerStudioApi(app: StudioApp): void {
   app.get('/api/me/knowledge/collections/:collectionId/items', async (c) => {
     const collection = await ownedCollection(c.env, c.get('userId'), c.req.param('collectionId'));
     if (!collection) return c.json({ error: 'Not found' }, 404);
-    const { results } = await c.env.DB.prepare(
-      'SELECT * FROM knowledge_items WHERE collection_id = ? ORDER BY status, created_at, id'
-    )
-      .bind(collection.id)
-      .all();
-    return c.json(results);
+    const page = await knowledgePage(c.env, collection.id, c.req.query('cursor'));
+    if (!page) return c.json({ error: 'Invalid knowledge cursor' }, 400);
+    if (page.nextCursor) c.header('X-Next-Cursor', page.nextCursor);
+    return c.json(page.items);
   });
 
   app.post('/api/me/knowledge/collections/:collectionId/items', async (c) => {
     const collection = await ownedCollection(c.env, c.get('userId'), c.req.param('collectionId'));
     if (!collection) return c.json({ error: 'Not found' }, 404);
-    const body = await c.req.json<Partial<KnowledgeItem>>();
+    const body = await readWorkspaceBody<Partial<KnowledgeItem>>(c.req);
     const kind = normalizedKind(body.kind);
     if (!kind) return c.json({ error: 'Knowledge kind must be faq, service, or note' }, 400);
     const candidate = {
@@ -1438,7 +1459,7 @@ export function registerStudioApi(app: StudioApp): void {
   app.put('/api/me/knowledge/items/:itemId', async (c) => {
     const item = await ownedItem(c.env, c.get('userId'), c.req.param('itemId'));
     if (!item) return c.json({ error: 'Not found' }, 404);
-    const body = await c.req.json<Partial<KnowledgeItem>>();
+    const body = await readWorkspaceBody<Partial<KnowledgeItem>>(c.req);
     let collectionId = body.collection_id ?? item.collection_id;
     if (collectionId !== item.collection_id) {
       const collection = await ownedCollection(c.env, c.get('userId'), collectionId);
@@ -1484,7 +1505,7 @@ export function registerStudioApi(app: StudioApp): void {
   });
 
   app.post('/api/me/knowledge/drafts/from-turn', async (c) => {
-    const body = await c.req.json<{ callId?: string; turnId?: number; collectionId?: string }>();
+    const body = await readWorkspaceBody<{ callId?: string; turnId?: number; collectionId?: string }>(c.req);
     if (!body.callId || !Number.isInteger(body.turnId)) return c.json({ error: 'Call and caller turn required' }, 400);
     const workspace = await workspaceForUser(c.env, c.get('userId'));
     if (!workspace) return c.json({ error: 'Not found' }, 404);
@@ -1565,7 +1586,7 @@ export function registerStudioApi(app: StudioApp): void {
     const current = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
       .bind(workspace.id)
       .first<ProviderSettings>();
-    const body = await c.req.json<{ baseUrl?: string; apiKey?: string | null; clearApiKey?: boolean }>();
+    const body = await readWorkspaceBody<{ baseUrl?: string; apiKey?: string | null; clearApiKey?: boolean }>(c.req);
     if (body.clearApiKey !== undefined && typeof body.clearApiKey !== 'boolean') {
       return c.json({ error: 'clearApiKey must be a boolean' }, 400);
     }
@@ -1613,7 +1634,7 @@ export function registerStudioApi(app: StudioApp): void {
   app.post('/api/me/provider/check', async (c) => {
     const workspace = await workspaceForUser(c.env, c.get('userId'));
     if (!workspace) return c.json({ error: 'Create a workspace first' }, 409);
-    const body: { assistantId?: string } = await c.req.json<{ assistantId?: string }>().catch(() => ({}));
+    const body: { assistantId?: string } = await readWorkspaceBody<{ assistantId?: string }>(c.req, true);
     let assistant: Assistant | null = null;
     if (body.assistantId) assistant = await ownedAssistant(c.env, c.get('userId'), body.assistantId);
     else {
@@ -1735,7 +1756,7 @@ export function registerStudioApi(app: StudioApp): void {
   app.post('/api/me/engine-presets', async (c) => {
     const workspace = await workspaceForUser(c.env, c.get('userId'));
     if (!workspace) return c.json({ error: 'Create a workspace first' }, 409);
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await readWorkspaceBody<Record<string, unknown>>(c.req);
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name) return c.json({ error: 'Preset name required' }, 400);
     const id = newId();
@@ -1778,7 +1799,7 @@ export function registerStudioApi(app: StudioApp): void {
   });
 
   app.post('/api/me/engine-presets/:presetId/apply', async (c) => {
-    const body = await c.req.json<{ assistantId?: string }>();
+    const body = await readWorkspaceBody<{ assistantId?: string }>(c.req);
     if (!body.assistantId) return c.json({ error: 'Assistant id required' }, 400);
     const assistant = await ownedAssistant(c.env, c.get('userId'), body.assistantId);
     const preset = await c.env.DB.prepare(
@@ -1834,7 +1855,7 @@ export function registerStudioApi(app: StudioApp): void {
       .bind(c.req.param('presetId'), c.get('userId'))
       .first<Record<string, string>>();
     if (!preset) return c.json({ error: 'Not found' }, 404);
-    const body = await c.req.json<Record<string, unknown>>();
+    const body = await readWorkspaceBody<Record<string, unknown>>(c.req);
     const value = (key: string) => (typeof body[key] === 'string' ? body[key] as string : preset[key]);
     const name = value('name').trim() || preset.name;
     const engine = body.engine === 'realtime' ? 'realtime' : body.engine === 'pipeline' ? 'pipeline' : preset.engine;

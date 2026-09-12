@@ -45,6 +45,7 @@ export class VoiceCall {
   private ttsMode: 'server' | 'browser' = 'browser';
   private mimeType = 'audio/webm';
   private player: HTMLAudioElement | null = null;
+  private playerUrl: string | null = null;
   private listeners: Listener[] = [];
   ended = false;
   // realtime engine mode: continuous streaming, server-side VAD, barge-in
@@ -78,6 +79,13 @@ export class VoiceCall {
     }
     const { callId } = (await res.json()) as { callId: string };
 
+    await this.connect(callId);
+  }
+
+  /** Connect an authenticated test reservation or a public call. */
+  async connect(callId: string): Promise<void> {
+    if (this.ended) return;
+    this.emit({ type: 'status', status: 'connecting' });
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -86,12 +94,26 @@ export class VoiceCall {
       this.stream = null; // mic denied -> text-only mode still works
     }
 
+    // A user may cancel while the browser is waiting for microphone permission.
+    if (this.ended) {
+      this.stream?.getTracks().forEach((track) => track.stop());
+      this.stream = null;
+      return;
+    }
+
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${proto}://${location.host}/ws/call/${callId}`);
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(`${proto}://${location.host}/ws/call/${callId}`);
+    } catch (error) {
+      this.teardown('ended');
+      throw error;
+    }
     ws.binaryType = 'arraybuffer';
     this.ws = ws;
 
     ws.onopen = () => {
+      if (this.ended) return;
       ws.send(JSON.stringify({ type: 'start' }));
       // Cloudflare drops WebSockets idle for ~100 s; pipeline-mode calls go
       // silent between utterances, so keep the line warm.
@@ -99,75 +121,88 @@ export class VoiceCall {
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }));
       }, 20_000);
     };
-    ws.onerror = () => this.emit({ type: 'status', status: 'error', detail: 'Connection failed' });
+    ws.onerror = () => {
+      if (this.ended) return;
+      this.emit({ type: 'status', status: 'error', detail: 'Connection failed' });
+      this.teardown('ended');
+    };
     ws.onclose = () => {
       if (!this.ended) this.teardown('ended');
     };
     ws.onmessage = (ev) => {
-      if (typeof ev.data !== 'string') {
-        if (this.mode === 'realtime') this.playPcm(ev.data as ArrayBuffer);
-        else this.playAudio(ev.data as ArrayBuffer);
-        return;
-      }
-      const msg = JSON.parse(ev.data) as {
-        type: string;
-        text?: string;
-        greeting?: string;
-        ttsMode?: string;
-        message?: string;
-        mode?: string;
-        who?: 'caller' | 'agent' | 'none';
-        engine?: string;
-      };
-      switch (msg.type) {
-        case 'ready':
-          this.mode = msg.mode === 'realtime' ? 'realtime' : 'pipeline';
-          this.ttsMode = msg.ttsMode === 'server' ? 'server' : 'browser';
-          this.emit({ type: 'status', status: 'live' });
-          if (msg.engine) this.emit({ type: 'engine', label: msg.engine });
-          if (msg.greeting) {
-            this.emit({ type: 'agent_text', text: msg.greeting });
-            if (this.ttsMode === 'browser') this.speakLocally(msg.greeting);
-          }
-          if (this.stream) {
-            if (this.mode === 'realtime') this.startRealtimeCapture();
-            else this.startVad();
-          }
-          break;
-        case 'flush': // barge-in: stop agent playback immediately
-          this.flushPlayback();
-          break;
-        case 'ending': // agent is hanging up: let the goodbye finish, then end
-          this.hangupWhenDone = true;
-          if (!this.agentSpeaking && this.liveSources.size === 0) {
-            setTimeout(() => this.hangup(), 1200);
-          }
-          break;
-        case 'speaking':
-          if (msg.who) this.emit({ type: 'speaking', who: msg.who });
-          break;
-        case 'transcript':
-          this.emit({ type: 'transcript', text: msg.text ?? '' });
-          break;
-        case 'thinking':
-          this.emit({ type: 'thinking' });
-          break;
-        case 'agent_text':
-          this.emit({ type: 'agent_text', text: msg.text ?? '' });
-          if (this.ttsMode === 'browser' && msg.text) this.speakLocally(msg.text);
-          break;
-        case 'error':
-          this.emit({ type: 'status', status: 'error', detail: msg.message });
-          break;
-        case 'ended':
-          this.teardown('ended');
-          break;
+      if (this.ended) return;
+      try {
+        if (typeof ev.data !== 'string') {
+          if (this.mode === 'realtime') this.playPcm(ev.data as ArrayBuffer);
+          else this.playAudio(ev.data as ArrayBuffer);
+          return;
+        }
+        const msg = JSON.parse(ev.data) as {
+          type: string;
+          text?: string;
+          greeting?: string;
+          ttsMode?: string;
+          message?: string;
+          mode?: string;
+          who?: 'caller' | 'agent' | 'none';
+          engine?: string;
+        };
+        switch (msg.type) {
+          case 'ready':
+            this.mode = msg.mode === 'realtime' ? 'realtime' : 'pipeline';
+            this.ttsMode = msg.ttsMode === 'server' ? 'server' : 'browser';
+            this.emit({ type: 'status', status: 'live' });
+            if (msg.engine) this.emit({ type: 'engine', label: msg.engine });
+            if (msg.greeting) {
+              this.emit({ type: 'agent_text', text: msg.greeting });
+              if (this.ttsMode === 'browser') this.speakLocally(msg.greeting);
+            }
+            if (this.stream) {
+              if (this.mode === 'realtime') this.startRealtimeCapture();
+              else this.startVad();
+            }
+            break;
+          case 'flush': // barge-in: stop agent playback immediately
+            this.flushPlayback();
+            break;
+          case 'ending': // agent is hanging up: let the goodbye finish, then end
+            this.hangupWhenDone = true;
+            if (!this.agentSpeaking && this.liveSources.size === 0) {
+              setTimeout(() => this.hangup(), 1200);
+            }
+            break;
+          case 'speaking':
+            if (msg.who) this.emit({ type: 'speaking', who: msg.who });
+            break;
+          case 'transcript':
+            this.emit({ type: 'transcript', text: msg.text ?? '' });
+            break;
+          case 'thinking':
+            this.emit({ type: 'thinking' });
+            break;
+          case 'agent_text':
+            this.emit({ type: 'agent_text', text: msg.text ?? '' });
+            if (this.ttsMode === 'browser' && msg.text) this.speakLocally(msg.text);
+            break;
+          case 'error':
+            this.emit({ type: 'status', status: 'error', detail: msg.message });
+            this.teardown('ended');
+            break;
+          case 'ended':
+            this.teardown('ended');
+            break;
+        }
+      } catch {
+        this.emit({ type: 'status', status: 'error', detail: 'Could not process call audio. Please try again.' });
+        this.teardown('ended');
       }
     };
   }
 
   sendText(text: string): void {
-    this.ws?.send(JSON.stringify({ type: 'text', text }));
+    if (!this.ended && this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'text', text }));
+    }
   }
 
   hangup(): void {
@@ -249,9 +284,13 @@ export class VoiceCall {
   private async shipUtterance(): Promise<void> {
     const blob = new Blob(this.chunks, { type: this.mimeType });
     this.chunks = [];
-    if (blob.size < 1200 || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-    this.ws.send(JSON.stringify({ type: 'meta', contentType: this.mimeType }));
-    this.ws.send(await blob.arrayBuffer());
+    const ws = this.ws;
+    if (blob.size < 1200 || this.ended || !ws || ws.readyState !== WebSocket.OPEN) return;
+    const audio = await blob.arrayBuffer();
+    // Blob conversion yields: hangup may close the socket in the meantime.
+    if (this.ended || this.ws !== ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'meta', contentType: this.mimeType }));
+    ws.send(audio);
   }
 
   // ---- realtime engine: continuous capture + streamed PCM playback ----
@@ -335,17 +374,34 @@ export class VoiceCall {
 
   // ---- agent audio playback ----
   private playAudio(buf: ArrayBuffer): void {
+    this.releasePlayer();
     this.agentSpeaking = true;
     this.emit({ type: 'speaking', who: 'agent' });
     const url = URL.createObjectURL(new Blob([buf], { type: 'audio/mpeg' }));
+    this.playerUrl = url;
     this.player = new Audio(url);
     this.player.onended = this.player.onerror = () => {
-      URL.revokeObjectURL(url);
+      this.releasePlayer();
       this.agentSpeaking = false;
       this.emit({ type: 'speaking', who: 'none' });
       if (this.hangupWhenDone) setTimeout(() => this.hangup(), 600);
     };
-    void this.player.play();
+    void this.player.play().catch(() => {
+      if (this.playerUrl !== url) return;
+      this.releasePlayer();
+      this.agentSpeaking = false;
+      this.emit({ type: 'speaking', who: 'none' });
+    });
+  }
+
+  private releasePlayer(): void {
+    if (this.player) {
+      this.player.onended = this.player.onerror = null;
+      this.player.pause();
+      this.player = null;
+    }
+    if (this.playerUrl) URL.revokeObjectURL(this.playerUrl);
+    this.playerUrl = null;
   }
 
   private speakLocally(text: string): void {
@@ -353,6 +409,7 @@ export class VoiceCall {
     this.emit({ type: 'speaking', who: 'agent' });
     const u = new SpeechSynthesisUtterance(text);
     u.onend = u.onerror = () => {
+      if (this.ended) return;
       this.agentSpeaking = false;
       this.emit({ type: 'speaking', who: 'none' });
       if (this.hangupWhenDone) setTimeout(() => this.hangup(), 600);
@@ -365,19 +422,28 @@ export class VoiceCall {
     this.ended = true;
     if (this.vadTimer) clearInterval(this.vadTimer);
     if (this.pingTimer) clearInterval(this.pingTimer);
+    if (this.recorder) {
+      this.recorder.ondataavailable = null;
+      this.recorder.onstop = null;
+    }
     try {
       this.recorder?.state !== 'inactive' && this.recorder?.stop();
     } catch {
       /* noop */
     }
     this.stream?.getTracks().forEach((t) => t.stop());
+    this.stream = null;
+    this.chunks = [];
     void this.audioCtx?.close();
     this.flushPlayback();
     this.processor?.disconnect();
     void this.captureCtx?.close();
     void this.playCtx?.close();
-    this.player?.pause();
+    this.releasePlayer();
     speechSynthesis.cancel();
+    if (this.ws) {
+      this.ws.onopen = this.ws.onclose = this.ws.onerror = this.ws.onmessage = null;
+    }
     try {
       this.ws?.close();
     } catch {

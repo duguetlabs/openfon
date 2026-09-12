@@ -117,49 +117,42 @@ const SERVER_VAD: TurnDetection = { type: 'server_vad', threshold: 0.7, prefix_p
 // update.
 type SessionConfig = Record<string, unknown>;
 
-// The trade, so it does not get re-litigated from half the evidence — all of it
-// in docs/research/realtime-latency-2026-08.md § "Follow-up: is the splitting
-// the brain or the turn detector?":
+// Evidence: docs/research/realtime-latency-2026-08.md and
+// docs/research/realtime-21-2026-08.md. Evaluate observed tail latency as well
+// as medians before changing a detector; a null median does not establish
+// equivalent latency distributions.
 //
-//   * `server_vad` splits a caller's utterance at a clause pause on
-//     gpt-realtime tiers — 10 of 10 turns, against 0 of 10 for the same brain
-//     and serving stack on a semantic detector (exact McNemar p = 0.00195).
-//     Inaudibly: the fragment's response is cancelled before any audio goes
-//     out, so the caller hears nothing and the model answers a sentence
-//     fragment as a complete turn, billing a discarded response each time.
-//   * OpenAI's `semantic_vad` fixes that and costs too much for a phone call:
-//     end-of-turn p50 1189 ms against server VAD's 736, and a **p90 of
-//     4512 ms**. The engine-only delta is −87 ms and null, so the whole penalty
-//     is the detector deciding, not the model thinking.
-//   * Azure's semantic detector is genuinely free — 707 ms p50, the tightest
-//     spread of any arm measured, 0/10 splits. It is only reachable through
-//     Voice Live, and Kataleptic exposes no tier that pairs Voice Live with a
-//     gpt-realtime brain. That combination is the actual fix and it is not
-//     currently purchasable.
+// In the 72-turn split experiment, gpt-realtime-2, 2.1, and 2.1-mini each split
+// 12/12 clause-pause utterances under server VAD, versus HD's 0/12. Cancelled
+// fragment responses consume provider work even when callers hear no audio.
+// OpenAI semantic VAD eliminated observed splits on 2 and 2.1, but only reduced
+// mini to 4/12. It is a mitigation on mini, not a demonstrated fix.
 //
-// So: the splitting is real and stays, because every available remedy is worse
-// than the defect. Revisit when a Voice Live + gpt-realtime tier exists.
-// Two detectors with opposite latency profiles both get called "semantic VAD";
-// collapsing them is how this nearly shipped the 4.5 s tail.
+// OpenAI semantic VAD also produced multi-second observed end-of-turn tails:
+// speech_stopped_ms p90 was 4512 ms on 2 and 4442 ms on 2.1. Both measured tails
+// are undesirable for this application. These unmatched samples (n=10 and 20)
+// do not establish equivalence or independence from the underlying model.
 //
-// The whole gpt-realtime family behaves the same way, so none of this is
-// specific to one model id (72-turn run, all controls verified): 2, 2.1 and
-// 2.1-mini all split **12/12** under `server_vad`, against HD's 0/12. Semantic
-// VAD takes 2.1 to 0/12 (Holm p = 0.00293) but only takes **2.1-mini to 4/12**
-// (Holm p = 0.02344) — still one turn in three, with the detector confirmed
-// echoed back on all 12. On mini the semantic detector is a mitigation, not a
-// fix, which counts against that tier as a default on its own, before latency
-// is even considered.
+// Azure semantic VAD is a separate detector. The later Voice Live arms showed
+// narrow observed distributions (end-of-turn p50 731-732 ms, p90 738-785 ms)
+// and 0/12 observed splits with gpt-realtime. These small samples do not rule
+// out rare tails. At the time of those measurements, the gateway offered no
+// Voice Live tier pairing this detector with a gpt-realtime brain. Recheck
+// availability and measure tail latency before adopting that configuration.
+//
+// Keep the tuned server detector: its observed splitting is currently preferred
+// to OpenAI semantic VAD's measured latency cost. The session echo verification
+// below is required to confirm that the provider actually applied the choice.
 const TURN_DETECTION_BY_TIER: Record<string, TurnDetection> = {
   // Splits 12/12 under server_vad. Left on it anyway — see the trade above.
   'gpt-realtime-2': SERVER_VAD,
-  // 12/12 too, and semantic VAD would take it to 0/12 — the one tier where the
-  // detector is a clean fix. Still server VAD pending the latency block: if 2.1
-  // carries gpt-realtime-2's 4512 ms p90 end-of-turn tail, fixing the splitting
-  // does not pay for it. One line to flip when those numbers land.
+  // Semantic VAD eliminated observed splits (12/12 -> 0/12), but the paired
+  // TTFA median +106 ms hid a p90 +3490 ms (n=20). End-of-turn p90 was 4442 ms
+  // versus server VAD's 805 ms. Retain server VAD based on that observed tail;
+  // the null median alone is not evidence that semantic VAD is cheap.
   'gpt-realtime-2.1': SERVER_VAD,
-  // 12/12, and semantic VAD only gets it to 4/12. Nothing available fixes this
-  // tier, so the detector choice is not what decides it.
+  // Semantic VAD left 4/12 splits and measured TTFA p90 5123 ms. It did not
+  // eliminate splitting in this sample, and it added an undesirable tail.
   'gpt-realtime-2.1-mini': SERVER_VAD,
   // Does not split (0/10), and semantic VAD measured *worse* on this brain
   // (strict success 0.333 -> 0.259, pass^3 0.222 -> 0.111, TTFA p95 +133 ms;
@@ -909,7 +902,9 @@ export class CallSession implements DurableObject {
   // 33 goodbye turns per engine, the agent invoked `end_call` on 23-25 of them,
   // with no meaningful spread between engines — and on one scenario it fired
   // 1 time in 15 after capturing every detail correctly
-  // (docs/research/voice-engine-quality-2026-08.md, Track B).
+  // (docs/research/voice-engine-quality-2026-08.md, scoring-defects section).
+  // Track B counts only the 9 scored scenarios (17-19/27); the 23-25/33
+  // figure includes every goodbye turn. These are different denominators.
   //
   // So the caller-farewell heuristic and the hangup safety net below are not
   // belt-and-braces. They are the primary mechanism on roughly a quarter of

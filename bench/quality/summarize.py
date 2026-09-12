@@ -67,9 +67,10 @@ def strict_num(v, field: str, key: tuple) -> float:
     (`slots_all_heard`) silently turns corrupt data into a pass.
     """
     out = num(v)
-    if out is None:
-        sys.exit(f"{'/'.join(map(str, key))}: {field}={v!r} is not numeric — "
-                 f"refusing to guess whether that is a pass or a fail")
+    if out is None or not math.isfinite(out):
+        sys.exit(f"{'/'.join(map(str, key))}: {field}={v!r} is not numeric "
+                 "(a finite number is required) — refusing to guess whether "
+                 "that is a pass or a fail")
     return out
 
 

@@ -1,3 +1,10 @@
+export interface AccountExport {
+  schemaVersion: number;
+  exportedAt: string;
+  account: { id: string; email: string; created_at: string };
+  data: Record<string, Array<Record<string, unknown>>>;
+}
+
 export interface Me {
   id: string;
   email: string;
@@ -248,9 +255,10 @@ export class ApiError extends Error {
   }
 }
 
-async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function req<T>(method: string, path: string, body?: unknown, keepalive = false): Promise<T> {
   const res = await fetch(path, {
     method,
+    keepalive,
     headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -260,6 +268,9 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 }
 
 export const api = {
+  changePassword: (body: { currentPassword: string; newPassword: string }) => req<{ ok: true }>('POST', '/api/me/account/password', body),
+  exportAccount: () => req<AccountExport>('GET', '/api/me/account/export'),
+  deleteAccount: (body: { currentPassword: string; confirmation: 'DELETE' }) => req<{ ok: true }>('DELETE', '/api/me/account', body),
   me: () => req<Me>('GET', '/api/me'),
   signup: (email: string, password: string) => req<Me>('POST', '/api/auth/signup', { email, password }),
   login: (email: string, password: string) => req<Me>('POST', '/api/auth/login', { email, password }),
@@ -278,11 +289,12 @@ export const api = {
   updateAssistant: (id: string, assistant: Partial<Assistant>) => req<Assistant>('PUT', `/api/me/assistants/${id}`, assistant),
   activateAssistant: (id: string) => req<{ ok: true; state: 'active' }>('POST', `/api/me/assistants/${id}/activate`, {}),
   pauseAssistant: (id: string) => req<{ ok: true; state: 'paused' }>('POST', `/api/me/assistants/${id}/pause`, {}),
+  cancelTestCall: (id: string) => req<{ ok: true }>('DELETE', `/api/me/test-calls/${encodeURIComponent(id)}`, undefined, true),
   startTestCall: (id: string) => req<{ callId: string; assistantId: string; environment: 'test' }>('POST', `/api/me/assistants/${id}/test-calls`, {}),
   callPage: (params: URLSearchParams) => req<CallsPage>('GET', `/api/me/calls?${params.toString()}`),
   overview: (days: 7 | 30 | 90 = 30) => req<OverviewResponse>('GET', `/api/me/overview?days=${days}`),
   knowledgeCollections: () => req<KnowledgeCollection[]>('GET', '/api/me/knowledge/collections'),
-  knowledgeCollection: (id: string) => req<KnowledgeCollection & { items: KnowledgeItem[]; assistants: Assistant[] }>('GET', `/api/me/knowledge/collections/${id}`),
+  knowledgeCollection: (id: string, cursor?: string) => req<KnowledgeCollection & { items: KnowledgeItem[]; nextCursor: string | null; assistants: Assistant[] }>('GET', `/api/me/knowledge/collections/${id}${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
   createKnowledgeCollection: (body: Pick<KnowledgeCollection, 'name' | 'description'>) => req<KnowledgeCollection>('POST', '/api/me/knowledge/collections', body),
   updateKnowledgeCollection: (id: string, body: Partial<Pick<KnowledgeCollection, 'name' | 'description'>>) => req<{ ok: true }>('PUT', `/api/me/knowledge/collections/${id}`, body),
   deleteKnowledgeCollection: (id: string) => req<{ ok: true }>('DELETE', `/api/me/knowledge/collections/${id}`),

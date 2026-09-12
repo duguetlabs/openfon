@@ -1,12 +1,13 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useSession } from '../App';
 import { authSubmissionBlocked, SIGN_OUT_PENDING_MESSAGE } from '../session-load';
 import { Button, Field, Logo } from '../ui';
 
 export default function AuthPage() {
-  const [mode, setMode] = useState<'login' | 'signup'>('signup');
+  const [params] = useSearchParams();
+  const [mode, setMode] = useState<'login' | 'signup'>(params.get('mode') === 'login' ? 'login' : 'signup');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -19,13 +20,13 @@ export default function AuthPage() {
     e.preventDefault();
     // Native disabled controls stop user input, while this guard also covers a
     // programmatic submission during pending or unconfirmed server sign-out.
-    if (authSubmissionBlocked(signOutPending, Boolean(signOutWarning))) return;
+    if (busy || authSubmissionBlocked(signOutPending, Boolean(signOutWarning))) return;
     setBusy(true);
     setError('');
     try {
       await (mode === 'signup' ? api.signup(email, password) : api.login(email, password));
       await refresh();
-      nav('/');
+      nav('/overview');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
@@ -34,9 +35,9 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-base md:flex-row">
+    <div className="studio-theme auth-layout flex min-h-screen flex-col bg-base md:flex-row">
       {/* brand panel */}
-      <div className="relative flex flex-col justify-between overflow-hidden bg-midnight p-8 text-white md:w-[44%] md:p-12">
+      <div className="auth-brand relative flex flex-col justify-between overflow-hidden bg-midnight p-8 text-white md:w-[44%] md:p-12">
         {/* atmosphere: iris + rose glow on midnight */}
         <div
           className="pointer-events-none absolute inset-0"
@@ -66,19 +67,19 @@ export default function AuthPage() {
         </div>
         <div className="relative py-16 md:py-0">
           <h1 className="rise rise-1 font-display text-4xl font-semibold leading-[1.05] tracking-tight md:text-6xl">
-            Your phone,
+            A voice for
             <br />
-            <em className="not-italic text-[#B5A8F5]">answered.</em>
+            <em className="not-italic text-[#B5A8F5]">your business.</em>
             <br />
-            Always.
+            On your terms.
           </h1>
           <p className="rise rise-2 mt-6 max-w-sm text-sm leading-relaxed text-white/65">
-            OpenFon is an open-source AI receptionist for small businesses. It answers calls, takes
-            messages, and books appointments — while you do the actual work.
+            Build a browser voice assistant, test its answers, and review every conversation.
+            OpenFon can take messages and capture booking requests for your team to follow up.
           </p>
         </div>
         <p className="rise rise-3 relative font-mono text-xs text-white/40">
-          self-hosted · MIT licensed · no per-seat pricing
+          open source · self-hosted · MIT licensed
         </p>
       </div>
 
@@ -116,24 +117,25 @@ export default function AuthPage() {
             </p>
           )}
           <fieldset
-            disabled={authLocked}
-            aria-busy={signOutPending}
+            disabled={authLocked || busy}
+            aria-busy={signOutPending || busy}
             aria-describedby={signOutPending ? 'sign-out-pending-status' : undefined}
             className="m-0 min-w-0 border-0 p-0 transition-opacity disabled:cursor-wait disabled:opacity-60"
           >
             <div className="rounded-2xl border border-line bg-surface p-7 shadow-raise sm:p-8">
               <div className="mb-6">
                 <h2 className="font-display text-3xl font-semibold tracking-tight text-ink">
-                  {mode === 'signup' ? 'Set up your line' : 'Welcome back'}
+                  {mode === 'signup' ? 'Create your workspace' : 'Welcome back'}
                 </h2>
                 <p className="mt-1.5 text-sm text-ink-soft">
-                  {mode === 'signup' ? 'Free, on your own infrastructure.' : 'Sign in to your dashboard.'}
+                  {mode === 'signup' ? 'Create an account on this OpenFon instance.' : 'Sign in to your OpenFon workspace.'}
                 </p>
               </div>
               <div className="space-y-4">
                 <Field
                   label="Email"
                   type="email"
+                  autoComplete="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -144,12 +146,14 @@ export default function AuthPage() {
                   type="password"
                   required
                   minLength={8}
+                  maxLength={1024}
+                  autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="At least 8 characters"
                 />
                 {error && (
-                  <p className="rounded-[10px] border border-rose/20 bg-wash-rose px-3 py-2 text-sm text-rose">
+                  <p role="alert" className="rounded-[10px] border border-rose/20 bg-wash-rose px-3 py-2 text-sm text-rose">
                     {error}
                   </p>
                 )}
@@ -164,13 +168,15 @@ export default function AuthPage() {
             <button
               type="button"
               className="font-semibold text-iris underline decoration-iris/30 underline-offset-2 hover:decoration-iris disabled:cursor-wait disabled:opacity-60"
-              disabled={authLocked}
+              disabled={authLocked || busy}
               aria-describedby={signOutPending ? 'sign-out-pending-status' : undefined}
-              onClick={() => setMode(mode === 'signup' ? 'login' : 'signup')}
+              onClick={() => { setError(''); setMode(mode === 'signup' ? 'login' : 'signup'); }}
             >
               {mode === 'signup' ? 'Sign in' : 'Create one'}
             </button>
           </p>
+          <p className="mt-6 text-center text-xs leading-relaxed text-ink-soft">This account belongs to the instance you are visiting. Hosting and AI provider costs are managed by its operator.</p>
+          <Link to="/" className="mt-5 block text-center text-sm font-semibold text-iris">← Back to OpenFon</Link>
         </form>
       </div>
     </div>

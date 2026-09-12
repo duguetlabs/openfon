@@ -665,12 +665,15 @@ describe('realtime session payload', () => {
     expect(await turnDetection('gpt-realtime-2')).toEqual(TUNED_SERVER_VAD);
   });
 
-  it('keeps the 2.1 tiers on server VAD too', async () => {
-    // Both split 12/12 under server_vad, exactly like gpt-realtime-2. Semantic
-    // VAD would take 2.1 to 0/12 but only takes 2.1-mini to 4/12 — a mitigation
-    // rather than a fix on mini, and on 2.1 still subject to the same
-    // end-of-turn tail that rules it out on gpt-realtime-2.
+  it('keeps 2.1 on server VAD given the observed semantic detector tail', async () => {
+    // A null paired median (+106 ms) did not exclude a measured TTFA p90
+    // increase of 3490 ms in 20 pairs. This pins the configured detector;
+    // it does not test a latency distribution or prove model equivalence.
     expect(await turnDetection('gpt-realtime-2.1')).toEqual(TUNED_SERVER_VAD);
+  });
+
+  it('keeps 2.1-mini on server VAD after incomplete split mitigation', async () => {
+    // Semantic VAD left 4/12 observed splits with TTFA p90 5123 ms.
     expect(await turnDetection('gpt-realtime-2.1-mini')).toEqual(TUNED_SERVER_VAD);
   });
 

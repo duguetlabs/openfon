@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { confirmDiscardUnsaved, useUnsavedEdits } from '../unsaved-edits';
 import { api } from '../api';
 import { useSession } from '../App';
 import {
@@ -15,7 +17,8 @@ import { Button, Card, Field, FieldLabel, Logo, TextArea, LANGUAGES, inputClassS
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 export default function Onboarding() {
-  const { business, workspaceReady, firstAssistant, refresh } = useSession();
+  const { business, workspaceReady, firstAssistant, refresh, signOut } = useSession();
+  const navigate = useNavigate();
   const defaultHours = DAYS.map((day) => ({
     day,
     open: '09:00',
@@ -40,7 +43,12 @@ export default function Onboarding() {
   const [language, setLanguage] = useState(firstAssistant?.language || business?.agent?.language || 'en');
   const [greeting, setGreeting] = useState(firstAssistant?.greeting || business?.agent?.greeting || '');
 
+  const draft = JSON.stringify({ name, description, address, phone, hours, services, faqs, agentName, persona, language, greeting });
+  const savedDraft = useRef(draft);
+  const markSaved = useUnsavedEdits(draft !== savedDraft.current);
+
   async function finish() {
+    if (busy) return;
     if (!name.trim() || !description.trim() || !agentName.trim() || !persona.trim() || !language.trim()) {
       setError('Complete the required workspace and assistant details first.');
       return;
@@ -59,17 +67,16 @@ export default function Onboarding() {
         faqs_json: serializeFaqRows(faqs),
       };
       const biz = business ?? (await api.createBusiness(workspace));
-      if (business) await api.updateBusiness(business.id, workspace);
-      await api.updateAgent(biz.id, { agent_name: agentName, persona, language, greeting });
-      // The legacy update activates a draft primary assistant, while preserving
-      // an intentionally paused one. This compatibility screen is also the
-      // recovery path when no primary assistant is live, so explicitly finish
-      // activation for either lifecycle state before exposing the dashboard's
-      // public link.
-      if (firstAssistant && firstAssistant.state !== 'active') {
-        await api.activateAssistant(firstAssistant.id);
-      }
+      await api.updateBusiness(biz.id, workspace);
+      // Workspace creation provisions a draft primary assistant. Update it through
+      // the studio API so setup does not implicitly publish a public call line.
+      const primary = firstAssistant ?? (await api.assistants()).find(a => a.public_slug === biz.slug);
+      if (!primary) throw new Error('Your first assistant could not be loaded. Reload to resume setup.');
+      await api.updateAssistant(primary.id, { name: agentName, persona, language, greeting });
+      savedDraft.current = draft;
+      markSaved();
       await refresh();
+      navigate('/overview');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
       setBusy(false);
@@ -79,10 +86,10 @@ export default function Onboarding() {
   const steps = ['Your business', 'Hours & offerings', 'Your receptionist'];
 
   return (
-    <div className="atmosphere min-h-screen bg-base">
+    <div className="studio-theme atmosphere min-h-screen bg-base">
       <div className="mx-auto max-w-2xl px-5 py-10">
         <div className="rise mb-10 flex items-center justify-between">
-          <Logo />
+          <Link to="/" aria-label="OpenFon home"><Logo /></Link>
           <ol className="flex items-center gap-2.5 font-mono text-[11px] text-ink-faint">
             {steps.map((s, i) => (
               <li key={s} className={`flex items-center gap-1.5 ${i === step ? 'text-iris' : ''}`}>
@@ -103,6 +110,7 @@ export default function Onboarding() {
           </ol>
         </div>
 
+        <div className="mb-6 flex justify-end"><button className="text-sm text-ink-soft underline" onClick={() => { if (!confirmDiscardUnsaved()) return; void signOut().catch(() => {}); navigate('/auth'); }}>Sign out</button></div>
         <p className="rise rise-1 font-mono text-[11px] uppercase tracking-[0.2em] text-ink-faint">
           Step {step + 1} of {steps.length}
         </p>
@@ -111,7 +119,7 @@ export default function Onboarding() {
         </h1>
         <p className="rise rise-2 mb-7 max-w-md text-sm leading-relaxed text-ink-soft">
           {step === 0 && 'Tell your receptionist who it works for. You can edit everything later.'}
-          {step === 1 && 'The agent only answers from facts you give it — no made-up prices or hours.'}
+          {step === 1 && 'Give your assistant accurate hours and service details. Test its answers before sharing your line.'}
           {step === 2 && 'Give your agent a name and a voice. It greets every caller with this.'}
         </p>
 
@@ -280,7 +288,7 @@ export default function Onboarding() {
                 onClick={() => void finish()}
                 disabled={busy || !agentName.trim() || !persona.trim() || !language.trim()}
               >
-                {busy ? 'Setting up…' : firstAssistant?.state === 'active' ? 'Open my line ☎' : 'Activate my line ☎'}
+                {busy ? 'Saving…' : 'Save and open studio →'}
               </Button>
             )}
           </div>

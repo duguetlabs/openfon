@@ -47,6 +47,21 @@ afterEach(() => {
 
 // The measured attack: 53.8 unauthenticated call rows/sec from one IP, 571 rows
 // in a ten-second burst, 0 rejected. Same shape as scratchpad/repro/p0-2-uncapped-calls.mjs.
+describe('public call-start payload limit', () => {
+  it.each([false, true])('rejects oversized bodies before creating a ticket (Content-Length: %s)', async (declaredLength) => {
+    const { db, call, start } = setup();
+    const body = JSON.stringify({ slug: 'riverside-dental-1377', padding: 'x'.repeat(4096) });
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (declaredLength) headers['Content-Length'] = String(new TextEncoder().encode(body).length);
+    const response = await call('/api/public/call/start', { method: 'POST', headers, body });
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ error: 'Call-start request is too large.' });
+    expect(db.calls).toHaveLength(0);
+    expect((await start()).status).toBe(200);
+    expect(db.calls).toHaveLength(1);
+  });
+});
+
 describe('POST /api/public/call/start burst', () => {
   it('rejects everything past the per-IP allowance', async () => {
     const { db, start } = setup();

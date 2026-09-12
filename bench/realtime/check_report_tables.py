@@ -94,7 +94,7 @@ MANUAL_COUNT = re.compile(
 # rows while 88 more went unseen. Compared by equality, so a table that leaves
 # scope fails instead of quietly lowering the number, and a table that arrives
 # has to be accounted for in the same commit.
-REPORTS = {"realtime-latency-2026-08.md": 55, "realtime-21-2026-08.md": 66}
+REPORTS = {"realtime-latency-2026-08.md": 55, "realtime-21-2026-08.md": 71}
 
 # Prose labels for a comparison, for tables that name arms in words. Declared,
 # not inferred: the headline table is the one readers act on, and a checker that
@@ -102,6 +102,14 @@ REPORTS = {"realtime-latency-2026-08.md": 55, "realtime-21-2026-08.md": 66}
 PROSE_PAIRS = {
     "gpt-realtime-2 via gateway − direct": ("native-gateway", "native-direct"),
     "Voice Live via gateway − direct": ("vl-gateway", "vl-direct"),
+}
+
+# Exact model labels in the semantic-VAD recommendation table name a
+# treatment/control pair. Exact matching avoids treating model mentions in
+# ordinary descriptive cells as independent experimental comparisons.
+MODEL_PAIRS = {
+    "gpt-realtime-2.1": ("gw-21-semantic", "gw-21-server"),
+    "gpt-realtime-2.1-mini": ("gw-21mini-semantic", "gw-21mini-server"),
 }
 
 # Tables whose figures are a hand count over a derivable denominator. Only the
@@ -121,7 +129,10 @@ MANUAL_COUNT_TABLES = {
 # header row, each with the reason. Absence from this list is a problem, not a
 # pass — that is the point. No entry may name something the analyzer computes,
 # and no entry may cover more than the part that is actually unverifiable.
-UNCHECKABLE_TABLES: dict[str, str] = {}
+UNCHECKABLE_TABLES: dict[str, str] = {
+    "| tier | echoed `semantic_vad` | echoed `server_vad` |":
+        "live session configuration echoes, not analyzer latency or split statistics",
+}
 
 # Individual rows of an otherwise checkable table, keyed by their label. Same
 # rule, and narrower than a table entry for that reason.
@@ -129,6 +140,19 @@ UNCHECKABLE_ROWS = {
     "cost/min (Azure retail)":
         "Azure's published price list, not a measurement — and the point of the "
         "row is that the model-to-tier mapping is unverified",
+}
+
+# Explicit omissions in the column-oriented comparison table: baseline arms do
+# not need paired deltas; config_ms quotes only the two named comparisons; the
+# gateway caller transcript is excluded because its source is misleading.
+NULLABLE_CELLS = {
+    ("connect_ms paired δ", "native-direct"): "—",
+    ("connect_ms paired δ", "vl-direct"): "—",
+    ("connect_ms paired δ", "vl-native-brain"): "—",
+    ("config_ms paired δ vs native-direct", "native-direct"): "—",
+    ("config_ms paired δ vs native-direct", "vl-direct"): "—",
+    ("config_ms paired δ vs native-direct", "vl-gateway"): "—",
+    ("transcript_ms p50 (caller's transcript)", "native-gateway"): "*(excluded)*",
 }
 
 # Values that come from the analyzer's own constants rather than from a run.
@@ -148,6 +172,9 @@ SPLIT = "split_rate"
 # problem.** That is the whole discipline: the previous three versions of this
 # checker each failed by treating what they did not recognise as nothing to do.
 LABEL_SPECS: list[tuple[str, tuple[str, ...], "str | None"]] = [
+    (r"^server vad$", ("c_split", "cells"), SPLIT),
+    (r"^openai semantic vad$", ("t_split", "cells"), SPLIT),
+    (r"^what openai semantic vad costs$", ("median", "p90"), "ttfa_ms"),
     # — paired comparisons —
     (r"^pairs$", ("n",), None),
     (r"^cells$", ("cells",), SPLIT),
@@ -199,7 +226,7 @@ LABEL_SPECS: list[tuple[str, tuple[str, ...], "str | None"]] = [
     (r"^engine-only p50$", ("p50",), "ttfa_minus_vad_ms"),
     (r"^engine-only p90$", ("p90",), "ttfa_minus_vad_ms"),
     (r"^speech_stopped_ms p50", ("p50",), "speech_stopped_ms"),
-    (r"^transcript_ms p50", ("p50", "n"), "transcript_ms"),
+    (r"^transcript_ms p50", ("p50",), "transcript_ms"),
     (r"^connect_ms paired δ", ("median",), "connect_ms"),
     (r"^config_ms paired δ", ("median",), "config_ms"),
     (r"^session_ready_ms paired δ", ("median",), "session_ready_ms"),
@@ -571,6 +598,10 @@ def row_arms(row: str) -> list[str]:
             for a in (treat, ctrl):
                 if a not in seen:
                     seen.append(a)
+    label = normalise_label(cells_of(row)[0])
+    for a in MODEL_PAIRS.get(label, ()):
+        if a not in seen:
+            seen.append(a)
     return seen
 
 
@@ -690,7 +721,15 @@ def check_cell(ev: Evidence, cell: str, subjects: list[str],
     figs = list(FIGURE.finditer(strip_identifiers("| " + cell)))
     values = [(m.group(1).replace("−", "-").replace("–", "-") or "") + m.group(2)
               for m in figs]
-    if len(stats) > 1 and len(values) == len(stats):
+    # p Holm admits either of two statistical families, not two positions.
+    # Every other multi-statistic spec declares an ordered compound cell.
+    alternative = stats == ("p_adj", "mcnemar_p_adj")
+    if not values:
+        return {"missing statistic"}
+    expected = 1 if alternative else len(stats)
+    if len(values) != expected:
+        return {f"expected {expected} statistic(s), found {len(values)}"}
+    if len(stats) > 1 and not alternative:
         return {v for v, stat in zip(values, stats)
                 if v not in stat_values(ev, subjects, stat, metric, table_metric,
                                         prose)}
@@ -718,9 +757,16 @@ def check_row(tbl: Table, line: str, resolve) -> str:
     table_metric = (tbl.binding.metric if tbl.binding else None) or (
         row_spec[1] if row_spec else None)
 
+    if len(body) != len(head):
+        return f"expected {len(head)} columns, found {len(body)}"
     for i, cell in enumerate(body):
         figs = figures("| " + cell)
-        if not figs:
+        declared = row_spec if tbl.is_column_oriented and i > 0 else spec_for(head[i])
+        if not figs and not (i > 0 and (declared or manual)):
+            continue
+        if (not figs and tbl.is_column_oriented and i > 0
+                and cell.strip() == NULLABLE_CELLS.get(
+                    (normalise_label(label), normalise_label(head[i])))):
             continue
         ev = resolve(label, head[i] if i < len(head) else "")
         if isinstance(ev, str):
@@ -792,9 +838,12 @@ def check(report: Path) -> int:
     considered = 0
 
     for tbl in tables(text):
-        in_scope = (bool(row_arms(tbl.header))
+        in_scope = (tbl.binding is not None or bool(row_arms(tbl.header))
                     or any(row_arms(l) for _, l in tbl.body))
-        rows = [(n, l) for n, l in tbl.body if figures(l)]
+        rows = [(n, l) for n, l in tbl.body
+                if figures(l) or (tbl.binding is not None and
+                    (spec_for(cells_of(l)[0]) or
+                     any(spec_for(h) for h in tbl.head_cells[1:])))]
         if not in_scope or not rows:
             continue
         considered += len(rows)

@@ -327,6 +327,65 @@ describe('Calm Studio API foundation', () => {
     );
   }
 
+  it('rejects malformed workspace field types without persisting invalid state', async () => {
+    const workspace = await createWorkspace() as { id: string };
+    const bootstrap = await data<{ assistants: Array<{ id: string }>; knowledgeCollections: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'));
+    const assistantId = bootstrap.assistants[0].id;
+    const collection = db.database.prepare('SELECT id FROM knowledge_collections WHERE business_id=?').get(workspace.id) as { id: string };
+    const cases: Array<[string, string, unknown]> = [
+      ['/api/me/assistants', 'POST', { name: {} }],
+      [`/api/me/assistants/${assistantId}`, 'PUT', { name: {} }],
+      [`/api/me/assistants/${assistantId}`, 'PUT', { greeting: ['invalid'] }],
+      [`/api/me/assistants/${assistantId}`, 'PUT', { take_messages: {} }],
+      ['/api/me/knowledge/collections', 'POST', { name: 'Invalid', description: {} }],
+      [`/api/me/knowledge/collections/${collection.id}`, 'PUT', { name: 5 }],
+      [`/api/me/knowledge/collections/${collection.id}/items`, 'POST', { kind: 'faq', question: {}, answer: 'Answer' }],
+      ['/api/me/provider', 'PUT', { baseUrl: {} }],
+      ['/api/me/engine-presets', 'POST', { name: 'Invalid', voice: [] }],
+      [`/api/me/business/${workspace.id}`, 'PUT', { hours_json: [] }],
+      [`/api/me/business/${workspace.id}/agent`, 'PUT', { agent_name: {} }],
+      [`/api/me/business/${workspace.id}/profiles`, 'POST', { name: 'Invalid', llm_base_url: [] }],
+    ];
+    for (const [path, method, body] of cases) {
+      const response = await request(env, path, json(method, body));
+      expect(response.status, `${method} ${path}`).toBe(400);
+      expect(await response.json()).toHaveProperty('error');
+    }
+    expect(db.database.prepare('SELECT name,greeting FROM assistants WHERE id=?').get(assistantId)).toEqual({ name: '', greeting: '' });
+    expect(db.database.prepare('SELECT COUNT(*) AS n FROM assistants').get()).toEqual({ n: 1 });
+    expect(db.database.prepare('SELECT COUNT(*) AS n FROM knowledge_collections').get()).toEqual({ n: 1 });
+    expect(db.database.prepare('SELECT COUNT(*) AS n FROM knowledge_items').get()).toEqual({ n: 0 });
+    expect(db.database.prepare('SELECT COUNT(*) AS n FROM engine_presets').get()).toEqual({ n: 0 });
+  });
+
+  it('returns JSON client errors for malformed or non-object studio bodies', async () => {
+    await createWorkspace();
+    for (const path of ['/api/me/assistants', '/api/me/knowledge/collections', '/api/me/provider/check']) {
+      for (const body of ['{', 'null', '[]', 'true', '42', '"text"']) {
+        const response = await request(env, path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+        expect(response.status, `${path}: ${body}`).toBe(400);
+        expect(await response.json()).toHaveProperty('error');
+      }
+    }
+  });
+
+  it('preserves a named draft primary through new onboarding and knowledge reads', async () => {
+    const workspace = await createWorkspace() as { id: string; slug: string };
+    expect((await request(env, `/api/me/business/${workspace.id}`, json('PUT', {
+      name: 'Workshop', description: 'Bicycle repairs', services_json: '[]', faqs_json: '[]',
+    }))).status).toBe(200);
+    const assistants = await data<Array<{ id: string; public_slug: string }>>(await request(env, '/api/me/assistants'));
+    const primary = assistants.find(a => a.public_slug === workspace.slug)!;
+    const updated = await data<{ name: string; state: string }>(await request(env, `/api/me/assistants/${primary.id}`, json('PUT', {
+      name: 'Alex', persona: 'friendly and professional', language: 'en', greeting: '',
+    })));
+    expect(updated).toMatchObject({ name: 'Alex', state: 'draft' });
+    for (const path of ['/api/me/bootstrap', '/api/me/business', '/api/me/knowledge/collections', '/api/me/assistants']) {
+      expect((await request(env, path)).status).toBe(200);
+      expect(db.database.prepare('SELECT name,state FROM assistants WHERE id=?').get(primary.id)).toEqual({ name: 'Alex', state: 'draft' });
+    }
+  });
+
   it('creates one compatibility workspace atomically and idempotently and enforces the account boundary in D1', async () => {
     const first = await request(
       env,
@@ -1913,8 +1972,8 @@ describe('Calm Studio API foundation', () => {
     const insert = db.database.prepare(
       `INSERT INTO calls (
         id, business_id, assistant_id, status, environment, direction, duration_s,
-        intent, message_json, outcome
-       ) VALUES (?, ?, ?, 'completed', 'live', 'inbound', 20, ?, ?, ?)`
+        intent, message_json, outcome, connected_at
+       ) VALUES (?, ?, ?, 'completed', 'live', 'inbound', 20, ?, ?, ?, datetime('now'))`
     );
     insert.run(
       'booking-contact',
@@ -1969,13 +2028,51 @@ describe('Calm Studio API foundation', () => {
     });
   });
 
+  it('counts connected live conversations but keeps unused reservations visible in history', async () => {
+    const workspace = await createWorkspace();
+    const insert = db.database.prepare(`INSERT INTO calls (id, business_id, status, environment, connected_at)
+      VALUES (?, ?, ?, ?, ?)`);
+    insert.run('unused-active', workspace.id, 'active', 'live', null);
+    insert.run('unused-abandoned', workspace.id, 'abandoned', 'live', null);
+    insert.run('connected', workspace.id, 'active', 'live', '2026-08-10 12:00:00');
+    insert.run('private', workspace.id, 'completed', 'test', '2026-08-10 12:00:00');
+    const overview = await data<{metrics: {total: number}; recentCalls: Array<{id: string}>}>(await request(env, '/api/me/overview'));
+    expect(overview.metrics.total).toBe(1);
+    expect(overview.recentCalls.map(c => c.id)).toContain('unused-abandoned');
+  });
+
+  it('pages knowledge with stable ties and keeps collection scope on every page', async () => {
+    const workspace = await createWorkspace();
+    const collections = await data<Array<{id:string}>>(await request(env, '/api/me/knowledge/collections'));
+    const id = collections[0].id;
+    const insert = db.database.prepare(`INSERT INTO knowledge_items(id,business_id,collection_id,kind,status,content,created_at)
+      VALUES (?,?,?,'note',?,'A bounded note','2026-08-10 12:00:00')`);
+    for(let i=0;i<45;i++) insert.run(`paged-${String(i).padStart(3,'0')}`, workspace.id, id, i<23?'active':'draft');
+    const seen: string[]=[]; let cursor: string|null=null;
+    do {
+      const page = await data<{items:Array<{id:string}>;nextCursor:string|null}>(await request(env, `/api/me/knowledge/collections/${id}${cursor?'?cursor='+encodeURIComponent(cursor):''}`));
+      expect(page.items.length).toBeLessThanOrEqual(20); seen.push(...page.items.map(i=>i.id)); cursor=page.nextCursor;
+    } while(cursor);
+    expect(new Set(seen).size).toBe(seen.length);
+    expect(seen.filter(id=>id.startsWith('paged-'))).toHaveLength(45);
+    expect((await request(env, `/api/me/knowledge/collections/${id}?cursor=invalid`)).status).toBe(400);
+    const legacy = await request(env, `/api/me/knowledge/collections/${id}/items`);
+    expect((await legacy.json() as unknown[])).toHaveLength(20); expect(legacy.headers.get('X-Next-Cursor')).toBeTruthy();
+  });
+
+  it('preserves boolean false when creating an assistant', async () => {
+    await createWorkspace();
+    const assistant = await data<{take_messages: number}>(await request(env, '/api/me/assistants', json('POST', {name: 'No messages', take_messages: false})));
+    expect(assistant.take_messages).toBe(0);
+  });
+
   it('keeps overview totals accurate beyond 100 and cursors stable while excluding tests', async () => {
     const workspace = await createWorkspace();
     const { assistants } = await data<{ assistants: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'));
     const insert = db.database.prepare(
       `INSERT INTO calls (
-        id, business_id, assistant_id, status, environment, direction, started_at, duration_s
-       ) VALUES (?, ?, ?, 'completed', ?, 'inbound', ?, 30)`
+        id, business_id, assistant_id, status, environment, direction, started_at, duration_s, connected_at
+       ) VALUES (?, ?, ?, 'completed', ?, 'inbound', ?, 30, datetime('now'))`
     );
     for (let i = 0; i < 135; i++) {
       const seconds = String(i).padStart(3, '0');

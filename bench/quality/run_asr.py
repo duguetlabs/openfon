@@ -140,13 +140,21 @@ async def transcribe_batch(arm_name: str, lang: str, clips: list[dict],
                         f"{clip['id']}: no input_audio_buffer.committed within 30 s; "
                         f"the commit stream is out of sync, abandoning this session")
                 if ev.get("type") == "error":
-                    err = json.dumps(ev.get("error"))
-                    break
+                    raise CommitDesync(
+                        f"{clip['id']}: error before commit acknowledgement; "
+                        "abandoning this session to avoid misattributed transcripts")
                 if ev.get("type") == "input_audio_buffer.committed":
                     item_id = ev.get("item_id")
                     break
                 if (got := arm.caller_transcript(ev)) is not None:
                     offer(*got)
+
+            if not item_id:
+                # Includes a malformed acknowledgement and expiry while other
+                # events keep arriving. Neither permits reuse of this socket.
+                raise CommitDesync(
+                    f"{clip['id']}: no valid commit acknowledgement; "
+                    "abandoning this session")
 
             # Wait only for *a* completed event for this item, not for a
             # non-empty one: when the service emits the empty half of its
