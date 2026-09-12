@@ -1,12 +1,12 @@
 # Integration checkpoint
 
-- Status: In progress — official351 corrections locally validated; onboarding retry allegation disproved by unchanged-app browser probes; scoped QA next
+- Status: In progress — QA closedeeec61a export/admission scope; publishing evidence-final candidate for renewed hosted and official reviews
 - Owner: openfon-integration, gpt-6-astra / medium
 - Branch/worktree: codex/integrated-release, /Users/cristian/projects/fun/openfon-worktrees/integration
 - Updated: 2026-09-13
-- Application candidate: 2bcd30b includes c06ee1c atomic snapshot and daf1c99 PBX harness;105 focused/both types and independent QA8/workerd privacy probe PASS; prior42077ab813/types/runtime retained
+- Application candidate: eeec61a export escaped-size preflight and Telnyx12ff85f admission budget;185+4 focused/both types/3 browser probes, independent QA103/actualD1 export PASS
 - Published PR16 head: 351606f2e43ad10beb8112222ec9c635411c0c8b (docs-only over QA-scoped2bcd30b; frozen for required reviews)
-- Validation slot: integration released after185+4 focused/both types and3 actual-workerd browser probes; QA next bounded independent slot
+- Validation slot: QA released after103 focused/actualD1 export; no runner active
 - Ports: integration8814/9254, optional real-PBX proxy8824; never8787
 - Read first: root orchestration-rules/current-task/manifest (read-only), this file, docs/launch/readiness.md
 - Earlier detailed milestones and failures remain in this file's history through ccdd85d and the linked original review reports. This checkpoint records current state.
@@ -24,6 +24,8 @@ Realtimec58b17d→42077ab assembled with application hunks clean. Docs conflict 
 Final42077ab direct/gateway and Telnyx native+synthesized actual-workerd smokes PASS, all processes exited. Logs/tmp/openfon-420-direct.log,/tmp/openfon-420-gateway.log,/tmp/openfon-420-telnyx.log. Prior08cc Asterisk/retirement runtime unchanged by later Telnyx/preset/error-event deltas; full813 covers assembled interfaces. Reporting-only rehearsal9/17 previously passed without behavior change. Integration releases sole slot to QA for bounded independent combined closure, no full-suite duplication or official inference until published freeze. Remote5e0 and stagingb15 remain unchanged.
 
 ## Authorization and ownership
+QA closes exacteeec61a:103/103 focused; independent actual-D1/workerd800KBcontrol→413,100KBcontrol→200 with601070responsebytes, normal multibyte/escaping roundtrip PASS. SourcepreJSON/finalbudget propagation and scalarTelnyx admission reviewed; no new major/security concern scoped. Reused onboarding3/browser and ownerTelnyx runtime, no duplicated claim. All processes exited0/Miniflare disposed. Hosted351 security completed; code still running at publication preparation, inspect final/latefindings. Official351 disposition separates actual export/read security fixes from disproved onboarding conflict. Nextdocsfinalhead requires fresh hosted+official reviews andCI; no staging/livechange.
+
 Telnyxf4617fb→12ff85f assembled; only checkpoint append conflict, source/test fixture imports preserved. Owner105 focused/worker types/nativeworkerd PASS, exact351 17th bogus request negative fails404vs429. Constant16burst/2persecond/4pending D1 lookups, no identity maps/writes,finallyrelease before owner upgrade; per-isolate/restart limits explicit.
 
 Integration export correction and Telnyx assembly185/185 focused4files plus separate4/4 actual helper file PASS; both typechecks PASS. Initial command named nonexistent test/telnyx-admission.test.ts alongside valid files, so helper was subsequently run by correct test/telnyx-media-admission.test.ts name; no missing coverage claim. Export negative temporarily restores original raw-byte gates (new scalar estimate remains inert), json_object trap triggers500vs413; fixed gates restored, aggregate refusal and accepted100KB control text pass. Logs/tmp/openfon-export-escaping-negative.log,/tmp/openfon-351-fixes-focused.log,/tmp/openfon-351-fixes-types.log,/tmp/openfon-351-admission-focused.log.
