@@ -69,6 +69,9 @@ export class TelnyxMediaAdapter {
     try {
       const msg = parse(raw, 8192);
       if (msg.event === 'connected') {
+        // Our control command always sets stream_auth_token. Telnyx documents
+        // it in BOTH this connected field and the upgrade header when configured:
+        // https://developers.telnyx.com/api-reference/websockets/stream-call-media-over-websocket
         if (this.connected || this.streamId || msg.version !== '1.0.0' ||
             object(msg.connected)['x-telnyx-streaming-auth-token'] !== this.options.expected.authToken) throw new Error('invalid_connection');
         this.connected = true;
