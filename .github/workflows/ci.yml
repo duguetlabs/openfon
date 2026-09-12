@@ -26,6 +26,16 @@ jobs:
       - run: npm test
       - run: npm run test:telnyx
       - run: npm run build
+      - name: Synthetic carrier and realtime runtime checks
+        env:
+          OPENFON_TEST_PORT: '8814'
+          OPENFON_INSPECTOR_PORT: '9254'
+        run: |
+          npm run test:telnyx
+          node scripts/asterisk-smoke.mjs
+          node scripts/realtime-smoke.mjs
+          node scripts/realtime-smoke.mjs --gateway
+      - run: python3 scripts/migration-rehearsal.py . --through 11
 
   # The benchmark scoring code is Python and computes the numbers in
   # docs/research/. A wrong normaliser or a slot matcher that fails closed would
