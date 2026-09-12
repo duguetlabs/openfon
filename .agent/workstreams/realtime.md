@@ -1,10 +1,10 @@
 # Realtime provider workstream
 
-- Status: Implementation complete; integration pending; live-provider validation blocked
+- Status: Implementation integrated; QA handshake issue closed; live Kataleptic preflight passed; staging recording handoff pending
 - Owner: openfon-realtime
 - Branch: codex/realtime-providers
 - Base at arrival: a9b33c5c46ccb441e4c07f50b81469354d3cf700
-- Updated: 2026-09-12T11:52:46.067657+00:00
+- Updated: 2026-09-12T12:53:31.767345+00:00
 - Rules: root AGENTS.md, orchestration-rules.md/current-task/manifest, assigned handoff, strategy and readiness read. Root shared documents untouched.
 - Ports: 8813 test, 9253 inspector; never 8787.
 
@@ -63,3 +63,30 @@ Root status clarification: ca0d9018acce1b885bbe8529a836d7249fffb8f3 only adds ca
 
 
 Independent QA closure received and verified in release-audit/.agent/workstreams/qa.md: P2 resolved at exact 083dae372fa0ca875a5745769e9876213bdd7827 with ce62114 dependencies; original independent failing probe passes unchanged, QA focused147 (owner145 plus two independent probes), typecheck, adversarial direct/catalog and gateway actual-workerd smoke pass. Scoped no remaining major/new security issues; not a whole-release, live-provider or PR-Agent substitute verdict. Integration notified by QA.
+
+## Authorized bounded live preflight
+Root authorized existing personal-vault Kataleptic preflight (maximum two short conversations), no paid account/credit purchase or production change. Re-read integrated staging/current-task and Northwheel audible script. Staging source 41041c1 is isolated with carriers disabled. dsecret --list still exposes exactly one clearly relevant item: `kataleptic api key - broser-use`; explicit `credential` field will be used. No unrelated credentials will be read. Plan actual realtime authentication first using integrated resolver, then at most one short fictional greeting if accepted; also test required text-summary endpoint. Values remain subprocess memory only; output is status/count evidence, never raw provider errors or request URLs.
+
+
+## Live Kataleptic preflight — succeeded
+- Relevant personal vault item discovered by dsecret --list: `kataleptic api key - broser-use`, explicit field `credential`. Retrieval succeeded (51 characters, no whitespace); value only in subprocess memory/stdin, never files/logs/chat. No other credential item fetched.
+- Used current integration worktree's bundled resolveRealtime/realtimeConnection and CallSession.realtimeSessionPayload to construct the real gateway connection/configuration, with fictional Northwheel greeting. No staging or production mutation.
+- Actual wss://api.kataleptic.com/v1/realtime, requested model gpt-realtime-2: HTTP101 upgrade, matching session.updated, response.create issued once, 146400 PCM audio bytes and nonempty output transcript received, 30 events total. Voice left blank (provider default; exact resolved voice ID not recorded). Socket closed after the short response. Generated audio was counted in memory and not saved/listened to: this is real-provider generation evidence, NOT yet audible browser/demo quality acceptance.
+- Actual POST https://api.kataleptic.com/v1/chat/completions, model llama-3.3-70b: HTTP200 and nonempty summary content for the same fictional greeting. One bounded max_tokens32 summary request.
+- Conversation budget: one short voice conversation used; one of root's maximum two remains for launch recording. No second voice probe planned. Prior /models403 does not block these verified endpoints.
+- Required staging configuration: REALTIME_API_KEY and DEFAULT_LLM_API_KEY from the same item/credential field; REALTIME_PROVIDER=kataleptic (or absent default), REALTIME_BASE_URL=wss://api.kataleptic.com/v1/realtime, assistant engine=realtime, realtime_model=gpt-realtime-2, realtime_voice empty; summary DEFAULT_LLM_BASE_URL=https://api.kataleptic.com/v1 and DEFAULT_LLM_MODEL=llama-3.3-70b. Native greeting/transcription tested without Azure or separate STT key. Keep telephone flags/routes disabled. Default deployment model llama-3.3-70b must be overridden on the private Northwheel assistant to use the verified native greeting route.
+- Coordinate integration-owned staging secret injection by item name/field only, via dsecret capture piped into explicit staging wrangler secret put stdin; never default production target, never plaintext vars files. Integration supplied staging-only config reference /Users/cristian/.local/share/openfon/backups/2026-09-12-integration/worker-staging.json; target openfon-staging at https://openfon-staging.duguetlabs.workers.dev. Launch should receive procedure/reference, not values, and record one remaining actual mic call with fictional/AI/Kataleptic disclosures.
+- Independent OpenAI path remains independent; no OpenAI key found/used and no paid account or credits created.
+
+## Exclusive remaining-call handoff to launch
+Integration confirmed staging READY: openfon-staging at https://openfon-staging.duguetlabs.workers.dev, version76a515eb-877e-48ef-bdcd-1ab8ea7095ef, source718d233e3754e53b800a397b1e600ffea492bb79. Agreed REALTIME_API_KEY/DEFAULT_LLM_API_KEY secret names independently read back; separate D1 through0011, carriers/routes disabled. No secret values received.
+
+Realtime explicitly hands the ONE remaining authorized short Northwheel conversation to openfon-launch as exclusive call initiator/capture owner. Realtime will make no more live provider requests. Launch prepared local synthetic caller prompts without making a provider call, per read-only pane inspection. Approved recording uses scripted synthetic caller audio injected through browser mic stream plus real provider replies; disclose no physical-microphone/handset claim. Private assistant engine realtime, model gpt-realtime-2, voice blank; preserve fictional/AI/Kataleptic disclosure. Launch records actual call/result and reports budget exhausted after the single conversation. Realtime remains available for code/transport diagnosis without additional live calls.
+
+## Security review 3996213110 correction in progress
+Read exact hosted comment at4a498c8 plus integration checkpoint. Confirmed: CallSession passes resolved workspace realtime endpoint to piperVoiceFor; provider helper cache is isolate-global {map,fetchedAt}, so one endpoint's fetched voice map is reused for another endpoint for one hour. Realtime owns narrow Piper cache extraction/wrapper/tests. Fix will partition by normalized catalog destination, bound cache/response/map/voice sizes, validate values, refuse redirects, and fail to static per-language fallback without cross-endpoint reuse. Preserve direct handshake/session code; no live requests. Existing presets dependency snapshots remain uncommitted/unowned.
+- Before fix, all six isolation/normalization regressions failed: second endpoint returned first endpoint voice, including when second endpoint should fail. New src/piper-catalog.ts caches up to32 normalized destinations for1h, preserves path/query identity, caps endpoint4096 chars/body65536 bytes/map64 entries/voice128 identifier chars, validates two-letter language keys, refuses redirects and cancels rejected bodies. Expired/failing catalogs use static fallback rather than stale or other-endpoint data.
+- First targeted run after extraction118/118 passed; initial typecheck rejected browser-only RequestInit.credentials (unsupported by Workers types). Removed that option; public lookup sends no authorization or cookie headers. Full validation running; no live/provider/runtime call made for this correction.
+
+- Final correction validation: full local suite467/467 passed before final endpoint-length guard test; final focused Piper+CallSession+realtime-provider suite119/119 passed (14 Piper tests), and typecheck passed. git diff --check clean. No live requests. Direct handshake source untouched. Commit stages only new src/piper-catalog.ts, narrow src/providers.ts Piper wrapper hunk, test/piper-catalog.test.ts and this checkpoint; unrelated presets snapshots are excluded.
+- Integration must assemble the exact fix and retrigger hosted security/code reviews plus QA-owned genuine official PR-Agent full rerun. Finding3996213110 is verified/fixed locally, not declared reviewer-closed until required reruns report against assembled head.

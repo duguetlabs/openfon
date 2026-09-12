@@ -1,3 +1,4 @@
+import { piperVoiceFromCatalog } from './piper-catalog';
 // Pluggable AI providers. LLM and STT speak the OpenAI-compatible wire format,
 // so OpenFon works with Kataleptic (default), OpenAI, Azure OpenAI, Groq, Ollama,
 // vLLM, or anything else that implements /chat/completions and /audio/transcriptions.
@@ -242,27 +243,9 @@ export const PIPER_BY_LANG: Record<string, string> = {
   ru: 'ru_RU-irina-medium',
 };
 
-// Live per-language voice map from the engine's public catalog endpoint
-// (<realtime base>/voices), cached per isolate; PIPER_BY_LANG is the fallback
-// when the endpoint is missing (self-hosters pointing at other providers).
-let piperCatalog: { map: Record<string, string>; fetchedAt: number } | null = null;
-
+// Endpoint-scoped, bounded public catalog; fixed language defaults on failure.
 export async function piperVoiceFor(env: Env, lang: string): Promise<string> {
-  const fallback = PIPER_BY_LANG[lang] ?? '';
-  try {
-    if (!piperCatalog || Date.now() - piperCatalog.fetchedAt > 3_600_000) {
-      const url = env.REALTIME_BASE_URL.replace(/^ws/, 'http') + '/voices';
-      const res = await fetch(url, { signal: AbortSignal.timeout(1500) });
-      if (res.ok) {
-        const data = (await res.json()) as { 'kataleptic-realtime'?: { voices_by_language?: Record<string, string> } };
-        const map = data['kataleptic-realtime']?.voices_by_language;
-        if (map && typeof map === 'object') piperCatalog = { map, fetchedAt: Date.now() };
-      }
-    }
-    return piperCatalog?.map[lang] ?? fallback;
-  } catch {
-    return fallback;
-  }
+  return piperVoiceFromCatalog(env.REALTIME_BASE_URL, lang, PIPER_BY_LANG[lang] ?? '');
 }
 
 // STT backends report language as ISO codes ("de") or names ("german").
