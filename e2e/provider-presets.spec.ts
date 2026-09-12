@@ -125,3 +125,83 @@ test('provider draft guards navigation and sign-out, then resets after discard o
   page.off('dialog', rejectUnexpected);
   expect((await page.request.get('/api/me')).status()).toBe(401);
 });
+
+test('confirmed provider save survives a failed refresh without resending credentials', async ({ page }) => {
+  await page.goto('/auth');
+  await page.getByLabel('Email').fill(`provider-refresh-${Date.now()}@example.invalid`);
+  await page.getByLabel('Password', { exact: true }).fill('Synthetic-Presets-Password-1234');
+  await page.getByRole('button', { name: 'Create account', exact: true }).click();
+  await page.getByLabel('Business name', { exact: true }).fill('Provider refresh workshop');
+  await page.getByLabel('What do you do?').fill('Synthetic refresh failure validation');
+  await page.getByRole('button', { name: 'Continue →' }).click();
+  await page.getByRole('button', { name: 'Continue →' }).click();
+  await page.getByRole('button', { name: /Create.*assistant|Save.*assistant|Open.*studio/i }).click();
+  const navigation = page.getByRole('navigation', { name: 'Workspace' });
+  await expect(navigation).toBeVisible();
+  await navigation.getByRole('link', { name: 'Settings', exact: true }).click();
+  const model = page.getByLabel('Workspace text model', { exact: true });
+  const key = page.getByLabel('Text API key', { exact: true });
+  await expect(model).toHaveValue('');
+
+  let writes = 0;
+  let failWrite = true;
+  let failRefresh = true;
+  await page.route('**/api/me/provider', async route => {
+    if (route.request().method() === 'PUT') {
+      if (failWrite) {
+        await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Synthetic write failure' }) });
+        return;
+      }
+      writes++;
+      await route.continue(); // Actual workerd persists the submitted key/model.
+    } else if (failRefresh) {
+      await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Synthetic read failure' }) });
+    } else await route.continue();
+  });
+  await model.fill('persisted-despite-refresh');
+  await key.fill('synthetic-refresh-key');
+  await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Synthetic write failure');
+  await expect(page.getByText('Provider settings saved.', { exact: false })).toHaveCount(0);
+  await expect(key).toHaveValue('synthetic-refresh-key');
+  const cancel = page.waitForEvent('dialog');
+  const leave = navigation.getByRole('link', { name: 'Overview', exact: true }).click();
+  await (await cancel).dismiss();
+  await leave;
+  await expect(page).toHaveURL('/settings');
+  expect(writes).toBe(0);
+  failWrite = false;
+  await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
+  await expect(page.getByText('Provider settings saved.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('Provider settings were saved, but the provider settings display could not refresh');
+  await expect(page.getByRole('alert')).toContainText('do not need to save again or re-enter API keys');
+  await expect(key).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Save provider settings', exact: true })).toBeDisabled();
+  const persisted = await (await page.request.get('/api/me/provider')).json();
+  expect(persisted).toMatchObject({ model: 'persisted-despite-refresh', workspaceApiKeyConfigured: true });
+  expect(writes).toBe(1);
+
+  // The recovery action only rereads confirmed data; no key replacement/PUT.
+  failRefresh = false;
+  await page.getByRole('button', { name: 'Refresh saved provider settings', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Refresh saved provider settings', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(model).toHaveValue('persisted-despite-refresh');
+  await expect(key).toHaveValue('');
+  expect(writes).toBe(1);
+
+  // A second injected failure also leaves the acknowledged draft clean before
+  // recovery: navigation must not suggest discarding changes already saved.
+  failRefresh = true;
+  await model.fill('second-confirmed-model');
+  await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Provider settings were saved');
+  const dialogs: string[] = [];
+  page.on('dialog', async dialog => { dialogs.push(dialog.type()); await dialog.dismiss(); });
+  await navigation.getByRole('link', { name: 'Overview', exact: true }).click();
+  await expect(page).toHaveURL('/overview');
+  expect(dialogs).toEqual([]);
+  expect(writes).toBe(2);
+  const latest = await (await page.request.get('/api/me/provider')).json();
+  expect(latest).toMatchObject({ model: 'second-confirmed-model', workspaceApiKeyConfigured: true });
+});

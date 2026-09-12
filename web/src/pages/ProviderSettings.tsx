@@ -9,6 +9,7 @@ export default function ProviderSettings({ onSaved }: { onSaved: () => Promise<v
   const [savedDraft, setSavedDraft] = useState<ProviderUpdate | null>(null);
   const [preset, setPreset] = useState('custom');
   const [busy, setBusy] = useState(false);
+  const [refreshPending, setRefreshPending] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   // Include write-only key inputs and removal flags in the baseline. Empty
@@ -35,12 +36,39 @@ export default function ProviderSettings({ onSaved }: { onSaved: () => Promise<v
     try { await action(); } catch (e) { setError(e instanceof Error ? e.message : 'Provider request failed'); }
     finally { setBusy(false); }
   }
+  const savedMessage = 'Provider settings saved. Test the saved configuration before calling.';
+  async function refreshAfterSave() {
+    let stage = 'provider settings';
+    try {
+      await load();
+      stage = 'workspace';
+      await onSaved();
+      setRefreshPending(false);
+    } catch {
+      setError(`Provider settings were saved, but the ${stage} display could not refresh. Refresh the saved settings; you do not need to save again or re-enter API keys.`);
+    }
+  }
+  async function save() {
+    const result = await api.updateProvider(draft);
+    // Persistence is confirmed before either follow-up read. Drop submitted
+    // secrets and mark the acknowledged draft clean even if refresh fails.
+    const clean = { ...draft, apiKey: '', clearApiKey: false,
+      realtime_api_key: '', realtime_clear_api_key: false, stt_api_key: '', stt_clear_api_key: false };
+    setDraft(clean);
+    setSavedDraft(clean);
+    setSaved(current => current && { ...current,
+      apiKeyConfigured: result.apiKeyConfigured, workspaceApiKeyConfigured: result.workspaceApiKeyConfigured });
+    setMessage(savedMessage);
+    setRefreshPending(true);
+    await refreshAfterSave();
+  }
   if (!saved) return <p role={error ? 'alert' : 'status'}>{error || 'Loading provider settings…'}</p>;
   return <section aria-label="Workspace AI providers"><h2 className="font-display text-2xl mb-3">Workspace AI providers</h2>
     <p className="text-sm text-ink-soft mb-4">Kataleptic is operated by OpenFon’s maintainer and is an optional paid service. You can use your own provider accounts. Provider usage and hosting may cost money.</p>
     {error && <p role="alert" className="text-rose mb-3">{error}</p>}{message && <p role="status" className="mb-3">{message}</p>}
-    <form onSubmit={e => { e.preventDefault(); void run(async () => { await api.updateProvider(draft); await load(); await onSaved(); setMessage('Provider settings saved. Test the saved configuration before calling.'); }); }}>
-      <fieldset disabled={busy} className="min-w-0 space-y-4">
+    {refreshPending && <Button type="button" disabled={busy} onClick={() => void run(async () => { setMessage(savedMessage); await refreshAfterSave(); })}>Refresh saved provider settings</Button>}
+    <form onSubmit={e => { e.preventDefault(); if (!busy && !refreshPending) void run(save); }}>
+      <fieldset disabled={busy || refreshPending} className="min-w-0 space-y-4">
         <Card className="space-y-4"><h3 className="font-semibold">Text generation & call summaries</h3>
           <label className="block text-sm">Text provider preset<select aria-label="Text provider preset" className={`${inputClassSm} w-full min-w-0 max-w-full`} value={preset} onChange={e => {
             const id = e.target.value; setPreset(id);
