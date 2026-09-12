@@ -183,6 +183,17 @@ test('confirmed provider save survives a failed refresh without resending creden
 
   // The recovery action only rereads confirmed data; no key replacement/PUT.
   failRefresh = false;
+  let failWorkspace = true;
+  await page.route('**/api/me/business', async route => {
+    if (failWorkspace && route.request().method() === 'GET') await route.fulfill({ status: 503, json: { error: 'Synthetic workspace refresh failure' } });
+    else await route.continue();
+  });
+  await page.getByRole('button', { name: 'Refresh saved provider settings', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Provider settings were saved, but the workspace display could not refresh');
+  await expect(navigation).toBeVisible();
+  await expect(key).toHaveValue('');
+  expect(writes).toBe(1);
+  failWorkspace = false;
   await page.getByRole('button', { name: 'Refresh saved provider settings', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Refresh saved provider settings', exact: true })).toHaveCount(0);
   await expect(page.getByRole('alert')).toHaveCount(0);
@@ -204,4 +215,14 @@ test('confirmed provider save survives a failed refresh without resending creden
   expect(writes).toBe(2);
   const latest = await (await page.request.get('/api/me/provider')).json();
   expect(latest).toMatchObject({ model: 'second-confirmed-model', workspaceApiKeyConfigured: true });
+
+  // A genuine authentication denial still clears the private shell.
+  failRefresh = false;
+  await navigation.getByRole('link', { name: 'Settings', exact: true }).click();
+  await expect(model).toHaveValue('second-confirmed-model');
+  await page.route('**/api/me', route => route.fulfill({ status: 401, json: { error: 'Session expired' } }));
+  await model.fill('saved-before-auth-expired');
+  await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
+  await expect(page).toHaveURL('/auth');
+  await expect(navigation).toHaveCount(0);
 });

@@ -34,7 +34,7 @@ export class CompatibilitySessionCoordinator {
   async refresh(
     load: () => Promise<CompatibilitySessionSnapshot>,
     publish: (snapshot: CompatibilitySessionSnapshot) => void,
-    clear: () => void
+    failed: (error: unknown) => void
   ): Promise<void> {
     // A cookie-backed load started after local sign-out could still authenticate
     // until the server response clears that cookie. Do not even issue it: a
@@ -45,9 +45,9 @@ export class CompatibilitySessionCoordinator {
     try {
       const snapshot = await load();
       if (generation === this.generation) publish(snapshot);
-    } catch {
+    } catch (error) {
       // A superseded failure must not sign out a newer successful session.
-      if (generation === this.generation) clear();
+      if (generation === this.generation) failed(error);
     }
   }
 

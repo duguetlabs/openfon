@@ -29,6 +29,22 @@ function snapshot(id: string): CompatibilitySessionSnapshot {
 }
 
 describe('compatibility session loading', () => {
+  it('propagates current refresh failure to its owner without publishing or defeating stale-result guards', async () => {
+    const coordinator = new CompatibilitySessionCoordinator();
+    const publish = vi.fn();
+    const error = new Error('temporary workspace read failure');
+    const failed = vi.fn((reason: unknown) => { throw reason; });
+    await expect(coordinator.refresh(async () => { throw error; }, publish, failed)).rejects.toBe(error);
+    expect(failed).toHaveBeenCalledWith(error);
+    expect(publish).not.toHaveBeenCalled();
+    const stale = deferred<CompatibilitySessionSnapshot>();
+    const old = coordinator.refresh(() => stale.promise, publish, failed);
+    await coordinator.refresh(async () => snapshot('new'), publish, failed);
+    stale.reject(error);
+    await expect(old).resolves.toBeUndefined();
+    expect(failed).toHaveBeenCalledTimes(1);
+  });
+
   it('does not expose a signed-in snapshot before business and bootstrap recovery finish', async () => {
     const business = { id: 'workspace-1', slug: 'primary-link' } as Business;
     const primary = { id: 'assistant-1', public_slug: 'primary-link', state: 'draft' } as Assistant;

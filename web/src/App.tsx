@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, createContext, useContext } from 'react';
 import { Routes, Route, Navigate, useNavigate, Link, useLocation } from 'react-router-dom';
-import { api, type Assistant, type Business, type Me } from './api';
+import { api, ApiError, type Assistant, type Business, type Me } from './api';
 import { Logo, Spinner } from './ui';
 import AuthPage from './pages/Auth';
 import Onboarding from './pages/Onboarding';
@@ -54,8 +54,10 @@ export default function App() {
   const [signOutPending, setSignOutPending] = useState(false);
   const [signOutWarning, setSignOutWarning] = useState<string | null>(null);
   const sessionCoordinator = useRef(new CompatibilitySessionCoordinator());
+  const hasSession = useRef(false);
 
   const clearSession = useCallback(() => {
+    hasSession.current = false;
     setMe(null);
     setBusiness(null);
     setWorkspaceReady(false);
@@ -64,6 +66,7 @@ export default function App() {
   }, []);
 
   const publishSession = useCallback((snapshot: CompatibilitySessionSnapshot) => {
+    hasSession.current = true;
     // Publish the account and its workspace as one renderable snapshot. If
     // `me` lands first after sign-in, a resumable Onboarding mounts against a
     // transient null business and keeps those empty one-shot form values.
@@ -80,10 +83,13 @@ export default function App() {
   }, []);
 
   const refresh = useCallback(async () => {
-    await sessionCoordinator.current.refresh(loadCompatibilitySession, publishSession, () => {
-      clearSession();
+    await sessionCoordinator.current.refresh(loadCompatibilitySession, publishSession, error => {
+      // A temporary post-save read failure does not invalidate the authenticated
+      // snapshot. Let the saving page report recovery without losing its state.
+      if (!hasSession.current || (error instanceof ApiError && (error.status === 401 || error.status === 403))) clearSession();
       setSignOutPending(false);
       setLoading(false);
+      throw error;
     });
   }, [clearSession, publishSession]);
 
@@ -103,7 +109,7 @@ export default function App() {
   }, [clearSession]);
 
   useEffect(() => {
-    void refresh();
+    void refresh().catch(() => {}); // Initial signed-out/unavailable load has no saving page.
   }, [refresh]);
 
   if (loading) {
