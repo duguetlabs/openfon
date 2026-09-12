@@ -79,6 +79,21 @@ describe('account self service', () => {
     expect(JSON.parse(text).data.businesses).toHaveLength(1);
   });
 
+  it('exports independent provider configuration without any capability key', async () => {
+    db.database.prepare(`INSERT INTO provider_settings
+      (business_id,llm_base_url,llm_model,llm_api_key,stt_provider,stt_base_url,stt_model,stt_api_key,realtime_provider,realtime_base_url,realtime_api_key)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run('biz-owner','https://text.example/v1','custom-text','text-export-secret',
+      'custom','https://speech.example/v1','custom-stt','speech-export-secret','openai','wss://api.openai.com/v1/realtime','realtime-export-secret');
+    const response = await call('/api/me/account/export');
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    for (const key of ['text-export-secret','speech-export-secret','realtime-export-secret','llm_api_key','stt_api_key','realtime_api_key']) expect(text).not.toContain(key);
+    expect(JSON.parse(text).data.provider_settings[0]).toMatchObject({
+      llm_model:'custom-text',stt_provider:'custom',stt_base_url:'https://speech.example/v1',stt_model:'custom-stt',
+      realtime_provider:'openai',realtime_base_url:'wss://api.openai.com/v1/realtime',
+    });
+  });
+
   it('reads account, calls and turns in one snapshot when finalization happens between operations', async () => {
     db.exec("INSERT INTO calls(id,business_id,status) VALUES ('snapshot-call','biz-owner','active')");
     let exportReads = 0;

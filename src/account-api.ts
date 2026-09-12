@@ -12,7 +12,7 @@ const EXPORT_COLUMNS: Record<string, string[]> = {
   businesses: ['id', 'user_id', 'slug', 'name', 'description', 'address', 'phone', 'website', 'timezone', 'hours_json', 'services_json', 'faqs_json', 'created_at', 'closures_json', 'max_concurrent_calls', 'max_calls_per_day'],
   assistants: ['id', 'business_id', 'public_slug', 'state', 'name', 'greeting', 'persona', 'language', 'voice', 'take_messages', 'custom_instructions', 'engine', 'realtime_model', 'realtime_voice', 'llm_model', 'created_at', 'updated_at', 'activated_at'],
   agent_settings: ['business_id', 'agent_name', 'greeting', 'persona', 'language', 'voice', 'take_messages', 'custom_instructions', 'llm_base_url', 'llm_model', 'engine', 'realtime_model', 'realtime_voice'],
-  provider_settings: ['business_id', 'llm_base_url', 'created_at', 'updated_at'],
+  provider_settings: ['business_id', 'llm_base_url', 'llm_model', 'stt_provider', 'stt_base_url', 'stt_model', 'realtime_provider', 'realtime_base_url', 'created_at', 'updated_at'],
   engine_presets: ['id', 'business_id', 'name', 'engine', 'realtime_model', 'realtime_voice', 'language', 'voice', 'llm_model', 'created_at', 'updated_at'],
   engine_profiles: ['id', 'business_id', 'name', 'engine', 'realtime_model', 'realtime_voice', 'language', 'voice', 'llm_base_url', 'llm_model', 'created_at'],
   knowledge_collections: ['id', 'business_id', 'name', 'description', 'is_default', 'created_at', 'updated_at'],

@@ -54,3 +54,6 @@ Sole release consolidation owner. Complete old launch findings, preserve stacked
 ## Files / next action
 Committed owner files plus integration migration rehearsal, test fixture/registry/port reconciliation, CI gate/runtime checks and evidence docs. Only pre-existing node_modules remains untracked after checkpoint commit.
 Next: publish latest evidence/harness head to PR16, retrigger required reviews, watch/fix real findings and CI. Ask root the concrete mandatory-reviewer decision only when candidate otherwise reviewable. Preserve production and disabled staging routes; real provider/audio/PSTN and account gates remain. Do not end at a plan or merge around missing PR-Agent.
+
+## Post-consolidation export correction
+Independent integration inspection found account export's explicit provider allowlist still omitted migration0010 non-secret settings (model, STT choice/URL/model, realtime choice/URL). Adding those fields while retaining key exclusions; regression verifies all three credentials absent and configuration preserved. This is an integration-only migration0010 follow-up, not applicable to stacked PR14's older schema. Targeted validation running before push/review retrigger.
