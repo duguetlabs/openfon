@@ -73,6 +73,7 @@ export function registerAccountApi(app: App): void {
     const tables = { users: ['id', 'email', 'created_at'], ...EXPORT_COLUMNS };
     const ctes: string[] = [];
     const measurements: string[] = [];
+    const rawMeasurements: string[] = [];
     const payloads: string[] = [];
     const bindings: string[] = [];
     // One SQL statement provides a snapshot across the owner and every table.
@@ -94,9 +95,19 @@ export function registerAccountApi(app: App): void {
       // large legacy rows before constructing JSON, below D1's 2 MB string
       // limit even in that worst case. Normal API writes are capped at 128 KiB.
       const rawBytes = columns.map(column => `COALESCE(length(CAST(${column} AS BLOB)), 0)`).join(' + ');
+      // Measure bounded raw rows first; rejected accounts must never construct
+      // JSON for their payload. The second scan shares this statement's snapshot.
+      ctes.push(`${table}_raw AS MATERIALIZED (
+        SELECT COUNT(*) AS row_count, COALESCE(SUM(raw_bytes),0) AS bytes,
+          COALESCE(MAX(raw_bytes),0) AS largest_row, ${rowLimit} AS row_limit
+        FROM (SELECT (${rawBytes}) AS raw_bytes FROM ${table} WHERE ${scope} LIMIT ${rowLimit + 1})
+      )`);
+      bindings.push(userId);
+      rawMeasurements.push(`SELECT * FROM ${table}_raw`);
       ctes.push(`${table}_rows AS MATERIALIZED (
-        SELECT CASE WHEN (${rawBytes})<=240000 THEN ${jsonRow} ELSE NULL END AS item
-        FROM ${table} WHERE ${scope}
+        SELECT ${jsonRow} AS item FROM ${table}
+        WHERE (SELECT bytes<=${EXPORT_BYTE_LIMIT - 4096} AND largest_row<=240000 AND too_many=0 FROM raw_budget)
+          AND ${scope} LIMIT ${rowLimit}
       )`);
       bindings.push(userId);
       measurements.push(`SELECT '${table}' AS table_name, COUNT(*) AS row_count,
@@ -116,12 +127,16 @@ export function registerAccountApi(app: App): void {
       }
       return groups.join(' UNION ALL ');
     };
+    const rawSql = groupedUnion('raw_group', rawMeasurements);
+    ctes.push(`raw_budget AS MATERIALIZED (SELECT SUM(bytes) AS bytes, MAX(largest_row) AS largest_row,
+      MAX(CASE WHEN row_count>row_limit THEN 1 ELSE 0 END) AS too_many FROM (${rawSql}))`);
     const measuredSql = groupedUnion('measurement_group', measurements);
     const payloadSql = groupedUnion('payload_group', payloads);
     const result = await c.env.DB.prepare(`WITH ${ctes.join(',')},
       measured AS MATERIALIZED (${measuredSql}),
-      budget AS (SELECT SUM(bytes) AS bytes, MAX(largest_row) AS largest_row,
-        MAX(CASE WHEN row_count>row_limit THEN 1 ELSE 0 END) AS too_many FROM measured),
+      budget AS (SELECT MAX(SUM(bytes), (SELECT bytes FROM raw_budget)) AS bytes,
+        MAX(MAX(largest_row), CASE WHEN (SELECT largest_row FROM raw_budget)>240000 THEN 1500001 ELSE 0 END) AS largest_row,
+        MAX(MAX(CASE WHEN row_count>row_limit THEN 1 ELSE 0 END), (SELECT too_many FROM raw_budget)) AS too_many FROM measured),
       payloads AS MATERIALIZED (${payloadSql})
       SELECT NULL AS table_name, NULL AS payload, bytes, largest_row, too_many FROM budget
       UNION ALL

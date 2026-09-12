@@ -12,7 +12,7 @@ export function confirmDiscardUnsaved(): boolean {
   return true;
 }
 
-export function useUnsavedEdits(dirty: boolean): void {
+export function useUnsavedEdits(dirty: boolean): () => void {
   const guard = useRef({ dirty, approved: false });
   guard.current.dirty = dirty;
   if (!dirty) guard.current.approved = false;
@@ -32,4 +32,5 @@ export function useUnsavedEdits(dirty: boolean): void {
     event.preventDefault();
     event.returnValue = '';
   }, []));
+  return () => { guard.current.dirty = false; guard.current.approved = false; };
 }
