@@ -1677,6 +1677,8 @@ export function registerStudioApi(app: StudioApp): void {
            AND realtime_voice<>'' AND realtime_voice NOT IN (${voicePlaceholders})`
         ).bind(workspace.id, ...OPENAI_REALTIME_VOICES));
       }
+      // This owner-side cleanup is not an edit from an old worker.
+      statements.push(updateAgentSnapshot(c.env, workspace.id));
     }
     await c.env.DB.batch(statements);
     return c.json({
