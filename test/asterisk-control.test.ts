@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { AsteriskCall } from '../src/asterisk-control';
 import { asteriskDigest, authenticateAsterisk } from '../src/asterisk-routes';
 import { applyMigrations, SqliteD1 } from './sqlite-d1';
@@ -23,7 +22,7 @@ function owner(storage=new Storage()) {
 }
 const request=()=>new Request(`https://internal/media?call=${call}&route=pbx`,{headers:{Upgrade:'websocket',Authorization:auth}});
 beforeEach(async()=>{
-  db=new SqliteD1();applyMigrations(db,1,9);db.exec(readFileSync(new URL('../migrations/0010_provider_capabilities.sql',import.meta.url),'utf8'));db.exec(readFileSync(new URL('../migrations/0011_asterisk_inbound.sql',import.meta.url),'utf8'));
+  db=new SqliteD1();applyMigrations(db);
   db.exec(`INSERT INTO users(id,email,password_hash) VALUES('owner','owner@example.invalid','unused');
     INSERT INTO businesses(id,user_id,slug,name,max_concurrent_calls,max_calls_per_day) VALUES('biz','owner','biz','Business',1,2);
     INSERT INTO assistants(id,business_id,public_slug,state,name,persona,language,engine,realtime_model) VALUES('assistant','biz','assistant','active','Alex','Helpful','en','realtime','gpt-realtime-2');`);

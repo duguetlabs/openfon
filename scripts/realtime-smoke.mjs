@@ -75,7 +75,7 @@ export default { async fetch(request, env) {
 `;
 try {
   const bundle = await build({ entryPoints: [resolve(root, 'src/index.ts')], bundle: true, format: 'esm', platform: 'browser', target: 'es2022', write: false, external: ['cloudflare:*'] });
-  mf = new Miniflare(convertV4MiniflareOptions({ defaultPersistRoot: temp, port: 8813, inspectorPort: 9253, cf: false, workers: [
+  mf = new Miniflare(convertV4MiniflareOptions({ defaultPersistRoot: temp, port: Number(process.env.OPENFON_TEST_PORT || 8813), inspectorPort: Number(process.env.OPENFON_INSPECTOR_PORT || 9253), cf: false, workers: [
     { name: 'openfon', modules: true, script: bundle.outputFiles[0].text, compatibilityDate: '2026-05-01',
       d1Databases: { DB: 'smoke-db' }, durableObjects: { CALL_SESSION: { className:'CallSession',useSQLite:true }, TELNYX_CALL:{className:'TelnyxCall',useSQLite:true} },
       outboundService: 'mock-provider', bindings: {

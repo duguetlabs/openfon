@@ -1,11 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
-import { randomUUID } from 'node:crypto';
-
-// Local workerd accepts this edge header; each attempt gets its own production
-// limiter bucket, including retries. No application limit or auth is bypassed.
-test.beforeEach(async ({ context }) => {
-  await context.setExtraHTTPHeaders({ 'CF-Connecting-IP': `e2e-${randomUUID()}` });
-});
+import { test, expect } from './fixtures';
+import type { Page } from '@playwright/test';
 
 async function signup(page: Page) {
   await page.goto('/auth');

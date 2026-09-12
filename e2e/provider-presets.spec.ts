@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('provider alternatives persist, keep custom models, and require a new key when endpoints change', async ({ page }) => {
   await page.goto('/auth');
