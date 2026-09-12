@@ -2064,6 +2064,9 @@ describe('telephone audio capabilities', () => {
     await session.fetch(upgradeRequest());
     serverSockets[0].receive({ type: 'start' });
     await flush(100);
+    const pending = (session as unknown as { nativeGreeting: { frames: ArrayBuffer[]; resolve: (ok: boolean) => void } }).nativeGreeting;
+    pending.frames.push(new ArrayBuffer(4)); pending.resolve(true);
+    await flush(80);
     expect(serverSockets[0].messages().find(m => m.type === 'ready')).toMatchObject({mode: 'realtime', greeting: ''});
     expect(serverSockets[0].countOf('ended')).toBe(0);
     serverSockets[0].receive({type:'hangup'});
@@ -2246,5 +2249,88 @@ describe('direct OpenAI realtime independence', () => {
     expect(serverSockets[0].countOf('ended')).toBe(1);
     expect(requests).toHaveLength(1);
     expect(JSON.stringify(callUpdates())).not.toContain('private material');
+  });
+});
+
+describe('native greeting admission boundary', () => {
+  it.each(['web', 'telnyx'])('connects direct realtime without text keys for %s startup', async channel => {
+    vi.useFakeTimers();
+    const up = new FakeSocket();
+    const fetcher = vi.fn(async () => ({ status: 101, webSocket: up }));
+    globalThis.fetch = fetcher as unknown as typeof fetch;
+    const { session, ctl } = newSession('realtime', {
+      realtime_provider: 'openai', realtime_api_key: 'synthetic-direct', realtime_model: '',
+      llm_base_url: '', llm_api_key: '', llm_model: '',
+    }, { DEFAULT_LLM_API_KEY: '', REALTIME_API_KEY: '', DEFAULT_LLM_BASE_URL: 'https://api.openai.com/v1' });
+    ctl.channel = channel;
+    await session.fetch(upgradeRequest());
+    const caller = serverSockets[0]; caller.receive({ type: 'start' });
+    await flush(80);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(String(fetcher.mock.calls[0][0])).toBe('https://api.openai.com/v1/realtime?model=gpt-realtime');
+    const sent = up.messages().find(m => m.type === 'session.update')!.session;
+    up.receive({ type: 'session.updated', session: sent });
+    up.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' });
+    await flush(80);
+    expect(caller.countOf('ready')).toBe(1);
+    expect(caller.binaryCount()).toBe(1);
+    expect(caller.countOf('error')).toBe(0);
+    caller.receive({ type: 'hangup' }); await flush(80);
+  });
+
+  it('withholds carrier ready and buffered input until delayed native greeting audio exists', async () => {
+    vi.useFakeTimers();
+    const { session, ctl } = newSession('realtime', { realtime_model: 'gpt-realtime-2' });
+    ctl.channel = 'telnyx';
+    await session.fetch(upgradeRequest());
+    const caller = serverSockets[0];
+    const send = caller.send.bind(caller);
+    caller.send = data => {
+      send(data);
+      // Emulate the carrier's preReady queue, which releases on ready.
+      if (typeof data === 'string' && JSON.parse(data).type === 'ready') caller.emit('message', { data: new ArrayBuffer(960) });
+    };
+    caller.receive({ type: 'start' }); await flush(80);
+    const up = upstreamSockets[0]; up.emit('open', {}); await flush(80);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(up.countOf('response.create')).toBe(1);
+    expect(caller.countOf('ready')).toBe(0);
+    expect(up.countOf('input_audio_buffer.append')).toBe(0);
+    up.receive({ type: 'response.output_audio.delta', delta: '' }); await flush();
+    expect(caller.countOf('ready')).toBe(0);
+    up.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' }); await flush(80);
+    expect(caller.countOf('ready')).toBe(1);
+    expect(caller.binaryCount()).toBe(1);
+    const index = caller.sent.findIndex(data => typeof data === 'string' && JSON.parse(data).type === 'ready');
+    expect(caller.sent[index + 1]).toBeInstanceOf(ArrayBuffer);
+    expect(up.countOf('input_audio_buffer.append')).toBe(1);
+    up.receive({ type: 'input_audio_buffer.speech_started' });
+    expect(caller.countOf('flush')).toBe(1); // normal barge-in after greeting starts
+    caller.receive({ type: 'hangup' }); await flush(80);
+  });
+});
+
+
+describe('native carrier greeting failure', () => {
+  it.each(['timeout', 'hangup', 'upstream-close', 'upstream-close-with-audio'])('does not announce ready after %s while waiting for native audio', async failure => {
+    vi.useFakeTimers();
+    const { session, ctl, callUpdates } = newSession('realtime', { realtime_model: 'gpt-realtime-2' });
+    ctl.channel = 'telnyx';
+    await session.fetch(upgradeRequest());
+    const caller = serverSockets[0]; caller.receive({ type: 'start' }); await flush(80);
+    const up = upstreamSockets[0]; up.emit('open', {}); await flush(80);
+    if (failure === 'timeout') await vi.advanceTimersByTimeAsync(5001);
+    else if (failure.startsWith('upstream-close')) {
+      if (failure === 'upstream-close-with-audio') up.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' });
+      up.close();
+    }
+    else caller.receive({ type: 'hangup' });
+    await flush(100);
+    up.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' }); await flush();
+    expect(caller.countOf('ready')).toBe(0);
+    expect(caller.binaryCount()).toBe(0);
+    expect(caller.countOf('ended')).toBe(1);
+    expect(up.closed).not.toBeNull();
+    if (failure === 'timeout') expect(callUpdates().some(w => w.args.includes('The realtime provider did not produce usable greeting audio.'))).toBe(true);
   });
 });

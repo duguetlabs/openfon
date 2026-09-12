@@ -42,7 +42,10 @@ The Worker upgrades an HTTP request with `Authorization: Bearer …`; it does no
 put the OpenAI project key in a query parameter or browser subprotocol. Redirects
 are refused. The session uses PCM16 mono 24 kHz, audio output, caller transcription,
 and the `end_call` tool. Direct startup waits for a matching `session.updated`
-configuration before requesting a greeting and declaring readiness. A rejected or
+configuration before requesting a greeting. Carrier readiness additionally waits
+for the first valid native greeting PCM, queued immediately after the ready event;
+ordinary interruption remains enabled once that audio starts. A bounded five-second
+wait fails closed if no greeting audio arrives. Browser readiness is unchanged. A rejected or
 unconfirmed direct connection fails the call, without falling back to an instance
 pipeline. Reconnection retains the existing retry limits and conversation briefing.
 

@@ -220,6 +220,7 @@ export class CallSession implements DurableObject {
   // Computed once and reused across finalize retries, so a failed row write
   // does not re-bill summarization.
   private summarized: { summary: string | null; intent: string | null; messageJson: string | null } | null = null;
+  private nativeGreeting: { ready: Promise<boolean>; resolve: (ok: boolean) => void; frames: ArrayBuffer[]; bytes: number; failed: boolean } | null = null;
   private starting: Promise<void> | null = null; // in-flight or completed start
   private announced = false; // `ready` sent: the session exists, retries are off
   private lang = 'en'; // follows the caller; starts as the business default
@@ -430,6 +431,7 @@ export class CallSession implements DurableObject {
     if (this.ended) return;
     this.lastActivity = Date.now(); // feeds the idle watchdog
     if (typeof ev.data !== 'string') {
+      if (this.nativeGreeting) return; // carrier input cannot overtake the native greeting
       const audio = await toArrayBuffer(ev.data);
       if (this.mode === 'realtime') {
         this.sendUpstream({ type: 'input_audio_buffer.append', audio: b64encode(audio) });
@@ -543,6 +545,11 @@ export class CallSession implements DurableObject {
 
     if (this.settings!.engine === 'realtime') {
       this.history = [{ role: 'system', content: systemPrompt }];
+      if (this.requiresCarrierAudio && this.engineGreets()) {
+        let resolve!: (ok: boolean) => void;
+        const ready = new Promise<boolean>(done => { resolve = done; });
+        this.nativeGreeting = { ready, resolve, frames: [], bytes: 0, failed: false };
+      }
       const ok = await this.startRealtime(systemPrompt, greeting).catch((err) => {
         console.error('realtime engine startup failed: provider details redacted');
         return false;
@@ -558,7 +565,26 @@ export class CallSession implements DurableObject {
           // Engine speaks the greeting in its own voice; the greeting text and
           // transcript turn arrive through the normal event stream.
           const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-          this.sendReady({ mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
+          const pending = this.nativeGreeting;
+          if (pending) {
+            // Config acknowledgement is not evidence of generated greeting
+            // audio. Bound the wait; hangup also wakes it through closeUpstream.
+            const timer = setTimeout(() => pending.resolve(false), 5000);
+            const hasAudio = await pending.ready;
+            clearTimeout(timer);
+            this.nativeGreeting = null;
+            if (this.ended) return;
+            if (!hasAudio || pending.failed) {
+              await this.failCarrierAudio('The realtime provider did not produce usable greeting audio.');
+              return;
+            }
+            // The carrier releases buffered input on ready. Queue the first
+            // PCM immediately afterward, with no await or event-loop gap.
+            this.sendReady({ mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
+            for (const audio of pending.frames) { try { this.ws?.send(audio); } catch { /* caller gone */ } }
+          } else {
+            this.sendReady({ mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
+          }
           return;
         }
         if (this.requiresCarrierAudio && !(this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY)) {
@@ -657,6 +683,8 @@ export class CallSession implements DurableObject {
   }
 
   private closeUpstream(): void {
+    this.nativeGreeting?.resolve(false);
+    this.nativeGreeting = null;
     for (const ws of this.readableUpstreams) {
       try {
         ws.close(1000, 'call ended');
@@ -1145,6 +1173,7 @@ export class CallSession implements DurableObject {
         clearTimeout(timer);
         this.readableUpstreams.delete(ws);
         settle(false);
+        if (this.nativeGreeting) { this.nativeGreeting.failed = true; this.nativeGreeting.resolve(false); return; }
         if (this.mode === 'realtime' && !this.ended && this.upstream === ws) {
           this.upstream = null;
           void this.recoverUpstream();
@@ -1263,7 +1292,15 @@ export class CallSession implements DurableObject {
               }
               this.outputAudio.bytes += audio.byteLength;
             }
-            this.ws.send(audio);
+            const pending = this.nativeGreeting;
+            if (pending) {
+              if (!audio.byteLength || audio.byteLength % 2) break;
+              if (pending.bytes + audio.byteLength > 480000) {
+                pending.failed = true; pending.resolve(false); break;
+              }
+              pending.frames.push(audio); pending.bytes += audio.byteLength;
+              pending.resolve(true);
+            } else this.ws.send(audio);
           } catch {
             /* caller gone */
           }
@@ -1273,7 +1310,7 @@ export class CallSession implements DurableObject {
         // Barge-in: the server cancels its in-flight response; we flush caller
         // playback — except while our own greeting is playing, where a noise
         // blip would cut off the agent's opening line for nothing.
-        if (Date.now() < this.greetingGuardUntil) break;
+        if (this.nativeGreeting || Date.now() < this.greetingGuardUntil) break;
         this.send({ type: 'flush' });
         if (this.realtimeConfig?.protocol === 'openai' && this.outputAudio?.socket === from) {
           const output = this.outputAudio;

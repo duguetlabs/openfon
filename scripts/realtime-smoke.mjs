@@ -37,7 +37,7 @@ export default { async fetch(request, env) {
   if (url.hostname === '${gateway ? 'realtime.smoke.invalid' : 'api.openai.com'}' && url.pathname === '/v1/realtime' && request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
     if (${gateway ? "url.searchParams.get('token') !== 'synthetic-gateway-key'" : "request.headers.get('Authorization') !== 'Bearer synthetic-direct-key' || url.searchParams.has('token')"}) return new Response('Invalid provider authentication', { status: 401 });
     const pair = new WebSocketPair(); const socket = pair[1]; socket.accept();
-    let responded = false;
+    let responded = false; let greetingEmitted = false;
     const tone=new Uint8Array(4800); const view=new DataView(tone.buffer);
     for(let i=0;i<2400;i++) view.setInt16(i*2,Math.round(8000*Math.sin(2*Math.PI*440*i/24000)),true);
     const audio=btoa(String.fromCharCode(...tone));
@@ -55,13 +55,14 @@ export default { async fetch(request, env) {
         send({type:'session.updated',session:msg.session});
       }
       if (msg.type === 'response.create') setTimeout(() => {
+        greetingEmitted = true;
         send({type:'response.output_audio.delta',delta:audio});
         send({type:'response.output_audio_transcript.done',transcript:'Synthetic greeting.'});
-      }, 30);
+      }, 400);
       if (msg.type === 'input_audio_buffer.append' && !responded) {
         responded = true;
         const bytes = atob(msg.audio).length;
-        env.RECORD.fetch('https://telemetry.smoke.invalid/input', {method:'POST',body:JSON.stringify({bytes})});
+        env.RECORD.fetch('https://telemetry.smoke.invalid/input', {method:'POST',body:JSON.stringify({bytes,greetingEmitted})});
         // After greeting guard expires, emit barge-in then a short goodbye.
         setTimeout(() => {
           send({type:'input_audio_buffer.speech_started'});
@@ -159,11 +160,12 @@ try {
   });
   carrier.send(JSON.stringify({event:'connected',version:'1.0.0',connected:{'x-telnyx-streaming-auth-token':stream.body.stream_auth_token}}));
   carrier.send(JSON.stringify({event:'start',sequence_number:'1',stream_id:'smoke-stream',start:{...call,media_format:{encoding:'PCMU',sample_rate:8000,channels:1}}}));
+  carrier.send(JSON.stringify({event:'media',sequence_number:'2',stream_id:'smoke-stream',media:{track:'inbound',chunk:'1',timestamp:'0',payload:Buffer.alloc(160,255).toString('base64')}}));
   await wait(()=>received.some(x=>x.event==='media'),'realtime greeting PCM');
   assert.ok(received.some(x=>x.event==='media' && [...Buffer.from(x.media.payload,'base64')].some(byte=>byte!==255)), 'non-silent tone survives codec');
-  carrier.send(JSON.stringify({event:'media',sequence_number:'2',stream_id:'smoke-stream',media:{track:'inbound',chunk:'1',timestamp:'0',payload:Buffer.alloc(160,255).toString('base64')}}));
   await wait(()=>telemetry.some(x=>x.path==='/input'),'PCM reaches realtime');
   assert.equal(telemetry.find(x=>x.path==='/input').body.bytes,960);
+  assert.equal(telemetry.find(x=>x.path==='/input').body.greetingEmitted,true,'buffered carrier input must not overtake native greeting');
   await wait(()=>received.some(x=>x.event==='clear'),'barge-in clear');
   await wait(()=>commands.find(x=>x.action==='hangup'),'terminal carrier command');
   const before=await db.prepare("SELECT status,carrier_released_at FROM calls WHERE channel='telnyx'").first();
