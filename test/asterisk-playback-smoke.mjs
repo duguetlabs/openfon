@@ -19,7 +19,7 @@ export default {fetch(){
     if(msg.probe==='load'){adapter.sessionMessage(new ArrayBuffer(480000));socket.send(JSON.stringify({probe:'loaded',frames}));}
     else if(msg.event==='MEDIA_XOFF'){adapter.carrierMessage(event.data);socket.send(JSON.stringify({probe:'paused',frames}));}
     else if(msg.probe==='flush'){adapter.sessionMessage(JSON.stringify({type:'flush'}));socket.send(JSON.stringify({probe:'flushed',frames}));}
-    else if(msg.probe==='finish'){adapter.sessionMessage(new ArrayBuffer(960));adapter.sessionMessage(JSON.stringify({type:'ending'}));}
+    else if(msg.probe==='finish'){adapter.sessionMessage(new ArrayBuffer(960));adapter.sessionMessage(JSON.stringify({type:'ending'}));socket.send(JSON.stringify({probe:'finishQueued',frames}));}
     else adapter.carrierMessage(event.data);
   });
   socket.addEventListener('close',()=>adapter.close());
@@ -45,11 +45,13 @@ try{
   const paused=await wait(()=>messages.find(x=>x.probe==='paused'),'XOFF delivered through WebSocket');
   assert.ok(paused.frames>0 && paused.frames<500,'XOFF intercepted incremental playback');
   await new Promise(r=>setTimeout(r,150));assert.equal(frames,paused.frames,'no media while XOFF');
-  send({event:'MEDIA_XON'});await wait(()=>frames>paused.frames,'XON resumes scheduled playback');
   send({probe:'flush'});const flushed=await wait(()=>messages.find(x=>x.probe==='flushed'),'flush');
   await new Promise(r=>setTimeout(r,150));assert.equal(frames,flushed.frames,'flush cancels old scheduled output');
   ack=true;send({probe:'finish'});
+  await wait(()=>messages.find(x=>x.probe==='finishQueued'),'new PCM and ending queued after flush');
+  await new Promise(r=>setTimeout(r,300));assert.equal(frames,flushed.frames,'flush and new PCM must not override XOFF');
+  send({event:'MEDIA_XON'});
   const ended=await wait(()=>messages.find(x=>x.probe==='ended'),'final marks/drain');assert.equal(ended.reason,'playback_complete');
   assert.ok(messages.some(x=>x.command==='HANGUP'));
-  console.log(`PASS workerd incremental playback: maximum frame writes 0 synchronously; XOFF paused at ${paused.frames}/500 frames; XON resumes, flush cancels old pump, final marks drain and cleanup. Synthetic PCM/PBX only.`);
+  console.log(`PASS workerd incremental playback: maximum frame writes 0 synchronously; XOFF paused at ${paused.frames}/500 frames; flush/new PCM/ending remain blocked until XON; final marks drain and cleanup. Synthetic PCM/PBX only.`);
 }finally{try{socket?.close();}catch{}await mf?.dispose();}

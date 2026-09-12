@@ -79,7 +79,9 @@ export class AsteriskMediaAdapter {
       } else if (msg.type === 'flush') {
         this.stopPump();
         this.queue = []; this.marks.clear(); this.down.reset(); this.generation++;
-        this.paused = false; this.drained = false; this.command('FLUSH_MEDIA');
+        // FLUSH_MEDIA clears Asterisk's queue, not its queue_full/XOFF state.
+        // Its dequeue loop subsequently emits XON; only that event may resume us.
+        this.drained = false; this.command('FLUSH_MEDIA');
         if (this.ending) this.armDrain();
       } else if (msg.type === 'ending') {
         if (!this.ready) throw Error();

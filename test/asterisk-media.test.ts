@@ -101,4 +101,21 @@ describe('Asterisk JSON ulaw transport', () => {
     expect(end).toHaveBeenCalledExactlyOnceWith('playback_error');expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('flush preserves XOFF until XON even with new audio and final drain queued',()=>{
+    begin();adapter.sessionMessage(new ArrayBuffer(960));vi.advanceTimersByTime(20);
+    const old=commands().find(x=>x.command==='MARK_MEDIA');
+    adapter.carrierMessage(JSON.stringify({event:'MEDIA_XOFF'}));
+    adapter.sessionMessage(JSON.stringify({type:'flush'}));
+    adapter.sessionMessage(new ArrayBuffer(960));adapter.sessionMessage(JSON.stringify({type:'ending'}));
+    adapter.carrierMessage(JSON.stringify({event:'MEDIA_MARK_PROCESSED',correlation_id:old.correlation_id}));
+    vi.advanceTimersByTime(500);
+    expect(carrier.filter(x=>x instanceof ArrayBuffer)).toHaveLength(1);
+    expect(end).not.toHaveBeenCalled();
+    adapter.carrierMessage(JSON.stringify({event:'MEDIA_XON'}));vi.advanceTimersByTime(20);
+    const current=commands().filter(x=>x.command==='MARK_MEDIA' && x.correlation_id.startsWith('1:'));
+    expect(current).toHaveLength(2);expect(end).not.toHaveBeenCalled();
+    for(const mark of current)adapter.carrierMessage(JSON.stringify({event:'MEDIA_MARK_PROCESSED',correlation_id:mark.correlation_id}));
+    expect(end).toHaveBeenCalledExactlyOnceWith('playback_complete');expect(vi.getTimerCount()).toBe(0);
+  });
+
 });
