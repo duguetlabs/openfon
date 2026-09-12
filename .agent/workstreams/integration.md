@@ -1,12 +1,12 @@
 # Integration checkpoint
 
-- Status: In progress — QA closed486bb25 combined corrections; publishing docs-final candidate for required hosted and official full reviews
+- Status: In progress — official a20f2d8 complete with two findings/no security; hosted reviews/CI pending; owner verification assigned
 - Owner: openfon-integration, gpt-6-astra / medium
 - Branch/worktree: codex/integrated-release, /Users/cristian/projects/fun/openfon-worktrees/integration
-- Updated: 2026-09-12
-- Application candidate: 42077ab (realtimec58b17d after presets11524e2/Telnyx348dd9c); combined813/813 tests35files and both typechecks PASS; affected workerd smokes running
-- Published PR16 head: 5e0ece34b445297ace05b6474b2fb9e4e968a5b4 (docs-only over applicationd43a3ff; frozen for required reviews)
-- Validation slot: QA released after317 focused and independent actual-workerd HTTP reader probe; no validation runner active
+- Updated: 2026-09-13
+- Application candidate: c06ee1c adds atomic provider cleanup snapshot to publisheda20; owner101 focused/both types and2 original privacy negatives; prior42077ab813/types/runtime and QA317 remain attributed
+- Published PR16 head: a20f2d8225f6485f499959eeecf820bc3e62ddc1 (docs-only over QA-scoped486bb25/application42077ab; frozen for required reviews)
+- Validation slot: integration released after105 focused/both types; QA granted bounded independent follow-up review, no other runner
 - Ports: integration8814/9254, optional real-PBX proxy8824; never8787
 - Read first: root orchestration-rules/current-task/manifest (read-only), this file, docs/launch/readiness.md
 - Earlier detailed milestones and failures remain in this file's history through ccdd85d and the linked original review reports. This checkpoint records current state.
@@ -24,6 +24,20 @@ Realtimec58b17d→42077ab assembled with application hunks clean. Docs conflict 
 Final42077ab direct/gateway and Telnyx native+synthesized actual-workerd smokes PASS, all processes exited. Logs/tmp/openfon-420-direct.log,/tmp/openfon-420-gateway.log,/tmp/openfon-420-telnyx.log. Prior08cc Asterisk/retirement runtime unchanged by later Telnyx/preset/error-event deltas; full813 covers assembled interfaces. Reporting-only rehearsal9/17 previously passed without behavior change. Integration releases sole slot to QA for bounded independent combined closure, no full-suite duplication or official inference until published freeze. Remote5e0 and stagingb15 remain unchanged.
 
 ## Authorization and ownership
+Assembled fe8e9b4→daf1c99 harness-only correction after snapshotc06ee1c. Only owner checkpoint append conflicted; source preserved. Integration105/105 four focused files and worker/web types PASS, logs/tmp/openfon-a20-followup-focused.log,/tmp/openfon-a20-followup-types.log. Owner actual Asterisk22.11 Local-channel/workerd PASS with fresh seq2/runtime-revoked401,0 rate-write attempts,unchanged rows/no extra call/zerochannels;4 harness tests PASS. Docker fixture gone and8811/9251/8821 clear perowner. Reused real runtime evidence, no duplicate PBX run. All integration processes exited; QA nextsole scoped review of these two deltas, no full duplication/inference. Hosted codea20 clean comment5649405765; security still pending. Newhead reviews remain required.
+
+Presets0bb382c→c06ee1c assembled clean application hunk (existing snapshot helper appended within OpenAI cleanup batch). Only owner checkpoint append conflicted; retained original and new evidence. Asterisk sole runtime grant active; integration no runner. Exact snapshot regression/source review and combined next-candidate validation remain pending before publication.
+
+Presets snapshot correction final101/101 focused/both types PASS; exacta20 negatives2 privacy assertions fail/2 pass. Initial test-only quota409 expectation corrected to actual429; genuine later legacy edit and exact quota rollback pass. All owner processes exited, exact commit pending. Asterisk now receives sole queued validation grant, sequential focused harness and real Local-channel/mock-AI runtime on assigned ports.
+
+Asterisk verified BrokenSmoke source and prepared harness-only correction: distinct revoked-call attempt, fresh proxy sequence/call/actual401 before zero channels, test-only zero rate-write attempts and unchanged D1 rows. No adapter/auth/schema changes. Queued after presets release for focused harness checks and isolated real Docker Asterisk Local-channel on8811/9251/8821 with mocked AI; not yet granted/running. Prior runtime evidence is not relabelled as validation of this correction.
+
+Presets independently verifieda20 draft activation; narrow provider PUT appends existing updateAgentSnapshot after OpenAI model/voice cleanup in the same batch. No shared reconciliation/activation/quota edits. Required regression covers bootstrap/public lookup order, genuine later legacy edit and atomic quota rollback. Source preparation active under existing next-slot grant; Asterisk source-only queued. Both exacta20 CI34725277186/34725249444 SUCCESS; hosted review verdicts still pending.
+
+Officiala20 report5649387055 published unchanged:3chunks/3calls498773tokens, exit0/stderr0, no security concerns but no clean major verdict. Root/QA provenance retained. Presets assigned provider OpenAI cleanup stale agent_snapshot/draft activation verification and narrow atomic snapshot correction with negative regression. Asterisk assigned real-PBX revoked-route smoke counter-wait verification and nonmutating attempt signal/zero-write regression. Both source-only initially; explicit sole validation queue presets then Asterisk. No duplicate inference; remote staysa20 while hosted reviews finish, staging unchanged. Completed report frees application work freeze but no publication before coordinated validation.
+
+Published freeze read back2026-09-13: PR16 OPEN at exacta20f2d8225f6485f499959eeecf820bc3e62ddc1. Normal git push succeeded; no connector/auth expansion. Official5e disposition5649371005 and hosted replies3997975631/5747/5813/5885/5962 posted. PRbodyupdated, close/reopen completed, code5649371528/security5649371618 requested. QA alone assigned one unchanged full official run; no competing inference, application runner, staging/live/production changes. This checkpoint readback remains local during freeze.
+
 QAace477c closes exact486bb25 bounded combined scope:317/317 six files plus independent actual-workerd reader exact64KiB UTF8/65537 fragmented pulls, oversized/empty/network refusal, status preservation and15001ms stalled-body deadline despite nonsettlingcancel PASS. Synthetic in-isolate fetch/streams only, no live HTTP claim. All QA processes exited and Miniflare disposed; no inference until next published freeze. Docs-final evidence update follows; app bytes remain42077ab. Original5e0 findings will receive dispositions and renewed hosted/official review, no clean-full verdict yet.
 
 Sole consolidation/release owner. Preserve root coordination commits, user research and other worktrees. Root alone edits shared current-task/manifest. Personal Duguet Labs secrets use dsecret; never expose values, signed export links or legacy credential files. Capture private command output in restricted files. Existing staged keys are retained; no extra live call, purchase, carrier routing or production mutation is part of this correction round.
