@@ -2,6 +2,8 @@ export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
   CALL_SESSION: DurableObjectNamespace;
+  ASTERISK_CALL?: DurableObjectNamespace;
+  ASTERISK_ENABLED?: string;
   TELNYX_CALL?: DurableObjectNamespace;
   TELNYX_ENABLED?: string;
   TELNYX_API_KEY?: string;

@@ -394,7 +394,7 @@ export class CallSession implements DurableObject {
     if (!call || call.status !== 'active') throw new Error('call not found or not active');
     // Persisted admission decides capabilities; a client cannot opt into another
     // channel using a query parameter or WebSocket message.
-    this.requiresCarrierAudio = call.channel === 'telnyx';
+    this.requiresCarrierAudio = call.channel === 'telnyx' || call.channel === 'asterisk';
     this.biz = await this.env.DB.prepare('SELECT * FROM businesses WHERE id = ?')
       .bind(call.business_id)
       .first<Business>();

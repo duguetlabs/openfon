@@ -1,0 +1,124 @@
+/** chan_websocket JSON control, ulaw/8000/mono. Asterisk owns 20ms pacing.
+ * https://docs.asterisk.org/Configuration/Channel-Drivers/WebSocket/
+ */
+import { Pcmu8ToPcm24, Pcm24ToPcmu8, MAX_PCM24_BYTES } from './telephony-audio';
+
+export class AsteriskMediaAdapter {
+  private up = new Pcmu8ToPcm24();
+  private down = new Pcm24ToPcmu8();
+  private started = false;
+  private ready = false;
+  private closed = false;
+  private paused = false;
+  private ending = false;
+  private drained = false;
+  private generation = 0;
+  private counter = 0;
+  private marks = new Set<string>();
+  private queue: string[] = [];
+  private startup = setTimeout(() => this.close('start_timeout'), 20000);
+  private quiet?: ReturnType<typeof setTimeout>;
+  private deadline?: ReturnType<typeof setTimeout>;
+  constructor(private options: {
+    carrierSend: (data: string | ArrayBuffer) => void;
+    sessionSend: (data: string | ArrayBuffer) => void;
+    onEnd: (reason: string) => void;
+  }) {}
+  private command(command: string, correlation_id?: string): void {
+    this.options.carrierSend(JSON.stringify({ command, ...(correlation_id ? { correlation_id } : {}) }));
+  }
+  carrierMessage(raw: unknown): void {
+    if (this.closed) return;
+    try {
+      if (raw instanceof ArrayBuffer) {
+        if (!this.started || !raw.byteLength || raw.byteLength > 1600) throw Error();
+        // Discard startup audio: never replay speech over the greeting.
+        if (!this.ready || this.ending) return;
+        const bytes = new Uint8Array(raw);
+        let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte);
+        this.options.sessionSend(this.up.push(btoa(binary)).buffer as ArrayBuffer);
+        return;
+      }
+      if (typeof raw !== 'string' || raw.length > 8192) throw Error();
+      const msg = JSON.parse(raw);
+      if (!msg || typeof msg !== 'object') throw Error();
+      if (msg.event === 'MEDIA_START') {
+        if (this.started || msg.format !== 'ulaw' || msg.optimal_frame_size !== 160 || msg.ptime !== 20 ||
+            typeof msg.channel !== 'string' || typeof msg.connection_id !== 'string') throw Error();
+        this.started = true;
+        this.command('ANSWER');
+        this.options.sessionSend(JSON.stringify({ type: 'start' }));
+      } else {
+        if (!this.started) throw Error();
+        if (msg.event === 'MEDIA_XOFF') this.paused = true;
+        else if (msg.event === 'MEDIA_XON') { this.paused = false; this.pump(); }
+        else if (msg.event === 'MEDIA_MARK_PROCESSED') {
+          if (typeof msg.correlation_id !== 'string') throw Error();
+          this.marks.delete(msg.correlation_id); this.maybeEnd();
+        } else if (!['DTMF_END', 'STATUS', 'QUEUE_DRAINED', 'MEDIA_BUFFERING_COMPLETED'].includes(msg.event)) throw Error();
+      }
+    } catch { this.close('invalid_carrier_frame'); }
+  }
+  sessionMessage(raw: unknown): void {
+    if (this.closed) return;
+    try {
+      if (raw instanceof ArrayBuffer) {
+        // Greeting audio may precede ready, but only after MEDIA_START.
+        if (!this.started || this.drained || !raw.byteLength || raw.byteLength % 2 || raw.byteLength > 480000) throw Error();
+        const bytes = new Uint8Array(raw);
+        for (let offset = 0; offset < bytes.length; offset += MAX_PCM24_BYTES) this.enqueue(this.down.push(bytes.subarray(offset, offset + MAX_PCM24_BYTES)));
+        if (this.ending) this.armDrain();
+        return;
+      }
+      if (typeof raw !== 'string' || raw.length > 65536) throw Error();
+      const msg = JSON.parse(raw);
+      if (msg.type === 'ready') {
+        if (!this.started || this.ready || msg.mode !== 'realtime' || (msg.ttsMode === 'browser' && msg.greeting)) throw Error();
+        this.ready = true; clearTimeout(this.startup);
+      } else if (msg.type === 'flush') {
+        this.queue = []; this.marks.clear(); this.down.reset(); this.generation++;
+        this.paused = false; this.drained = false; this.command('FLUSH_MEDIA');
+        if (this.ending) this.armDrain();
+      } else if (msg.type === 'ending') {
+        if (!this.ready) throw Error();
+        if (!this.ending) { this.ending = true; this.deadline = setTimeout(() => this.close('drain_timeout'), 12000); }
+        this.armDrain();
+      } else if (msg.type === 'ended') this.close('session_ended');
+      else if (msg.type === 'error') this.close('session_error');
+    } catch { this.close('invalid_session_frame'); }
+  }
+  private enqueue(frames: string[]): void {
+    if (this.queue.length + this.marks.size + frames.length > 500) throw Error('playback_overflow');
+    this.queue.push(...frames); this.pump();
+  }
+  private pump(): void {
+    while (!this.paused && this.queue.length) {
+      const payload = atob(this.queue.shift()!);
+      const bytes = Uint8Array.from(payload, char => char.charCodeAt(0));
+      const mark = `${this.generation}:${++this.counter}`;
+      this.marks.add(mark);
+      this.options.carrierSend(bytes.buffer);
+      this.command('MARK_MEDIA', mark);
+    }
+    this.maybeEnd();
+  }
+  private armDrain(): void {
+    if (this.quiet) clearTimeout(this.quiet);
+    this.quiet = setTimeout(() => {
+      try { this.enqueue(this.down.finish()); this.drained = true; this.maybeEnd(); }
+      catch { this.close('playback_overflow'); }
+    }, 200);
+  }
+  private maybeEnd(): void {
+    if (this.ending && this.drained && !this.queue.length && !this.marks.size) this.close('playback_complete');
+  }
+  close(reason = 'socket_closed'): void {
+    if (this.closed) return;
+    this.closed = true;
+    for (const timer of [this.startup, this.quiet, this.deadline]) if (timer) clearTimeout(timer);
+    this.queue = []; this.marks.clear(); this.up.reset(); this.down.reset();
+    try { this.command('HANGUP'); } catch { /* disconnected */ }
+    try { this.options.sessionSend(JSON.stringify({ type: 'hangup' })); } catch { /* disconnected */ }
+    this.options.onEnd(reason);
+  }
+}

@@ -1,0 +1,15 @@
+# Asterisk workstream
+- Status: In progress
+- Owner: openfon-asterisk
+- Branch: codex/asterisk-integration
+- Base verified: a9b33c5c46ccb441e4c07f50b81469354d3cf700
+- Scope: authenticated inbound Asterisk adapter, runnable gateway/configuration, protocol and runtime validation.
+- Constraints: own files/checkpoint only; coordinate shared hooks; migration 0011 reserved; ports 8811 / 9251, never 8787. Root documents untouched.
+- Evidence: handoff, root rules/current task/manifest, strategy and readiness read. Initial working tree clean except existing untracked node_modules symlink. Existing carrier boundary is Telnyx-specific; inspecting before selecting minimal integration hooks.
+- Validation: git status and rev-parse only so far; no real Asterisk/provider/telephone evidence yet.
+- Next action: inspect carrier transport/admission and current official chan_websocket protocol, then implement.
+- Interface decision: direct chan_websocket JSON/ulaw into a new AsteriskCall durable owner and AsteriskMediaAdapter, reusing telephony-audio and internal CallSession. Route-scoped Basic credentials stored only as SHA-256 hashes; operator-provisioned route binds workspace/assistant. Shared hooks needed: index import/export/register, Env ASTERISK_CALL/ASTERISK_ENABLED, CallSession carrier capability for channel=asterisk, public browser upgrade exclusion. Separate migration 0011 and DO binding.
+- Implemented: asterisk-media.ts (JSON/ulaw, PCM24 reuse, bounded marks/flow control/flush/drain), asterisk-routes.ts (rate-limited route-scoped Basic auth with hash-only D1 storage), asterisk-control.ts (atomic quota reservation, one-shot durable identity, owner alarm/release), migration 0011, minimal shared hooks and v3 DO binding, example PBX config/deployment guide.
+- Validation: npm run typecheck passed; npx vitest run test/asterisk-media.test.ts passed 8/8; node scripts/asterisk-smoke.mjs passed real local workerd/D1/DO with simulated PBX/provider (auth, duplicate, concurrency cap, greeting/input PCM, flush/marks/drain, hangup, finalization, disabled route). No external requests. Actual Asterisk unavailable: no executable; Docker info fails because daemon socket is absent.
+- Remaining: admission/provider helper from realtime owner, broader tests/security recovery checks, final commit. No real PBX/provider/PSTN evidence.
+- Broader validation: npm test passed 432/432 before adding control tests. Control tests initially 6/7: cross-workspace fixture violated the existing one-workspace/account trigger; corrected fixture to use separate owners (not an application bug). Added durable recovery/alarm retry protection and optional socket bufferedAmount guard.

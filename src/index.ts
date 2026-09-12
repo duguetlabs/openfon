@@ -7,6 +7,8 @@ import type { Env, Business, AgentSettings } from './types';
 import { createSession, createVerifiedSession, deleteSession, getUserIdFromSession, hashPassword, newId, verifyPassword } from './auth';
 import { sameLlmEndpoint, validateLlmBaseUrl } from './providers';
 import { CallSession } from './call-session';
+import { AsteriskCall } from './asterisk-control';
+import { registerAsteriskRoutes } from './asterisk-routes';
 import { TelnyxCall } from './telnyx-control';
 import { registerTelnyxRoutes, reconcileTelnyxCalls } from './telnyx-routes';
 import { OCCUPIED_CALL_SQL } from './telnyx-admission';
@@ -18,12 +20,13 @@ import {
   syncLegacyKnowledge,
 } from './studio-api';
 
-export { CallSession, TelnyxCall };
+export { CallSession, TelnyxCall, AsteriskCall };
 
 type Vars = { userId: string };
 type Ctx = Context<{ Bindings: Env; Variables: Vars }>;
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 registerTelnyxRoutes(app);
+registerAsteriskRoutes(app);
 
 const COOKIE = 'ofs';
 
@@ -1229,7 +1232,7 @@ app.get('/ws/call/:callId', async (c) => {
       faqs_json: string;
       max_concurrent_calls: number;
     }>();
-  if (!call || call.channel === 'telnyx') return c.json({ error: 'call not found' }, 404);
+  if (!call || call.channel === 'telnyx' || call.channel === 'asterisk') return c.json({ error: 'call not found' }, 404);
   if (call.environment === 'test') {
     const userId = await getUserIdFromSession(c.env, getCookie(c, COOKIE));
     if (userId !== call.user_id) return c.json({ error: 'call not found' }, 404);
@@ -1265,7 +1268,7 @@ app.get('/ws/call/:callId', async (c) => {
   const claim = await c.env.DB.batch<{ n: number }>([
     c.env.DB.prepare(
       `UPDATE calls SET connected_at = datetime('now')
-        WHERE id = ? AND status='active' AND channel!='telnyx' AND connected_at IS NULL
+        WHERE id = ? AND status='active' AND channel NOT IN ('telnyx','asterisk') AND connected_at IS NULL
           AND (environment = 'test' OR EXISTS (
             SELECT 1 FROM assistants
              WHERE assistants.business_id=calls.business_id
@@ -1389,7 +1392,7 @@ export async function sweepStaleCalls(env: Env, now = Date.now()): Promise<numbe
     // the only timestamp such a row has.
     env.DB.prepare(
       `UPDATE calls SET status = 'abandoned', ended_at = datetime('now')
-        WHERE status = 'active' AND channel!='telnyx' AND connected_at IS NULL AND started_at < datetime('now', ?)`
+        WHERE status = 'active' AND channel NOT IN ('telnyx','asterisk') AND connected_at IS NULL AND started_at < datetime('now', ?)`
     ).bind(STALE_UNCONNECTED),
     // Connected: measured from when the session began, not when the row was
     // created. Attachment is allowed for 15 minutes after creation, so ageing
@@ -1398,7 +1401,7 @@ export async function sweepStaleCalls(env: Env, now = Date.now()): Promise<numbe
     // mislabelled as interrupted on the way out.
     env.DB.prepare(
       `UPDATE calls SET status = 'abandoned', ended_at = datetime('now')
-        WHERE status = 'active' AND (channel!='telnyx' OR carrier_released_at IS NOT NULL) AND connected_at IS NOT NULL AND connected_at < datetime('now', ?)`
+        WHERE status = 'active' AND (channel NOT IN ('telnyx','asterisk') OR carrier_released_at IS NOT NULL) AND connected_at IS NOT NULL AND connected_at < datetime('now', ?)`
     ).bind(STALE_CONNECTED),
     // Fixed-window counters are only read for the current window; a day of
     // history is plenty of slack for the longest limiter.
