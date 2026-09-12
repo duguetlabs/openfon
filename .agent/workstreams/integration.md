@@ -1,12 +1,12 @@
 # Integration checkpoint
 
-- Status: In progress — assembled application passes719/typechecks/15browser/optimized16; 3d8e892 official review completed with new findings; bounded corrections in progress
+- Status: In progress — applicationd33e43f passes753/typechecks/optimized17; browser14pass2fail then targeted2pass; exact scoped QA active before renewed reviews
 - Owner: openfon-integration, gpt-6-astra / medium
 - Branch/worktree: codex/integrated-release, /Users/cristian/projects/fun/openfon-worktrees/integration
 - Updated: 2026-09-12
-- Application candidate: local18e0227 plus uncommitted preset0017 corrections; prior validated0b88ae7 remains baseline
+- Application candidate: d43a3ff94dde7d63e6cec8b249e2fba54eb54624; d33 full753/types/rehearsal17 plus finalNUL9/types pass
 - Published PR16 head: 3d8e89275f99fce262973aefe6543fb4ae4d2a20 (documentation-only finalization over application0b88ae7)
-- Validation slot: integration exclusively for preset focused checks after realtime release; no other runners
+- Validation slot: free; all integration/QA runtimes exited, next work is publication and exact-head reviews
 - Ports: integration8814/9254, optional real-PBX proxy8824; never8787
 - Read first: root orchestration-rules/current-task/manifest (read-only), this file, docs/launch/readiness.md
 - Earlier detailed milestones and failures remain in this file's history through ccdd85d and the linked original review reports. This checkpoint records current state.
@@ -133,3 +133,7 @@ PresetPOSTedge reproducedwritecounter269→271 despite409; sourcefix usesread-on
 
 ## Final local0017 candidate evidence
 Final753/753 tests33files PASS18.45s; both typesPASS. Chromeinitial14pass/2fail retainedhonestly; targetedKnowledge/profilepreview2/2PASS18.2s afterfixturewait, unchangedKnowledgebody. No timeoutraise/productioncall. Optimized17rehearsalPASS; missing17copyFAILexpectedconsecutiveguard. Latestlogs /tmp/openfon-17-final-full.log,/tmp/openfon-17-final-types.log,/tmp/openfon-17-browser-recheck.log,/tmp/openfon-missing17-negative.log. Original14/2runtrace/log retained. All integrationprocessesexited; sole slotreleased for exactcandidateQA next. RequirednewheadCI/review clearancepending; no stagedmigration orpublishedheadchange.
+
+QAexactd33scopeclosed:219/219sixfiles andindependentactualD1 presetcount/512KiB/day399/mirroredrefusal/JSON/pendingreconcilePOSTsnapshot/secondmirrorrollback/400KiBswap/changed-only/exhausted/70largehistory/delete recoveryPASS; sourcevoice/AsteriskCPU+close/transcript no newmajor/securityissue. ThenintegrationidentifiedNULpreviewlengthflagedge: exactd33regressionFAILpreview_only0vs1, d43a3ff BLOB-lengthflagfix9preset/typesPASS. QAholdsnextsoleactualD1 old/fixedprobe; no changedbroadscope/inference/live. Prior753fullbelongsd33; finalNULdeltafocused9, no fabricated754fullclaim.
+
+QAactualD1NULclosure: unchangedprobe SHA82d035c9b67ef9a3fdd29ac4ce57d94aefe752f615f3f3930fcc0c0e1b801aeb failsd33(flag0) andpassesexactd43(flag1), same22storedbytes/Shortpreview. QAcheckpointf746b6f preserveslogs, prior219/scopedruntimeevidence retained. QAexplicitlyreleasedslot/allruntimesdisposed. Finaldocs-onlypublication followsd43; hosted6commentsandoriginalofficial3d8dispositions prepared. No cleanfullreviewyet.
