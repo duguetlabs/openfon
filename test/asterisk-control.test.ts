@@ -44,7 +44,7 @@ beforeEach(async()=>{
   await db.prepare("INSERT INTO asterisk_routes(id,business_id,assistant_id,password_sha256,enabled,password_hash) VALUES('pbx','biz','assistant',lower(hex(randomblob(32))),1,?)").bind(await hashPassword(password)).run();
   env={...fakeEnv(undefined as never),DB:db as unknown as D1Database,ASTERISK_ENABLED:'true',REALTIME_BASE_URL:'wss://realtime.example.invalid/v1/realtime',REALTIME_MODEL:'gpt-realtime-2',REALTIME_API_KEY:'synthetic-only'};
 });
-afterEach(()=>{vi.restoreAllMocks();vi.useRealTimers();db.close();});
+afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks();vi.useRealTimers();db.close();});
 describe('Asterisk authorization, admission and recovery',()=>{
   it('requires matching route identity and full secret; disabled routes revoke new calls',async()=>{
     expect(await authenticateAsterisk(env,'pbx',auth)).toBe(true);
@@ -305,3 +305,36 @@ describe('Asterisk cleanup grace and terminal classification',()=>{
    const live=owner();await live.storage.put('call',call);await live.object.alarm();
    expect(await db.prepare('SELECT status,outcome,failure_code FROM calls WHERE id=?').bind(call).first()).toEqual({status:'completed',outcome:'answered',failure_code:null});
  });
+
+describe('Asterisk established socket close codes',()=>{
+  class Socket {
+    readyState=1;binaryType='arraybuffer';listeners=new Map<string,((event:unknown)=>void)[]>();
+    accept(){} send(){} close(){this.readyState=3;}
+    addEventListener(type:string,fn:(event:unknown)=>void){this.listeners.set(type,[...(this.listeners.get(type)||[]),fn]);}
+    emit(type:string,event:unknown){for(const fn of this.listeners.get(type)||[])fn(event);}
+  }
+  for(const side of ['carrier','session'])for(const code of [1000,1005,1011,1006])
+    it(`${side} close ${code} preserves normal completion or projects abnormal failure`,async()=>{
+      db.exec(`INSERT INTO calls(id,business_id,assistant_id,channel,environment,reserved_at) VALUES('${call}','biz','assistant','asterisk','live',datetime('now'))`);
+      const live=owner(),session=new Socket();let carrier!:Socket;
+      vi.stubGlobal('WebSocketPair',class {0=new Socket();1=carrier=new Socket();});
+      const NativeResponse=Response;
+      vi.stubGlobal('Response',class extends NativeResponse {constructor(body:null,init:ResponseInit & {webSocket?:unknown}){super(null);Object.defineProperty(this,'status',{value:init.status});Object.defineProperty(this,'webSocket',{value:init.webSocket});}});
+      const control=live.object as unknown as {install(call:string,response:Response):Promise<Response>;pending:Promise<unknown>};
+      await live.storage.put('call',call);
+      try {
+        expect((await control.install(call,{status:101,webSocket:session} as unknown as Response)).status).toBe(101);
+        carrier.emit('message',{data:JSON.stringify({event:'MEDIA_START',connection_id:'fixture',channel:'fixture',format:'ulaw',optimal_frame_size:160,ptime:20})});
+        session.emit('message',{data:JSON.stringify({type:'ready',mode:'realtime',greeting:''})});await control.pending;
+        const selected=side==='carrier'?carrier:session;selected.emit('close',{code});await control.pending;
+        const row=await db.prepare('SELECT status,outcome,connected_at,carrier_released_at,failure_code FROM calls WHERE id=?').bind(call).first<Record<string,unknown>>();
+        expect(row?.connected_at).toBeTruthy();expect(row?.carrier_released_at).toBeTruthy();
+        if(code===1000 || code===1005){
+          expect(row).toMatchObject({status:'active',failure_code:null});
+          db.exec("UPDATE calls SET status='completed',outcome='answered' WHERE status='active'");
+        } else expect(row).toMatchObject({status:'failed',outcome:'failed',failure_code:'asterisk_socket_error'});
+        await expire(live);expect([...live.storage.data]).toEqual([['retired',true]]);
+        expect((await db.prepare('SELECT status FROM calls WHERE id=?').bind(call).first())?.status).toBe(code===1000 || code===1005?'completed':'failed');
+      } finally {carrier?.emit('close',{code:1000});session.emit('close',{code:1000});await control.pending;}
+    });
+});

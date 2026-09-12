@@ -160,7 +160,8 @@ export class AsteriskCall implements DurableObject {
       this.carrier.addEventListener('message', event => this.adapter?.carrierMessage(event.data));
       this.session.addEventListener('message', event => this.adapter?.sessionMessage(event.data));
       for (const socket of [this.carrier, this.session]) {
-        socket.addEventListener('close', () => this.adapter?.close());
+        socket.addEventListener('close', event => this.adapter?.close(
+          event.code === 1000 || event.code === 1005 ? 'socket_closed' : 'socket_error'));
         socket.addEventListener('error', () => this.adapter?.close('socket_error'));
       }
       await this.state.storage.put('deadline', Date.now() + 30 * 60000);

@@ -14,11 +14,12 @@ import { unstable_splitSqlQuery } from 'wrangler';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const persist=await mkdtemp(resolve(tmpdir(),'openfon-asterisk-retirement-'));
+const closeCases=['close-carrier-1000','close-carrier-1011','close-session-1000','close-session-1011'];
 const bundle=await build({stdin:{resolveDir:root,loader:'ts',contents:`
 import { AsteriskCall } from './src/asterisk-control';
 export class Probe extends AsteriskCall {
   constructor(ctx,env){
-    let fail=false,opening=false,lateClosed=false,resolveSession,readyWaiting=false,resolveReady;
+    let fail=false,opening=false,lateClosed=false,resolveSession,readyWaiting=false,resolveReady,sessionPeer;
     const DB={prepare(sql){
       const statement=env.DB.prepare(sql);
       if(sql.includes('SET connected_at=COALESCE'))return {bind(...args){const bound=statement.bind(...args);return {async first(){readyWaiting=true;await new Promise(resolve=>{resolveReady=resolve;});return bound.first();}};}};
@@ -34,8 +35,8 @@ export class Probe extends AsteriskCall {
     }});
     super({storage,waitUntil:p=>ctx.waitUntil(p)}, {...env,DB,ASTERISK_ENABLED:'true',REALTIME_BASE_URL:'wss://provider.invalid/v1/realtime',REALTIME_API_KEY:'fixture-only',REALTIME_MODEL:'gpt-realtime-2',DEFAULT_TTS_PROVIDER:'browser',CALL_SESSION:{idFromName:x=>x,get:()=>({fetch:async request=>{
       const id=new URL(request.url).searchParams.get('call');
-      if(${JSON.stringify(['adjacent-ready','ended-ready','connected-failure'].map(name=>'ast_'+createHash('sha256').update(name).digest('hex')))}.includes(id)){
-        const pair=new WebSocketPair();pair[1].accept();
+      if(${JSON.stringify(['adjacent-ready','ended-ready','connected-failure',...closeCases].map(name=>'ast_'+createHash('sha256').update(name).digest('hex')))}.includes(id)){
+        const pair=new WebSocketPair();pair[1].accept();sessionPeer=pair[1];
         pair[1].addEventListener('message',event=>{
           const msg=JSON.parse(event.data);
           if(msg.type==='start'){pair[1].send(JSON.stringify({type:'ready',mode:'realtime',greeting:''}));pair[1].send(new ArrayBuffer(960));}
@@ -49,10 +50,11 @@ export class Probe extends AsteriskCall {
         resolve(new Response(null,{status:101,webSocket:pair[0]}));
       };});
     }})}});
-    this.ctx=ctx;this.fail=value=>{fail=value;};this.opening=()=>({opening,lateClosed,readyWaiting});this.resolveReady=()=>resolveReady?.();this.resolveSession=()=>resolveSession?.();
+    this.closeSession=code=>sessionPeer?.close(code,'fixture close');this.ctx=ctx;this.fail=value=>{fail=value;};this.opening=()=>({opening,lateClosed,readyWaiting});this.resolveReady=()=>resolveReady?.();this.resolveSession=()=>resolveSession?.();
   }
   async fetch(request){
     const url=new URL(request.url);
+    if(url.pathname==='/close-session'){this.closeSession(Number(url.searchParams.get('code')));return new Response(null,{status:204});}
     if(url.pathname==='/opening')return Response.json(this.opening());
     if(url.pathname==='/release-readiness'){this.resolveReady();return new Response(null,{status:204});}
     if(url.pathname==='/resolve-session'){this.resolveSession();return new Response(null,{status:204});}
@@ -125,7 +127,7 @@ try{
     assert.equal((await (await send(object,'/opening')).json()).lateClosed,true,'late actual workerd socket closed');
     assert.equal((await send(object,'/expire')).status,204);assert.deepEqual(await snapshot(object),marker);
   }
-  for(const object of ['adjacent-ready','ended-ready','connected-failure']){
+  for(const object of ['adjacent-ready','ended-ready','connected-failure',...closeCases]){
     const response=await send(object,'/media');assert.equal(response.status,101);const pbx=response.webSocket;pbx.accept();pbx.binaryType='arraybuffer';
     let pcmBytes=0;pbx.addEventListener('message',event=>{if(typeof event.data!=='string')pcmBytes+=event.data.byteLength;});
     pbx.send(JSON.stringify({event:'MEDIA_START',connection_id:'fixture',channel:'fixture',format:'ulaw',optimal_frame_size:160,ptime:20}));
@@ -144,25 +146,31 @@ try{
       await new Promise(r=>setTimeout(r,10));
     }
     const row=await db.prepare('SELECT status,connected_at FROM calls WHERE id=?').bind(call(object)).first();
-    if(object!=='ended-ready'){assert.ok(row.connected_at);if(object==='connected-failure')pbx.send('invalid frame');else pbx.close();}
+    if(object!=='ended-ready'){assert.ok(row.connected_at);if(object.startsWith('close-carrier-'))pbx.close(Number(object.split('-')[2]),'fixture close');else if(object.startsWith('close-session-'))assert.equal((await send(object,'/close-session','&code='+object.split('-')[2])).status,204);else if(object==='connected-failure')pbx.send('invalid frame');else pbx.close();}
     else {assert.equal(row.status,'failed');assert.equal(row.connected_at,null,'pending readiness cannot resurrect terminal row');}
     for(let i=0;i<100;i++){if((await snapshot(object)).entries.some(([key])=>key==='cleanup'))break;await new Promise(r=>setTimeout(r,10));}
     const grace=await snapshot(object);
     assert.equal((await send(object,'/alarm')).status,204);
     assert.deepEqual((await snapshot(object)).entries,grace.entries,'early alarm retains cleanup state');
     assert.equal((await snapshot(object)).alarm,grace.entries.find(([key])=>key==='cleanup')[1]);
+    if(closeCases.includes(object)){
+      const closed=await db.prepare('SELECT status,outcome,failure_code,carrier_released_at FROM calls WHERE id=?').bind(call(object)).first();
+      assert.ok(closed.carrier_released_at);
+      if(object.endsWith('1011'))assert.deepEqual({status:closed.status,outcome:closed.outcome,failure_code:closed.failure_code},{status:'failed',outcome:'failed',failure_code:'asterisk_socket_error'});
+      else {assert.equal(closed.status,'active');assert.equal(closed.failure_code,null);await db.prepare("UPDATE calls SET status='completed',outcome='answered' WHERE id=? AND status='active'").bind(call(object)).run();}
+    }
     if(object==='connected-failure'){const failed=await db.prepare('SELECT status,outcome,failure_code FROM calls WHERE id=?').bind(call(object)).first();assert.deepEqual(failed,{status:'failed',outcome:'failed',failure_code:'asterisk_invalid_carrier_frame'});}
     assert.equal((await send(object,'/expire')).status,204);assert.deepEqual(await snapshot(object),marker);
   }
   await db.prepare('DELETE FROM calls').run();
   await mf.dispose();mf=new Miniflare(options());await mf.ready;
   db=await mf.getD1Database('DB','asterisk-retirement');
-  for(const object of ['completed','failed','rejected','stalled-alarm','stalled-timeout','adjacent-ready','ended-ready','connected-failure']){
+  for(const object of ['completed','failed','rejected','stalled-alarm','stalled-timeout','adjacent-ready','ended-ready','connected-failure',...closeCases]){
     assert.deepEqual(await snapshot(object),marker);
     assert.equal((await send(object,'/media')).status,409);
     assert.equal((await send(object,'/expire')).status,204);
     assert.deepEqual(await snapshot(object),marker);
   }
   assert.equal((await db.prepare('SELECT COUNT(*) n FROM calls').first()).n,0);
-  console.log('PASS Asterisk SQLite-workerd retirement: completed call, failed setup and rejected admission compact to marker only; actual transaction rollback preserves recovery fields/alarm; persisted restart and D1 row deletion cannot admit late replay. stalled startup permits alarms, times out, and closes late actual sockets; adjacent ready+PCM survives pending D1 readiness without reviving failed calls. No external calls.');
+  console.log('PASS Asterisk SQLite-workerd retirement: completed call, failed setup and rejected admission compact to marker only; actual transaction rollback preserves recovery fields/alarm; persisted restart and D1 row deletion cannot admit late replay. stalled startup permits alarms, times out, and closes late actual sockets; adjacent ready+PCM survives pending D1 readiness without reviving failed calls. actual carrier/session1000 closes preserve normal completion and1011 closes project failure/release. No external calls.');
 }finally{await mf?.dispose();await rm(persist,{recursive:true,force:true});}
