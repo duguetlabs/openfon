@@ -1,3 +1,4 @@
+import { fetchProviderJson, ProviderResponseError } from './provider-response';
 import { piperVoiceFromCatalog } from './piper-catalog';
 // Pluggable AI providers. LLM and STT speak the OpenAI-compatible wire format,
 // so OpenFon works with Kataleptic (default), OpenAI, Azure OpenAI, Groq, Ollama,
@@ -165,7 +166,7 @@ export async function chatComplete(
   messages: ChatMessage[],
   opts: { maxTokens?: number; temperature?: number; json?: boolean } = {}
 ): Promise<string> {
-  const res = await fetch(providerUrl(cfg.baseUrl, '/chat/completions'), {
+  const { response: res, data } = await fetchProviderJson(providerUrl(cfg.baseUrl, '/chat/completions'), {
     method: 'POST',
     // Every endpoint rule above is checked against the URL that was saved, so a
     // followed redirect would walk straight around them: a host that passes
@@ -200,8 +201,11 @@ export async function chatComplete(
       : res.status === 400 ? 'check model support for chat completions and JSON responses' : 'provider request failed; retry later';
     throw new LlmRequestError(`LLM error ${res.status}: ${hint}`);
   }
-  const data = (await res.json()) as { choices: { message: { content: string } }[] };
-  return data.choices[0]?.message?.content ?? '';
+  const choices = (data as { choices?: { message?: { content?: unknown } }[] } | null)?.choices;
+  if (!Array.isArray(choices)) throw new ProviderResponseError();
+  const content = choices[0]?.message?.content;
+  if (content != null && typeof content !== 'string') throw new ProviderResponseError();
+  return content ?? '';
 }
 
 // Languages OpenFon speaks. Keys are ISO 639-1; values are Azure neural voices.
@@ -356,7 +360,7 @@ export async function transcribe(env: Env, audio: ArrayBuffer, contentType: stri
   form.append('file', new Blob([audio], { type: contentType }), `utterance.${ext}`);
   form.append('model', model);
   if (prompt) form.append('prompt', prompt);
-  const res = await fetch(providerUrl(baseUrl, '/audio/transcriptions'), {
+  const { response: res, data } = await fetchProviderJson(providerUrl(baseUrl, '/audio/transcriptions'), {
     method: 'POST',
     redirect: 'manual',
     headers: { Authorization: `Bearer ${apiKey}` },
@@ -365,8 +369,11 @@ export async function transcribe(env: Env, audio: ArrayBuffer, contentType: stri
   if (!res.ok) {
     throw new Error(`STT error ${res.status}: provider request failed`);
   }
-  const data = (await res.json()) as { text: string; language?: string };
-  return { text: (data.text ?? '').trim(), language: normalizeLang(data.language) };
+  const result = data as { text?: unknown; language?: unknown } | null;
+  if (!result || typeof result !== 'object' || Array.isArray(result) ||
+    (result.text != null && typeof result.text !== 'string') ||
+    (result.language != null && typeof result.language !== 'string')) throw new ProviderResponseError();
+  return { text: (result.text ?? '').trim(), language: normalizeLang(result.language ?? undefined) };
 }
 
 // Pick the voice for a reply: the business's custom voice only applies to its

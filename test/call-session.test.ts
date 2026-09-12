@@ -11,6 +11,12 @@ import { CallSession } from '../src/call-session';
 import { applyMigrations, SqliteD1 } from './sqlite-d1';
 import type { Env } from '../src/types';
 
+function jsonStream(value: unknown): ReadableStream<Uint8Array> {
+  return new ReadableStream({ start(controller) {
+    controller.enqueue(new TextEncoder().encode(JSON.stringify(value))); controller.close();
+  } });
+}
+
 // ---------- fakes ----------
 
 class FakeSocket {
@@ -1535,7 +1541,7 @@ describe('watchdog alarm', () => {
       sentTranscript = init.body;
       return {
         ok: true,
-        json: async () => ({
+        headers: new Headers(), body: jsonStream({
           choices: [
             {
               message: {
@@ -1611,7 +1617,7 @@ describe('watchdog alarm', () => {
       ctl.callRowActive = false; // the cron lands while we are summarizing
       return {
         ok: true,
-        json: async () => ({
+        headers: new Headers(), body: jsonStream({
           choices: [{ message: { content: '{"summary":"Callback requested.","intent":"message"}' } }],
         }),
       };
@@ -1671,7 +1677,7 @@ describe('watchdog alarm', () => {
     ];
     (globalThis as never).fetch = async () => ({
       ok: true,
-      json: async () => ({
+      headers: new Headers(), body: jsonStream({
         choices: [
           {
             message: {
@@ -1853,7 +1859,7 @@ describe('watchdog alarm', () => {
       summaryCalls++;
       return {
         ok: true,
-        json: async () => ({
+        headers: new Headers(), body: jsonStream({
           choices: [{ message: { content: '{"summary":"Callback requested.","intent":"message"}' } }],
         }),
       };
@@ -1886,7 +1892,7 @@ describe('watchdog alarm', () => {
       summaryCalls++;
       return {
         ok: true,
-        json: async () => ({
+        headers: new Headers(), body: jsonStream({
           choices: [{ message: { content: '{"summary":"Callback requested.","intent":"message"}' } }],
         }),
       };
@@ -2092,7 +2098,7 @@ describe('direct OpenAI realtime independence', () => {
       if (String(url) === 'https://api.openai.com/v1/realtime?model=gpt-realtime') return { status: 101, webSocket: upstream } as never;
       if (String(url) === 'https://api.openai.com/v1/chat/completions') return {
         ok: true, status: 200,
-        json: async () => ({ choices: [{ message: { content: JSON.stringify({ summary: 'Caller requested a callback.', intent: 'message', message: 'Please call tomorrow.' }) } }] }),
+        headers: new Headers(), body: jsonStream({ choices: [{ message: { content: JSON.stringify({ summary: 'Caller requested a callback.', intent: 'message', message: 'Please call tomorrow.' }) } }] }),
       } as never;
       throw new Error('Non-OpenAI network destination blocked');
     });
