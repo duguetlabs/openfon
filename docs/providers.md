@@ -19,6 +19,43 @@ Kataleptic is the default and is operated by the OpenFon founder. It is an optio
 
 Source: [`src/providers.ts`](../src/providers.ts), [`src/call-session.ts`](../src/call-session.ts), [`wrangler.jsonc`](../wrangler.jsonc), and [dated readiness evidence](launch/readiness.md). The default Azure voice in configuration is `en-US-AvaMultilingualNeural`. No provider pricing or availability is asserted here.
 
+## Incoming workspace settings contract
+
+The presets owner finalized this contract on **2026-09-12** in the provider-presets worktree. It is implemented there and awaiting its final commit/integration; the baseline table above remains the description of this launch checkout. Apply migration `0010_provider_capabilities.sql` together with the matching provider API/UI and realtime adapter changes before following this section. Integration must record the final release commit here.
+
+### Text presets
+
+| Choice | Base URL | Suggested model in the preset |
+| --- | --- | --- |
+| Kataleptic | `https://api.kataleptic.com/v1` | `llama-3.3-70b` |
+| OpenRouter | `https://openrouter.ai/api/v1` | `openai/gpt-4.1-mini` |
+| Hugging Face | `https://router.huggingface.co/v1` | `openai/gpt-oss-120b` |
+| OpenAI | `https://api.openai.com/v1` | `gpt-4.1-mini` |
+| Custom | Your compatible chat endpoint | Your account’s model ID |
+
+These are configuration presets, **not successful live-provider tests** or availability guarantees. Check access with the selected account. The workspace text model applies only when the assistant has no text-model override; inspect an existing assistant’s override after changing providers. Selecting a text preset does not change transcription or realtime settings.
+
+The presets owner checked official [OpenRouter setup](https://openrouter.ai/docs/quickstart), [Hugging Face chat completion](https://huggingface.co/docs/inference-providers/en/tasks/chat-completion) and [OpenAI GPT-4.1 mini](https://developers.openai.com/api/docs/models/gpt-4.1-mini) documentation on 2026-09-12. OpenRouter uses namespaced model IDs; Hugging Face uses repository IDs with an optional provider suffix and requires an Inference Providers-capable token. The Kataleptic catalog could not be refreshed; its existing defaults were preserved.
+
+### Speech and realtime choices
+
+- **Pipeline transcription:** instance default, direct OpenAI (`https://api.openai.com/v1`, `whisper-1`) with its own key, or a custom `/audio/transcriptions` endpoint with its own URL/key/model.
+- **Pipeline synthesis:** remains operator-selected browser or Azure. OpenRouter/Hugging Face text presets do not establish speech support. Browser synthesis cannot provide telephone audio.
+- **Realtime:** instance default, explicit Kataleptic, direct OpenAI, or custom. Direct OpenAI pins `wss://api.openai.com/v1/realtime` and requires its own key. Custom requires its own public secure WebSocket URL/key and uses an experimental OpenAI GA protocol adapter; arbitrary realtime APIs are not interchangeable.
+- **Assistant realtime model and voice:** remain assistant settings. Switching to OpenAI clears known gateway presets, while arbitrary custom overrides are preserved. Check those overrides manually. The direct adapter uses `gpt-realtime` when the realtime model is blank and native provider audio for its greeting; Azure and pipeline STT are not needed for that direct call.
+
+For a completely independent direct OpenAI conversation, configure **both** OpenAI realtime and the OpenAI text preset with their respective credentials. Summaries use text generation, independently of the realtime key. Explicit workspace realtime choices do not inherit instance credentials. Follow the realtime owner’s `docs/realtime-providers.md` recipe after its commit is integrated, including the test that removes Kataleptic credentials and blocks its endpoints.
+
+### Saving and replacing credentials
+
+Keys are write-only through the API; settings responses expose configured flags rather than values. A blank or omitted key preserves the saved key at the same destination. Changing the destination or protocol requires a replacement key or an explicit clear action. Do not assume that selecting a new provider safely reuses the previous provider’s key.
+
+The existing text API uses `baseUrl`, `apiKey`, `clearApiKey`, with a new `model` field. Speech settings use `stt_provider`, `stt_base_url`, `stt_model`, `stt_api_key` and `realtime_provider`, `realtime_base_url`, `realtime_api_key`. Speech key removal accepts a null key or the corresponding `stt_clear_api_key` / `realtime_clear_api_key` flag. The operator-selected `tts_provider` is reported separately. Prefer the settings UI for normal setup.
+
+### Evidence received from owners
+
+Presets reports 439 full unit tests passed, plus a subsequent 48-test legacy security regression run; do not add these overlapping counts into a new total. Its actual local-workerd browser run verified settings save/reload and key retention. A mobile sizing fix is awaiting its rerun/final commit. Realtime reports a synthetic complete independent workflow; consult its final report for exact commit and runtime checks. **No live provider calls or refreshed Kataleptic catalog are established by these results.** Launch has reviewed the contract, not rerun the other owners’ suites.
+
 ## Telephone channels
 
 | Channel | Implementation at baseline | Release evidence required |

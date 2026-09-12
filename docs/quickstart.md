@@ -2,6 +2,8 @@
 
 This guide targets the Cloudflare Worker + D1 application in this repository. It is a setup recipe, not evidence of a fresh-install or real-voice pass. Start with fictional information and a private assistant. No telephone number is needed. See [readiness](launch/readiness.md) for outstanding release gates.
 
+The [incoming workspace settings contract](providers.md#incoming-workspace-settings-contract) describes the new text/STT/realtime presets awaiting integration. The steps below remain valid for the baseline instance configuration. After the matching migration and code are integrated, use workspace settings for separate provider choices and check existing assistant model overrides. Do not assume a preset dropdown alone verifies provider access.
+
 ## 1. Prepare your accounts and configuration
 
 You need Node 22.13+ and npm, a Cloudflare account you control, and valid text-generation and transcription provider credentials. Browser speech synthesis can supply the spoken reply without an Azure key; available voices depend on the browser/device. Hosting and provider usage may be billed separately from the MIT-licensed code.

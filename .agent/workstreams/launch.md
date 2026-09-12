@@ -38,3 +38,6 @@ Integration confirms no real provider/telephone pilot or staging HTTPS validatio
 
 ## Next action
 Integration cherry-picks launch commit, refreshes baseline compatibility with final owners’ evidence and drives release review. Launch assets are complete; do not publish drafts or claim live audio acceptance.
+
+## Provider contract follow-up
+Read presets’ final persisted/API contract and realtime owner’s recipe on 2026-09-12. Added an explicitly incoming section to docs/providers.md with exact text preset URLs/models, independent STT/realtime configuration, model precedence, key retention/removal and owner-reported evidence. Added quickstart routing to it. No final provider commit received yet; baseline claims remain intact and no live-provider success is inferred. Launch did not rerun the other owners’ tests. Integration should resolve the incoming/baseline distinction when consolidating final commits.
