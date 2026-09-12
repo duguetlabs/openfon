@@ -54,7 +54,7 @@ The existing text API uses `baseUrl`, `apiKey`, `clearApiKey`, with a new `model
 
 ### Consolidated evidence
 
-Integration passed TypeScript and **491/491 unit/API tests** across 24 files. Actual local-workerd smoke tests passed Telnyx native and synthesized greeting paths, Asterisk protocol/media handling, direct OpenAI GA protocol and the existing gateway. The direct synthetic call uses no instance AI or Azure credentials and blocks unmatched outbound hosts. Final browser/benchmark results are recorded in [readiness](launch/readiness.md).
+Integration passed TypeScript and **496/496 unit/API tests** across 24 files. Actual local-workerd smoke tests passed Telnyx native and synthesized greeting paths, Asterisk protocol/media handling, direct OpenAI GA protocol and the existing gateway. The direct synthetic call uses no instance AI or Azure credentials and blocks unmatched outbound hosts. Final browser/benchmark results are recorded in [readiness](launch/readiness.md).
 
 **No live provider call, audible browser acceptance or PSTN validation is established by these results.** No live OpenAI credential was available; the recorded Kataleptic catalog preflight returned 403. Asterisk itself was not available locally, so its actual PBX compatibility still needs the [gateway recipe and pilot](asterisk.md).
 
