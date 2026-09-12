@@ -324,3 +324,43 @@ describe('sameLlmEndpoint', () => {
     expect(sameLlmEndpoint('https://api.example.com/v1#x', 'https://api.example.com/v1')).toBe(true);
   });
 });
+
+
+describe('STT endpoint path construction', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('uses the workspace STT base path and credential without falling back to instance settings', async () => {
+    const request = vi.fn(async () => new Response(JSON.stringify({ text: 'ok' })));
+    vi.stubGlobal('fetch', request);
+    await transcribe({ DEFAULT_STT_BASE_URL: 'https://instance.example/v1', DEFAULT_STT_API_KEY: 'instance-test-key' } as Env,
+      new ArrayBuffer(2), 'audio/wav', undefined, {
+        stt_provider: 'custom', stt_base_url: 'https://speech.example/proxy/chat/completions/v1',
+        stt_api_key: 'workspace-test-key', stt_model: 'workspace-model',
+      });
+    const [url, init] = request.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://speech.example/proxy/chat/completions/v1/audio/transcriptions');
+    expect(init.headers).toEqual({ Authorization: 'Bearer workspace-test-key' });
+    expect(init.redirect).toBe('manual');
+    expect((init.body as FormData).get('model')).toBe('workspace-model');
+  });
+  it.each([
+    ['https://speech.example/v1', 'https://speech.example/v1/audio/transcriptions'],
+    ['https://speech.example/proxy/chat/completions/v1/', 'https://speech.example/proxy/chat/completions/v1/audio/transcriptions'],
+    ['https://speech.example/chat/completions/chat/completions///', 'https://speech.example/chat/completions/chat/completions/audio/transcriptions'],
+    ['https://speech.example/v1/?target=/chat/completions#route', 'https://speech.example/v1/audio/transcriptions?target=/chat/completions#route'],
+    ['https://speech.example/proxy/chat%2Fcompletions/v1', 'https://speech.example/proxy/chat%2Fcompletions/v1/audio/transcriptions'],
+  ])('appends only the transcription suffix to %s', async (base, expected) => {
+    const request = vi.fn(async () => new Response(JSON.stringify({ text: ' hello ', language: 'en' })));
+    vi.stubGlobal('fetch', request);
+    const voiceEnv = { DEFAULT_STT_BASE_URL: base, DEFAULT_STT_API_KEY: 'test-stt-key', DEFAULT_STT_MODEL: 'test-stt-model' } as Env;
+    await expect(transcribe(voiceEnv, new Uint8Array([1, 2]).buffer, 'audio/wav', 'Northwheel'))
+      .resolves.toMatchObject({ text: 'hello', language: 'en' });
+    expect(request).toHaveBeenCalledOnce();
+    const [url, init] = request.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(expected);
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual({ Authorization: 'Bearer test-stt-key' });
+    expect((init.body as FormData).get('model')).toBe('test-stt-model');
+    expect((init.body as FormData).get('prompt')).toBe('Northwheel');
+    expect((init.body as FormData).get('file')).toBeInstanceOf(Blob);
+  });
+});

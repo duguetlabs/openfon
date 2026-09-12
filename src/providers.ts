@@ -150,13 +150,13 @@ export function validateLlmBaseUrl(raw: string, allowInsecure = false): string |
 // The trailing slash goes for the same reason it always did: "…/v1/" would
 // otherwise build "…/v1//chat/completions", which providers used to paper over
 // with a 301 that fetch followed, and redirects are off below.
-function completionsUrl(baseUrl: string): string {
+function providerUrl(baseUrl: string, endpoint: '/chat/completions' | '/audio/transcriptions'): string {
   try {
     const u = new URL(baseUrl.trim());
-    u.pathname = `${u.pathname.replace(/\/+$/, '')}/chat/completions`;
+    u.pathname = `${u.pathname.replace(/\/+$/, '')}${endpoint}`;
     return u.toString();
   } catch {
-    return `${baseUrl.trim().replace(/\/+$/, '')}/chat/completions`;
+    return `${baseUrl.trim().replace(/\/+$/, '')}${endpoint}`;
   }
 }
 
@@ -165,7 +165,7 @@ export async function chatComplete(
   messages: ChatMessage[],
   opts: { maxTokens?: number; temperature?: number; json?: boolean } = {}
 ): Promise<string> {
-  const res = await fetch(completionsUrl(cfg.baseUrl), {
+  const res = await fetch(providerUrl(cfg.baseUrl, '/chat/completions'), {
     method: 'POST',
     // Every endpoint rule above is checked against the URL that was saved, so a
     // followed redirect would walk straight around them: a host that passes
@@ -356,7 +356,7 @@ export async function transcribe(env: Env, audio: ArrayBuffer, contentType: stri
   form.append('file', new Blob([audio], { type: contentType }), `utterance.${ext}`);
   form.append('model', model);
   if (prompt) form.append('prompt', prompt);
-  const res = await fetch(completionsUrl(baseUrl).replace('/chat/completions', '/audio/transcriptions'), {
+  const res = await fetch(providerUrl(baseUrl, '/audio/transcriptions'), {
     method: 'POST',
     redirect: 'manual',
     headers: { Authorization: `Bearer ${apiKey}` },
