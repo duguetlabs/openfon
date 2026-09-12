@@ -118,4 +118,19 @@ describe('Asterisk JSON ulaw transport', () => {
     expect(end).toHaveBeenCalledExactlyOnceWith('playback_complete');expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('notifies connection only after valid MEDIA_START and realtime ready',()=>{
+    adapter.close();end.mockClear();const onReady=vi.fn();
+    adapter=new AsteriskMediaAdapter({carrierSend:()=>{},sessionSend:()=>{},onReady,onEnd:end});
+    adapter.carrierMessage(JSON.stringify(start));expect(onReady).not.toHaveBeenCalled();
+    adapter.sessionMessage(JSON.stringify(ready));expect(onReady).toHaveBeenCalledTimes(1);
+    adapter.sessionMessage(JSON.stringify(ready));expect(onReady).toHaveBeenCalledTimes(1);expect(end).toHaveBeenCalled();
+  });
+  it('invalid MEDIA_START and startup timeout never notify connection',()=>{
+    for(const invalid of [true,false]){
+      adapter.close();const onReady=vi.fn();adapter=new AsteriskMediaAdapter({carrierSend:()=>{},sessionSend:()=>{},onReady,onEnd:end});
+      if(invalid)adapter.carrierMessage(JSON.stringify({...start,format:'slin16'}));else vi.advanceTimersByTime(20000);
+      adapter.sessionMessage(JSON.stringify(ready));expect(onReady).not.toHaveBeenCalled();
+    }
+  });
+
 });

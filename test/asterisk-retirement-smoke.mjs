@@ -17,7 +17,12 @@ const bundle=await build({stdin:{resolveDir:root,loader:'ts',contents:`
 import { AsteriskCall } from './src/asterisk-control';
 export class Probe extends AsteriskCall {
   constructor(ctx,env){
-    let fail=false;
+    let fail=false,opening=false,lateClosed=false,resolveSession,readyWaiting=false,resolveReady;
+    const DB={prepare(sql){
+      const statement=env.DB.prepare(sql);
+      if(sql.includes('SET connected_at=COALESCE'))return {bind(...args){const bound=statement.bind(...args);return {async first(){readyWaiting=true;await new Promise(resolve=>{resolveReady=resolve;});return bound.first();}};}};
+      return statement;
+    }};
     const storage=new Proxy(ctx.storage,{get(target,key){
       if(key==='transaction') return fn=>target.transaction(async txn=>{
         const result=await fn(txn);
@@ -26,11 +31,30 @@ export class Probe extends AsteriskCall {
       });
       const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
     }});
-    super({storage,waitUntil:p=>ctx.waitUntil(p)}, {...env,ASTERISK_ENABLED:'true',REALTIME_BASE_URL:'wss://provider.invalid/v1/realtime',REALTIME_API_KEY:'fixture-only',REALTIME_MODEL:'gpt-realtime-2',DEFAULT_TTS_PROVIDER:'browser',CALL_SESSION:{idFromName:x=>x,get:()=>({fetch:async()=>new Response(null,{status:503})})}});
-    this.ctx=ctx;this.fail=value=>{fail=value;};
+    super({storage,waitUntil:p=>ctx.waitUntil(p)}, {...env,DB,ASTERISK_ENABLED:'true',REALTIME_BASE_URL:'wss://provider.invalid/v1/realtime',REALTIME_API_KEY:'fixture-only',REALTIME_MODEL:'gpt-realtime-2',DEFAULT_TTS_PROVIDER:'browser',CALL_SESSION:{idFromName:x=>x,get:()=>({fetch:async request=>{
+      const id=new URL(request.url).searchParams.get('call');
+      if(${JSON.stringify(['adjacent-ready','ended-ready'].map(name=>'ast_'+createHash('sha256').update(name).digest('hex')))}.includes(id)){
+        const pair=new WebSocketPair();pair[1].accept();
+        pair[1].addEventListener('message',event=>{
+          const msg=JSON.parse(event.data);
+          if(msg.type==='start'){pair[1].send(JSON.stringify({type:'ready',mode:'realtime',greeting:''}));pair[1].send(new ArrayBuffer(960));}
+          if(msg.type==='hangup')pair[1].close(1000,'done');
+        });
+        return new Response(null,{status:101,webSocket:pair[0]});
+      }
+      if(!${JSON.stringify(['stalled-alarm','stalled-timeout'].map(name=>'ast_'+createHash('sha256').update(name).digest('hex')))}.includes(id))return new Response(null,{status:503});
+      opening=true;return new Promise(resolve=>{resolveSession=()=>{
+        const pair=new WebSocketPair();pair[1].accept();pair[1].addEventListener('close',()=>{lateClosed=true;});
+        resolve(new Response(null,{status:101,webSocket:pair[0]}));
+      };});
+    }})}});
+    this.ctx=ctx;this.fail=value=>{fail=value;};this.opening=()=>({opening,lateClosed,readyWaiting});this.resolveReady=()=>resolveReady?.();this.resolveSession=()=>resolveSession?.();
   }
   async fetch(request){
     const url=new URL(request.url);
+    if(url.pathname==='/opening')return Response.json(this.opening());
+    if(url.pathname==='/release-readiness'){this.resolveReady();return new Response(null,{status:204});}
+    if(url.pathname==='/resolve-session'){this.resolveSession();return new Response(null,{status:204});}
     if(url.pathname==='/snapshot')return Response.json({entries:[...await this.ctx.storage.list()],alarm:await this.ctx.storage.getAlarm()});
     if(url.pathname==='/seed-completed'){
       await this.ctx.storage.put({call:url.searchParams.get('call'),deadline:1,ending:'playback_complete',cleanup:1});
@@ -57,7 +81,7 @@ let mf;
 const password='synthetic-password-with-at-least-32-bytes';
 const auth='Basic '+Buffer.from('pbx:'+password).toString('base64');
 const call=object=>'ast_'+createHash('sha256').update(object).digest('hex');
-const send=(object,path,extra='')=>mf.dispatchFetch(`http://local.test${path}?object=${object}&call=${call(object)}&route=pbx${extra}`,{headers:{Authorization:auth,...(path==='/media'?{Upgrade:'websocket'}:{})}});
+const send=(object,path,extra='')=>mf.dispatchFetch(`http://local.test${path}?object=${object}&call=${call(object)}&route=pbx${extra}`,{headers:{Authorization:auth,...(path==='/media'?{Upgrade:'websocket','Sec-WebSocket-Protocol':'media'}:{})}});
 const snapshot=async object=>(await send(object,'/snapshot')).json();
 const marker={entries:[['retired',true]],alarm:null};
 try{
@@ -82,15 +106,54 @@ try{
   await db.prepare("UPDATE assistants SET state='paused'").run();
   assert.equal((await send('rejected','/media')).status,403);assert.deepEqual(await snapshot('rejected'),marker);
   assert.equal((await db.prepare('SELECT COUNT(*) n FROM calls').first()).n,2);
-  await db.prepare('DELETE FROM calls').run();await db.prepare("UPDATE assistants SET state='active'").run();
+  await db.prepare("UPDATE assistants SET state='active'").run();
+  for(const object of ['stalled-alarm','stalled-timeout']){
+    const pending=send(object,'/media');
+    for(let i=0;i<100;i++){if((await (await send(object,'/opening')).json()).opening)break;await new Promise(r=>setTimeout(r,10));}
+    assert.equal((await (await send(object,'/opening')).json()).opening,true);
+    if(object==='stalled-alarm')assert.equal((await send(object,'/expire')).status,204,'alarm is not blocked by session fetch');
+    else assert.equal((await pending).status,503,'bounded ten-second session startup');
+    const failed=await db.prepare('SELECT status,connected_at,carrier_released_at FROM calls WHERE id=?').bind(call(object)).first();
+    assert.equal(failed.status,'failed');assert.equal(failed.connected_at,null);assert.ok(failed.carrier_released_at);
+    assert.equal((await send(object,'/resolve-session')).status,204);
+    if(object==='stalled-alarm')assert.equal((await pending).status,409,'late install rejected after alarm');
+    for(let i=0;i<100;i++){if((await (await send(object,'/opening')).json()).lateClosed)break;await new Promise(r=>setTimeout(r,10));}
+    assert.equal((await (await send(object,'/opening')).json()).lateClosed,true,'late actual workerd socket closed');
+    assert.equal((await send(object,'/expire')).status,204);assert.deepEqual(await snapshot(object),marker);
+  }
+  for(const object of ['adjacent-ready','ended-ready']){
+    const response=await send(object,'/media');assert.equal(response.status,101);const pbx=response.webSocket;pbx.accept();pbx.binaryType='arraybuffer';
+    let pcmBytes=0;pbx.addEventListener('message',event=>{if(typeof event.data!=='string')pcmBytes+=event.data.byteLength;});
+    pbx.send(JSON.stringify({event:'MEDIA_START',connection_id:'fixture',channel:'fixture',format:'ulaw',optimal_frame_size:160,ptime:20}));
+    for(let i=0;i<100;i++){if((await (await send(object,'/opening')).json()).readyWaiting && pcmBytes>0)break;await new Promise(r=>setTimeout(r,10));}
+    assert.equal((await (await send(object,'/opening')).json()).readyWaiting,true);
+    assert.equal(pcmBytes,160,'PCM adjacent to ready is delivered while readiness D1 write is pending');
+    assert.equal((await db.prepare('SELECT connected_at FROM calls WHERE id=?').bind(call(object)).first()).connected_at,null);
+    if(object==='ended-ready'){
+      await db.prepare("UPDATE calls SET status='failed',outcome='failed' WHERE id=?").bind(call(object)).run();
+      pbx.close(1000,'ended during pending projection');
+    }
+    assert.equal((await send(object,'/release-readiness')).status,204);
+    for(let i=0;i<100;i++){
+      const row=await db.prepare('SELECT connected_at,carrier_released_at FROM calls WHERE id=?').bind(call(object)).first();
+      if(object==='adjacent-ready'?row.connected_at:row.carrier_released_at)break;
+      await new Promise(r=>setTimeout(r,10));
+    }
+    const row=await db.prepare('SELECT status,connected_at FROM calls WHERE id=?').bind(call(object)).first();
+    if(object==='adjacent-ready'){assert.ok(row.connected_at);pbx.close();}
+    else {assert.equal(row.status,'failed');assert.equal(row.connected_at,null,'pending readiness cannot resurrect terminal row');}
+    for(let i=0;i<100;i++){if((await snapshot(object)).entries.some(([key])=>key==='cleanup'))break;await new Promise(r=>setTimeout(r,10));}
+    assert.equal((await send(object,'/expire')).status,204);assert.deepEqual(await snapshot(object),marker);
+  }
+  await db.prepare('DELETE FROM calls').run();
   await mf.dispose();mf=new Miniflare(options());await mf.ready;
   db=await mf.getD1Database('DB','asterisk-retirement');
-  for(const object of ['completed','failed','rejected']){
+  for(const object of ['completed','failed','rejected','stalled-alarm','stalled-timeout','adjacent-ready','ended-ready']){
     assert.deepEqual(await snapshot(object),marker);
     assert.equal((await send(object,'/media')).status,409);
     assert.equal((await send(object,'/expire')).status,204);
     assert.deepEqual(await snapshot(object),marker);
   }
   assert.equal((await db.prepare('SELECT COUNT(*) n FROM calls').first()).n,0);
-  console.log('PASS Asterisk SQLite-workerd retirement: completed call, failed setup and rejected admission compact to marker only; actual transaction rollback preserves recovery fields/alarm; persisted restart and D1 row deletion cannot admit late replay. No external calls.');
+  console.log('PASS Asterisk SQLite-workerd retirement: completed call, failed setup and rejected admission compact to marker only; actual transaction rollback preserves recovery fields/alarm; persisted restart and D1 row deletion cannot admit late replay. stalled startup permits alarms, times out, and closes late actual sockets; adjacent ready+PCM survives pending D1 readiness without reviving failed calls. No external calls.');
 }finally{await mf?.dispose();await rm(persist,{recursive:true,force:true});}

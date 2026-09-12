@@ -23,6 +23,7 @@ export class AsteriskMediaAdapter {
   constructor(private options: {
     carrierSend: (data: string | ArrayBuffer) => void;
     sessionSend: (data: string | ArrayBuffer) => void;
+    onReady?: () => void;
     onEnd: (reason: string) => void;
   }) {}
   private command(command: string, correlation_id?: string): void {
@@ -76,6 +77,7 @@ export class AsteriskMediaAdapter {
       if (msg.type === 'ready') {
         if (!this.started || this.ready || msg.mode !== 'realtime' || (msg.ttsMode === 'browser' && msg.greeting)) throw Error();
         this.ready = true; clearTimeout(this.startup);
+        this.options.onReady?.();
       } else if (msg.type === 'flush') {
         this.stopPump();
         this.queue = []; this.marks.clear(); this.down.reset(); this.generation++;

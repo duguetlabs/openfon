@@ -13,12 +13,14 @@ import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const temp=await mkdtemp(resolve(tmpdir(),'openfon-asterisk-smoke-'));
 let mf,carrier;
+let allowReady=true, releaseReady;
 const telemetry=[];
-const wait=async(predicate,label)=>{const deadline=Date.now()+15000;while(Date.now()<deadline){if(await predicate())return;await new Promise(r=>setTimeout(r,25));}throw Error(`Timed out: ${label}`);};
+const wait=async(predicate,label,timeout=15000)=>{const deadline=Date.now()+timeout;while(Date.now()<deadline){if(await predicate())return;await new Promise(r=>setTimeout(r,25));}throw Error(`Timed out: ${label}`);};
 const mockScript = `
 export default { async fetch(request, env) {
   const url = new URL(request.url);
   if (url.hostname === 'realtime.smoke.invalid' && request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
+    await env.RECORD.fetch('https://telemetry.smoke.invalid/ready-gate');
     const pair = new WebSocketPair(); const socket = pair[1]; socket.accept();
     let responded = false;
     const tone=new Uint8Array(4800); const view=new DataView(tone.buffer);
@@ -67,7 +69,7 @@ try {
        DEFAULT_TTS_PROVIDER:'browser',DEFAULT_TTS_VOICE:'en-US-AvaMultilingualNeural',
        REALTIME_BASE_URL:'wss://realtime.smoke.invalid/v1/realtime',REALTIME_MODEL:'gpt-realtime-2',REALTIME_API_KEY:'synthetic-test-only'}},
     {name:'mock-provider',modules:true,script:mockScript,compatibilityDate:'2026-05-01',outboundService:async()=>new Response('Network disabled',{status:502}),
-     serviceBindings:{RECORD:async request=>{telemetry.push({path:new URL(request.url).pathname,body:await request.json()});return Response.json({ok:true});}}}
+     serviceBindings:{RECORD:async request=>{if(new URL(request.url).pathname==='/ready-gate'){if(!allowReady)await new Promise(resolve=>{releaseReady=resolve;});return Response.json({ok:true});}telemetry.push({path:new URL(request.url).pathname,body:await request.json()});return Response.json({ok:true});}}}
   ]}));
   await mf.ready;
   const db=await mf.getD1Database('DB','openfon');
@@ -90,6 +92,18 @@ try {
   const upgrade=async(call,auth=authorization)=>mf.dispatchFetch('https://openfon.smoke.invalid/ws/asterisk/pbx?call='+call,{headers:{Upgrade:'websocket',Authorization:auth,'Sec-WebSocket-Protocol':'media'}});
   assert.equal((await upgrade('bad','Basic '+Buffer.from('pbx:'+'x'.repeat(32)).toString('base64'))).status,401);
   assert.equal((await db.prepare('SELECT COUNT(*) n FROM calls').first()).n,0);
+  for(const scenario of ['invalid-start','start-timeout']){
+    const bad=await upgrade(scenario);assert.equal(bad.status,101);const pbx=bad.webSocket;pbx.accept();
+    const before=await db.prepare("SELECT id,status,connected_at FROM calls WHERE status='active'").first();
+    assert.equal(before.connected_at,null,'bridge creation is not a connection');
+    assert.equal((await upgrade(scenario+'-capacity')).status,403,'unready reservation still occupies capacity');
+    if(scenario==='invalid-start')pbx.send(JSON.stringify({event:'MEDIA_START',format:'slin16',optimal_frame_size:640,ptime:20}));
+    await wait(async()=>{const row=await db.prepare('SELECT status,carrier_released_at FROM calls WHERE id=?').bind(before.id).first();return row.status==='failed' && row.carrier_released_at;},scenario+' immediate failure/release',25000);
+    const after=await db.prepare('SELECT status,outcome,connected_at,failure_code FROM calls WHERE id=?').bind(before.id).first();
+    assert.equal(after.connected_at,null);assert.equal(after.outcome,'failed');assert.ok(after.failure_code);
+    try{pbx.close();}catch{}
+  }
+  allowReady=false;
   const response=await upgrade('first');assert.equal(response.status,101);carrier=response.webSocket;carrier.accept();carrier.binaryType='arraybuffer';
   assert.equal((await upgrade('first')).status,409,'duplicate channel rejected');
   assert.equal((await upgrade('second')).status,403,'concurrent call cap');
@@ -100,18 +114,24 @@ try {
     assert.ok(['ANSWER','HANGUP','MARK_MEDIA','FLUSH_MEDIA'].includes(msg.command));
     if(msg.command==='MARK_MEDIA')carrier.send(JSON.stringify({event:'MEDIA_MARK_PROCESSED',correlation_id:msg.correlation_id}));
   });
+  assert.equal((await db.prepare("SELECT connected_at FROM calls WHERE status='active'").first()).connected_at,null);
   carrier.send(JSON.stringify({event:'MEDIA_START',connection_id:'simulated',channel:'WebSocket/simulated',channel_id:'first',format:'ulaw',optimal_frame_size:160,ptime:20}));
+  await wait(()=>typeof releaseReady==='function','provider readiness held');
+  assert.equal((await db.prepare("SELECT connected_at FROM calls WHERE status='active'").first()).connected_at,null,'valid MEDIA_START alone is not ready');
+  allowReady=true;releaseReady();
   await wait(()=>received.some(x=>x.audio),'greeting audio');
+  await wait(async()=>Boolean((await db.prepare("SELECT connected_at FROM calls WHERE status='active'").first())?.connected_at),'actual session ready marks connection');
   carrier.send(new Uint8Array(160).fill(255));
   await wait(()=>telemetry.some(x=>x.path==='/input'),'input PCM');
   assert.equal(telemetry.find(x=>x.path==='/input').body.bytes,960);
   await wait(()=>received.some(x=>x.command==='FLUSH_MEDIA'),'interruption');
   await wait(()=>received.some(x=>x.command==='HANGUP'),'playback drain/hangup');
-  await wait(async()=>{const row=await db.prepare("SELECT status,carrier_released_at FROM calls WHERE channel='asterisk'").first();return row?.carrier_released_at && row.status!=='active';},'call finalization');
-  assert.equal((await db.prepare("SELECT COUNT(*) n FROM calls WHERE channel='asterisk'").first()).n,1);
+  await wait(async()=>{const row=await db.prepare("SELECT status,carrier_released_at FROM calls WHERE channel='asterisk' AND connected_at IS NOT NULL").first();return row?.carrier_released_at && row.status!=='active';},'call finalization');
+  assert.equal((await db.prepare("SELECT COUNT(*) n FROM calls WHERE channel='asterisk'").first()).n,3);
+  assert.equal((await db.prepare("SELECT COUNT(*) n FROM calls WHERE connected_at IS NOT NULL").first()).n,1,'only ready call contributes to connected metrics');
   assert.equal(telemetry.filter(x=>x.path==='/unexpected').length,0);
   assert.equal((await upgrade('first')).status,409,'completed channel cannot replay');
   await db.prepare("UPDATE asterisk_routes SET enabled=0").run();assert.equal((await upgrade('disabled')).status,401);
-  console.log('PASS Asterisk synthetic workerd smoke: auth, duplicate rejection, admission limit, greeting PCM, inbound conversion, flush, marks/drain, hangup, D1 finalization, disabled route. No real PBX/provider/PSTN.');
+  console.log('PASS Asterisk synthetic workerd smoke: invalid MEDIA_START/start timeout fail without connection, reserved capacity, delayed session-ready metrics, auth, duplicate rejection, admission limit, greeting PCM, inbound conversion, flush, marks/drain, hangup, D1 finalization, disabled route. No real PBX/provider/PSTN.');
   }
 } finally {try{carrier?.close();}catch{}await mf?.dispose();await rm(temp,{recursive:true,force:true});}

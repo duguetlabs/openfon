@@ -31,11 +31,46 @@ export class AsteriskCall implements DurableObject {
     });
   }
 
-  fetch(request: Request): Promise<Response> {
-    return this.exclusive(() => this.media(request));
+  async fetch(request: Request): Promise<Response> {
+    const prepared = await this.exclusive(() => this.prepare(request));
+    if (prepared instanceof Response) return prepared;
+    const { call } = prepared;
+    let response: Response | undefined;
+    try {
+      // Network/DO startup must not hold the owner lock: alarms can release the
+      // reservation while it waits, and installation rechecks their decision.
+      const stub = this.env.CALL_SESSION.get(this.env.CALL_SESSION.idFromName(call));
+      response = await this.openSession(stub, call);
+      return await this.exclusive(() => this.install(call, response!));
+    } catch {
+      if (response) this.closeResponse(response);
+      return this.exclusive(async () => {
+        await this.finish(call, 'setup_failed');
+        return new Response(null, { status: 503 });
+      });
+    }
   }
 
-  private async media(request: Request): Promise<Response> {
+  private closeResponse(response: Response): void {
+    const socket = response.webSocket;
+    if (!socket) return;
+    try { socket.accept(); } catch { /* possibly already accepted */ }
+    try { socket.close(1000, 'call ended'); } catch { /* already closed */ }
+  }
+
+  private async openSession(stub: DurableObjectStub, call: string): Promise<Response> {
+    let expired = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const opening = stub.fetch(new Request(`https://internal/?call=${call}`, { headers: { Upgrade: 'websocket' } }))
+        .then(response => { if (expired) this.closeResponse(response); return response; });
+      return await Promise.race([opening, new Promise<Response>((_resolve, reject) => {
+        timer = setTimeout(() => { expired = true; reject(Error('session_start_timeout')); }, 10000);
+      })]);
+    } finally { if (timer !== undefined) clearTimeout(timer); }
+  }
+
+  private async prepare(request: Request): Promise<Response | { call: string }> {
     const url = new URL(request.url);
     const call = url.searchParams.get('call') || '';
     const route = url.searchParams.get('route') || '';
@@ -80,9 +115,22 @@ export class AsteriskCall implements DurableObject {
             AND started_at>datetime('now','-1 day') AND NOT(status='abandoned' AND connected_at IS NULL AND reserved_at IS NULL))<b.max_calls_per_day
         RETURNING id`).bind(call, route).first();
       if (!row) { await this.compact(); return new Response(null, { status: 403 }); }
-      const stub = this.env.CALL_SESSION.get(this.env.CALL_SESSION.idFromName(call));
-      const response = await stub.fetch(new Request(`https://internal/?call=${call}`, { headers: { Upgrade: 'websocket' } }));
-      if (!response.webSocket) throw Error('session_unavailable');
+      return { call };
+    } catch {
+      await this.finish(call, 'setup_failed');
+      return new Response(null, { status: 503 });
+    }
+  }
+
+  private async install(call: string, response: Response): Promise<Response> {
+    if (await this.state.storage.get('retired') || await this.state.storage.get('ending') ||
+        await this.state.storage.get('cleanup') || this.env.ASTERISK_ENABLED !== 'true') {
+      this.closeResponse(response);
+      await this.finish(call, 'setup_cancelled');
+      return new Response(null, { status: 409 });
+    }
+    try {
+      if (response.status !== 101 || !response.webSocket) throw Error('session_unavailable');
       this.session = response.webSocket; this.session.accept(); this.session.binaryType = 'arraybuffer';
       const pair = new WebSocketPair(); this.carrier = pair[1]; this.carrier.accept(); this.carrier.binaryType = 'arraybuffer';
       const send = (socket: WebSocket, data: string | ArrayBuffer) => {
@@ -92,6 +140,18 @@ export class AsteriskCall implements DurableObject {
       };
       this.adapter = new AsteriskMediaAdapter({
         carrierSend: data => send(this.carrier!, data), sessionSend: data => send(this.session!, data),
+        onReady: () => {
+          // Readiness is emitted only after valid PBX MEDIA_START + session ready.
+          // Serialize with finish so the observed event order also owns metrics.
+          this.state.waitUntil(this.exclusive(async () => {
+            try {
+              if (await this.state.storage.get('retired') || await this.state.storage.get('ending')) return;
+              const connected = await this.env.DB.prepare(`UPDATE calls SET connected_at=COALESCE(connected_at,datetime('now'))
+                WHERE id=? AND status='active' AND carrier_released_at IS NULL RETURNING id`).bind(call).first();
+              if (!connected) throw Error('call_ended');
+            } catch { this.adapter?.close('readiness_projection_failed'); }
+          }));
+        },
         onEnd: reason => {
           for (const socket of [this.carrier, this.session]) { try { socket?.close(1000, 'call ended'); } catch { /* closed */ } }
           this.state.waitUntil(this.exclusive(() => this.finish(call, reason)));
@@ -103,10 +163,10 @@ export class AsteriskCall implements DurableObject {
         socket.addEventListener('close', () => this.adapter?.close());
         socket.addEventListener('error', () => this.adapter?.close('socket_error'));
       }
-      await this.env.DB.prepare("UPDATE calls SET connected_at=datetime('now') WHERE id=? AND status='active'").bind(call).run();
       await this.state.storage.put('deadline', Date.now() + 30 * 60000);
       return new Response(null, { status: 101, webSocket: pair[0], headers: { 'Sec-WebSocket-Protocol': 'media' } });
     } catch {
+      this.closeResponse(response);
       this.adapter?.close('setup_failed');
       try { this.session?.close(1011, 'setup failed'); } catch { /* closed */ }
       await this.finish(call, 'setup_failed');
@@ -119,7 +179,10 @@ export class AsteriskCall implements DurableObject {
     await this.state.storage.put('ending', reason);
     await this.state.storage.setAlarm(Date.now() + 30000);
     await this.env.DB.prepare(`UPDATE calls SET carrier_released_at=COALESCE(carrier_released_at,datetime('now')),
-      status=CASE WHEN status='active' AND connected_at IS NULL THEN 'failed' ELSE status END,
+      status=CASE WHEN connected_at IS NULL THEN 'failed' ELSE status END,
+      outcome=CASE WHEN connected_at IS NULL THEN 'failed' ELSE outcome END,
+      failure_code=CASE WHEN connected_at IS NULL THEN COALESCE(failure_code,'asterisk_start_failed') ELSE failure_code END,
+      failure_message=CASE WHEN connected_at IS NULL THEN COALESCE(failure_message,'The telephone audio connection did not become ready.') ELSE failure_message END,
       ended_at=CASE WHEN connected_at IS NULL THEN COALESCE(ended_at,datetime('now')) ELSE ended_at END
       WHERE id=? AND channel='asterisk'`).bind(call).run();
     // CallSession normally persists the transcript/outcome. Let it finish before

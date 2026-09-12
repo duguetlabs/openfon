@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AsteriskCall } from '../src/asterisk-control';
 import { asteriskDigest, authenticateAsterisk } from '../src/asterisk-routes';
 import { applyMigrations, SqliteD1 } from './sqlite-d1';
@@ -39,7 +39,7 @@ beforeEach(async()=>{
   await db.prepare("INSERT INTO asterisk_routes VALUES('pbx','biz','assistant',?,1)").bind(await asteriskDigest(password)).run();
   env={...fakeEnv(undefined as never),DB:db as unknown as D1Database,ASTERISK_ENABLED:'true',REALTIME_BASE_URL:'wss://realtime.example.invalid/v1/realtime',REALTIME_MODEL:'gpt-realtime-2',REALTIME_API_KEY:'synthetic-only'};
 });
-afterEach(()=>db.close());
+afterEach(()=>{vi.useRealTimers();db.close();});
 describe('Asterisk authorization, admission and recovery',()=>{
   it('requires matching route identity and full secret; disabled routes revoke new calls',async()=>{
     expect(await authenticateAsterisk(env,'pbx',auth)).toBe(true);
@@ -175,5 +175,44 @@ describe('Asterisk operational state retirement',()=>{
     const failed=owner();await failed.object.fetch(request());await failed.object.alarm();
     await (failed.object as unknown as {finish(call:string,reason:string):Promise<void>}).finish(call,'late_close');
     marker(failed.storage);
+  });
+});
+
+
+describe('Asterisk startup connection boundary',()=>{
+  function pendingSession(){
+    let resolve!:(response:Response)=>void;
+    const fetch=vi.fn(()=>new Promise<Response>(r=>{resolve=r;}));
+    env.CALL_SESSION={idFromName:()=>call,get:()=>({fetch})} as unknown as DurableObjectNamespace;
+    return {fetch,resolve:(response:Response)=>resolve(response)};
+  }
+  const waitOpening=async(fetch:ReturnType<typeof vi.fn>)=>{
+    for(let i=0;i<100 && !fetch.mock.calls.length;i++)await new Promise(r=>setImmediate(r));
+    expect(fetch).toHaveBeenCalledTimes(1);
+  };
+  const row=()=>db.prepare('SELECT status,outcome,connected_at,carrier_released_at,failure_code FROM calls WHERE id=?').bind(call).first<Record<string,unknown>>();
+  it('alarm progresses during stalled session upgrade and rejects/closes late installation',async()=>{
+    const upstream=pendingSession(), live=owner();const result=live.object.fetch(request());await waitOpening(upstream.fetch);
+    expect((await row())?.connected_at).toBeNull();
+    await live.object.alarm();
+    expect(await row()).toMatchObject({status:'failed',outcome:'failed',connected_at:null,failure_code:'asterisk_start_failed'});
+    expect((await row())?.carrier_released_at).toBeTruthy();
+    const socket={accept:vi.fn(),close:vi.fn()};upstream.resolve({status:101,webSocket:socket} as unknown as Response);
+    expect((await result).status).toBe(409);expect(socket.close).toHaveBeenCalledTimes(1);
+    await live.object.alarm();expect([...live.storage.data]).toEqual([['retired',true]]);
+  });
+  it('bounds startup to ten seconds, releases capacity, and closes a socket arriving after timeout',async()=>{
+    vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});
+    const upstream=pendingSession(), live=owner();const result=live.object.fetch(request());await waitOpening(upstream.fetch);
+    await vi.advanceTimersByTimeAsync(10000);expect((await result).status).toBe(503);
+    expect(await row()).toMatchObject({status:'failed',outcome:'failed',connected_at:null});expect((await row())?.carrier_released_at).toBeTruthy();
+    const socket={accept:vi.fn(),close:vi.fn()};upstream.resolve({status:101,webSocket:socket} as unknown as Response);
+    await Promise.resolve();await Promise.resolve();expect(socket.close).toHaveBeenCalledTimes(1);expect(vi.getTimerCount()).toBe(0);
+  });
+  it('projects unready failure even if ordinary CallSession close finalized first',async()=>{
+    db.exec(`INSERT INTO calls(id,business_id,assistant_id,channel,status,environment,outcome) VALUES('${call}','biz','assistant','asterisk','completed','live','answered')`);
+    const live=owner();await live.storage.put('call',call);
+    await (live.object as unknown as {finish(call:string,reason:string):Promise<void>}).finish(call,'invalid_carrier_frame');
+    expect(await row()).toMatchObject({status:'failed',outcome:'failed',connected_at:null,failure_code:'asterisk_start_failed'});
   });
 });
