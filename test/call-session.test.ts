@@ -8,6 +8,7 @@
 // See the file footer for what this approach does NOT cover.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CallSession } from '../src/call-session';
+import { applyMigrations, SqliteD1 } from './sqlite-d1';
 import type { Env } from '../src/types';
 
 // ---------- fakes ----------
@@ -2332,5 +2333,70 @@ describe('native carrier greeting failure', () => {
     expect(caller.countOf('ended')).toBe(1);
     expect(up.closed).not.toBeNull();
     if (failure === 'timeout') expect(callUpdates().some(w => w.args.includes('The realtime provider did not produce usable greeting audio.'))).toBe(true);
+  });
+});
+
+
+describe('finalization duration on SQLite', () => {
+  let db: SqliteD1;
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-12T12:01:00Z'));
+    db = new SqliteD1();
+    applyMigrations(db, 1, 9);
+    db.exec(`INSERT INTO users (id,email,password_hash) VALUES ('duration-user','duration@test.invalid','hash');
+      INSERT INTO businesses (id,user_id,slug,name) VALUES ('biz-1','duration-user','duration','Duration');`);
+  });
+  afterEach(() => db.close());
+  function seed(channel: string, connectedAt: string | null, status = 'active', duration: number | null = null) {
+    db.database.prepare(`INSERT INTO calls (id,business_id,channel,status,started_at,connected_at,duration_s,outcome)
+      VALUES ('call-1','biz-1',?,?,'2026-09-12 12:00:00',?,?,?)`)
+      .run(channel, status, connectedAt, duration, status === 'failed' ? 'failed' : null);
+    const session = newSession('pipeline', {}, { DB: db as unknown as D1Database });
+    session.storage.map.set('callId', 'call-1');
+    session.storage.map.set('hardDeadline', Date.now() - 1);
+    return session;
+  }
+  const row = () => db.database.prepare('SELECT status,outcome,duration_s,ended_at FROM calls WHERE id=?').get('call-1');
+
+  it.each(['telnyx', 'asterisk', 'web'])('excludes setup delay for connected %s calls', async channel => {
+    const { session } = seed(channel, '2026-09-12 12:00:40');
+    await session.alarm();
+    expect(row()).toMatchObject({ status: 'completed', outcome: 'answered', duration_s: 20, ended_at: '2026-09-12 12:01:00' });
+  });
+  it.each(['telnyx', 'asterisk', 'web'])('preserves the unconnected %s fallback', async channel => {
+    const { session } = seed(channel, null);
+    await session.alarm();
+    expect(row()).toMatchObject({ status: 'completed', outcome: 'answered', duration_s: 60 });
+  });
+  it('clamps a connection timestamp after the frozen end to zero', async () => {
+    const { session } = seed('asterisk', '2026-09-12 12:01:01');
+    await session.alarm();
+    expect(row()).toMatchObject({ duration_s: 0 });
+  });
+  it.each(['completed', 'failed'])('preserves already %s carrier projections', async status => {
+    const { session } = seed('asterisk', '2026-09-12 12:00:40', status, 7);
+    await session.alarm();
+    expect(row()).toMatchObject({ status, duration_s: 7, outcome: status === 'failed' ? 'failed' : null });
+  });
+  it('does not add retry delay after eviction to connected talk time', async () => {
+    const { session, evictAndRebuild } = seed('telnyx', '2026-09-12 12:00:40');
+    db.hook = sql => { if (sql.includes('UPDATE calls SET status')) throw new Error('write unavailable'); };
+    await session.alarm();
+    expect(row()).toMatchObject({ status: 'active', duration_s: null });
+    db.hook = null;
+    vi.setSystemTime(new Date('2026-09-12T12:11:00Z'));
+    await evictAndRebuild().alarm();
+    expect(row()).toMatchObject({ status: 'completed', duration_s: 20, ended_at: '2026-09-12 12:01:00' });
+  });
+  it('does not overwrite a carrier failure racing the final UPDATE', async () => {
+    const { session } = seed('asterisk', '2026-09-12 12:00:40');
+    db.hook = sql => {
+      if (sql.includes('UPDATE calls SET status')) {
+        db.database.exec("UPDATE calls SET status='failed',outcome='failed',duration_s=9 WHERE id='call-1'");
+      }
+    };
+    await session.alarm();
+    expect(row()).toMatchObject({ status: 'failed', outcome: 'failed', duration_s: 9 });
   });
 });

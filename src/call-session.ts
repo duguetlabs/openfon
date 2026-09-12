@@ -1789,9 +1789,9 @@ export class CallSession implements DurableObject {
       /* already gone */
     }
     const endedAt = await this.rememberEnding();
-    const call = await this.env.DB.prepare('SELECT started_at, business_id, assistant_id FROM calls WHERE id = ? AND status = ?')
+    const call = await this.env.DB.prepare('SELECT started_at, connected_at, business_id, assistant_id FROM calls WHERE id = ? AND status = ?')
       .bind(this.callId, 'active')
-      .first<{ started_at: string; business_id: string; assistant_id: string | null }>();
+      .first<{ started_at: string; connected_at: string | null; business_id: string; assistant_id: string | null }>();
     if (!call) {
       // The row is no longer active: either something else completed it, or the
       // sweep retired it as 'abandoned' before we got here. The sweep is
@@ -1803,7 +1803,10 @@ export class CallSession implements DurableObject {
       await this.clearWatchdog();
       return;
     }
-    const duration = Math.max(0, Math.round((endedAt - new Date(call.started_at + 'Z').getTime()) / 1000));
+    // Carrier reservation/answer/setup precedes media readiness. Count talk
+    // time from connection, preserving the legacy unconnected-row fallback.
+    const durationOrigin = call.connected_at ?? call.started_at;
+    const duration = Math.max(0, Math.round((endedAt - new Date(durationOrigin + 'Z').getTime()) / 1000));
     await this.rehydrateHistory(call.business_id, call.assistant_id);
     // Survives eviction between attempts, so a retry never pays the
     // summarization model a second time for the same conversation.
