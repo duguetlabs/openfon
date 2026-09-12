@@ -61,6 +61,12 @@ export function providerUpdate(env: Env, current: ProviderSettings | null, body:
       if (capability === 'realtime' && !url.startsWith('wss://')) throw new ProviderInputError('Realtime URL must use wss://');
       const bad = validateLlmBaseUrl(capability === 'realtime' ? url.replace(/^wss:/, 'https:') : url);
       if (bad) throw new ProviderInputError(`${capability} URL ${bad}`);
+      if (capability === 'realtime') {
+        const endpoint = new URL(url);
+        if (endpoint.search || endpoint.hash) {
+          throw new ProviderInputError('Realtime URL must not include query parameters or fragments.');
+        }
+      }
       if (!credential) throw new ProviderInputError(`${capability} provider needs its own API key; instance keys are never inherited.`);
     }
     Object.assign(result, { [providerField]: provider, [urlField]: url, [keyField]: credential });

@@ -140,3 +140,22 @@ it('rejects custom STT WebSocket URLs without changing saved configuration, whil
   expect(db.database.prepare('SELECT realtime_base_url FROM provider_settings WHERE business_id=?').get('b1'))
     .toEqual({ realtime_base_url: 'wss://speech.example/realtime' });
 });
+
+it.each(['custom', 'kataleptic'])('rejects realtime query/fragment URLs atomically for %s', async provider => {
+  const original = { realtime_provider: provider, realtime_base_url: 'wss://voice.example/realtime', realtime_api_key: 'original-realtime-key', model: 'original-text-model' };
+  expect((await request('/api/me/provider', original)).status).toBe(200);
+  for (const suffix of ['?route=other', '#fragment', '?route=other#fragment']) {
+    const rejected = await request('/api/me/provider', { ...original,
+      realtime_base_url: original.realtime_base_url + suffix,
+      realtime_api_key: 'replacement-realtime-key', model: 'must-not-persist' });
+    expect(rejected.status).toBe(400);
+    expect(await rejected.json()).toEqual({ error: 'Realtime URL must not include query parameters or fragments.' });
+    expect(db.database.prepare('SELECT realtime_provider,realtime_base_url,realtime_api_key,llm_model FROM provider_settings WHERE business_id=?').get('b1'))
+      .toEqual({ realtime_provider: provider, realtime_base_url: original.realtime_base_url,
+        realtime_api_key: original.realtime_api_key, llm_model: original.model });
+  }
+  // An ordinary path-only endpoint remains configurable with an explicit key.
+  expect((await request('/api/me/provider', { realtime_base_url: 'wss://other.example/v1/realtime', realtime_api_key: 'replacement-realtime-key' })).status).toBe(200);
+  expect(db.database.prepare('SELECT realtime_base_url FROM provider_settings WHERE business_id=?').get('b1'))
+    .toEqual({ realtime_base_url: 'wss://other.example/v1/realtime' });
+});

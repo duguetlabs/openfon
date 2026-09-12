@@ -84,3 +84,10 @@ Realtime owner accepts instance|kataleptic|openai|custom; explicit choices never
 - Added API/SQLite regression rejecting both custom STT wss:// and ws:// with400 and preserving prior saved URL/key/model; valid custom STT HTTPS setup and custom realtime WSS save still pass.
 - `npx vitest run test/provider-presets.test.ts`:32/32 PASS; `npm run typecheck`:both projects PASS; `git diff --check`:PASS. No live calls, no shared snapshot edits or review inference. Only provider-settings helper, capability test and this owner checkpoint changed.
 - Next: integration cherry-picks correction and includes disposition in next assembled review candidate.
+
+## Hosted c436 inline3996380091 — realtime query/fragment validation
+- Verified save/runtime mismatch: providerUpdate accepted explicit custom/Kataleptic URL query/fragment components; runtime realtime endpoint validation rejects fragments and explicit-provider queries.
+- Narrow provider-settings fix validates parsed realtime URL search/hash after existing URL checks and rejects either with400 before persistence. Instance settings and HTTP text/STT rules unchanged; no adapter/shared dependency edits.
+- API/SQLite regression for both custom and Kataleptic tests query-only, fragment-only, combined rejection; previous provider/URL/key/text-model remain intact despite attempted replacement in same PUT. Path-only endpoint change with explicit new key remains accepted.
+- `npx vitest run test/provider-presets.test.ts`:34/34 PASS; `npm run typecheck`:both projects PASS; `git diff --check`:PASS. No dependency snapshots, live calls, new review inference or other workstreams edited.
+- Next: integration includes exact correction and disposition in next assembled security/review candidate.
