@@ -9,28 +9,38 @@ import { join } from 'node:path';
 import { createServer } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
 const exec = promisify(execFile);
+/** Only a new, correlated HTTP rejection proves a revoked PBX attempt happened.
+ * Zero channels alone can be observed before asynchronous originate starts. */
+export async function waitForPbxRejection({wait, attempts, after, call}) {
+  let rejected;
+  await wait(()=>Boolean(rejected=attempts.find(x=>x.sequence>after && x.call===call && x.status===401)), 'revoked route actual PBX HTTP rejection');
+  assert.equal(rejected.rateWriteAttempts,0,'revoked handshake attempts no D1 rate-counter write');
+  return rejected;
+}
 export async function runAsteriskRuntime({ temp, db, telemetry, wait, password }) {
   const name = `openfon-asterisk-${process.pid}`;
   const image = process.env.OPENFON_ASTERISK_IMAGE || 'openfon-asterisk-runtime:22.11.0';
   const port = Number(process.env.OPENFON_TEST_PORT || 8811);
   const proxyPort = Number(process.env.OPENFON_ASTERISK_PROXY_PORT || 8821);
   const controls = {}, events = {};
+  const attempts=[];let sequence=0;
   const proxy = createServer((_request,response)=>{response.writeHead(404);response.end();});
   const websockets = new WebSocketServer({noServer:true});
   const sockets = new Set();
   proxy.on('upgrade',(request,socket,head)=>{
+    const attempt={sequence:++sequence,call:new URL(request.url,'http://local.test').searchParams.get('call'),status:null,rateWriteAttempts:null};attempts.push(attempt);
     const upstream = new WebSocket(`ws://127.0.0.1:${port}${request.url}`, 'media', {headers:{Authorization:request.headers.authorization || ''}});
     sockets.add(upstream);
-    upstream.on('unexpected-response',(_request,response)=>{socket.end(`HTTP/1.1 ${response.statusCode} Rejected\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);response.resume();upstream.terminate();});
+    upstream.on('unexpected-response',(_request,response)=>{attempt.status=response.statusCode;attempt.rateWriteAttempts=response.headers['x-openfon-test-rate-writes']===undefined?null:Number(response.headers['x-openfon-test-rate-writes']);socket.end(`HTTP/1.1 ${response.statusCode} Rejected\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);response.resume();upstream.terminate();});
     upstream.on('error',()=>socket.destroy());
-    upstream.on('open',()=>websockets.handleUpgrade(request,socket,head,pbx=>{
+    upstream.on('open',()=>{attempt.status=101;websockets.handleUpgrade(request,socket,head,pbx=>{
       sockets.add(pbx);
       pbx.on('message',(data,binary)=>{if(!binary){const event=JSON.parse(data.toString()).event;events[event]=(events[event]||0)+1;}if(upstream.readyState===1)upstream.send(data,{binary});});
       upstream.on('message',(data,binary)=>{if(!binary){const command=JSON.parse(data.toString()).command;controls[command]=(controls[command]||0)+1;}if(pbx.readyState===1)pbx.send(data,{binary});});
       pbx.on('close',()=>{sockets.delete(pbx);upstream.close();});
       pbx.on('error',()=>upstream.close());
       upstream.on('close',()=>{sockets.delete(upstream);pbx.close();});
-    }));
+    });});
   });
   const config = join(temp, 'pbx'); await mkdir(config);
   const docker = async (...args) => (await exec('docker', args, { timeout: 30000, maxBuffer: 1024 * 1024 })).stdout;
@@ -40,7 +50,7 @@ export async function runAsteriskRuntime({ temp, db, telemetry, wait, password }
   await writeFile(join(config, 'logger.conf'), '[logfiles]\nconsole=notice,warning,error,verbose,debug\n');
   await writeFile(join(config, 'websocket_client.conf'), `[openfon]\ntype=websocket_client\nconnection_type=per_call_config\nuri=ws://host.docker.internal:${proxyPort}/ws/asterisk/pbx\nprotocols=media\nusername=pbx\npassword=${password}\nconnection_timeout=10000\nreconnect_attempts=0\ntls_enabled=no\nenable_pingpongs=yes\npingpong_interval=5\npingpong_probes=2\n`, { mode: 0o600 });
   // Cleartext is confined to the local Docker-to-host test hop, using fixture credentials.
-  await writeFile(join(config, 'extensions.conf'), `[general]\nstatic=yes\n[openfon-test]\nexten => s,1,Answer()\n same => n,Set(TIMEOUT(absolute)=15)\n same => n,MixMonitor(/test/mixed.wav,r(/test/caller.wav)t(/test/assistant.wav))\n same => n,Dial(WebSocket/openfon/c(ulaw)nf(json)v(call=runtime-one),10)\n same => n,StopMixMonitor()\n same => n,Hangup()\n`);
+  await writeFile(join(config, 'extensions.conf'), `[general]\nstatic=yes\n[openfon-test]\nexten => s,1,Answer()\n same => n,Set(TIMEOUT(absolute)=15)\n same => n,MixMonitor(/test/mixed.wav,r(/test/caller.wav)t(/test/assistant.wav))\n same => n,Dial(WebSocket/openfon/c(ulaw)nf(json)v(call=runtime-one),10)\n same => n,StopMixMonitor()\n same => n,Hangup()\nexten => revoked,1,Answer()\n same => n,Dial(WebSocket/openfon/c(ulaw)nf(json)v(call=runtime-revoked),10)\n same => n,Hangup()\n`);
   const tone = Buffer.alloc(8000 * 2 * 6);
   for (let i = 0; i < tone.length / 2; i++) tone.writeInt16LE(Math.round(6000 * Math.sin(2 * Math.PI * 660 * i / 8000)), i * 2);
   await writeFile(join(config, 'tone.sln'), tone);
@@ -86,14 +96,16 @@ export async function runAsteriskRuntime({ temp, db, telemetry, wait, password }
     for(const command of ['ANSWER','FLUSH_MEDIA','MARK_MEDIA','HANGUP']) assert.ok(controls[command]>0,`actual PBX received ${command}`);
     assert.ok(events.MEDIA_MARK_PROCESSED>0, 'actual PBX acknowledged playback');
     // A real second PBX connection with revoked route must fail before reservation.
-    const attempts=await db.prepare("SELECT COALESCE(SUM(count),0) n FROM rate_counters WHERE bucket LIKE 'asterisk:%'").first();
+    const counters=await db.prepare("SELECT bucket,window_start,count FROM rate_counters WHERE bucket LIKE 'asterisk:%' ORDER BY bucket,window_start").all();
     await db.prepare("UPDATE asterisk_routes SET enabled=0").run();
-    await cli('channel originate Local/s@openfon-test/n application Playback /test/tone');
-    await wait(async()=>{const row=await db.prepare("SELECT COALESCE(SUM(count),0) n FROM rate_counters WHERE bucket LIKE 'asterisk:%'").first();return row.n>attempts.n;},'revoked route actual PBX attempt');
+    const beforeAttempt=sequence;
+    await cli('channel originate Local/revoked@openfon-test/n application Playback /test/tone');
+    const rejected=await waitForPbxRejection({wait,attempts,after:beforeAttempt,call:'runtime-revoked'});
     await wait(async()=>(await cli('core show channels count')).includes('0 active channels'),'rejected PBX channel cleanup');
+    assert.deepEqual((await db.prepare("SELECT bucket,window_start,count FROM rate_counters WHERE bucket LIKE 'asterisk:%' ORDER BY bucket,window_start").all()).results,counters.results,'revoked handshake leaves rate counters unchanged');
     assert.equal((await db.prepare("SELECT COUNT(*) n FROM calls").first()).n,1,'revoked PBX creates no call');
     assert.equal(telemetry.filter(x => x.path === '/unexpected').length, 0);
-    console.log(JSON.stringify({ evidence: 'real Asterisk + Local channel + workerd/D1/DO; mocked AI; no SIP trunk/PSTN', version, modules: modules.trim(), inputPcmBytes: telemetry.find(x=>x.path==='/input').body.bytes, assistantRecordedBytes: data.length, assistantPeak: peak, tone440Amplitude: Math.round(tone440), controlsToPbx: controls, eventsFromPbx: events, revokedRouteRejected: true, persistedTurns: turns.results.length, calls: rows.results, activeChannels: 0 }, null, 2));
+    console.log(JSON.stringify({ evidence: 'real Asterisk + Local channel + workerd/D1/DO; mocked AI; no SIP trunk/PSTN', version, modules: modules.trim(), inputPcmBytes: telemetry.find(x=>x.path==='/input').body.bytes, assistantRecordedBytes: data.length, assistantPeak: peak, tone440Amplitude: Math.round(tone440), controlsToPbx: controls, eventsFromPbx: events, revokedRouteRejected: true, revokedHandshake: rejected, persistedTurns: turns.results.length, calls: rows.results, activeChannels: 0 }, null, 2));
   } catch (error) {
     // Only this fixture container: its config contains no real credentials.
     const logs = await docker('logs', '--tail', '100', name).catch(() => 'Container unavailable');

@@ -61,7 +61,19 @@ export default { async fetch(request, env) {
 }};
 `;
 try {
-  const bundle=await build({entryPoints:[resolve(root,'src/index.ts')],bundle:true,format:'esm',platform:'browser',target:'es2022',write:false,external:['cloudflare:*']});
+  const bundle=await build({stdin:{resolveDir:root,loader:'ts',contents:`
+import worker from './src/index';
+import { observeAsteriskRateWrites } from './scripts/asterisk-smoke-db.mjs';
+export * from './src/index';
+export default {...worker,async fetch(request,env,ctx){
+  // Test-only per-request instrumentation: no D1 audit table or public changes.
+  const observer=observeAsteriskRateWrites(env.DB);
+  const response=await worker.fetch(request,{...env,DB:observer.DB},ctx);
+  if(response.status===101)return response;
+  const headers=new Headers(response.headers);headers.set('X-Openfon-Test-Rate-Writes',String(observer.attempts));
+  return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
+}};
+`},bundle:true,format:'esm',platform:'browser',target:'es2022',write:false,external:['cloudflare:*']});
   mf=new Miniflare(convertV4MiniflareOptions({port:Number(process.env.OPENFON_TEST_PORT || 8811), inspectorPort:Number(process.env.OPENFON_INSPECTOR_PORT || 9251), defaultPersistRoot:temp,cf:false,workers:[
     {name:'openfon',modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-05-01',
      d1Databases:{DB:'smoke-db'},durableObjects:{CALL_SESSION:{className:'CallSession',useSQLite:true},ASTERISK_CALL:{className:'AsteriskCall',useSQLite:true}},
