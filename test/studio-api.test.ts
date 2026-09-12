@@ -2056,6 +2056,25 @@ describe('Calm Studio API foundation', () => {
     expect(overview.recentCalls.map(c => c.id)).toContain('unused-abandoned');
   });
 
+  it('pages knowledge with stable ties and keeps collection scope on every page', async () => {
+    const workspace = await createWorkspace();
+    const collections = await data<Array<{id:string}>>(await request(env, '/api/me/knowledge/collections'));
+    const id = collections[0].id;
+    const insert = db.database.prepare(`INSERT INTO knowledge_items(id,business_id,collection_id,kind,status,content,created_at)
+      VALUES (?,?,?,'note',?,'A bounded note','2026-08-10 12:00:00')`);
+    for(let i=0;i<45;i++) insert.run(`paged-${String(i).padStart(3,'0')}`, workspace.id, id, i<23?'active':'draft');
+    const seen: string[]=[]; let cursor: string|null=null;
+    do {
+      const page = await data<{items:Array<{id:string}>;nextCursor:string|null}>(await request(env, `/api/me/knowledge/collections/${id}${cursor?'?cursor='+encodeURIComponent(cursor):''}`));
+      expect(page.items.length).toBeLessThanOrEqual(20); seen.push(...page.items.map(i=>i.id)); cursor=page.nextCursor;
+    } while(cursor);
+    expect(new Set(seen).size).toBe(seen.length);
+    expect(seen.filter(id=>id.startsWith('paged-'))).toHaveLength(45);
+    expect((await request(env, `/api/me/knowledge/collections/${id}?cursor=invalid`)).status).toBe(400);
+    const legacy = await request(env, `/api/me/knowledge/collections/${id}/items`);
+    expect((await legacy.json() as unknown[])).toHaveLength(20); expect(legacy.headers.get('X-Next-Cursor')).toBeTruthy();
+  });
+
   it('preserves boolean false when creating an assistant', async () => {
     await createWorkspace();
     const assistant = await data<{take_messages: number}>(await request(env, '/api/me/assistants', json('POST', {name: 'No messages', take_messages: false})));

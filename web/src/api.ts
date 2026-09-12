@@ -320,7 +320,7 @@ export const api = {
   callPage: (params: URLSearchParams) => req<CallsPage>('GET', `/api/me/calls?${params.toString()}`),
   overview: (days: 7 | 30 | 90 = 30) => req<OverviewResponse>('GET', `/api/me/overview?days=${days}`),
   knowledgeCollections: () => req<KnowledgeCollection[]>('GET', '/api/me/knowledge/collections'),
-  knowledgeCollection: (id: string) => req<KnowledgeCollection & { items: KnowledgeItem[]; assistants: Assistant[] }>('GET', `/api/me/knowledge/collections/${id}`),
+  knowledgeCollection: (id: string, cursor?: string) => req<KnowledgeCollection & { items: KnowledgeItem[]; nextCursor: string | null; assistants: Assistant[] }>('GET', `/api/me/knowledge/collections/${id}${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
   createKnowledgeCollection: (body: Pick<KnowledgeCollection, 'name' | 'description'>) => req<KnowledgeCollection>('POST', '/api/me/knowledge/collections', body),
   updateKnowledgeCollection: (id: string, body: Partial<Pick<KnowledgeCollection, 'name' | 'description'>>) => req<{ ok: true }>('PUT', `/api/me/knowledge/collections/${id}`, body),
   deleteKnowledgeCollection: (id: string) => req<{ ok: true }>('DELETE', `/api/me/knowledge/collections/${id}`),
