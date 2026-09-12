@@ -48,6 +48,23 @@ async function data<T>(response: Response): Promise<T> {
 }
 
 describe('Calm Studio migration 0008', () => {
+  it.each(['agent_name', 'persona', 'language'])('seeds incomplete legacy %s as draft while preserving its public slug', async (field) => {
+    for (const blank of ['', ' \t\r\n', '\u00a0\u3000\ufeff']) {
+      const db = new SqliteD1();
+      try {
+        applyMigrations(db, 1, 7);
+        db.exec(`INSERT INTO users (id,email,password_hash) VALUES ('u','legacy@example.invalid','hash');
+          INSERT INTO businesses (id,user_id,slug,name) VALUES ('b','u','legacy-link','Legacy');
+          INSERT INTO agent_settings (business_id,agent_name,persona,language) VALUES ('b','Maya','calm','en');`);
+        db.database.prepare(`UPDATE agent_settings SET ${field}=? WHERE business_id='b'`).run(blank);
+        applyMigrations(db, 8);
+        expect(db.database.prepare("SELECT state,activated_at,public_slug FROM assistants WHERE id='asst_b'").get()).toEqual({state:'draft',activated_at:null,public_slug:'legacy-link'});
+        expect(db.database.prepare(`SELECT ${field} AS value FROM agent_settings WHERE business_id='b'`).get()).toEqual({value:blank});
+        expect((await request(makeEnv(db), '/api/public/agent/legacy-link', {}, '')).status).toBe(404);
+      } finally { db.close(); }
+    }
+  });
+
   it.each([1, 2, 3, 4, 5, 6, 7])(
     'upgrades a populated database currently at migration 000%i',
     (version) => {

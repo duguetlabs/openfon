@@ -49,6 +49,9 @@ CREATE INDEX idx_assistants_state ON assistants(business_id, state);
 
 -- Preserve every existing public URL and voice/behavior choice. Deterministic
 -- ids keep the migration idempotent in copied development databases.
+WITH essentials AS (
+  SELECT char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279) AS whitespace
+)
 INSERT INTO assistants (
   id, business_id, public_slug, state, name, greeting, persona, language,
   voice, take_messages, custom_instructions, engine, realtime_model,
@@ -58,7 +61,9 @@ SELECT
   'asst_' || b.id,
   b.id,
   b.slug,
-  'active',
+  CASE WHEN trim(COALESCE(a.agent_name, 'Alex'), whitespace)<>''
+    AND trim(COALESCE(a.persona, 'friendly and professional'), whitespace)<>''
+    AND trim(COALESCE(a.language, 'en'), whitespace)<>'' THEN 'active' ELSE 'draft' END,
   COALESCE(a.agent_name, 'Alex'),
   COALESCE(a.greeting, ''),
   COALESCE(a.persona, 'friendly and professional'),
@@ -72,13 +77,16 @@ SELECT
   COALESCE(a.llm_model, ''),
   b.created_at,
   b.created_at,
-  b.created_at
+  CASE WHEN trim(COALESCE(a.agent_name, 'Alex'), whitespace)<>''
+    AND trim(COALESCE(a.persona, 'friendly and professional'), whitespace)<>''
+    AND trim(COALESCE(a.language, 'en'), whitespace)<>'' THEN b.created_at ELSE NULL END
 FROM businesses b
+CROSS JOIN essentials
 LEFT JOIN agent_settings a ON a.business_id = b.id;
 
 -- Lifecycle validity must hold at execution time, not only after an API read:
 -- concurrent edits and activation requests can otherwise race stale checks.
--- Existing rows are preserved above; every future activation or active edit is
+-- Incomplete legacy rows retain their settings as drafts above; every future activation or active edit is
 -- constrained to complete essentials.
 CREATE TRIGGER assistants_active_essentials_insert
 BEFORE INSERT ON assistants
