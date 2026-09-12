@@ -1,15 +1,15 @@
 # OpenFon launch preparation
 
 - Status: In progress
-- Owner/active agent: Codex /root; foundation_fix unsaved-edit fix and review follow-up; benchmark_hardening rehearsal complete
+- Owner/active agent: Codex /root; subagents finished; overnight automation paused
 - Branch: codex/launch-studio at /Users/cristian/projects/fun/openfon; verified carrier review branch codex/telnyx-inbound at /tmp/openfon-telephony
-- Base commit: 3cad16bcd699b14979c5178bc2b587bbae30cef9 (PR #14; merged into this branch)
-- Last updated: 2026-09-11T22:58:50.154256+00:00
+- Base commit: cd3acc9 (consolidated checkout before this documentation update)
+- Last updated: 2026-09-12T08:13:05.257242+00:00
 - Applicable AGENTS.md: repository AGENTS.md and user-provided project instructions
 - Read first: this file, docs/launch/readiness.md, docs/telephony.md, docs/launch/production-preflight.md
 
 ## Objective
-Finish launch app/technical work, original website and marketing assets; user authorizes overnight parallel agents. Hourly heartbeat openfon-overnight-launch-preparation continues until2026-09-12 08:00 Europe/Vienna, then pauses and reports.
+Finish launch app/technical work, original website and marketing assets; user authorizes overnight parallel agents. Overnight window ended; heartbeat openfon-overnight-launch-preparation was paused at 2026-09-12 08:11 UTC when the queued wakeups were handled. No claim of continuous work during the intervening queued period.
 
 ## Scope
 App completion, bugs/issues #6/#12, PRs #10/#13, website/marketing, disabled inbound Telnyx implementation and release verification.
@@ -19,7 +19,7 @@ Unapproved spending, external marketing distribution, real carrier calls without
 
 ## Confirmed facts
 - PR #13 branch agent/calm-studio-foundation at d6ea5d2: exact-head Codex no-major finding and CI green. Separate worktree /tmp/openfon-foundation-review.
-- PR #14 codex/launch-review at3cad16b: latest review findings fixed (one-snapshot export, production-origin wiring, cancelled reservation cleanup). Local 283 unit / 6 browser tests pass; all four CI jobs green at 3cad16b; latest Codex review pending. Separate worktree /tmp/openfon-launch-review. It includes app, website, account controls, benchmark fixes and CI.
+- PR #14 head 370be80: assistant unsaved-edit guard integrated into root and carrier. Local tests pass; latest CI has one browser failure (ambiguous status locator, then signup retry quota exhaustion). Exact-head Codex has three remaining P2 findings; see Work remaining.
 - Mandatory PR-Agent is unavailable; personal reusable infrastructure probes returned404 and historical instructions forbid private cross-org qapture caller. User's async substitute-review question remains unanswered. Never merge around this gate.
 - Workflow OAuth scope is NO LONGER blocked: existing authorized GitHub connector published prepared CI as fabdee7 without expanding account access. Canceled old gh auth refresh; no scope grant needed.
 - Read-only Cloudflare preflight: Worker openfon exists, migrations0007/0008 pending; browser-user-agent workers.dev probes returned root 200 and signed-out /api/me 401; Python-user-agent probes returned 403. Secret names inspected only, values not read. See production-preflight.md. No deployment/migration/secret update occurred.
@@ -42,28 +42,28 @@ Unapproved spending, external marketing distribution, real carrier calls without
 - Independent review found/fixed unowned outgoing leg commands, expired-alarm hot loop, shutdown callback handling, exact number authorization, account deletion race, persistent failure reporting and arbitrary DO instantiation.
 
 ## Work remaining
-- PR #15 open (codex/telnyx-inbound → codex/launch-review), all four CI jobs green at a59f1ff; latest code and security reviews pending. Actual carrier runtime harness included in CI. Obtain exact-head reviews and resolve real findings.
-- PR #14 review found unsaved assistant edits lost on navigation (3994044623). foundation_fix owns the router/unload guard and browser regression in /tmp/openfon-launch-review; integrate its validated commit into carrier/root and retrigger reviews.
-- PR #15 P1 3994041617 is false: official Telnyx Connected Frame contract includes the configured streaming token in both header and frame. Evidence rebuttal 3994044459 posted and explicit reconsideration requested in issuecomment-5641596366. No authentication weakened. Still await clean exact-head review.
-- Satisfy mandatory PR-Agent gate before merging any PR.
-- Confirm production identity/access/provider; backup/staging migration/rollback drill then actual provider/carrier pilot before launch. No production ready claim.
-- Verified carrier and launch branches consolidated into this original checkout; user research remains untracked and untouched.
+- PR #14 at 370be80: protect unsaved knowledge drafts (3994129324), exclude unconnected reservations from headline live-call total (3994129328), isolate browser retries from shared signup quota (3994129334). All verified and acknowledged on PR; none fixed yet. Also fix status locator ambiguity found in CI run 34656631441 before rerunning.
+- PR #15 at d616fff: gate carrier input until Azure greeting audio is synthesized/queued (3994125261). Verified sendReady precedes synthesize and adapter flushes input on ready. Needs delayed-synthesis regression. All CI jobs passed; exact-head security review found no security issues, but code finding remains open.
+- Earlier Telnyx connected-frame finding was false; official-contract rebuttal accepted with no-major review on a59f1ff. Latest d616fff has the separate greeting-order finding above.
+- Every finding has a PR reply; fix, validate, push, close/reopen and re-request Codex after each fix. Propagate final branch changes into the original checkout. Never merge past unresolved findings or the unavailable mandatory PR-Agent gate.
+- Final hostname/operator/support/privacy choices, valid provider access, production D1 backup and staging migration/restore, real-provider and consented carrier pilot remain required.
+- Marketing strategy/copy/assets are prepared but distribution unsent. No public launch or production changes.
 
 ## Files changed
 - This branch contains src/telnyx-*, src/telephony-audio.ts, migration0009, CallSession carrier guards, shared admission/account guards, tests, synthetic harness and docs.
 - All worktrees share dependency symlink; node_modules is untracked in /tmp worktrees and must not be committed.
 
 ## Validation
-- npm test:424/424 across20 files after merge and ingressfix.
+- Final consolidated npm test: 424/424 across 20 files at cd3acc9; /tmp/openfon-launch-qa/final-integrated-unit.log.
 - Local synthetic legacy migration/backup rehearsal passed: 0006 → 0009, preserved slugs/history/settings, binary and SQL restore, rollback/re-upgrade, integrity/foreign-key checks. Script: /tmp/openfon-launch-qa/migration-rehearsal.py; invocation python3 SCRIPT /Users/cristian/projects/fun/openfon. Migration 0008 regression group: 10 passed. Production D1 rehearsal remains required.
 - npm run typecheck:passed.
 - npm run test:telnyx:passed against actual local workerd, signed ingress, duplicate admission, valid-shaped forged token rejected, bidirectional non-silent PCM, interruption/marks/hangup and D1release. All outbound services mocked.
-- Browser test:e2e:6/6 passed on consolidated carrier branch; build included.
-- Launch and carrier CI: app, browser, scoring and realtime green at PR #14 3cad16b and PR #15 a59f1ff. Python suites220(one existing skip)/206; npm audit zero after upgrades.
+- Final consolidated browser suite: 6/6 passed at cd3acc9, including unsaved assistant guard; build included. /tmp/openfon-launch-qa/final-integrated-browser.log. This local pass does not override the later-inspected CI failure.
+- Latest CI: PR #15 d616fff all required jobs green; PR #14 370be80 has one failing browser run, other jobs green. Python suites220(one existing skip)/206; npm audit zero after upgrades.
 - Initial runtime failures above fixed; current passing harness supersedes them.
 
 ## Blockers, risks and unresolved questions
-Missing mandatory reviewer, final operator/domain/privacy details, unverified real-provider access (local credential preflight 403), absent real carrier configuration/pilot. Tombstones retain provider correlation for replay suppression; no live-carrier readiness claimed.
+Four confirmed review fixes and browser CI failure, missing mandatory reviewer, final operator/domain/privacy details, unverified real-provider access (local credential preflight 403), absent real carrier configuration/pilot. Tombstones retain provider correlation for replay suppression; no live-carrier readiness claimed.
 
 ## Recommended next action
-Verify worktree/agent/remote PR state, collect latest-head reviews on PRs #14/#15, address confirmed findings, and integrate the pending validated unsaved-edit fix from foundation_fix. No merge or production launch until gates pass.
+Resume by verifying git and remote reviews, then fix PR #14 browser isolation/locator and remaining product findings, followed by PR #15 greeting ordering. Automation is paused; no main merge or production launch until all gates pass.

@@ -33,6 +33,10 @@ Updated 2026-09-12. **Release candidate in progress; not production-launch appro
 
 Read-only production inspection is recorded in [production-preflight.md](production-preflight.md): remote migrations 0007/0008 remain pending, configured secret names do not establish validity, and browser-user-agent probes returned 200 for the public site and 401 for the signed-out account endpoint. Python-user-agent probes returned 403. No remote changes, authenticated production session, or real-provider conversation are claimed.
 
+## Latest review findings still open
+
+At the final check on 2026-09-12, PR #14 head `370be80` still needs knowledge-draft navigation protection, connected-call-only headline totals, and browser retry isolation. One CI browser run failed because a status locator matched both the success notice and loading indicator; retries then exceeded the shared signup limit. PR #15 head `d616fff` has green CI and no security findings, but needs carrier input gated until Azure greeting synthesis/queueing completes. These are confirmed open fixes, despite the final local suite passing. The overnight automation is paused.
+
 ## Required release gate
 
 1. Resolve every confirmed test/review finding and rerun the relevant matrix against the final commit.
