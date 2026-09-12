@@ -36,7 +36,7 @@ jobs:
           node scripts/asterisk-smoke.mjs
           node scripts/realtime-smoke.mjs
           node scripts/realtime-smoke.mjs --gateway
-      - run: python3 scripts/migration-rehearsal.py . --through 11
+      - run: python3 scripts/migration-rehearsal.py . --through 12
 
   # The benchmark scoring code is Python and computes the numbers in
   # docs/research/. A wrong normaliser or a slot matcher that fails closed would

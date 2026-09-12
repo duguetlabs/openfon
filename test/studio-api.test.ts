@@ -48,6 +48,22 @@ async function data<T>(response: Response): Promise<T> {
 }
 
 describe('Calm Studio migration 0008', () => {
+  it('repairs previously migrated invalid active essentials without dropping public slugs', () => {
+    const db = new SqliteD1();
+    try {
+      applyMigrations(db, 1, 11);
+      db.exec(`DROP TRIGGER assistants_active_essentials_insert;
+        DROP TRIGGER assistants_active_essentials_update;
+        INSERT INTO users(id,email,password_hash) VALUES('repair-user','repair@example.invalid','hash');
+        INSERT INTO businesses(id,user_id,slug,name) VALUES('repair-biz','repair-user','repair-business','Repair');
+        INSERT INTO assistants(id,business_id,public_slug,state,name,persona,language,activated_at)
+          VALUES('repair-assistant','repair-biz','preserved-link','active',char(160),'calm','en','2026-01-01');`);
+      applyMigrations(db, 12, 12);
+      expect(db.database.prepare("SELECT state,activated_at,public_slug,name FROM assistants WHERE id='repair-assistant'").get()).toEqual({state:'draft',activated_at:null,public_slug:'preserved-link',name:'\u00a0'});
+      expect(() => db.database.prepare("UPDATE assistants SET state='active' WHERE id='repair-assistant'").run()).toThrow('active assistant requires complete essentials');
+    } finally { db.close(); }
+  });
+
   it.each(['agent_name', 'persona', 'language'])('seeds incomplete legacy %s as draft while preserving its public slug', async (field) => {
     for (const blank of ['', ' \t\r\n', '\u00a0\u3000\ufeff']) {
       const db = new SqliteD1();
