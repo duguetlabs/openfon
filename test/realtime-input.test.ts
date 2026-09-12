@@ -41,3 +41,17 @@ describe('realtime input allocation bounds', () => {
     expect(() => decodeRealtimeAudio('private-provider-text!')).toThrow('Invalid or oversized realtime provider message');
   });
 });
+
+
+describe('realtime transcript field bounds', () => {
+  it.each(['conversation.item.input_audio_transcription.completed', 'response.output_audio_transcript.done'])('bounds %s in UTF-8 after JSON unescaping', type => {
+    const accepted = '€'.repeat(2730) + 'xx'; //8192 bytes
+    expect(parseRealtimeMessage(JSON.stringify({ type, transcript: accepted })).transcript).toBe(accepted);
+    expect(() => parseRealtimeMessage(JSON.stringify({ type, transcript: accepted + 'x' }))).toThrow();
+    expect(() => parseRealtimeMessage(JSON.stringify({ type, transcript: 'x'.repeat(900000) }))).toThrow();
+    expect(() => parseRealtimeMessage(JSON.stringify({ type, transcript: 123 }))).toThrow();
+    expect(parseRealtimeMessage(JSON.stringify({ type, transcript: '' })).transcript).toBe('');
+    const escaped = '{"type":"' + type + '","transcript":"' + '\\u20ac'.repeat(2731) + '"}';
+    expect(() => parseRealtimeMessage(escaped)).toThrow();
+  });
+});

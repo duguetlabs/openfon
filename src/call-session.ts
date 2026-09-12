@@ -19,7 +19,7 @@ import type { RealtimeConfig } from './realtime-providers';
 import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './prompt';
 import type { PromptKnowledgeItem } from './prompt';
 import { loadCallKnowledge } from './call-knowledge';
-import { parseRealtimeMessage, decodeRealtimeAudio, RealtimeInputError } from './realtime-input';
+import { parseRealtimeMessage, decodeRealtimeAudio, RealtimeInputError, transcriptBytes, MAX_TRANSCRIPT_FIELD_BYTES, MAX_CALL_TRANSCRIPT_BYTES } from './realtime-input';
 import { chatComplete, detectLang, isFarewell, isVocabEcho, LlmConfigError, normalizeLang, piperVoiceFor, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
 
 // WebSocket binary payloads vary by runtime: ArrayBuffer, ArrayBufferView, or Blob.
@@ -221,6 +221,7 @@ export class CallSession implements DurableObject {
   // and authoritative empty knowledge set.
   private knowledge: PromptKnowledgeItem[] | undefined;
   private history: ChatMessage[] = [];
+  private persistedTranscriptBytes = 0;
   private busy = false;
   private ended = false; // stop handling caller messages
   private finalized = false; // the call row has been written; gates retries
@@ -412,6 +413,9 @@ export class CallSession implements DurableObject {
       .bind(this.callId)
       .first<CallRow>();
     if (!call || call.status !== 'active') throw new Error('call not found or not active');
+    const budget = await this.env.DB.prepare('SELECT COALESCE(SUM(length(CAST(text AS BLOB))), 0) AS bytes FROM call_turns WHERE call_id = ?')
+      .bind(this.callId).first<{ bytes: number }>();
+    this.persistedTranscriptBytes = budget?.bytes ?? 0;
     // Persisted admission decides capabilities; a client cannot opt into another
     // channel using a query parameter or WebSocket message.
     this.requiresCarrierAudio = call.channel === 'telnyx' || call.channel === 'asterisk';
@@ -586,6 +590,7 @@ export class CallSession implements DurableObject {
           await this.failCarrierAudio('This realtime tier requires server speech synthesis for telephone greetings.');
           return;
         }
+        this.reserveTranscript(greeting);
         this.history = [
           { role: 'system', content: systemPrompt },
           { role: 'assistant', content: greeting },
@@ -625,6 +630,7 @@ export class CallSession implements DurableObject {
       return;
     }
     this.mode = 'pipeline';
+    this.reserveTranscript(greeting);
     this.history = [
       {
         role: 'system',
@@ -1331,11 +1337,11 @@ export class CallSession implements DurableObject {
             this.send({ type: 'flush' });
             break;
           }
+          this.reserveTranscript(text);
+          this.history.push({ role: 'user', content: text });
           // Standard tier sends a detected language with each transcript;
           // prefer it over our own text-based heuristic.
           this.maybeSwitchVoice(text, normalizeLang(msg.language));
-          this.send({ type: 'transcript', text });
-          this.history.push({ role: 'user', content: text });
           // Caller-farewell backstop, armed after at least one real exchange.
           // Not a fallback: `end_call` fires on 23-25 of 33 goodbye turns on
           // every tier measured (see toolsSupported), so on roughly a quarter
@@ -1355,14 +1361,18 @@ export class CallSession implements DurableObject {
             }, 8000);
           }
           await this.saveTurn('caller', text);
+          if (this.ended) return;
+          this.send({ type: 'transcript', text });
         }
         break;
       case 'response.output_audio_transcript.done':
         if (msg.transcript?.trim()) {
           const text = msg.transcript.trim();
-          this.send({ type: 'agent_text', text });
+          this.reserveTranscript(text);
           this.history.push({ role: 'assistant', content: text });
           await this.saveTurn('agent', text);
+          if (this.ended) return;
+          this.send({ type: 'agent_text', text });
           if (this.endPending) this.beginHangup();
         }
         break;
@@ -1396,6 +1406,7 @@ export class CallSession implements DurableObject {
   }
 
   private sendCallerText(text: string): void {
+    this.reserveTranscript(text);
     this.maybeSwitchVoice(text);
     this.sendUpstream({
       type: 'conversation.item.create',
@@ -1404,7 +1415,7 @@ export class CallSession implements DurableObject {
     this.sendUpstream({ type: 'response.create' });
     this.send({ type: 'transcript', text });
     this.history.push({ role: 'user', content: text });
-    void this.saveTurn('caller', text);
+    void this.saveTurn('caller', text).catch(error => this.failInternally(error));
   }
 
   private async handleUtterance(audio: ArrayBuffer): Promise<void> {
@@ -1418,6 +1429,7 @@ export class CallSession implements DurableObject {
         this.busy = false;
         return;
       }
+      this.reserveTranscript(text);
       if (language) this.lang = language; // follow the caller's language
       this.send({ type: 'transcript', text });
       await this.respondInner(text);
@@ -1430,6 +1442,7 @@ export class CallSession implements DurableObject {
     if (this.busy || !this.biz) return;
     this.busy = true;
     try {
+      this.reserveTranscript(text);
       this.send({ type: 'transcript', text });
       await this.respondInner(text);
     } finally {
@@ -1444,6 +1457,7 @@ export class CallSession implements DurableObject {
     const raw = (await chatComplete(llm, this.history, { maxTokens: 200, temperature: 0.6 })).trim();
     const wantsEnd = /<?END_CALL>?/i.test(raw);
     const reply = raw.replace(/\s*<?END_CALL>?\s*/gi, ' ').trim();
+    this.reserveTranscript(reply);
     this.history.push({ role: 'assistant', content: reply });
     this.send({ type: 'agent_text', text: reply });
     await this.saveTurn('agent', reply);
@@ -1463,10 +1477,23 @@ export class CallSession implements DurableObject {
     }
   }
 
+  private reserveTranscript(text: string): void {
+    const bytes = transcriptBytes(text);
+    if (this.persistedTranscriptBytes + bytes > MAX_CALL_TRANSCRIPT_BYTES) throw new RealtimeInputError();
+    // Synchronous reservation: overlapping provider events cannot each observe
+    // the same remaining budget while their D1 writes are pending. Keep failed
+    // write reservations spent rather than reopening capacity after an error.
+    this.persistedTranscriptBytes += bytes;
+  }
+
   private async saveTurn(role: 'caller' | 'agent', text: string): Promise<void> {
-    await this.env.DB.prepare('INSERT INTO call_turns (call_id, role, text) VALUES (?, ?, ?)')
-      .bind(this.callId, role, text)
+    const bytes = transcriptBytes(text);
+    const result = await this.env.DB.prepare(`INSERT INTO call_turns (call_id, role, text)
+      SELECT ?, ?, ? WHERE
+      (SELECT COALESCE(SUM(length(CAST(text AS BLOB))), 0) FROM call_turns WHERE call_id = ?) + ? <= ${MAX_CALL_TRANSCRIPT_BYTES}`)
+      .bind(this.callId, role, text, this.callId, bytes)
       .run();
+    if (result.meta?.changes === 0) throw new RealtimeInputError();
     // A model that loops — or an engine echoing itself — would otherwise run up
     // provider spend for as long as the socket stays open.
     if (++this.turns >= CallSession.MAX_TURNS) {
@@ -1698,7 +1725,12 @@ export class CallSession implements DurableObject {
   private async rehydrateHistory(businessId: string, assistantId: string | null): Promise<void> {
     if (this.history.length > 0) return; // live session: memory is authoritative
     if (!this.settings) await this.loadSettings(businessId, assistantId);
-    const { results } = await this.env.DB.prepare('SELECT role, text FROM call_turns WHERE call_id = ? ORDER BY id')
+    const { results } = await this.env.DB.prepare(`SELECT role, text FROM (
+      SELECT id, role, text, length(CAST(text AS BLOB)) AS bytes,
+        SUM(length(CAST(text AS BLOB))) OVER (ORDER BY id) AS total_bytes
+      FROM call_turns WHERE call_id = ?
+      ORDER BY id LIMIT ${CallSession.MAX_TURNS}
+    ) WHERE bytes <= ${MAX_TRANSCRIPT_FIELD_BYTES} AND total_bytes <= ${MAX_CALL_TRANSCRIPT_BYTES} ORDER BY id`)
       .bind(this.callId)
       .all<{ role: string; text: string }>();
     if (!results.length) return;

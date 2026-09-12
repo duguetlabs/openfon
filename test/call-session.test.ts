@@ -106,6 +106,7 @@ function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline', settings: Partial<
     failCallReads: false, // transient failure inside loadCall()
     failFinalizeReads: false, // transient failure on finalize's own row read
     failTurnWrites: false, // transient failure inserting a turn
+    callerTurnGate: null as Promise<void> | null,
     callRowActive: true, // false once the cron sweep has retired the row
     turns: [] as { role: string; text: string }[], // rows call_turns should return
     /** Resolve to release a gated loadCall(), letting a test interleave a hangup. */
@@ -138,6 +139,7 @@ function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline', settings: Partial<
             async run() {
               if (ctl.failUpdates && sql.includes('UPDATE calls')) throw new Error('D1 unavailable');
               if (ctl.failTurnWrites && sql.includes('INSERT INTO call_turns')) throw new Error('D1 unavailable');
+              if (ctl.callerTurnGate && sql.includes('INSERT INTO call_turns') && args[1] === 'caller') await ctl.callerTurnGate;
               writes.push({ sql, args });
               // A statement predicated on `status = 'active'` matches nothing
               // once the sweep has retired the row, which is how the real D1
@@ -2260,6 +2262,55 @@ describe('direct OpenAI realtime independence', () => {
     expect(callUpdates().some(write => write.args[0] === 'failed')).toBe(true);
   });
 
+  it.each(['conversation.item.input_audio_transcription.completed', 'response.output_audio_transcript.done'])('rejects oversized transcript before forwarding/history/write: %s', async type => {
+    const up = new FakeSocket();
+    globalThis.fetch = vi.fn(async () => ({ status: 101, webSocket: up })) as unknown as typeof fetch;
+    const { session, turnWrites, callUpdates } = newSession('realtime', directSettings);
+    await session.fetch(upgradeRequest());
+    const caller = serverSockets[0]; caller.receive({ type: 'start' });
+    await flush(50);
+    up.receive({ type: 'session.updated', session: up.messages().find(m => m.type === 'session.update')!.session });
+    await flush(50);
+    const transcript = '€'.repeat(2731);
+    up.receive({ type, transcript });
+    await flush(100);
+    expect(turnWrites()).toHaveLength(0);
+    expect(caller.messages().filter(m => m.type === 'agent_text' || m.type === 'transcript')).toHaveLength(0);
+    expect((session as unknown as { history: { content: string }[] }).history.some(m => m.content === transcript)).toBe(false);
+    expect(callUpdates().some(w => w.args[0] === 'failed')).toBe(true);
+  });
+
+  it('reserves transcript bytes across burst events and rotation before any await', async () => {
+    const old = new FakeSocket(), replacement = new FakeSocket();
+    let upgrades = 0;
+    globalThis.fetch = vi.fn(async () => ({ status: 101, webSocket: upgrades++ === 0 ? old : replacement })) as unknown as typeof fetch;
+    const { session, turnWrites, callUpdates } = newSession('realtime', directSettings);
+    await session.fetch(upgradeRequest());
+    const caller = serverSockets[0]; caller.receive({ type: 'start' });
+    await flush(50);
+    old.receive({ type: 'session.updated', session: old.messages().find(m => m.type === 'session.update')!.session });
+    await flush(50);
+    const transcript = '€'.repeat(2730) + 'xx';
+    for (let i = 0; i < 16; i++) old.receive({ type: 'response.output_audio_transcript.done', transcript });
+    await flush(100);
+    old.receive({ type: 'session.expiring' }); await flush(50);
+    replacement.receive({ type: 'session.updated', session: replacement.messages().find(m => m.type === 'session.update')!.session });
+    await flush(50);
+    // A burst with no awaits fills the remaining128KiB exactly.
+    for (let i = 0; i < 16; i++) replacement.receive({ type: 'response.output_audio_transcript.done', transcript });
+    await flush(100);
+    expect(turnWrites()).toHaveLength(32);
+    expect(caller.countOf('agent_text')).toBe(32);
+    expect(old.closed).not.toBeNull();
+    replacement.receive({ type: 'response.output_audio_transcript.done', transcript: 'x' });
+    await flush(100);
+    expect(turnWrites()).toHaveLength(32);
+    expect(caller.countOf('agent_text')).toBe(32);
+    const history = (session as unknown as { history: { content: string }[] }).history.slice(1);
+    expect(history.reduce((sum, m) => sum + new TextEncoder().encode(m.content).length, 0)).toBe(256 * 1024);
+    expect(callUpdates().some(w => w.args[0] === 'failed')).toBe(true);
+  });
+
   it.each(['reject', 'redirect', 'session-error', 'session-mismatch', 'session-timeout'])('fails closed on %s without pipeline fallback', async failure => {
     vi.useFakeTimers();
     const up = new FakeSocket();
@@ -2432,5 +2483,84 @@ describe('finalization duration on SQLite', () => {
     };
     await session.alarm();
     expect(row()).toMatchObject({ status: 'failed', outcome: 'failed', duration_s: 9 });
+  });
+});
+
+
+describe('persisted transcript byte budget on SQLite', () => {
+  let db: SqliteD1;
+  beforeEach(() => {
+    db = new SqliteD1(); applyMigrations(db, 1, 9);
+    db.exec(`INSERT INTO users (id,email,password_hash) VALUES ('u','budget@test.invalid','hash');
+      INSERT INTO businesses (id,user_id,slug,name) VALUES ('biz-1','u','budget','Budget');
+      INSERT INTO agent_settings (business_id) VALUES ('biz-1');
+      INSERT INTO calls (id,business_id) VALUES ('call-1','biz-1'),('other','biz-1');`);
+  });
+  afterEach(() => db.close());
+  function budgetSession() {
+    const value = newSession('realtime', {}, { DB: db as unknown as D1Database });
+    const internals = value.session as unknown as {
+      callId: string; persistedTranscriptBytes: number;
+      loadCall(): Promise<void>; reserveTranscript(text: string): void;
+      saveTurn(role: string, text: string): Promise<void>;
+      rehydrateHistory(businessId: string, assistantId: string | null): Promise<void>;
+      history: { content: string }[];
+    };
+    internals.callId = 'call-1';
+    return { ...value, internals };
+  }
+  const insert = (text: string, id = 'call-1') => db.database.prepare('INSERT INTO call_turns (call_id,role,text) VALUES (?, ?, ?)').run(id, 'agent', text);
+  it('reloads persisted bytes after eviction without counting another call', async () => {
+    for (let i = 0; i < 31; i++) insert('x'.repeat(8192));
+    insert('y'.repeat(8192), 'other');
+    const { internals } = budgetSession(); await internals.loadCall();
+    expect(internals.persistedTranscriptBytes).toBe(31 * 8192);
+    internals.reserveTranscript('€'.repeat(2730) + 'xx');
+    await internals.saveTurn('caller', '€'.repeat(2730) + 'xx');
+    const rebuilt = budgetSession().internals; await rebuilt.loadCall();
+    expect(() => rebuilt.reserveTranscript('x')).toThrow();
+    expect(rebuilt.persistedTranscriptBytes).toBe(256 * 1024);
+  });
+  it('atomically refuses a stale writer at the exact persisted byte limit', async () => {
+    const { internals } = budgetSession(); await internals.loadCall();
+    // Another writer fills the budget after this instance loaded its counter.
+    for (let i = 0; i < 32; i++) insert('x'.repeat(8192));
+    await expect(internals.saveTurn('agent', 'x')).rejects.toThrow();
+    const row = db.database.prepare('SELECT COUNT(*) AS n,SUM(length(CAST(text AS BLOB))) AS bytes FROM call_turns WHERE call_id=?').get('call-1');
+    expect(row).toMatchObject({ n: 32, bytes: 256 * 1024 });
+  });
+  it('bounds historical rehydration before D1 materializes whole turns', async () => {
+    for (let i = 0; i < 40; i++) insert('€'.repeat(2730) + 'xx');
+    insert('x'.repeat(900000));
+    const { internals } = budgetSession();
+    await internals.rehydrateHistory('biz-1', null);
+    expect(internals.history).toHaveLength(33);
+    expect(internals.history.slice(1).reduce((n, row) => n + new TextEncoder().encode(row.content).length, 0)).toBe(256 * 1024);
+  });
+});
+
+
+describe('transcript budget preserves native farewell ordering', () => {
+  it('arms the caller farewell before an immediately following agent transcript', async () => {
+    const { session, ctl } = newSession('realtime');
+    await session.fetch(upgradeRequest());
+    const caller = serverSockets[0]; caller.receive({ type: 'start' });
+    await flush(50);
+    const up = upstreamSockets[0]; up.emit('open', {});
+    await flush(50);
+    up.receive({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'Do you have parking?' });
+    await flush(50);
+    up.receive({ type: 'response.output_audio_transcript.done', transcript: 'Yes, parking is available.' });
+    await flush(50);
+    let release!: () => void;
+    ctl.callerTurnGate = new Promise<void>(resolve => { release = resolve; });
+    up.receive({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'Thanks, goodbye.' });
+    up.receive({ type: 'response.output_audio_transcript.done', transcript: 'Goodbye.' });
+    await flush(100);
+    expect(caller.countOf('ending')).toBe(1);
+    expect(caller.countOf('transcript')).toBe(1); // caller insert is still pending
+    release(); await flush(100);
+    expect(caller.countOf('transcript')).toBe(2);
+    expect(caller.countOf('agent_text')).toBe(2);
   });
 });
