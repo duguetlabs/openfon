@@ -1,6 +1,6 @@
 # Audible demo — 60–90 seconds
 
-**Prepared script, not a recording or voice evidence.** The existing MP4 is a silent synthetic UI walkthrough. Root approved the existing fictional Northwheel scenario for this demonstration on 2026-09-12; no further scenario approval is needed. Record once authorized working provider configuration is available, using bounded test usage. No real customer data, invented testimonial or overdubbed assistant answer.
+**Approved script.** An [actual audible staging capture](audible/README.md) is now available with known failures retained; it does not pass clean release acceptance. The earlier walkthrough MP4 remains silent synthetic UI evidence. Root approved the existing fictional Northwheel scenario for this demonstration on 2026-09-12; no further scenario approval is needed. The authorized working configuration was used for one bounded capture; the conversation allowance is now exhausted. Do not make a new take without renewed root authorization. No real customer data, invented testimonial or overdubbed assistant answer.
 
 ## Approved fictional fixture
 

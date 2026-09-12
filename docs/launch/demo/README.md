@@ -23,4 +23,4 @@ The script checks that ports 8791 and 9233 are free before starting. Override `D
 
 ## Audible demonstration
 
-The [60–90 second audible script](audible-script.md) uses the Northwheel fictional scenario approved by root on 2026-09-12. Recording awaits authorized working provider configuration only; no additional scenario approval is needed. No audible recording is supplied yet; the silent MP4 above remains UI evidence only.
+The approved Northwheel scenario was recorded in one bounded real-provider staging conversation. The [68-second audible capture and result report](audible/README.md) include synthetic caller disclosure, actual Kataleptic replies, lossless original audio and two retained failures: conflicting hours setup and literal `null` phone display. It is review evidence, not a clean release-acceptance pass. No further conversation is authorized. The original silent MP4 above remains UI evidence only.

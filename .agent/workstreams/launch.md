@@ -1,55 +1,45 @@
 # Launch workstream
 
-- Status: Complete — bounded assets ready for integration; dependent live evidence pending
+- Status: Complete — launch assets and actual audible capture delivered; clean voice/release acceptance remains gated
 - Owner: openfon-launch
 - Branch: codex/launch-kit
-- Starting commit: a9b33c5c46ccb441e4c07f50b81469354d3cf700 (code baseline b730480)
+- Starting commit: a9b33c5c46ccb441e4c07f50b81469354d3cf700
 - Updated: 2026-09-12
-- Rules: root AGENTS.md, .agent/orchestration-rules.md, launch handoff
+- Rules: root AGENTS.md, orchestration-rules.md, launch handoff; shared root docs read-only
+- Read first: docs/launch/demo/audible/README.md; integration checkpoint; docs/providers.md on integrated release
 
-## Confirmed facts and scope
-Read root handoff/current-task/manifest/rules and proposed strategy. Worktree has only an existing untracked node_modules dependency link. README overstates universal provider compatibility and portability; website lacks founder/provider disclosure. Existing recording is explicitly silent and synthetic. Real provider/carrier evidence is pending per readiness.md; no new runtime evidence yet.
+## Delivered
+README/landing identity and provider disclosure; quickstart; capability/telephone compatibility; CONTRIBUTING; pilot and support scope; evaluation and measured-cost templates; announcement drafts; approved audible script and actual recording. Existing website architecture and silent synthetic walkthrough preserved. No marketing distributed, invented identity/testimonial/bill, provider default replacement or production deployment.
 
-Own README, public landing copy, CONTRIBUTING.md and launch/onboarding docs; avoid settings/schema, runtime adapters, shared root coordination and research. Preserve existing website architecture. Use 8815/9255 only for local runtime if needed.
+Launch commits:52b73ee,45fb33a,24d8321,7f9c30c,7267d13 plus current audible artifact commit. Integration received all prior commits. Owner alone changes runtime/schema/shared release branches.
 
-## Work completed / remaining dependencies
-Finished quickstart, evidence-scoped compatibility, pilot/support guidance, evaluation and costs formulas, audible script, contribution guide and announcement drafts. Tightened README/landing claims without replacing website architecture. No runtime/schema edits.
+## Actual audible evidence
+Root approved existing fictional Northwheel scenario, with no additional scenario approval required. Realtime preflight consumed one conversation and handed exclusive ownership of the final one to launch; integration verified working staging configuration. Launch made exactly one call, no retry. **Remaining conversation allowance: ZERO.**
 
-Integration must refresh compatibility/configuration against consolidated provider/Asterisk commits, add exact adapter recipe links, and run final release gates. Root approved the existing fictional Northwheel scenario on 2026-09-12; no further scenario approval is required. Audible recording awaits authorized working provider configuration only; operator/domain/support/legal inputs remain missing. No invented recordings, bills or testimonials.
+- Origin:https://openfon-staging.duguetlabs.workers.dev
+- Source:718d233e3754e53b800a397b1e600ffea492bb79
+- Worker version:76a515eb-877e-48ef-bdcd-1ab8ea7095ef
+- Private draft assistant:realtime/gpt-realtime-2/blank voice; summary llama-3.3-70b; real Kataleptic gateway. Provider default resolved voice ID not recorded.
+- Session:5e890b0d-1c0e-4e34-88d0-92b9c16d0443;2026-09-12T12:11–12:12Z;58s;completed;10 turns;summary;message_taken.
+- Local synthetic Samantha caller audio flowed through browser mic/capture/WebSocket. Provider replies captured as actually played. No physical mic, handset, direct OpenAI or SIP/PSTN claim. Staging carriers/routes stayed disabled.
+- Artifacts:docs/launch/demo/audible/ contains68.24s H.264/AAC video,58.197s lossless original FLAC, sanitized persisted result, capture metadata, poster and detailed README.
+- Original replies/pauses retained, no alternate take or overdub. Permanent fictional/synthetic-caller/real-Kataleptic affiliation disclosure. Screen/audio alignment approximate, not latency evidence.
 
-## Files changed
-- README.md: identity, paid-provider affiliation, bounded compatibility, quickstart links and explicit local ports.
-- web/src/pages/Landing.tsx: clearer browser identity, usage costs, Kataleptic FAQ, corrected self-host anchor; architecture unchanged.
-- CONTRIBUTING.md; docs/quickstart.md; docs/providers.md.
-- docs/launch/pilot.md; pilot-evaluation.md; costs.md; copy.md.
-- docs/launch/demo/audible-script.md; demo/README.md.
-- .agent/workstreams/launch.md.
-
-## Coordination evidence
-Integration confirms no real provider/telephone pilot or staging HTTPS validation; typed local-provider browser flow passes. Presets owns schema/UI and will send final contract; no edits to launch files. Realtime owner is authoring docs/realtime-providers.md: direct path synthetic workflow passes, no OpenAI credential/live test available. Compatibility table deliberately targets baseline until integrated evidence exists. Integration must add the final adapter recipe links/status when consolidating.
+## Observed failures and disposition
+1. Intended Saturday09–14 answer failed: launch setup left canonical business hours at onboarding default Saturday closed, conflicting with description/custom instructions. Read-only post-call snapshot verified the conflict. This is a fixture setup defect, not proven hallucination; original answer retained. Correct canonical hours before any newly authorized acceptance run.
+2. Provider extraction stored caller_phone literal string "null", visibly rendered despite caller declining number. Original row/artifact retained. Integration corrected shared persistence and historical UI normalization in696a34a; owner reports typecheck/build/22 summary-contact tests pass, preserving real numbers and surname Null. No live retest.
+3. Interruption attempted; audio contains interrupted replies. Manual hangup may truncate the final spoken reply. Persisted transcript text does not prove every word was heard. No human listening/voice-quality verdict or exact latency claim.
 
 ## Validation
-- npm run typecheck: passed (Worker and web).
-- npm run build: passed; public hostname unset so canonical/sitemap intentionally omitted.
-- Relative-link check: 35 links across 10 changed documents; no missing targets.
-- git diff --check: passed.
-- Static Playwright rendering first could not launch missing expected Chromium 1243. Retry uses installed Chromium 149 (1228); initial exact-text locator timed out because summary includes a plus icon. Corrected locator checks summary text; desktop 1440×1000 and mobile 390×844 passed rendering, disclosure expansion and no horizontal overflow. Screenshots visually inspected at /tmp/openfon-launch-desktop.png and /tmp/openfon-launch-mobile.png. Static built UI with mocked signed-out API only, not Worker/voice evidence.
-- No live provider calls, carrier calls, staging deployment, audio recording, marketing distribution or spending.
+- Original launch code: npm run typecheck and npm run build passed. Public hostname unset locally; canonical/sitemap omitted as designed.
+- Static signed-out UI: desktop1440×1000/mobile390×844 Chromium149 passed rendering, disclosure expansion, overflow checks; screenshots inspected. Initial bundled Chromium missing; initial exact-summary locator included plus icon and timed out; corrected locator passed. Mock signed-out API, not voice evidence.
+- Integrated wording/link audit at9efef65:45 local paths/anchors across13 documents passed. Later dbb01e7 audit confirmed real Asterisk22.11.0+mockAI vs synthetic direct-provider tests vs pending SIP/PSTN. Corrected stale README staging claim in7267d13.
+- Capture locally self-tested without provider requests. Initial Opus capture self-test exposed decode errors; replaced with PCM WAV before the single live call. Final audio/video decode passed.
+- Audio:48kHz mono;58.197s;peak−0.9dBFS/mean−19.9dBFS; provider-only speech intervals about−25dBFS. Local faster-whisper base.en independently recovered both voices from recording; no paid/cloud ASR request. ASR timestamps/errors are not ground truth.
+- Video:H.2641280×1060/AAC48kHz mono/68.24s; poster and saved result visually inspected. Full ffmpeg decode and artifact link/whitespace checks passed.
 
-## Next action
-Integration cherry-picks launch commit, refreshes baseline compatibility with final owners’ evidence and drives release review. Launch assets are complete; do not publish drafts or claim live audio acceptance.
+## Files / private state
+Launch-owned README.md,CONTRIBUTING.md,web/src/pages/Landing.tsx,docs/quickstart.md,docs/providers.md,docs/launch/copy.md,pilot.md,pilot-evaluation.md,costs.md,demo/README.md,demo/audible-script.md,demo/audible/* and this checkpoint. Existing node_modules symlink not committed. Restricted temporary setup/session/raw capture under /tmp/openfon-audible-prep; no cookie/key/password exported to repository. No vault credential fetched by launch; staging secret injection stayed integration-owned.
 
-## Provider contract follow-up
-Read presets’ final persisted/API contract and realtime owner’s recipe on 2026-09-12. Added an explicitly incoming section to docs/providers.md with exact text preset URLs/models, independent STT/realtime configuration, model precedence, key retention/removal and owner-reported evidence. Added quickstart routing to it. Final provider commit ce62114 and realtime implementation 13f037b (helper 18d3638) received; updated docs with final owner-reported unit/browser/runtime results. Baseline claims remain intact pending consolidation and no live-provider success is inferred. Launch did not rerun the other owners’ tests. Integration should resolve the incoming/baseline distinction when consolidating final commits.
-
-Follow-up validation: relative links in docs/providers.md and docs/quickstart.md resolve; git diff --check passed. Documentation only, no repeat application suite needed.
-
-## Integrated release wording audit
-Read integrated commit 9efef65 and its provider/Asterisk/realtime recipes. Provider table now correctly describes assembled adapters with synthetic-only evidence and links to both recipes. Integration reports 491 unit/API and 7 browser tests plus carrier/realtime smokes, but QA has an unresolved pre-session.updated audio finding; no final release approval inferred. Found stale quickstart “awaiting integration” wording and corrected the launch-owned paragraph for consolidation. Updated source/short announcement drafts to acknowledge implemented experimental adapters without live claims. Corrected Northwheel approval wording in demo script, demo README and pilot inputs. No provider is currently evidenced as authorized and working for an audible recording; no audio fabricated or marketing distributed.
-
-Root clarification replaces the earlier artificial scenario blocker. Remaining real inputs: working provider configuration for recording; final operator/support/domain details for hosted release. Scenario and launch-material authoring are already authorized.
-
-Audit validation: 45 relative paths/Markdown anchors across 13 integrated README/provider/telephony/launch documents passed at inspected 9efef65; git diff --check passed. No application code changed. Final hosted publication remains gated by integration's release process; complete source/announcement/pilot/demo drafts are supplied without invented identity or outcomes.
-
-## Staging / real PBX audit
-Inspected integration dbb01e7, root current-task/manifest and committed Asterisk evidence. Provider table and PBX recipe correctly distinguish real Asterisk22.11.0 local tone/audio with mocked AI, synthetic direct-provider protocol tests, and pending live AI/SIP/PSTN. Found a real stale claim in README that staging deployment was pending; corrected it to verified isolated staging with audible acceptance still pending. Expanded short/Show HN drafts to preserve the three evidence levels explicitly. Root independently probed staging source41041c1/version8439378c-eeda-4fb7-83e5-a01a2f986fb0; this launch task did not repeat those probes. Realtime owner is checking authorized existing credentials; await safe working configuration and remaining bounded-call allowance for approved Northwheel recording. No new scenario approval required.
+## Remaining / next action
+Integration consumes artifact commit, updates consolidated live-provider evidence with these specific limitations and drives release review. Clean acceptance needs consistent canonical fixture and fixed contact handling plus newly authorized voice test; no retry authorized now. Hosted operator/support/legal/domain inputs remain factual release decisions, never invented. Publish nothing under this implementation task. Actual Asterisk local PBX used mocked AI; direct OpenAI remains synthetic-tested; SIP/PSTN remains pending. These recordings do not change those evidence levels.

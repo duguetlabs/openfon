@@ -33,7 +33,7 @@ Provide commit/version, engine, channel, sanitized reproduction steps and expect
 
 - Actual operator/legal and support contact, final hostname, selected processors and retention policy.
 - Maintainer availability, pilot duration, participant agreement and spend cap.
-- Working authorized provider for the audible demo. Root approved the existing fictional Northwheel scenario on 2026-09-12; retain fictional/AI disclosure and bounded test usage.
+- The [audible staging capture](demo/audible/README.md) used the approved fictional Northwheel scenario and working provider. Its known failures require correction before clean voice acceptance. The two-conversation allowance is exhausted; no new live run is authorized.
 - Final release/review evidence and channel-specific runtime results.
 
 These inputs block dependent publication or recording, not independent documentation work. Announcements remain [drafts](copy.md).
