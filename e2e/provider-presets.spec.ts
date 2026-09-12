@@ -226,3 +226,68 @@ test('confirmed provider save survives a failed refresh without resending creden
   await expect(page).toHaveURL('/auth');
   await expect(navigation).toHaveCount(0);
 });
+
+test('provider save refresh preserves sibling drafts while updating untouched assistant fields', async ({ page }) => {
+  await page.goto('/auth');
+  await page.getByLabel('Email').fill(`provider-siblings-${Date.now()}@example.invalid`);
+  await page.getByLabel('Password', { exact: true }).fill('Synthetic-Presets-Password-1234');
+  await page.getByRole('button', { name: 'Create account', exact: true }).click();
+  await page.getByLabel('Business name', { exact: true }).fill('Sibling baseline workshop');
+  await page.getByLabel('What do you do?').fill('Synthetic sibling draft validation');
+  await page.getByRole('button', { name: 'Continue →' }).click();
+  await page.getByRole('button', { name: 'Continue →' }).click();
+  await page.getByRole('button', { name: /Create.*assistant|Save.*assistant|Open.*studio/i }).click();
+  await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
+  const business = await (await page.request.get('/api/me/business')).json();
+  expect((await page.request.put(`/api/me/business/${business.id}`, { data: {
+    hours_json: JSON.stringify([{ day: 'Monday', open: '09:00', close: '17:00', closed: false }]),
+    services_json: JSON.stringify([{ name: 'Repair', price: '€40' }]),
+    faqs_json: JSON.stringify([{ q: 'Parking?', a: 'Outside' }]),
+    closures_json: JSON.stringify([{ date: '2026-12-25', reason: 'Holiday' }]),
+  } })).ok()).toBe(true);
+  expect((await page.request.put(`/api/me/business/${business.id}/agent`, { data: {
+    engine: 'realtime', realtime_model: 'kataleptic-realtime-hd', realtime_voice: 'azure-gateway-voice',
+  } })).ok()).toBe(true);
+  await page.goto('/settings');
+  await expect(page.getByLabel('Realtime voice (optional)', { exact: true })).toHaveValue('azure-gateway-voice');
+  await page.getByLabel('Name', { exact: true }).fill('Unsaved business name');
+  await page.getByLabel('Monday opening time', { exact: true }).fill('10:30');
+  await page.getByLabel('Service 1 price', { exact: true }).fill('€99');
+  await page.getByLabel('FAQ 1 answer', { exact: true }).fill('Unsaved parking answer');
+  await page.getByLabel('Closure 1 reason', { exact: true }).fill('Unsaved closure reason');
+  await page.getByLabel('Agent name', { exact: true }).fill('Unsaved assistant name');
+  await page.getByLabel('Personality', { exact: true }).fill('Unsaved assistant personality');
+
+  await page.getByLabel('Realtime provider', { exact: true }).selectOption('openai');
+  await page.getByLabel('Realtime API key', { exact: true }).fill('synthetic-sibling-key');
+  await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
+  await expect(page.getByText('Provider settings saved.', { exact: false })).toBeVisible();
+  // Wait for the sibling reload itself: untouched gateway voice adopts the
+  // server's provider-switch cleanup while edited assistant fields survive.
+  await expect(page.getByLabel('Realtime voice (optional)', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Unsaved business name');
+  await expect(page.getByLabel('Monday opening time', { exact: true })).toHaveValue('10:30');
+  await expect(page.getByLabel('Service 1 price', { exact: true })).toHaveValue('€99');
+  await expect(page.getByLabel('FAQ 1 answer', { exact: true })).toHaveValue('Unsaved parking answer');
+  await expect(page.getByLabel('Closure 1 reason', { exact: true })).toHaveValue('Unsaved closure reason');
+  await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Unsaved assistant name');
+  await expect(page.getByLabel('Personality', { exact: true })).toHaveValue('Unsaved assistant personality');
+  const unchanged = await (await page.request.get('/api/me/business')).json();
+  expect(unchanged.name).toBe('Sibling baseline workshop');
+  expect(JSON.parse(unchanged.services_json)[0].price).toBe('€40');
+  expect(unchanged.agent.agent_name).not.toBe('Unsaved assistant name');
+
+  const savedAssistant = page.waitForResponse(response => response.url().endsWith(`/api/me/business/${business.id}/agent`) && response.request().method() === 'PUT');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  expect((await savedAssistant).ok()).toBe(true);
+  await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeEnabled();
+  await page.reload();
+  await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Unsaved business name');
+  await expect(page.getByLabel('Monday opening time', { exact: true })).toHaveValue('10:30');
+  await expect(page.getByLabel('Service 1 price', { exact: true })).toHaveValue('€99');
+  await expect(page.getByLabel('FAQ 1 answer', { exact: true })).toHaveValue('Unsaved parking answer');
+  await expect(page.getByLabel('Closure 1 reason', { exact: true })).toHaveValue('Unsaved closure reason');
+  await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Unsaved assistant name');
+  await expect(page.getByLabel('Personality', { exact: true })).toHaveValue('Unsaved assistant personality');
+  await expect(page.getByLabel('Realtime voice (optional)', { exact: true })).toHaveValue('');
+});

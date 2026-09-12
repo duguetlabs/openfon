@@ -1,5 +1,5 @@
 import ProviderSettings from './ProviderSettings';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, type Agent, type Business, type EngineProfile, type VoiceCatalog } from '../api';
 import { useSession } from '../App';
 import {
@@ -17,6 +17,27 @@ import { readServiceRows, serializeServiceRows, type ServiceRow } from '../servi
 import { Button, Card, Field, FieldLabel, SectionTitle, TextArea, LANGUAGES, inputClassSm } from '../ui';
 import { ListEditor } from './Onboarding';
 
+// A provider-only save refreshes the shared session. Adopt server changes only
+// where the sibling form still matches its last loaded value.
+function preserveDraftFields<T extends object>(draft: T | null, previous: T | null | undefined, incoming: T): T {
+  if (!draft || !previous) return incoming;
+  const merged = { ...incoming };
+  for (const key of Object.keys(incoming) as (keyof T)[]) {
+    if (JSON.stringify(draft[key]) !== JSON.stringify(previous[key])) merged[key] = draft[key];
+  }
+  return merged;
+}
+
+function settingsSnapshot(business: Business) {
+  return {
+    business, agent: business.agent ? { ...business.agent } : null,
+    hours: readHourRows(business.hours_json, []),
+    services: readServiceRows(business.services_json),
+    faqs: readFaqRows(business.faqs_json, []),
+    closures: readClosureRows(business.closures_json),
+  };
+}
+
 export default function Settings() {
   const { business, refresh } = useSession();
   const [biz, setBiz] = useState<Business | null>(null);
@@ -31,17 +52,23 @@ export default function Settings() {
   const [profiles, setProfiles] = useState<EngineProfile[]>([]);
   const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
   const [newProfileName, setNewProfileName] = useState('');
+  const loaded = useRef<ReturnType<typeof settingsSnapshot> | null>(null);
 
   useEffect(() => {
     let active = true;
     if (business) void api.business().then((business) => {
       if (!active || !business) return;
-      setBiz({ ...business });
-      setHours(readHourRows(business.hours_json, []));
-      setServices(readServiceRows(business.services_json));
-      setFaqs(readFaqRows(business.faqs_json, []));
-      setClosures(readClosureRows(business.closures_json));
-      setAgent(business.agent ? { ...business.agent } : null);
+      const incoming = settingsSnapshot(business);
+      const previous = loaded.current?.business.id === business.id ? loaded.current : null;
+      loaded.current = incoming;
+      setBiz(current => preserveDraftFields(current, previous?.business, incoming.business));
+      setAgent(current => incoming.agent ? preserveDraftFields(current, previous?.agent, incoming.agent) : null);
+      // Row lists are edited as a unit; keep local additions/removals as well
+      // as changed values rather than attempting to merge positional rows.
+      setHours(current => previous && JSON.stringify(current) !== JSON.stringify(previous.hours) ? current : incoming.hours);
+      setServices(current => previous && JSON.stringify(current) !== JSON.stringify(previous.services) ? current : incoming.services);
+      setFaqs(current => previous && JSON.stringify(current) !== JSON.stringify(previous.faqs) ? current : incoming.faqs);
+      setClosures(current => previous && JSON.stringify(current) !== JSON.stringify(previous.closures) ? current : incoming.closures);
       void api.profiles(business.id).then(setProfiles).catch(() => {});
       void api.voices().then(setVoiceCatalog).catch(() => {});
     }).catch((e) => { if (active) setError(e instanceof Error ? e.message : 'Could not load settings'); });
