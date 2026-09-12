@@ -13,6 +13,8 @@ import pathlib
 import sqlite3
 import tempfile
 
+RELEASE_MIGRATION_TARGET = 12
+
 
 def require(condition, message):
     if not condition:
@@ -22,7 +24,8 @@ def require(condition, message):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('repository', nargs='?', default='.', type=pathlib.Path)
-    parser.add_argument('--through', type=int, default=9, help='Explicit final migration number (default: 9)')
+    parser.add_argument('--through', type=int, default=RELEASE_MIGRATION_TARGET,
+                        help=f'Explicit final migration number (default: {RELEASE_MIGRATION_TARGET})')
     args = parser.parse_args()
     root = args.repository.resolve()
     if args.through < 9:
