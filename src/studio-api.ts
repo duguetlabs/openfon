@@ -1,4 +1,4 @@
-import { providerUpdate, ProviderInputError, TEXT_PRESETS, OPENAI_REALTIME_VOICES } from './provider-settings';
+import { providerUpdate, presetCompatibilityError, ProviderInputError, TEXT_PRESETS, OPENAI_REALTIME_VOICES } from './provider-settings';
 import type { Hono } from 'hono';
 import { readWorkspaceBody } from './request-validation';
 import { newId } from './auth';
@@ -1846,9 +1846,6 @@ export function registerStudioApi(app: StudioApp): void {
     const language = typeof body.language === 'string' ? body.language.trim() || 'en' : 'en';
     const voice = typeof body.voice === 'string' ? body.voice : '';
     const llmModel = typeof body.llm_model === 'string' ? body.llm_model : '';
-    const provider = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
-      .bind(workspace.id)
-      .first<ProviderSettings>();
     await c.env.DB.batch([
       c.env.DB.prepare(
       `INSERT INTO engine_presets (
@@ -1869,8 +1866,8 @@ export function registerStudioApi(app: StudioApp): void {
         realtimeVoice,
         language,
         voice,
-        provider?.llm_base_url ?? '',
-        provider?.llm_api_key ?? '',
+        '', // Preset compatibility rows do not snapshot provider URLs or keys.
+        '',
         llmModel
       ),
     ]);
@@ -1891,6 +1888,10 @@ export function registerStudioApi(app: StudioApp): void {
       .first<Record<string, string>>();
     if (!assistant || !preset || assistant.business_id !== preset.business_id) return c.json({ error: 'Not found' }, 404);
     if (!preset.language.trim()) return c.json({ error: 'Preset language is required before applying it' }, 400);
+    const provider = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
+      .bind(assistant.business_id).first<ProviderSettings>();
+    const incompatibility = presetCompatibilityError(c.env, provider, preset);
+    if (incompatibility) return c.json({ error: incompatibility }, 400);
     const statements = [
       c.env.DB.prepare(
         `UPDATE assistants SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?, updated_at=datetime('now')

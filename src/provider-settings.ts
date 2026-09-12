@@ -1,5 +1,6 @@
-import type { Env, ProviderSettings } from './types';
-import { sameLlmEndpoint, validateLlmBaseUrl } from './providers';
+import { resolveRealtime } from './realtime-providers';
+import type { AgentSettings, Env, ProviderSettings } from './types';
+import { LlmConfigError, sameLlmEndpoint, validateLlmBaseUrl } from './providers';
 
 export const TEXT_PRESETS = [
   { id: 'instance', label: 'Instance default (Kataleptic by default)', baseUrl: '', model: '' },
@@ -74,4 +75,24 @@ export function providerUpdate(env: Env, current: ProviderSettings | null, body:
   result.stt_model = str('stt_model', current?.stt_model ?? '', 256);
   if (result.stt_provider !== 'instance' && !result.stt_model) throw new ProviderInputError('STT model is required (for OpenAI, use whisper-1).');
   return result;
+}
+
+// Presets select engine fields, never provider credentials. Validate against the
+// current workspace at application time; saved presets may predate a switch.
+export function presetCompatibilityError(env: Env, provider: ProviderSettings | null,
+  preset: { engine?: string; realtime_model?: string; realtime_voice?: string }): string | null {
+  if (preset.engine !== 'realtime') return null;
+  try {
+    const config = resolveRealtime(env, { ...provider, ...preset } as AgentSettings);
+    if (config.provider === 'openai') {
+      if (config.model === 'gpt-realtime-2') return 'Preset uses a Kataleptic gateway model. Choose a direct OpenAI realtime model before applying it.';
+      if (preset.realtime_voice && !OPENAI_REALTIME_VOICES.includes(preset.realtime_voice)) {
+        return 'Preset voice is not supported by direct OpenAI. Choose an OpenAI voice or leave it blank before applying it.';
+      }
+    }
+    return null;
+  } catch (error) {
+    if (error instanceof LlmConfigError) return `Cannot apply preset: ${error.message}`;
+    throw error;
+  }
 }

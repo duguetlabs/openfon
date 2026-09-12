@@ -379,19 +379,17 @@ describe('Calm Studio API foundation', () => {
     expect((await request(env, `/api/public/agent/${assistant.public_slug}`, {}, '')).status).toBe(200);
   });
 
-  it('does not carry a retained workspace/profile key to another endpoint through legacy settings', async () => {
+  it('guards workspace keys while legacy engine profiles ignore credential fields', async () => {
     const workspace = await createWorkspace() as { id: string };
     expect((await request(env, '/api/me/provider', json('PUT', { baseUrl: 'https://first.example/v1', apiKey: 'workspace-private' }))).status).toBe(200);
     const changed = await request(env, `/api/me/business/${workspace.id}/agent`, json('PUT', { llm_base_url: 'https://other.example/v1' }));
     expect(changed.status).toBe(400);
     expect(await changed.text()).toContain('Endpoint changed');
-    const profile = await request(env, `/api/me/business/${workspace.id}/profiles`, json('POST', { name: 'Moved endpoint', llm_base_url: 'https://other.example/v1' }));
-    expect(profile.status).toBe(400);
-    expect(await profile.text()).toContain('Endpoint changed');
-    const good = await data<{ id: string }>(await request(env, `/api/me/business/${workspace.id}/profiles`, json('POST', { name: 'Original endpoint', llm_base_url: 'https://first.example/v1' })));
-    const moved = await request(env, `/api/me/profiles/${good.id}`, json('PUT', { llm_base_url: 'https://other.example/v1' }));
-    expect(moved.status).toBe(400);
-    expect(await moved.text()).toContain('Endpoint changed');
+    const profile = await data<{ id: string }>(await request(env, `/api/me/business/${workspace.id}/profiles`, json('POST', {
+      name: 'Engine only', llm_base_url: 'https://other.example/v1', llm_api_key: 'ignored-key',
+    })));
+    expect((await request(env, `/api/me/profiles/${profile.id}`, json('PUT', { llm_base_url: 'https://third.example/v1', llm_api_key: 'also-ignored' }))).status).toBe(200);
+    expect(db.database.prepare('SELECT llm_base_url,llm_api_key FROM engine_profiles WHERE id=?').get(profile.id)).toEqual({ llm_base_url: '', llm_api_key: '' });
   });
 
   it('rejects malformed workspace field types without persisting invalid state', async () => {
@@ -1933,7 +1931,7 @@ describe('Calm Studio API foundation', () => {
     expect(db.database.prepare('SELECT name, llm_model, llm_api_key FROM engine_profiles WHERE id=?').get(preset.id)).toEqual({
       name: 'Fast',
       llm_model: 'model-fast',
-      llm_api_key: 'sync-secret',
+      llm_api_key: '',
     });
 
     expect(

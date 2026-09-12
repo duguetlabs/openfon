@@ -1,4 +1,4 @@
-import { OPENAI_REALTIME_VOICES, retainedProviderKey, ProviderInputError } from './provider-settings';
+import { OPENAI_REALTIME_VOICES, presetCompatibilityError, retainedProviderKey, ProviderInputError } from './provider-settings';
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { bodyLimit } from 'hono/body-limit';
@@ -780,19 +780,7 @@ app.post('/api/me/business/:id/profiles', async (c) => {
   const b = await readWorkspaceBody<Partial<ProfileFields>>(c.req);
   if (!b.name?.trim()) return c.json({ error: 'Profile name required' }, 400);
   const id = newId();
-  // A missing/blank value means "snapshot the workspace key". Credentials are
-  // never returned by an API, including as a masked placeholder.
-  let llmKey = b.llm_api_key ?? '';
-  if (!llmKey || /^•+$/.test(llmKey)) {
-    const cur = await c.env.DB.prepare('SELECT llm_base_url, llm_api_key FROM provider_settings WHERE business_id = ?')
-      .bind(biz.id)
-      .first<{ llm_base_url: string; llm_api_key: string }>();
-    try { llmKey = retainedProviderKey(cur?.llm_base_url || c.env.DEFAULT_LLM_BASE_URL,
-      b.llm_base_url || c.env.DEFAULT_LLM_BASE_URL, cur?.llm_api_key ?? '', '', false); }
-    catch (e) { if (e instanceof ProviderInputError) return c.json({ error: e.message }, 400); throw e; }
-  }
-  const bad = llmEndpointError(c.env, b.llm_base_url ?? '', llmKey);
-  if (bad) return c.json({ error: bad }, 400);
+  // Legacy profile clients still send these fields; presets no longer store credentials.
   const legacyProfile = c.env.DB.prepare(
     `INSERT INTO engine_profiles (id, business_id, name, engine, realtime_model, realtime_voice, language, voice, llm_base_url, llm_api_key, llm_model)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -805,8 +793,8 @@ app.post('/api/me/business/:id/profiles', async (c) => {
       b.realtime_voice ?? '',
       b.language?.trim() || 'en',
       b.voice ?? '',
-      b.llm_base_url ?? '',
-      llmKey,
+      '',
+      '',
       b.llm_model ?? ''
     );
   const preset = c.env.DB.prepare(
@@ -843,15 +831,7 @@ app.put('/api/me/profiles/:pid', async (c) => {
   const p = await ownedProfile(c.env, c.get('userId'), c.req.param('pid'));
   if (!p) return c.json({ error: 'Not found' }, 404);
   const b = await readWorkspaceBody<Partial<ProfileFields>>(c.req);
-  let llmKey: string;
-  try { llmKey = retainedProviderKey(p.llm_base_url || c.env.DEFAULT_LLM_BASE_URL,
-    (b.llm_base_url ?? p.llm_base_url) || c.env.DEFAULT_LLM_BASE_URL, p.llm_api_key,
-    b.llm_api_key && !/^•+$/.test(b.llm_api_key) ? b.llm_api_key : '', false); }
-  catch (e) { if (e instanceof ProviderInputError) return c.json({ error: e.message }, 400); throw e; }
-  const llmBaseUrl = b.llm_base_url ?? p.llm_base_url;
   if (b.language !== undefined && !b.language.trim()) return c.json({ error: 'Profile language is required' }, 400);
-  const bad = llmEndpointError(c.env, llmBaseUrl, llmKey);
-  if (bad) return c.json({ error: bad }, 400);
   const legacyProfileUpdate = c.env.DB.prepare(
     `UPDATE engine_profiles SET name=?, engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_base_url=?, llm_api_key=?, llm_model=? WHERE id=?`
   ).bind(
@@ -861,8 +841,8 @@ app.put('/api/me/profiles/:pid', async (c) => {
       b.realtime_voice ?? p.realtime_voice,
       b.language ?? p.language,
       b.voice ?? p.voice,
-      llmBaseUrl,
-      llmKey,
+      '',
+      '',
       b.llm_model ?? p.llm_model,
       p.id
     );
@@ -899,6 +879,10 @@ app.post('/api/me/profiles/:pid/apply', async (c) => {
   if (!p) return c.json({ error: 'Not found' }, 404);
   // A profile selects engine fields; workspace credentials are managed separately.
   if (!p.language.trim()) return c.json({ error: `Cannot apply "${p.name}": language is required` }, 400);
+  const provider = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
+    .bind(p.business_id).first<import('./types').ProviderSettings>();
+  const incompatibility = presetCompatibilityError(c.env, provider, p);
+  if (incompatibility) return c.json({ error: incompatibility }, 400);
   const legacySettings = c.env.DB.prepare(
     `UPDATE agent_settings SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=? WHERE business_id=?`
   ).bind(p.engine, p.realtime_model, p.realtime_voice, p.language, p.voice, p.llm_model, p.business_id);
