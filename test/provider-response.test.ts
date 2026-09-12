@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { chatComplete, transcribe } from '../src/providers';
-import { MAX_PROVIDER_JSON_BYTES as CAP, PROVIDER_RESPONSE_TIMEOUT_MS as TIMEOUT } from '../src/provider-response';
+import { MAX_PROVIDER_JSON_BYTES as CAP, MAX_PROVIDER_READS, PROVIDER_RESPONSE_TIMEOUT_MS as TIMEOUT } from '../src/provider-response';
 import type { Env } from '../src/types';
 
 const key = 'synthetic-workspace-key';
@@ -127,6 +127,35 @@ for (const kind of ['chat', 'stt']) describe(`${kind} bounded provider response`
       expect(String(error)).toBe('Error: Provider response unavailable, invalid, too large, or timed out');
       expect(String(error)).not.toContain(key);
     }
+  });
+
+  it('accepts64KiB one-byte fragments with one whole-operation deadline race', async () => {
+    const minimal = JSON.stringify({ ...content(kind), padding: '' });
+    const bytes = new TextEncoder().encode(JSON.stringify({ ...content(kind), padding: 'x'.repeat(CAP - minimal.length - 2) }));
+    let offset = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new ReadableStream({ pull(c) {
+      if (offset === bytes.length) c.close();
+      else c.enqueue(bytes.subarray(offset, ++offset));
+    } }))));
+    const race = vi.spyOn(Promise, 'race');
+    await request(kind);
+    expect(offset).toBe(CAP);
+    expect(race.mock.calls.length).toBe(1);
+  });
+
+  it('cancels empty-chunk producers within the read budget without parsing', async () => {
+    let pulls = 0;
+    const cancel = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new ReadableStream({ pull(c) {
+      pulls++; c.enqueue(new Uint8Array(0));
+    }, cancel }))));
+    const parse = vi.spyOn(JSON, 'parse');
+    const race = vi.spyOn(Promise, 'race');
+    await expect(request(kind)).rejects.toThrow('Provider response');
+    expect(pulls).toBeLessThanOrEqual(MAX_PROVIDER_READS + 1); // stream prefetch may add one
+    expect(cancel.mock.calls.length).toBe(1);
+    expect(parse.mock.calls.length).toBe(0);
+    expect(race.mock.calls.length).toBe(1);
   });
 
   it('preserves status errors and cancels unread error bodies', async () => {
