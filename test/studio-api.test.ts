@@ -364,6 +364,21 @@ describe('Calm Studio API foundation', () => {
     );
   }
 
+  it('keeps compatibility Settings saves private until explicit activation', async () => {
+    const workspace = await createWorkspace() as { id: string };
+    const bootstrap = await data<{ assistants: Array<{ id: string; public_slug: string }> }>(await request(env, '/api/me/bootstrap'));
+    const assistant = bootstrap.assistants[0];
+    expect((await request(env, `/api/me/business/${workspace.id}/agent`, json('PUT', {
+      agent_name: 'Alex', persona: 'Helpful', language: 'en',
+    }))).status).toBe(200);
+    expect((await request(env, `/api/me/business/${workspace.id}`, json('PUT', { description: 'Updated practice description.' }))).status).toBe(200);
+    expect((await request(env, '/api/me/bootstrap')).status).toBe(200);
+    expect(db.database.prepare('SELECT state, activated_at FROM assistants WHERE id=?').get(assistant.id)).toEqual({ state: 'draft', activated_at: null });
+    expect((await request(env, `/api/public/agent/${assistant.public_slug}`, {}, '')).status).toBe(404);
+    expect((await request(env, `/api/me/assistants/${assistant.id}/activate`, json('POST', {}))).status).toBe(200);
+    expect((await request(env, `/api/public/agent/${assistant.public_slug}`, {}, '')).status).toBe(200);
+  });
+
   it('does not carry a retained workspace/profile key to another endpoint through legacy settings', async () => {
     const workspace = await createWorkspace() as { id: string };
     expect((await request(env, '/api/me/provider', json('PUT', { baseUrl: 'https://first.example/v1', apiKey: 'workspace-private' }))).status).toBe(200);

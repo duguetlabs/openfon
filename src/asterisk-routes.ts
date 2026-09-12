@@ -20,13 +20,14 @@ export function registerAsteriskRoutes(app: Hono<{ Bindings: Env; Variables: { u
     const route = c.req.param('route');
     const call = c.req.query('call') || '';
     if (!/^[a-zA-Z0-9_-]{1,80}$/.test(route) || !/^[a-zA-Z0-9_.:-]{1,128}$/.test(call)) return c.json({ error: 'Invalid PBX route or call' }, 400);
+    // Rejected public handshakes must not consume the database write budget.
+    const authorization = c.req.header('Authorization') || null;
+    if (!await authenticateAsterisk(c.env, route, authorization)) return c.json({ error: 'Invalid PBX authorization' }, 401, { 'WWW-Authenticate': 'Basic realm="OpenFon PBX"' });
     const source = c.req.header('CF-Connecting-IP')?.trim() || 'unknown';
     const admitted = await c.env.DB.prepare(`INSERT INTO rate_counters(bucket,window_start,count) VALUES(?,?,1)
       ON CONFLICT(bucket,window_start) DO UPDATE SET count=count+1 WHERE count<120 RETURNING count`)
       .bind(`asterisk:${source}`, Math.floor(Date.now()/60000)*60).first();
     if (!admitted) return c.json({ error: 'Too many attempts' }, 429);
-    const authorization = c.req.header('Authorization') || null;
-    if (!await authenticateAsterisk(c.env, route, authorization)) return c.json({ error: 'Invalid PBX authorization' }, 401, { 'WWW-Authenticate': 'Basic realm="OpenFon PBX"' });
     const id = `ast_${await asteriskDigest(`${route}\0${call}`)}`;
     const stub = c.env.ASTERISK_CALL.get(c.env.ASTERISK_CALL.idFromName(id));
     return stub.fetch(new Request(`https://internal/media?call=${id}&route=${encodeURIComponent(route)}`, {

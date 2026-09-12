@@ -648,8 +648,6 @@ app.put('/api/me/business/:id/agent', async (c) => {
   const assistantUpdate = c.env.DB.prepare(
     `UPDATE assistants SET name=?, greeting=?, persona=?, language=?, voice=?, take_messages=?, custom_instructions=?,
       engine=?, realtime_model=?, realtime_voice=?, llm_model=?,
-      activated_at=CASE WHEN state='draft' THEN COALESCE(activated_at, datetime('now')) ELSE activated_at END,
-      state=CASE WHEN state='draft' THEN 'active' ELSE state END,
       updated_at=datetime('now') WHERE id=?`
   ).bind(
       effectiveName,
