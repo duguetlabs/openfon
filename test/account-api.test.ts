@@ -107,9 +107,17 @@ describe('account self service', () => {
       assistant.run(`a${i}`, 'biz-owner', `slug${i}`, 'Agent', 'x'.repeat(190000));
       callRow.run(`c${i}`, 'biz-owner', 'y'.repeat(190000));
     }
+    db.database.function('json_object', { varargs: true }, () => { throw new Error('Rejected exports must not construct JSON'); });
     const response = await call('/api/me/account/export');
     expect(response.status).toBe(413);
     expect((await response.text()).length).toBeLessThan(1024);
+  });
+
+  it('rejects excessive row counts before constructing JSON', async () => {
+    db.database.exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<10001)
+      INSERT INTO calls(id,business_id) SELECT 'bulk-' || i, 'biz-owner' FROM n`);
+    db.database.function('json_object', { varargs: true }, () => { throw new Error('Rejected exports must not construct JSON'); });
+    expect((await call('/api/me/account/export')).status).toBe(413);
   });
 
   it('exports wide records under the D1 function argument limit without losing null fields', async () => {
@@ -134,6 +142,7 @@ describe('account self service', () => {
     db.database.prepare('INSERT INTO knowledge_collections (id,business_id,name) VALUES (?,?,?)').run('large', 'biz-owner', 'Large notes');
     const insert = db.database.prepare('INSERT INTO knowledge_items (id,business_id,collection_id,kind,content) VALUES (?,?,?, ?,?)');
     for (let i = 0; i < 5; i++) insert.run(`large-${i}`, 'biz-owner', 'large', 'note', 'x'.repeat(1024 * 1024));
+    db.database.function('json_object', { varargs: true }, () => { throw new Error('Rejected exports must not construct JSON'); });
     const response = await call('/api/me/account/export');
     expect(response.status).toBe(413);
     expect((await response.text()).length).toBeLessThan(1024);

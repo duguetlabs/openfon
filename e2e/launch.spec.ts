@@ -14,6 +14,9 @@ async function signup(page: Page) {
   await page.getByRole('button', { name: 'Create account', exact: true }).click();
   await page.getByLabel('Business name', { exact: true }).fill('Workshop browser test');
   await page.getByLabel('What do you do?').fill('Bicycle repairs and tune-ups. Synthetic local test business.');
+  page.once('dialog', dialog => void dialog.dismiss());
+  await page.getByRole('link', { name: 'OpenFon home' }).click();
+  await expect(page.getByLabel('Business name', { exact: true })).toHaveValue('Workshop browser test');
   await page.getByRole('button', { name: 'Continue →' }).click();
   await page.getByRole('button', { name: 'Continue →' }).click();
   await page.getByRole('button', { name: /Create.*assistant|Save.*assistant|Open.*studio/i }).click();
@@ -91,6 +94,19 @@ test('knowledge draft, approval and attachment survive reload; all app menus wor
   await page.getByLabel('New collection', { exact: true }).fill('Workshop services');
   await page.getByRole('button', { name: 'Create collection' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Collection created' })).toBeVisible();
+  await page.getByLabel('Description', { exact: true }).fill('Unsaved collection description');
+  for (const action of [
+    () => page.getByRole('navigation', { name: 'Workspace' }).getByRole('link', { name: 'Assistants', exact: true }).click(),
+    () => page.getByRole('combobox', { name: 'Collection', exact: true }).selectOption({ index: 0 }),
+    () => page.reload({ timeout: 1500 }),
+  ]) {
+    const dialog = page.waitForEvent('dialog');
+    const navigation = action().catch(() => undefined);
+    await (await dialog).dismiss(); await navigation;
+    await expect(page.getByLabel('Description', { exact: true })).toHaveValue('Unsaved collection description');
+  }
+  await page.getByRole('button', { name: 'Save collection details' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Collection updated' })).toBeVisible();
   await page.getByRole('button', { name: 'Add knowledge' }).click();
   await page.getByLabel('Question', { exact: true }).fill('Do you fix punctures?');
   await page.getByLabel('Answer', { exact: true }).fill('Yes. Bring your bicycle during opening hours.');
@@ -124,6 +140,14 @@ test('knowledge draft, approval and attachment survive reload; all app menus wor
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: test.info().outputPath('knowledge-mobile.png'), fullPage: true });
+  await page.goto('/calls');
+  await page.getByLabel('Search conversations').fill('first');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await page.getByLabel('Search conversations').fill('second');
+  await page.getByRole('combobox', { name: 'Environment' }).selectOption('live');
+  await expect(page).toHaveURL(/search=second/);
+  await page.goBack();
+  await expect(page.getByLabel('Search conversations')).toHaveValue('first');
   for (const [route, title] of [['/test', 'Test Studio'], ['/calls', 'Conversations'], ['/settings', 'Settings'], ['/account', 'Your account']]) {
     await page.goto(route);
     await expect(page.getByRole('heading', { level: 1 })).toContainText(title);

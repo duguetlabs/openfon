@@ -98,6 +98,7 @@ export function Calls() {
     const [busy, setBusy] = useState(true);
     const [error, setError] = useState('');
     const [search, setSearch] = useState(params.get('search') || '');
+    useEffect(() => { setSearch(params.get('search') || ''); }, [params]);
     const generation = useRef(0);
     const [reload, setReload] = useState(0);
     useEffect(() => { void api.assistants().then(setAssistants).catch(e => setError(errorText(e))); }, []);
@@ -109,7 +110,7 @@ export function Calls() {
     } }).catch(e => { if (run === generation.current)
         setError(errorText(e)); }).finally(() => { if (run === generation.current)
         setBusy(false); }); }, [query, reload]);
-    function filter(key: string, value: string) { const p = new URLSearchParams(params); if (value)
+    function filter(key: string, value: string) { const p = new URLSearchParams(params); if (search.trim()) p.set('search', search.trim()); else p.delete('search'); if (value)
         p.set(key, value);
     else
         p.delete(key); p.delete('cursor'); setParams(p); }
@@ -215,13 +216,14 @@ export function Knowledge() {
     const [editing, setEditing] = useState<Partial<KnowledgeItem> | null>(null);
     const originalEditing = useRef<Partial<KnowledgeItem> | null>(null);
     const dirtyKnowledge = editing !== null && JSON.stringify(editing) !== JSON.stringify(originalEditing.current);
-    useUnsavedEdits(dirtyKnowledge);
+    const [collectionDirty, setCollectionDirty] = useState(false);
+    useUnsavedEdits(dirtyKnowledge || collectionDirty);
     function replaceEditing(next: Partial<KnowledgeItem> | null) {
         if (dirtyKnowledge && !window.confirm('Discard your unsaved knowledge changes?')) return;
         originalEditing.current = next;
         setEditing(next);
     }
-    function discardKnowledge() { return !dirtyKnowledge || window.confirm('Discard your unsaved knowledge changes?'); }
+    function discardKnowledge() { return !(dirtyKnowledge || collectionDirty) || window.confirm('Discard your unsaved knowledge changes?'); }
     async function loadCollections() { const c = await api.knowledgeCollections(); setCollections(c); setSelected(s => c.some(x => x.id === s) ? s : c[0]?.id || ''); }
     useEffect(() => { setLoading(true); setError(''); void Promise.all([loadCollections(), api.assistants().then(setAssistants)]).catch(e => setError(errorText(e))).finally(() => setLoading(false)); }, [reload]);
     useEffect(() => { let current = true; setDetail(null); setEditing(null); if (selected)
@@ -245,16 +247,18 @@ export function Knowledge() {
         setBusy(true);
         setError('');
         void api.deleteKnowledgeCollection(detail.id).then(async () => { setDetail(null); setSelected(''); await loadCollections(); setMessage('Collection deleted.'); }).catch(e => setError(errorText(e))).finally(() => setBusy(false));
-    } }}>Delete collection</Button>}</div><CollectionSettings key={detail.id} collection={detail} busy={busy} onSave={(body) => action(() => api.updateKnowledgeCollection(detail.id, body), 'Collection updated.')} /><p className="studio-muted">Active items are used by attached assistants. Drafts stay private until approved.</p><div className="studio-actions">{assistants.map(a => <label className="studio-check" key={a.id}><input type="checkbox" disabled={busy} checked={detail.assistants.some(x => x.id === a.id)} onChange={e => void action(() => e.target.checked ? api.attachKnowledgeCollection(a.id, selected) : api.detachKnowledgeCollection(a.id, selected), 'Assistant knowledge updated.')}/>{a.name}</label>)}</div></Card><div className="studio-between mt-6"><h2 className="studio-heading">Answers & notes</h2><Button disabled={busy} variant="ghost" onClick={() => replaceEditing({ kind: 'faq', status: 'draft', title: '', question: '', answer: '', content: '' })}>Add knowledge</Button></div>{editing && <Card><form onSubmit={e => { e.preventDefault(); void action(async () => { if (editing.id)
+    } }}>Delete collection</Button>}</div><CollectionSettings key={detail.id} collection={detail} busy={busy} onDirtyChange={setCollectionDirty} onSave={(body) => action(() => api.updateKnowledgeCollection(detail.id, body), 'Collection updated.')} /><p className="studio-muted">Active items are used by attached assistants. Drafts stay private until approved.</p><div className="studio-actions">{assistants.map(a => <label className="studio-check" key={a.id}><input type="checkbox" disabled={busy} checked={detail.assistants.some(x => x.id === a.id)} onChange={e => void action(() => e.target.checked ? api.attachKnowledgeCollection(a.id, selected) : api.detachKnowledgeCollection(a.id, selected), 'Assistant knowledge updated.')}/>{a.name}</label>)}</div></Card><div className="studio-between mt-6"><h2 className="studio-heading">Answers & notes</h2><Button disabled={busy} variant="ghost" onClick={() => replaceEditing({ kind: 'faq', status: 'draft', title: '', question: '', answer: '', content: '' })}>Add knowledge</Button></div>{editing && <Card><form onSubmit={e => { e.preventDefault(); void action(async () => { if (editing.id)
         await api.updateKnowledgeItem(editing.id, editing);
     else
         await api.createKnowledgeItem(selected, editing); setEditing(null); }, 'Knowledge saved.'); }}><fieldset disabled={busy} className="studio-fields"><label>Type<select className={inputClass} value={editing.kind} onChange={e => setEditing({ ...editing, kind: e.target.value as KnowledgeItem['kind'] })}><option value="faq">Question & answer</option><option value="service">Service</option><option value="note">Note</option></select></label><Field label="Title" required={editing.kind === 'service'} value={editing.title || ''} onChange={e => setEditing({ ...editing, title: e.target.value })}/>{editing.kind === 'faq' ? <><TextArea label="Question" required value={editing.question || ''} onChange={e => setEditing({ ...editing, question: e.target.value })}/><TextArea label="Answer" required value={editing.answer || ''} onChange={e => setEditing({ ...editing, answer: e.target.value })}/></> : <TextArea label="Content" required value={editing.content || ''} onChange={e => setEditing({ ...editing, content: e.target.value })}/>}<label className="studio-check"><input type="checkbox" checked={editing.status === 'active'} onChange={e => setEditing({ ...editing, status: e.target.checked ? 'active' : 'draft' })}/>Approved for use in conversations</label><div className="studio-actions"><Button>Save knowledge</Button><Button type="button" variant="ghost" onClick={() => replaceEditing(null)}>Cancel</Button></div></fieldset></form></Card>}<div className="studio-grid mt-5">{detail.items.map(item => <Card key={item.id}><div className="studio-between"><h3>{item.question || item.title || 'Untitled note'}</h3><span className="studio-badge">{item.status === 'active' ? 'Approved' : 'Draft'}</span></div><p className="studio-description">{item.answer || item.content || 'Add an answer before approving this item.'}</p>{item.source_call_id && <Link className="studio-link" to={`/calls/${item.source_call_id}`}>Source conversation ↗</Link>}<div className="studio-actions"><Button variant="ghost" disabled={busy} onClick={() => replaceEditing({ ...item })}>Edit</Button><Button variant="ghost" disabled={busy} onClick={() => void action(() => api.updateKnowledgeItem(item.id, { status: item.status === 'active' ? 'draft' : 'active' }), item.status === 'active' ? 'Moved to draft.' : 'Knowledge approved.')}>{item.status === 'active' ? 'Unpublish' : 'Approve'}</Button><Button variant="ghost" disabled={busy} onClick={() => { if (window.confirm('Delete this knowledge item? This cannot be undone.'))
         void action(() => api.deleteKnowledgeItem(item.id), 'Knowledge item deleted.'); }}>Delete</Button></div></Card>)}</div>{!detail.items.length && !editing && <Card className="mt-5">This collection is empty. Add an answer or save a caller question from a conversation for review.</Card>}</>}</>;
 }
 
-function CollectionSettings({ collection, busy, onSave }: { collection: KnowledgeCollection; busy: boolean; onSave: (body: { name: string; description: string }) => Promise<void> }) {
+function CollectionSettings({ collection, busy, onSave, onDirtyChange }: { collection: KnowledgeCollection; busy: boolean; onDirtyChange: (dirty: boolean) => void; onSave: (body: { name: string; description: string }) => Promise<void> }) {
   const [name, setName] = useState(collection.name);
   const [description, setDescription] = useState(collection.description);
+  useEffect(() => { onDirtyChange(name.trim() !== collection.name || description !== collection.description); }, [name, description, collection.name, collection.description, onDirtyChange]);
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   return <form className="studio-fields my-5" onSubmit={e => { e.preventDefault(); void onSave({ name: name.trim(), description }); }}><Field label="Collection name" required value={name} onChange={e => setName(e.target.value)} /><TextArea label="Description" value={description} onChange={e => setDescription(e.target.value)} /><div><Button variant="ghost" disabled={busy || !name.trim()}>Save collection details</Button></div></form>;
 }
 

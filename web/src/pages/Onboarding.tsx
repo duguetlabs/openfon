@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { confirmDiscardUnsaved, useUnsavedEdits } from '../unsaved-edits';
 import { api } from '../api';
 import { useSession } from '../App';
 import {
@@ -42,6 +43,10 @@ export default function Onboarding() {
   const [language, setLanguage] = useState(firstAssistant?.language || business?.agent?.language || 'en');
   const [greeting, setGreeting] = useState(firstAssistant?.greeting || business?.agent?.greeting || '');
 
+  const draft = JSON.stringify({ name, description, address, phone, hours, services, faqs, agentName, persona, language, greeting });
+  const savedDraft = useRef(draft);
+  const markSaved = useUnsavedEdits(draft !== savedDraft.current);
+
   async function finish() {
     if (busy) return;
     if (!name.trim() || !description.trim() || !agentName.trim() || !persona.trim() || !language.trim()) {
@@ -68,6 +73,8 @@ export default function Onboarding() {
       const primary = firstAssistant ?? (await api.assistants()).find(a => a.public_slug === biz.slug);
       if (!primary) throw new Error('Your first assistant could not be loaded. Reload to resume setup.');
       await api.updateAssistant(primary.id, { name: agentName, persona, language, greeting });
+      savedDraft.current = draft;
+      markSaved();
       await refresh();
       navigate('/overview');
     } catch (err) {
@@ -103,7 +110,7 @@ export default function Onboarding() {
           </ol>
         </div>
 
-        <div className="mb-6 flex justify-end"><button className="text-sm text-ink-soft underline" onClick={() => { void signOut().catch(() => {}); navigate('/auth'); }}>Sign out</button></div>
+        <div className="mb-6 flex justify-end"><button className="text-sm text-ink-soft underline" onClick={() => { if (!confirmDiscardUnsaved()) return; void signOut().catch(() => {}); navigate('/auth'); }}>Sign out</button></div>
         <p className="rise rise-1 font-mono text-[11px] uppercase tracking-[0.2em] text-ink-faint">
           Step {step + 1} of {steps.length}
         </p>
