@@ -285,3 +285,22 @@ test('assistant-list retries recover Test Studio and preserve Knowledge drafts',
   await expect(page.getByLabel('Answer', { exact: true })).toHaveValue('Unsaved answer');
   await expect(page.getByRole('button', { name: 'Retry assistants' })).toHaveCount(0);
 });
+
+test('settings identifies a saved business when active assistant validation rejects its save', async ({ page }) => {
+  await signup(page);
+  const bootstrap = await (await page.request.get('/api/me/bootstrap')).json();
+  expect((await page.request.post(`/api/me/assistants/${bootstrap.assistants[0].id}/activate`, { data: {} })).ok()).toBe(true);
+  await page.goto('/settings');
+  await page.getByLabel('Name', { exact: true }).fill('Updated business facts');
+  await page.getByLabel('Agent name', { exact: true }).fill('');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Business changes were saved. Assistant save failed:');
+  const persisted = await (await page.request.get('/api/me/business')).json();
+  expect(persisted.name).toBe('Updated business facts');
+  expect(persisted.agent.agent_name).toBe('Alex');
+  await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('');
+  await page.getByLabel('Agent name', { exact: true }).fill('Updated assistant');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Saved.' })).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});

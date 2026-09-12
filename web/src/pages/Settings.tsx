@@ -55,6 +55,7 @@ export default function Settings() {
     setSaving(true);
     setError('');
     setSaved('');
+    let stage: 'business' | 'assistant' | 'refresh' = 'business';
     try {
       await api.updateBusiness(biz!.id, {
         ...biz!,
@@ -63,13 +64,20 @@ export default function Settings() {
         faqs_json: serializeFaqRows(faqs),
         closures_json: serializeClosureRows(closures),
       });
+      stage = 'assistant';
+      setSaved('Business changes saved. Saving assistant…');
       const { llm_base_url: _url, llm_api_key: _key, ...assistant } = agent!;
       await api.updateAgent(biz!.id, assistant);
+      stage = 'refresh';
       await refresh();
       setSaved('Saved.');
       setTimeout(() => setSaved(''), 2000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed');
+      setSaved('');
+      const detail = err instanceof Error ? err.message : 'Request failed';
+      setError(stage === 'assistant' ? `Business changes were saved. Assistant save failed: ${detail}`
+        : stage === 'refresh' ? `Business and assistant changes were saved, but refreshing the page data failed: ${detail}`
+        : `Business save failed; assistant changes were not submitted: ${detail}`);
     } finally { setSaving(false); }
   }
 
@@ -429,8 +437,8 @@ export default function Settings() {
           Changes apply on the next call
         </p>
         <div className="flex items-center gap-3">
-          {saved && <span className="text-sm font-semibold text-ok">{saved}</span>}
-          {error && <span className="text-sm text-rose">{error}</span>}
+          {saved && <span role="status" className="text-sm font-semibold text-ok">{saved}</span>}
+          {error && <span role="alert" className="text-sm text-rose">{error}</span>}
           <Button disabled={saving} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</Button>
         </div>
       </div>
