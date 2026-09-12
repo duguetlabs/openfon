@@ -67,3 +67,6 @@ Integration: .agent/workstreams/integration.md, docs/launch/readiness.md, script
 
 ## Deployment control
 Found existing CI deploys automatically on every main push, which would couple any future merge to unaccepted production migrations. Integration changes CI to explicit workflow_dispatch on main with deploy_production=true (default false), preserving all prerequisite jobs. This makes merge and deployment separate concrete actions and implements the handoff's no-blind-deployment requirement. No dispatch executed.
+- Asterisk aac57a2 consolidated as adcaf9b. Its smoke harness hardcoded owner ports 8811/9251; integration adds OPENFON_TEST_PORT/OPENFON_INSPECTOR_PORT overrides before running on 8814/9254.
+- QA independently verified f95be36 deployment gate: typed false default, dispatch/main/true AND, unchanged prerequisite jobs and success gating. No major/security findings; checkbox does not itself attest acceptance.
+- Created separate D1 openfon-release-rehearsal-20260912 (e1d93b7d-9024-447a-ae25-6b1e5ed298b3) and imported production backup successfully with all output restricted. No public Worker attached. Awaiting 0010 before applying consecutive consolidated migrations; production DB untouched.
