@@ -1,5 +1,5 @@
 import { assertPresetWriteBudget, PRESET_LIST_COLUMNS } from './preset-budgets';
-import { OPENAI_REALTIME_VOICES, presetCompatibilityError, retainedProviderKey, ProviderInputError } from './provider-settings';
+import { OPENAI_REALTIME_VOICES, assistantCompatibilityError, presetCompatibilityError, retainedProviderKey, ProviderInputError } from './provider-settings';
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { bodyLimit } from 'hono/body-limit';
@@ -663,6 +663,11 @@ app.put('/api/me/business/:id/agent', async (c) => {
   const engine = s.engine === 'realtime' ? 'realtime' : s.engine === 'pipeline' ? 'pipeline' : cur.engine;
   const realtimeModel = s.realtime_model !== undefined ? s.realtime_model : cur.realtime_model;
   const realtimeVoice = s.realtime_voice !== undefined ? s.realtime_voice : cur.realtime_voice;
+  const realtimeProvider = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
+    .bind(biz.id).first<import('./types').ProviderSettings>();
+  const incompatibility = assistantCompatibilityError(c.env, realtimeProvider,
+    { engine, realtime_model: realtimeModel, realtime_voice: realtimeVoice });
+  if (incompatibility) return c.json({ error: incompatibility }, 400);
   const llmBaseUrl = s.llm_base_url ?? cur.llm_base_url;
   const effectiveName = s.agent_name ?? cur.agent_name;
   const effectivePersona = s.persona ?? cur.persona;

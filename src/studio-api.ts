@@ -1,5 +1,5 @@
 import { PRESET_RECONCILIATION_SQL, PRESET_CHANGED_SQL, assertPresetWriteBudget, PRESET_LIST_COLUMNS, PRESET_ROW_BYTES } from './preset-budgets';
-import { providerUpdate, presetCompatibilityError, ProviderInputError, TEXT_PRESETS, OPENAI_REALTIME_VOICES } from './provider-settings';
+import { providerUpdate, assistantCompatibilityError, presetCompatibilityError, ProviderInputError, TEXT_PRESETS, OPENAI_REALTIME_VOICES } from './provider-settings';
 import type { Hono } from 'hono';
 import { readWorkspaceBody } from './request-validation';
 import { newId } from './auth';
@@ -962,7 +962,9 @@ export function registerStudioApi(app: StudioApp): void {
   });
 
   app.post('/api/me/assistants', async (c) => {
-    const workspace = await workspaceForUser(c.env, c.get('userId'));
+    // Reject incompatible drafts before compatibility bootstrap can write.
+    const workspace = await c.env.DB.prepare('SELECT id FROM businesses WHERE user_id=? ORDER BY created_at,id LIMIT 1')
+      .bind(c.get('userId')).first<{ id: string }>();
     if (!workspace) return c.json({ error: 'Create a workspace first' }, 409);
     const body = await readWorkspaceBody<Partial<Omit<Assistant, 'take_messages'>> & { take_messages?: number | boolean }>(c.req);
     if (
@@ -973,6 +975,11 @@ export function registerStudioApi(app: StudioApp): void {
       return c.json({ error: 'Assistant name, personality, and language cannot be blank' }, 400);
     }
     if (!body.name?.trim()) return c.json({ error: 'Assistant name required' }, 400);
+    const realtimeProvider = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
+      .bind(workspace.id).first<ProviderSettings>();
+    const incompatibility = assistantCompatibilityError(c.env, realtimeProvider, body);
+    if (incompatibility) return c.json({ error: incompatibility }, 400);
+    await workspaceForUser(c.env, c.get('userId'));
     const id = newId();
     const createAssistant = c.env.DB.prepare(
       `INSERT INTO assistants (
@@ -1039,6 +1046,11 @@ export function registerStudioApi(app: StudioApp): void {
     const instructions = body.custom_instructions ?? assistant.custom_instructions;
     const realtimeModel = body.realtime_model ?? assistant.realtime_model;
     const realtimeVoice = body.realtime_voice ?? assistant.realtime_voice;
+    const realtimeProvider = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
+      .bind(assistant.business_id).first<ProviderSettings>();
+    const incompatibility = assistantCompatibilityError(c.env, realtimeProvider,
+      { engine, realtime_model: realtimeModel, realtime_voice: realtimeVoice });
+    if (incompatibility) return c.json({ error: incompatibility }, 400);
     const llmModel = body.llm_model ?? assistant.llm_model;
     if (assistant.state === 'active' && (!name.trim() || !persona.trim() || !language.trim())) {
       return c.json({ error: 'Active assistants require a name, personality, and language' }, 400);

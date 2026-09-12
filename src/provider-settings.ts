@@ -96,3 +96,21 @@ export function presetCompatibilityError(env: Env, provider: ProviderSettings | 
     throw error;
   }
 }
+
+// Draft configuration checks deliberately do not resolve endpoints or require keys.
+// Custom adapters retain their own model/voice namespace; blanks use runtime defaults.
+export function assistantCompatibilityError(env: Env, provider: ProviderSettings | null,
+  settings: { engine?: string; realtime_model?: string; realtime_voice?: string }): string | null {
+  if (settings.engine !== 'realtime') return null;
+  const selection = provider?.realtime_provider || 'instance';
+  const effectiveProvider = selection === 'instance' ? env.REALTIME_PROVIDER || 'kataleptic' : selection;
+  if (effectiveProvider !== 'openai') return null;
+  const model = settings.realtime_model;
+  if (model && (model === 'gpt-realtime-2' || !/^gpt-(realtime|4o.*realtime)/.test(model))) {
+    return 'Choose an OpenAI realtime model for the OpenAI provider, or leave it blank for the default.';
+  }
+  if (settings.realtime_voice && !OPENAI_REALTIME_VOICES.includes(settings.realtime_voice)) {
+    return 'Choose a supported OpenAI realtime voice, or leave it blank for the default.';
+  }
+  return null;
+}
