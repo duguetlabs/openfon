@@ -1,69 +1,66 @@
-# OpenFon launch preparation
+# OpenFon provider and telephone implementation
 
 - Status: In progress
-- Owner/active agent: Codex /root; subagents finished; overnight automation paused
-- Branch: codex/launch-studio at /Users/cristian/projects/fun/openfon; verified carrier review branch codex/telnyx-inbound at /tmp/openfon-telephony
-- Base commit: cd3acc9 (consolidated checkout before this documentation update)
-- Last updated: 2026-09-12T08:13:05.257242+00:00
-- Applicable AGENTS.md: repository AGENTS.md and user-provided project instructions
-- Read first: this file, docs/launch/readiness.md, docs/telephony.md, docs/launch/production-preflight.md
+- Owner/active agent: root orchestration task 01a09543-75cb-7c52-8c7f-4b5a24ed5c75
+- Branch: codex/launch-studio (coordination); codex/integrated-release (integration owner)
+- Base commit: b730480685b56de0e785a400621459e3896a7fb1
+- Last updated: 2026-09-12T11:28:54.423162+00:00
+- Applicable AGENTS.md: repository AGENTS.md; user-provided instructions preserved in .agent/orchestration-rules.md
+- Read first: this file, .agent/orchestration.json, .agent/orchestration-rules.md, assigned handoff, docs/launch/readiness.md
 
 ## Objective
-Finish launch app/technical work, original website and marketing assets; user authorizes overnight parallel agents. Overnight window ended; heartbeat openfon-overnight-launch-preparation was paused at 2026-09-12 08:11 UTC when the queued wakeups were handled. No claim of continuous work during the intervening queued period.
+Finish Telnyx telephone integration, add open Asterisk integration, add alternative provider presets and independent realtime configuration, and finish the remaining onboarding/release work. User explicitly requests Astra medium Codex CLI agents in Herdr openfon, a desktop Telnyx browser task, and ongoing orchestration/check-ins.
 
 ## Scope
-App completion, bugs/issues #6/#12, PRs #10/#13, website/marketing, disabled inbound Telnyx implementation and release verification.
+Separate implementation owners below; root manages dependencies, durable checkpoints, desktop account handoff and recurring progress checks. Integration owner consolidates code and drives release verification/reviews.
 
 ## Out of scope
-Unapproved spending, external marketing distribution, real carrier calls without configured authorized number/provider. Preserve original user research file docs/research/sim-ai-voice-gateway-2026-09-08.md. No outbound dialing, number purchasing/porting, calendar booking or email recovery implemented.
+Unrequested marketing distribution, fabricated business identity/application data, unbounded new spending, provider default replacement, and unsupported claims of real-provider/telephone readiness. Existing user research file remains untouched.
 
 ## Confirmed facts
-- PR #13 branch agent/calm-studio-foundation at d6ea5d2: exact-head Codex no-major finding and CI green. Separate worktree /tmp/openfon-foundation-review.
-- PR #14 head 370be80: assistant unsaved-edit guard integrated into root and carrier. Local tests pass; latest CI has one browser failure (ambiguous status locator, then signup retry quota exhaustion). Exact-head Codex has three remaining P2 findings; see Work remaining.
-- Mandatory PR-Agent is unavailable; personal reusable infrastructure probes returned404 and historical instructions forbid private cross-org qapture caller. User's async substitute-review question remains unanswered. Never merge around this gate.
-- Workflow OAuth scope is NO LONGER blocked: existing authorized GitHub connector published prepared CI as fabdee7 without expanding account access. Canceled old gh auth refresh; no scope grant needed.
-- Read-only Cloudflare preflight: Worker openfon exists, migrations0007/0008 pending; browser-user-agent workers.dev probes returned root 200 and signed-out /api/me 401; Python-user-agent probes returned 403. Secret names inspected only, values not read. See production-preflight.md. No deployment/migration/secret update occurred.
-- Local scoped Kataleptic credential returned403; no real-provider call completed. Final hostname/operator/support/privacy details still await user input.
-- Desktop process outside Herdr; no Herdr control dispatched. Codex agents used. Port8787 belongs to whatsapp-mcp; never stop it.
+- Herdr openfon is workspace w1; original pane w1:p1 is not ours and must remain untouched. User focus is in another workspace.
+- Installed Codex CLI is 0.153.4. Agents requested as gpt-6-astra with model_reasoning_effort=medium.
+- Local root b730480 consolidates the existing stacked launch/carrier work. PR #13 foundation targets main, #14 launch targets foundation, #15 Telnyx targets launch. PR #10 remains open.
+- Prior state and all earlier validations/blockers preserved in .agent/archive/current-task-2026-09-12-before-provider-expansion.md; reverify current status.
+- Repository is public and MIT licensed. Telephone adapter remains disabled pending a real carrier pilot.
+
+## Hypotheses
+- Existing Telnyx account can supply configuration/number access: desktop task verifies.
+- Asterisk chan_websocket fits the current media boundary: Asterisk owner validates with implementation/runtime tests.
+- Direct OpenAI realtime can work independently of Kataleptic: realtime owner verifies full workflow, not just URL configuration.
 
 ## Decisions
-- Public marketing remains browser-first until real carrier pilot; no fake results/testimonials.
-- Telnyx rollout defaults false; explicit operator-owned number routes, signed inbox, shared admission, durable retries and release confirmation. Carrier control IDs remain in separate private storage.
-- Realtime-only audible carrier sessions; no browser-TTS/pipeline fallback. MediaPCM converted with bounded buffers, rolling pre-ready second,20ms pacing and generation-aware playback marks.
-- Existing GitHub app tools may publish workflow edits with their already-granted permissions; no account permission expansion.
+- Each workstream has one owner and an isolated worktree; root owns this document and manifest.
+- Presets owner owns shared provider schema/configuration/UI; realtime owner agrees its contract before shared edits. Integration owner reserves migrations and handles consolidation.
+- Desktop task alone operates Telnyx account/browser. No secret values enter docs, messages, or source.
+- Keep existing Kataleptic default; alternatives are presets.
+- Existing mandatory review rules remain until an explicit user decision changes them.
 
 ## Work completed
-- Silent UI walkthrough verified and committed in docs/launch/demo/ (31.7 seconds, no audio, fictional data caption). Marketing distribution remains unsent.
-- Studio overview, assistant lifecycle/editor/private testing, calls/review, knowledge approval/attachments, settings, password/export/delete; auth/input/teardown/race fixes.
-- Original cream/cobalt/orange dimensional website, social/search assets, marketing strategy/copy and inspected screenshots.
-- Benchmark fixes #6/#12 and qualified #10 claims integrated into #14; do not close #10 before replacement is reviewed/merged.
-- Telnyx control4b0bd46, capability guard3138370, codec/signature/media c6048df, startupbuffer2e60c3e, actualworkerd harness a029e6f, ingressabusefix6f09669.
-- Runtime harness found and fixed workerd unsupported redirect:error and defaultBlob WebSocket input. No external providers contacted.
-- Independent review found/fixed unowned outgoing leg commands, expired-alarm hot loop, shutdown callback handling, exact number authorization, account deletion race, persistent failure reporting and arbitrary DO instantiation.
+- Read current checkout, historical readiness and Herdr topology.
+- Prepared bounded workstream handoffs and common operating rules.
 
 ## Work remaining
-- PR #14 at 370be80: protect unsaved knowledge drafts (3994129324), exclude unconnected reservations from headline live-call total (3994129328), isolate browser retries from shared signup quota (3994129334). All verified and acknowledged on PR; none fixed yet. Also fix status locator ambiguity found in CI run 34656631441 before rerunning.
-- PR #15 at d616fff: gate carrier input until Azure greeting audio is synthesized/queued (3994125261). Verified sendReady precedes synthesize and adapter flushes input on ready. Needs delayed-synthesis regression. All CI jobs passed; exact-head security review found no security issues, but code finding remains open.
-- Earlier Telnyx connected-frame finding was false; official-contract rebuttal accepted with no-major review on a59f1ff. Latest d616fff has the separate greeting-order finding above.
-- Every finding has a PR reply; fix, validate, push, close/reopen and re-request Codex after each fix. Propagate final branch changes into the original checkout. Never merge past unresolved findings or the unavailable mandatory PR-Agent gate.
-- Final hostname/operator/support/privacy choices, valid provider access, production D1 backup and staging migration/restore, real-provider and consented carrier pilot remain required.
-- Marketing strategy/copy/assets are prepared but distribution unsent. No public launch or production changes.
+Launch and verify agents, create desktop Telnyx task, record IDs, install recurring check-in, then resolve findings/dependencies through completed and validated implementation.
+
+| Workstream | Owner | Branch | Worktree | State |
+|---|---|---|---|---|
+| telnyx | openfon-telnyx | `codex/telnyx-inbound` | /private/tmp/openfon-telephony | Prepared |
+| asterisk | openfon-asterisk | `codex/asterisk-integration` | /Users/cristian/projects/fun/openfon-worktrees/asterisk | Prepared |
+| presets | openfon-presets | `codex/provider-presets` | /Users/cristian/projects/fun/openfon-worktrees/provider-presets | Prepared |
+| realtime | openfon-realtime | `codex/realtime-providers` | /Users/cristian/projects/fun/openfon-worktrees/realtime-providers | Prepared |
+| integration | openfon-integration | `codex/integrated-release` | /Users/cristian/projects/fun/openfon-worktrees/integration | Prepared |
+| launch | openfon-launch | `codex/launch-kit` | /Users/cristian/projects/fun/openfon-worktrees/launch-kit | Prepared |
+| qa | openfon-qa | `codex/release-audit` | /Users/cristian/projects/fun/openfon-worktrees/release-audit | Prepared |
 
 ## Files changed
-- This branch contains src/telnyx-*, src/telephony-audio.ts, migration0009, CallSession carrier guards, shared admission/account guards, tests, synthetic harness and docs.
-- All worktrees share dependency symlink; node_modules is untracked in /tmp worktrees and must not be committed.
+Only root coordination documents in this dispatch; previous user research untouched. Each agent records its own changes in .agent/workstreams/<role>.md.
 
 ## Validation
-- Final consolidated npm test: 424/424 across 20 files at cd3acc9; /tmp/openfon-launch-qa/final-integrated-unit.log.
-- Local synthetic legacy migration/backup rehearsal passed: 0006 → 0009, preserved slugs/history/settings, binary and SQL restore, rollback/re-upgrade, integrity/foreign-key checks. Script: /tmp/openfon-launch-qa/migration-rehearsal.py; invocation python3 SCRIPT /Users/cristian/projects/fun/openfon. Migration 0008 regression group: 10 passed. Production D1 rehearsal remains required.
-- npm run typecheck:passed.
-- npm run test:telnyx:passed against actual local workerd, signed ingress, duplicate admission, valid-shaped forged token rejected, bidirectional non-silent PCM, interruption/marks/hangup and D1release. All outbound services mocked.
-- Final consolidated browser suite: 6/6 passed at cd3acc9, including unsaved assistant guard; build included. /tmp/openfon-launch-qa/final-integrated-browser.log. This local pass does not override the later-inspected CI failure.
-- Latest CI: PR #15 d616fff all required jobs green; PR #14 370be80 has one failing browser run, other jobs green. Python suites220(one existing skip)/206; npm audit zero after upgrades.
-- Initial runtime failures above fixed; current passing harness supersedes them.
+`git status`, `git log`, `git worktree list`, `gh pr list`, `herdr workspace list`, `herdr pane list` inspected. No new app test, real AI call or carrier call claimed at dispatch.
 
 ## Blockers, risks and unresolved questions
-Four confirmed review fixes and browser CI failure, missing mandatory reviewer, final operator/domain/privacy details, unverified real-provider access (local credential preflight 403), absent real carrier configuration/pilot. Tombstones retain provider correlation for replay suppression; no live-carrier readiness claimed.
+Desktop task must inspect Telnyx account eligibility and existing numbers. Number country/price and any required identity proof must be concrete before asking user for missing decisions. Prior required-reviewer problem must be reverified by integration owner. Shared interfaces need coordination.
 
 ## Recommended next action
-Resume by verifying git and remote reviews, then fix PR #14 browser isolation/locator and remaining product findings, followed by PR #15 greeting ordering. Automation is paused; no main merge or production launch until all gates pass.
+Inspect .agent/orchestration.json and each owner's checkpoint, confirm agent model/effort and active state, then advance independent work and resolve precise blockers.

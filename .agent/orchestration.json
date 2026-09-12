@@ -1,0 +1,84 @@
+{
+  "updated_at": "2026-09-12T11:28:54.423162+00:00",
+  "orchestrator_thread": "01a09543-75cb-7c52-8c7f-4b5a24ed5c75",
+  "workspace_id": "w1",
+  "workspace_label": "openfon",
+  "base_commit": "b730480685b56de0e785a400621459e3896a7fb1",
+  "agents": [
+    {
+      "role": "telnyx",
+      "name": "openfon-telnyx",
+      "label": "Telnyx implementation",
+      "worktree": "/private/tmp/openfon-telephony",
+      "branch": "codex/telnyx-inbound",
+      "handoff": "/Users/cristian/projects/fun/openfon/.agent/handoffs/openfon-telnyx-2026-09-12.md",
+      "state": "prepared",
+      "pane_id": null
+    },
+    {
+      "role": "asterisk",
+      "name": "openfon-asterisk",
+      "label": "Asterisk integration",
+      "worktree": "/Users/cristian/projects/fun/openfon-worktrees/asterisk",
+      "branch": "codex/asterisk-integration",
+      "handoff": "/Users/cristian/projects/fun/openfon/.agent/handoffs/openfon-asterisk-2026-09-12.md",
+      "state": "prepared",
+      "pane_id": null
+    },
+    {
+      "role": "presets",
+      "name": "openfon-presets",
+      "label": "Provider presets",
+      "worktree": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets",
+      "branch": "codex/provider-presets",
+      "handoff": "/Users/cristian/projects/fun/openfon/.agent/handoffs/openfon-presets-2026-09-12.md",
+      "state": "prepared",
+      "pane_id": null
+    },
+    {
+      "role": "realtime",
+      "name": "openfon-realtime",
+      "label": "Independent realtime provider",
+      "worktree": "/Users/cristian/projects/fun/openfon-worktrees/realtime-providers",
+      "branch": "codex/realtime-providers",
+      "handoff": "/Users/cristian/projects/fun/openfon/.agent/handoffs/openfon-realtime-2026-09-12.md",
+      "state": "prepared",
+      "pane_id": null
+    },
+    {
+      "role": "integration",
+      "name": "openfon-integration",
+      "label": "Release integration and existing fixes",
+      "worktree": "/Users/cristian/projects/fun/openfon-worktrees/integration",
+      "branch": "codex/integrated-release",
+      "handoff": "/Users/cristian/projects/fun/openfon/.agent/handoffs/openfon-integration-2026-09-12.md",
+      "state": "prepared",
+      "pane_id": null
+    },
+    {
+      "role": "launch",
+      "name": "openfon-launch",
+      "label": "Launch and onboarding kit",
+      "worktree": "/Users/cristian/projects/fun/openfon-worktrees/launch-kit",
+      "branch": "codex/launch-kit",
+      "handoff": "/Users/cristian/projects/fun/openfon/.agent/handoffs/openfon-launch-2026-09-12.md",
+      "state": "prepared",
+      "pane_id": null
+    },
+    {
+      "role": "qa",
+      "name": "openfon-qa",
+      "label": "Independent release audit",
+      "worktree": "/Users/cristian/projects/fun/openfon-worktrees/release-audit",
+      "branch": "codex/release-audit",
+      "handoff": "/Users/cristian/projects/fun/openfon/.agent/handoffs/openfon-qa-2026-09-12.md",
+      "state": "prepared",
+      "pane_id": null
+    }
+  ],
+  "desktop_task": {
+    "client_thread_id": "client-new-thread:9ba82b0a-ecb6-4b86-a795-136ead42345b",
+    "host_id": "local",
+    "state": "creating"
+  }
+}
