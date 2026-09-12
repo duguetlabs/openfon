@@ -49,3 +49,12 @@
 - Existing node scripts/asterisk-smoke.mjs passed after control changes. No live AI/PSTN or new real PBX call run for this bounded fix.
 - Harness-only first run incorrectly sent Upgrade on a204 probe route; Miniflare rejected its response. Corrected helper to send Upgrade only for /media; subsequent retirement runs passed.
 - Final local validation: npm test457/457 across22files passed; npm run typecheck passed; git diff --check passed. Status: Complete for bounded finding; integration owns consolidation and fresh PR-Agent/Codex review on the resulting head.
+
+## PR16 Playback Burst finding — in progress
+- Verified original official comment5646036324 on b15ed876 and adapter: each conversion slice enqueues then synchronously drains, so a maximum480000-byte frame writes500media frames plus marks in one turn.
+- Bounded scope: adapter/tests/harness. Change to one scheduled pump, maximum5frames per20ms callback, yielding between batches. XOFF/flush/close cancel pending pump; XON schedules resume; marks, overall500frame bound, final drain and retirement unchanged.
+- Implemented: enqueue never sends inline; one cancellable timer emits at most5frames/20ms, catches async socket errors, and yields before next batch. XOFF cancels pending timer, XON schedules resume, flush discards old-generation output, close cancels all playback. Existing500-frame queued+unacknowledged bound and mark/drain/retirement semantics preserved.
+- npx vitest run test/asterisk-media.test.ts test/asterisk-control.test.ts passed38/38. New regressions cover maximum480000-byte frame, batch boundary XOFF/XON, flush/new generation, full501-frame padded drain with acknowledgments, close and asynchronous transport failure timer cleanup.
+- node test/asterisk-playback-smoke.mjs passed actual workerd timers/WebSocket delivery: zero synchronous frames, XOFF paused after5/500frames, no writes while paused, resumed on XON, flush cancelled old output, final marks drained/closed. Isolated test-only adapter harness; synthetic PCM/PBX, no external requests.
+- node scripts/asterisk-smoke.mjs and node test/asterisk-retirement-smoke.mjs passed after fix. npm run typecheck and git diff --check passed. No shared schema/control/admission changes and no live AI/PSTN.
+- Full local npm test passed462/462 across22files. Bounded Playback Burst assignment complete; integration owns consolidation and fresh official review on resulting head.

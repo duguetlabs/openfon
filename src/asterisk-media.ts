@@ -17,6 +17,7 @@ export class AsteriskMediaAdapter {
   private marks = new Set<string>();
   private queue: string[] = [];
   private startup = setTimeout(() => this.close('start_timeout'), 20000);
+  private playback?: ReturnType<typeof setTimeout>;
   private quiet?: ReturnType<typeof setTimeout>;
   private deadline?: ReturnType<typeof setTimeout>;
   constructor(private options: {
@@ -50,8 +51,8 @@ export class AsteriskMediaAdapter {
         this.options.sessionSend(JSON.stringify({ type: 'start' }));
       } else {
         if (!this.started) throw Error();
-        if (msg.event === 'MEDIA_XOFF') this.paused = true;
-        else if (msg.event === 'MEDIA_XON') { this.paused = false; this.pump(); }
+        if (msg.event === 'MEDIA_XOFF') { this.paused = true; this.stopPump(); }
+        else if (msg.event === 'MEDIA_XON') { this.paused = false; this.schedulePump(); }
         else if (msg.event === 'MEDIA_MARK_PROCESSED') {
           if (typeof msg.correlation_id !== 'string') throw Error();
           this.marks.delete(msg.correlation_id); this.maybeEnd();
@@ -76,6 +77,7 @@ export class AsteriskMediaAdapter {
         if (!this.started || this.ready || msg.mode !== 'realtime' || (msg.ttsMode === 'browser' && msg.greeting)) throw Error();
         this.ready = true; clearTimeout(this.startup);
       } else if (msg.type === 'flush') {
+        this.stopPump();
         this.queue = []; this.marks.clear(); this.down.reset(); this.generation++;
         this.paused = false; this.drained = false; this.command('FLUSH_MEDIA');
         if (this.ending) this.armDrain();
@@ -89,18 +91,34 @@ export class AsteriskMediaAdapter {
   }
   private enqueue(frames: string[]): void {
     if (this.queue.length + this.marks.size + frames.length > 500) throw Error('playback_overflow');
-    this.queue.push(...frames); this.pump();
+    this.queue.push(...frames); this.schedulePump();
+  }
+  private stopPump(): void {
+    if (this.playback !== undefined) clearTimeout(this.playback);
+    this.playback = undefined;
+  }
+  private schedulePump(): void {
+    if (this.closed || this.paused || !this.queue.length || this.playback !== undefined) return;
+    // Never write during the provider message/conversion loop. A bounded batch
+    // every 20ms gives incoming XOFF/flush/socket events a turn before more media.
+    // Asterisk still owns per-frame playout timing; each batch is at most 100ms.
+    this.playback = setTimeout(() => this.pump(), 20);
   }
   private pump(): void {
-    while (!this.paused && this.queue.length) {
-      const payload = atob(this.queue.shift()!);
-      const bytes = Uint8Array.from(payload, char => char.charCodeAt(0));
-      const mark = `${this.generation}:${++this.counter}`;
-      this.marks.add(mark);
-      this.options.carrierSend(bytes.buffer);
-      this.command('MARK_MEDIA', mark);
-    }
-    this.maybeEnd();
+    this.playback = undefined;
+    if (this.closed || this.paused) return;
+    try {
+      for (let sent = 0; sent < 5 && !this.closed && !this.paused && this.queue.length; sent++) {
+        const payload = atob(this.queue.shift()!);
+        const bytes = Uint8Array.from(payload, char => char.charCodeAt(0));
+        const mark = `${this.generation}:${++this.counter}`;
+        this.marks.add(mark);
+        this.options.carrierSend(bytes.buffer);
+        this.command('MARK_MEDIA', mark);
+      }
+      this.maybeEnd();
+      this.schedulePump();
+    } catch { this.close('playback_error'); }
   }
   private armDrain(): void {
     if (this.quiet) clearTimeout(this.quiet);
@@ -115,6 +133,7 @@ export class AsteriskMediaAdapter {
   close(reason = 'socket_closed'): void {
     if (this.closed) return;
     this.closed = true;
+    this.stopPump();
     for (const timer of [this.startup, this.quiet, this.deadline]) if (timer) clearTimeout(timer);
     this.queue = []; this.marks.clear(); this.up.reset(); this.down.reset();
     try { this.command('HANGUP'); } catch { /* disconnected */ }
