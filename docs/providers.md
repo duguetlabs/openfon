@@ -56,7 +56,7 @@ The existing text API uses `baseUrl`, `apiKey`, `clearApiKey`, with a new `model
 
 Integration passed TypeScript and **496/496 unit/API tests** across 24 files. Actual local-workerd smoke tests passed Telnyx native and synthesized greeting paths, Asterisk protocol/media handling, direct OpenAI GA protocol and the existing gateway. The direct synthetic call uses no instance AI or Azure credentials and blocks unmatched outbound hosts. Final browser/benchmark results are recorded in [readiness](launch/readiness.md).
 
-**No live provider call, audible browser acceptance or PSTN validation is established by these results.** No live OpenAI credential was available; the recorded Kataleptic catalog preflight returned 403. Asterisk itself was not available locally, so its actual PBX compatibility still needs the [gateway recipe and pilot](asterisk.md).
+**No live provider call, audible browser acceptance or PSTN validation is established by these results.** No live OpenAI credential was available; the recorded Kataleptic catalog preflight returned 403. Real Asterisk 22.11.0 Local-channel/audio verification passed against the integrated adapter with mocked AI; see the [dated runtime report](asterisk-runtime-validation-2026-09-12.md). SIP trunk/PSTN and live-provider acceptance still need the [gateway recipe and pilot](asterisk.md).
 
 
 ## Telephone channels
@@ -65,7 +65,7 @@ Integration passed TypeScript and **496/496 unit/API tests** across 24 files. Ac
 | --- | --- | --- |
 | Browser link | Implemented channel; pipeline and realtime | Real provider audio on intended HTTPS origin, permissions, interruption, hangup and saved results. |
 | Telnyx inbound | Disabled opt-in adapter; realtime only | [Operator setup and carrier gate](telephony.md). Synthetic workerd tests are not handset calls. No real carrier pass recorded. |
-| Asterisk / SIP gateway | Disabled opt-in authenticated chan_websocket adapter; realtime only | [Asterisk setup](asterisk.md). Synthetic workerd auth/admission/PCM/flush/drain/hangup passes; actual Asterisk and consented handset pilot remain required. |
+| Asterisk / SIP gateway | Disabled opt-in authenticated chan_websocket adapter; realtime only | [Asterisk setup](asterisk.md). Synthetic workerd and real Asterisk 22.11.0 Local-channel/audio tests pass; live-provider and consented handset pilot remain required. |
 | Twilio, arbitrary SIP trunks, SIM/analog | No adapter implemented | Separate integration and validation. A telephone number or SIP credential alone cannot connect to the Worker. |
 | Outbound calls, number purchasing/porting, calendar confirmation, human transfer | Not offered as launch capabilities | Do not include in onboarding or announcement promises. |
 

@@ -32,11 +32,17 @@ Implementation candidate `6e64872` includes presets `ce62114`, realtime `18d3638
 - A restricted production D1 SQL backup was restored into a **separate Cloudflare rehearsal D1 database** and upgraded through 0011. Six legacy-data fingerprints (businesses, settings, presets, completed calls, turns, public slugs) matched exactly; foreign-key and integrity checks passed. Production migrations were not applied.
 - Independent QA approved the initial launch fixes and explicit deployment gate, and closed the direct pre-ack event leak at exact fix `083dae3` with independent failing-then-passing probes and actual-workerd checks. Final assembled review is pending.
 
-[Provider configuration and compatibility](../providers.md), [direct realtime recipe](../realtime-providers.md), [Asterisk recipe](../asterisk.md), and [production/staging evidence](production-preflight.md) separate implementation from live acceptance. No live AI conversation, audible browser acceptance or handset pilot is claimed. Asterisk runtime evidence is being pursued by its owner; synthetic chan_websocket tests alone do not establish a real PBX pass.
+[Provider configuration and compatibility](../providers.md), [direct realtime recipe](../realtime-providers.md), [Asterisk recipe](../asterisk.md), and [production/staging evidence](production-preflight.md) separate implementation from live acceptance. No live AI conversation, audible browser acceptance or handset pilot is claimed. Real source-built Asterisk 22.11.0 Local-channel validation also passed on the integrated branch: generated caller/assistant audio, 11 mark acknowledgements, flush/hangup, revoked-route rejection and completed/released D1 history, with zero remaining channels. AI was mocked; no SIP trunk/PSTN or public WSS PBX pass is claimed. See the [dated runtime report](../asterisk-runtime-validation-2026-09-12.md).
+
+## Isolated staging
+
+https://openfon-staging.duguetlabs.workers.dev runs Worker version `8439378c-eeda-4fb7-83e5-a01a2f986fb0` from source `41041c1`. Its D1 binding is the separate rehearsal database upgraded through 0011. Both carrier flags are false; copied assistants/routes are disabled and copied sessions cleared. HTTP checks returned 200 for root, 401 for signed-out account and 503 for each disabled carrier endpoint. This is staging deployment evidence, not live-provider/carrier acceptance. Production remains on its prior version.
 
 ## PR and review state
 
 PR #13 `d6ea5d2` has Codex no major issues and green applicable checks. PR #15 `37b3575` has green CI and Codex code/security no-issues results. PR #14 `f839527` fixes the latest verified findings (bounded export construction, URL/search synchronization, collection detail and onboarding draft guards); it was pushed, closed/reopened and separately requested for Codex review. Its latest CI/review result remains pending. Every finding has a reasoned reply.
+
+Consolidated [PR #16](https://github.com/duguetlabs/openfon/pull/16) has separately requested Codex code/security reviews; current-head CI and review results must be checked before acceptance.
 
 Mandatory **PR-Agent is unavailable**: the public repository has CI only and no PR-Agent review after retriggering. Independent QA and Codex security review are not an authorized substitute. No PR has been merged. PR #10 remains open; integrated `8666e7e` already qualifies the semantic-VAD research without changing the detector, so do not merge stale wording over that correction.
 
