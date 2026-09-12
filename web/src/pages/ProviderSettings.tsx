@@ -1,20 +1,31 @@
 import { useEffect, useState } from 'react';
 import { api, type ProviderView, type ProviderUpdate } from '../api';
 import { Button, Card, Field, inputClassSm } from '../ui';
+import { useUnsavedEdits } from '../unsaved-edits';
 
 export default function ProviderSettings({ onSaved }: { onSaved: () => Promise<void> }) {
   const [saved, setSaved] = useState<ProviderView | null>(null);
   const [draft, setDraft] = useState<ProviderUpdate>({});
+  const [savedDraft, setSavedDraft] = useState<ProviderUpdate | null>(null);
   const [preset, setPreset] = useState('custom');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  // Include write-only key inputs and removal flags in the baseline. Empty
+  // inputs mean retain, so reverting an edit to empty is clean again.
+  const dirty = savedDraft !== null && (Object.keys(savedDraft) as (keyof ProviderUpdate)[])
+    .some(key => draft[key] !== savedDraft[key]);
+  useUnsavedEdits(dirty);
   async function load() {
     const p = await api.provider();
     setSaved(p);
-    setDraft({ baseUrl: p.usesInstanceDefault ? '' : p.baseUrl, model: p.model,
+    const next: ProviderUpdate = { baseUrl: p.usesInstanceDefault ? '' : p.baseUrl, model: p.model,
       realtime_provider: p.realtime_provider, realtime_base_url: p.realtime_base_url,
-      stt_provider: p.stt_provider, stt_base_url: p.stt_base_url, stt_model: p.stt_model });
+      stt_provider: p.stt_provider, stt_base_url: p.stt_base_url, stt_model: p.stt_model,
+      apiKey: '', clearApiKey: false, realtime_api_key: '', realtime_clear_api_key: false,
+      stt_api_key: '', stt_clear_api_key: false };
+    setDraft(next);
+    setSavedDraft(next);
     setPreset(p.usesInstanceDefault ? 'instance' : p.presets.find(x => x.baseUrl === p.baseUrl)?.id || 'custom');
   }
   useEffect(() => { void load().catch(e => setError(e.message)); }, []);
