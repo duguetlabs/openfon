@@ -921,27 +921,27 @@ app.post('/api/me/profiles/:pid/apply', async (c) => {
 });
 
 // ---------- voice catalogs (aggregated per tier, cached per isolate) ----------
-let voicesCache: { data: unknown; at: number } | null = null;
+type VoiceOption = { id: string; label: string };
+let voicesCache: { endpoint: string; data: { cascade: VoiceOption[]; native: VoiceOption[]; hdDefault: string }; at: number } | null = null;
+let azureVoicesCache: { region: string; key: string; data: VoiceOption[]; at: number } | null = null;
 
 app.get('/api/me/voices', async (c) => {
   const workspace = await c.env.DB.prepare('SELECT id FROM businesses WHERE user_id = ?').bind(c.get('userId')).first<{ id: string }>();
   const provider = workspace ? await c.env.DB.prepare('SELECT realtime_provider, realtime_base_url FROM provider_settings WHERE business_id = ?')
     .bind(workspace.id).first<{ realtime_provider: string; realtime_base_url: string }>() : null;
   const mode = provider?.realtime_provider && provider.realtime_provider !== 'instance' ? provider.realtime_provider : c.env.REALTIME_PROVIDER || 'kataleptic';
-  if (mode === 'openai' || mode === 'custom') return c.json({
-    cascade: [], native: mode === 'openai' ? OPENAI_REALTIME_VOICES.map(id => ({ id, label: id })) : [], azure: [], hdDefault: '',
-  });
-  // Explicit gateway endpoints get no catalog network request: custom voice IDs
-  // remain editable and no unrelated instance endpoint is contacted.
-  if (provider?.realtime_provider === 'kataleptic') return c.json({ cascade: [], native: [], azure: [], hdDefault: '' });
-  if (voicesCache && Date.now() - voicesCache.at < 3_600_000) return c.json(voicesCache.data);
+  // Workspace realtime selection does not change instance pipeline synthesis.
+  // Only inherited gateway configuration may contact the instance gateway.
+  const useGateway = mode === 'kataleptic' && (!provider?.realtime_provider || provider.realtime_provider === 'instance');
   const out: {
     cascade: { id: string; label: string }[];
     native: { id: string; label: string }[];
     azure: { id: string; label: string }[];
     hdDefault: string;
-  } = { cascade: [], native: [], azure: [], hdDefault: '' };
-  try {
+  } = { cascade: [], native: mode === 'openai' ? OPENAI_REALTIME_VOICES.map(id => ({ id, label: id })) : [], azure: [], hdDefault: '' };
+  if (useGateway && voicesCache?.endpoint === c.env.REALTIME_BASE_URL && Date.now() - voicesCache.at < 3_600_000) {
+    Object.assign(out, voicesCache.data);
+  } else if (useGateway) try {
     const res = await fetch(c.env.REALTIME_BASE_URL.replace(/^ws/, 'http') + '/voices', { signal: AbortSignal.timeout(3000) });
     if (res.ok) {
       const cat = (await res.json()) as {
@@ -955,25 +955,30 @@ app.get('/api/me/voices', async (c) => {
       }));
       out.native = (cat['gpt-realtime-2']?.voices ?? []).map((id) => ({ id, label: id }));
       out.hdDefault = cat['kataleptic-realtime-hd']?.default ?? '';
+      voicesCache = { endpoint: c.env.REALTIME_BASE_URL, data: { cascade: out.cascade, native: out.native, hdDefault: out.hdDefault }, at: Date.now() };
     }
   } catch {
     /* catalog unavailable — dropdowns degrade to free text */
   }
   try {
-    if (c.env.AZURE_SPEECH_KEY) {
+    if (c.env.AZURE_SPEECH_KEY && azureVoicesCache?.region === c.env.AZURE_SPEECH_REGION &&
+      azureVoicesCache.key === c.env.AZURE_SPEECH_KEY && Date.now() - azureVoicesCache.at < 3_600_000) {
+      out.azure = azureVoicesCache.data;
+    } else if (c.env.AZURE_SPEECH_KEY) {
       const res = await fetch(`https://${c.env.AZURE_SPEECH_REGION}.tts.speech.microsoft.com/cognitiveservices/voices/list`, {
         headers: { 'Ocp-Apim-Subscription-Key': c.env.AZURE_SPEECH_KEY },
         signal: AbortSignal.timeout(5000),
+        redirect: 'manual',
       });
       if (res.ok) {
         const list = (await res.json()) as { ShortName: string; LocaleName: string }[];
         out.azure = list.map((v) => ({ id: v.ShortName, label: `${v.ShortName} — ${v.LocaleName}` }));
+        azureVoicesCache = { region: c.env.AZURE_SPEECH_REGION, key: c.env.AZURE_SPEECH_KEY, data: out.azure, at: Date.now() };
       }
     }
   } catch {
     /* same: free text fallback */
   }
-  voicesCache = { data: out, at: Date.now() };
   return c.json(out);
 });
 
