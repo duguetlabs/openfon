@@ -12,6 +12,7 @@ export class AsteriskMediaAdapter {
   private paused = false;
   private ending = false;
   private drained = false;
+  private drainPending = false;
   private generation = 0;
   private counter = 0;
   private marks = new Set<string>();
@@ -56,7 +57,7 @@ export class AsteriskMediaAdapter {
         else if (msg.event === 'MEDIA_XON') { this.paused = false; this.schedulePump(); }
         else if (msg.event === 'MEDIA_MARK_PROCESSED') {
           if (typeof msg.correlation_id !== 'string') throw Error();
-          this.marks.delete(msg.correlation_id); this.maybeEnd();
+          this.marks.delete(msg.correlation_id); this.finishDrain(); this.maybeEnd();
         } else if (!['DTMF_END', 'STATUS', 'QUEUE_DRAINED', 'MEDIA_BUFFERING_COMPLETED'].includes(msg.event)) throw Error();
       }
     } catch { this.close('invalid_carrier_frame'); }
@@ -66,7 +67,7 @@ export class AsteriskMediaAdapter {
     try {
       if (raw instanceof ArrayBuffer) {
         // Greeting audio may precede ready, but only after MEDIA_START.
-        if (!this.started || this.drained || !raw.byteLength || raw.byteLength % 2 || raw.byteLength > 480000) throw Error();
+        if (!this.started || this.drained || this.drainPending || !raw.byteLength || raw.byteLength % 2 || raw.byteLength > 480000) throw Error();
         const bytes = new Uint8Array(raw);
         for (let offset = 0; offset < bytes.length; offset += MAX_PCM24_BYTES) this.enqueue(this.down.push(bytes.subarray(offset, offset + MAX_PCM24_BYTES)));
         if (this.ending) this.armDrain();
@@ -83,7 +84,7 @@ export class AsteriskMediaAdapter {
         this.queue = []; this.marks.clear(); this.down.reset(); this.generation++;
         // FLUSH_MEDIA clears Asterisk's queue, not its queue_full/XOFF state.
         // Its dequeue loop subsequently emits XON; only that event may resume us.
-        this.drained = false; this.command('FLUSH_MEDIA');
+        this.drained = false; this.drainPending = false; this.command('FLUSH_MEDIA');
         if (this.ending) this.armDrain();
       } else if (msg.type === 'ending') {
         if (!this.ready) throw Error();
@@ -127,9 +128,17 @@ export class AsteriskMediaAdapter {
   private armDrain(): void {
     if (this.quiet) clearTimeout(this.quiet);
     this.quiet = setTimeout(() => {
-      try { this.enqueue(this.down.finish()); this.drained = true; this.maybeEnd(); }
+      try { this.drainPending = true; this.finishDrain(); this.maybeEnd(); }
       catch { this.close('playback_overflow'); }
     }, 200);
+  }
+  private finishDrain(): void {
+    // finish() emits at most two FIR/padding frames. Keep that tail in the
+    // resampler until real acknowledgements free capacity; sending merely
+    // transfers a frame from queue to marks and does not free a slot.
+    if (!this.drainPending || this.queue.length + this.marks.size > 498) return;
+    this.enqueue(this.down.finish());
+    this.drainPending = false; this.drained = true;
   }
   private maybeEnd(): void {
     if (this.ending && this.drained && !this.queue.length && !this.marks.size) this.close('playback_complete');
@@ -139,7 +148,7 @@ export class AsteriskMediaAdapter {
     this.closed = true;
     this.stopPump();
     for (const timer of [this.startup, this.quiet, this.deadline]) if (timer) clearTimeout(timer);
-    this.queue = []; this.marks.clear(); this.up.reset(); this.down.reset();
+    this.drainPending = false; this.queue = []; this.marks.clear(); this.up.reset(); this.down.reset();
     try { this.command('HANGUP'); } catch { /* disconnected */ }
     try { this.options.sessionSend(JSON.stringify({ type: 'hangup' })); } catch { /* disconnected */ }
     this.options.onEnd(reason);

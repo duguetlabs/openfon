@@ -16,7 +16,8 @@ export default {fetch(){
   adapter.sessionMessage(JSON.stringify({type:'ready',mode:'realtime',greeting:''}));
   socket.addEventListener('message',event=>{
     const msg=JSON.parse(event.data);
-    if(msg.probe==='load'){adapter.sessionMessage(new ArrayBuffer(480000));socket.send(JSON.stringify({probe:'loaded',frames}));}
+    if(msg.probe==='maxEnding'){adapter.carrierMessage(JSON.stringify({event:'MEDIA_XOFF'}));adapter.sessionMessage(new ArrayBuffer(480000));adapter.sessionMessage(JSON.stringify({type:'ending'}));socket.send(JSON.stringify({probe:'maxQueued',frames}));}
+    else if(msg.probe==='load'){adapter.sessionMessage(new ArrayBuffer(480000));socket.send(JSON.stringify({probe:'loaded',frames}));}
     else if(msg.event==='MEDIA_XOFF'){adapter.carrierMessage(event.data);socket.send(JSON.stringify({probe:'paused',frames}));}
     else if(msg.probe==='flush'){adapter.sessionMessage(JSON.stringify({type:'flush'}));socket.send(JSON.stringify({probe:'flushed',frames}));}
     else if(msg.probe==='finish'){adapter.sessionMessage(new ArrayBuffer(960));adapter.sessionMessage(JSON.stringify({type:'ending'}));socket.send(JSON.stringify({probe:'finishQueued',frames}));}
@@ -53,5 +54,20 @@ try{
   send({event:'MEDIA_XON'});
   const ended=await wait(()=>messages.find(x=>x.probe==='ended'),'final marks/drain');assert.equal(ended.reason,'playback_complete');
   assert.ok(messages.some(x=>x.command==='HANGUP'));
-  console.log(`PASS workerd incremental playback: maximum frame writes 0 synchronously; XOFF paused at ${paused.frames}/500 frames; flush/new PCM/ending remain blocked until XON; final marks drain and cleanup. Synthetic PCM/PBX only.`);
+  const tailResponse=await mf.dispatchFetch('http://local.test/media',{headers:{Upgrade:'websocket'}});
+  assert.equal(tailResponse.status,101);socket=tailResponse.webSocket;socket.accept();socket.binaryType='arraybuffer';
+  const tailMessages=[];let tailFrames=0;
+  socket.addEventListener('message',event=>{if(typeof event.data!=='string')tailFrames++;else tailMessages.push(JSON.parse(event.data));});
+  send({probe:'maxEnding'});await wait(()=>tailMessages.find(x=>x.probe==='maxQueued'),'maximum frame and ending queued under XOFF');
+  await new Promise(r=>setTimeout(r,300));assert.equal(tailFrames,0);assert.ok(!tailMessages.some(x=>x.probe==='ended'),'full queue tail must wait rather than overflow');
+  send({event:'MEDIA_XON'});await wait(()=>tailFrames===500,'maximum payload pumped without acknowledgements');
+  await new Promise(r=>setTimeout(r,100));assert.equal(tailFrames,500);assert.ok(!tailMessages.some(x=>x.probe==='ended'));
+  const tailMarks=tailMessages.filter(x=>x.command==='MARK_MEDIA');assert.equal(tailMarks.length,500);
+  for(const mark of tailMarks.slice(0,2))send({event:'MEDIA_MARK_PROCESSED',correlation_id:mark.correlation_id});
+  await wait(()=>tailFrames===501,'FIR tail emitted after capacity freed');
+  for(const mark of tailMarks.slice(2))send({event:'MEDIA_MARK_PROCESSED',correlation_id:mark.correlation_id});
+  await new Promise(r=>setTimeout(r,100));assert.ok(!tailMessages.some(x=>x.probe==='ended'),'final tail mark still gates completion');
+  send({event:'MEDIA_MARK_PROCESSED',correlation_id:tailMessages.filter(x=>x.command==='MARK_MEDIA').at(-1).correlation_id});
+  assert.equal((await wait(()=>tailMessages.find(x=>x.probe==='ended'),'maximum frame tail drained')).reason,'playback_complete');
+  console.log(`PASS workerd incremental playback: maximum frame writes 0 synchronously; XOFF paused at ${paused.frames}/500 frames; flush/new PCM/ending remain blocked until XON; final marks drain and cleanup; full500-frame XOFF queue defers FIR tail until marks free capacity and completes501 total frames. Synthetic PCM/PBX only.`);
 }finally{try{socket?.close();}catch{}await mf?.dispose();}

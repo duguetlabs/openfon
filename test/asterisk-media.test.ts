@@ -90,6 +90,42 @@ describe('Asterisk JSON ulaw transport', () => {
     expect(acked.size).toBe(501);expect(end).toHaveBeenCalledExactlyOnceWith('playback_complete');
     expect(vi.getTimerCount()).toBe(0);
   });
+  for(const paused of [true,false])it(`defers maximum-frame FIR tail until marks free capacity (XOFF=${paused})`,()=>{
+    begin();if(paused)adapter.carrierMessage(JSON.stringify({event:'MEDIA_XOFF'}));
+    adapter.sessionMessage(new ArrayBuffer(480000));adapter.sessionMessage(JSON.stringify({type:'ending'}));
+    vi.advanceTimersByTime(300);
+    expect(end).not.toHaveBeenCalled();
+    if(paused){expect(carrier.filter(x=>x instanceof ArrayBuffer)).toHaveLength(0);adapter.carrierMessage(JSON.stringify({event:'MEDIA_XON'}));}
+    vi.advanceTimersByTime(2200);
+    expect(carrier.filter(x=>x instanceof ArrayBuffer)).toHaveLength(500);
+    expect(end).not.toHaveBeenCalled();
+    const marks=commands().filter(x=>x.command==='MARK_MEDIA');
+    const acknowledge=(mark:typeof marks[number])=>adapter.carrierMessage(JSON.stringify({event:'MEDIA_MARK_PROCESSED',correlation_id:mark.correlation_id}));
+    acknowledge(marks[0]);vi.advanceTimersByTime(20);
+    expect(carrier.filter(x=>x instanceof ArrayBuffer)).toHaveLength(500);
+    acknowledge(marks[1]);vi.advanceTimersByTime(20);
+    expect(carrier.filter(x=>x instanceof ArrayBuffer)).toHaveLength(501);
+    for(const mark of marks.slice(2))acknowledge(mark);
+    expect(end).not.toHaveBeenCalled();
+    acknowledge(commands().filter(x=>x.command==='MARK_MEDIA').at(-1));
+    expect(end).toHaveBeenCalledExactlyOnceWith('playback_complete');expect(vi.getTimerCount()).toBe(0);
+  });
+  it('flush discards a deferred full-queue tail and keeps XOFF for the new generation',()=>{
+    begin();adapter.carrierMessage(JSON.stringify({event:'MEDIA_XOFF'}));adapter.sessionMessage(new ArrayBuffer(480000));
+    adapter.sessionMessage(JSON.stringify({type:'ending'}));vi.advanceTimersByTime(300);
+    adapter.sessionMessage(JSON.stringify({type:'flush'}));adapter.sessionMessage(new ArrayBuffer(960));vi.advanceTimersByTime(300);
+    expect(end).not.toHaveBeenCalled();expect(carrier.filter(x=>x instanceof ArrayBuffer)).toHaveLength(0);
+    adapter.carrierMessage(JSON.stringify({event:'MEDIA_XON'}));vi.advanceTimersByTime(20);
+    const marks=commands().filter(x=>x.command==='MARK_MEDIA');expect(marks).toHaveLength(2);
+    for(const mark of marks){expect(mark.correlation_id).toMatch(/^1:/);adapter.carrierMessage(JSON.stringify({event:'MEDIA_MARK_PROCESSED',correlation_id:mark.correlation_id}));}
+    expect(end).toHaveBeenCalledExactlyOnceWith('playback_complete');expect(vi.getTimerCount()).toBe(0);
+  });
+  it('deferred tail still times out when XOFF never resumes',()=>{
+    begin();adapter.carrierMessage(JSON.stringify({event:'MEDIA_XOFF'}));adapter.sessionMessage(new ArrayBuffer(480000));
+    adapter.sessionMessage(JSON.stringify({type:'ending'}));vi.advanceTimersByTime(12000);
+    expect(end).toHaveBeenCalledExactlyOnceWith('drain_timeout');expect(vi.getTimerCount()).toBe(0);
+    adapter.carrierMessage(JSON.stringify({event:'MEDIA_XON'}));expect(carrier.filter(x=>x instanceof ArrayBuffer)).toHaveLength(0);
+  });
   it('close cancels queued playback and ignores later XON',()=>{
     begin();adapter.sessionMessage(new ArrayBuffer(480000));vi.advanceTimersByTime(20);adapter.close();
     const count=carrier.length;adapter.carrierMessage(JSON.stringify({event:'MEDIA_XON'}));vi.advanceTimersByTime(30000);
