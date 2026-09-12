@@ -1961,6 +1961,98 @@ describe('Calm Studio API foundation', () => {
     expect(db.database.prepare('SELECT COUNT(*) AS n FROM engine_profiles WHERE id=?').get(preset.id)).toEqual({ n: 0 });
   });
 
+  it('refuses over-quota compatibility saves atomically and keeps bootstrap recoverable', async () => {
+    const workspace = await createWorkspace() as { id: string };
+    const collection = db.database.prepare('SELECT id FROM knowledge_collections WHERE business_id=? AND is_default=1').get(workspace.id) as { id: string };
+    const insert = db.database.prepare("INSERT INTO knowledge_items(id,business_id,collection_id,kind,status) VALUES(?,?,?,'note','draft')");
+    for (let i=0;i<500;i++) insert.run(`full-${i}`,workspace.id,collection.id);
+    const original = db.database.prepare('SELECT * FROM businesses WHERE id=?').get(workspace.id);
+    const before = db.database.prepare('SELECT total_changes() AS n').get();
+    expect((await request(env, `/api/me/business/${workspace.id}`, json('PUT', {
+      name: 'Must not persist', services_json: JSON.stringify([{ name: 'One more service' }]),
+    }))).status).toBe(409);
+    expect(db.database.prepare('SELECT total_changes() AS n').get()).toEqual(before);
+    expect(db.database.prepare('SELECT * FROM businesses WHERE id=?').get(workspace.id)).toEqual(original);
+    expect((await request(env, '/api/me/bootstrap')).status).toBe(200);
+    const beforeCreate = db.database.prepare('SELECT total_changes() AS n').get();
+    expect((await request(env, '/api/me/business', json('POST', {
+      name: 'Too much initial knowledge', services_json: JSON.stringify(Array.from({ length: 501 }, (_,i) => ({ name: `Service ${i}` }))),
+    }), 'session-2')).status).toBe(409);
+    expect(db.database.prepare('SELECT total_changes() AS n').get()).toEqual(beforeCreate);
+    expect(db.database.prepare("SELECT id FROM businesses WHERE user_id='user-2'").get()).toBeUndefined();
+  });
+
+  it('counts retained legacy FAQs in services-only quota preflight', async () => {
+    const workspace = await createWorkspace() as { id: string };
+    expect((await request(env, `/api/me/business/${workspace.id}`, json('PUT', {
+      faqs_json: JSON.stringify(Array.from({ length: 499 }, (_,i) => ({ q: `Question ${i}`, a: 'Answer' }))),
+    }))).status).toBe(200);
+    db.database.prepare('UPDATE rate_counters SET count=0 WHERE bucket=?').run(`knowledge:${workspace.id}`);
+    const before = db.database.prepare('SELECT total_changes() AS n').get();
+    expect((await request(env, `/api/me/business/${workspace.id}`, json('PUT', {
+      services_json: JSON.stringify([{ name: 'One' }, { name: 'Two' }]),
+    }))).status).toBe(409);
+    expect(db.database.prepare('SELECT total_changes() AS n').get()).toEqual(before);
+    expect((await request(env, '/api/me/bootstrap')).status).toBe(200);
+  });
+
+  it('keeps compatibility JSON unchanged on daily rejection and missing default collection', async () => {
+    const workspace = await createWorkspace() as { id: string };
+    expect((await request(env, `/api/me/business/${workspace.id}`, json('PUT', { services_json: '[{"name":"Original"}]' }))).status).toBe(200);
+    db.database.prepare('UPDATE rate_counters SET count=500 WHERE bucket=?').run(`knowledge:${workspace.id}`);
+    const before = db.database.prepare('SELECT total_changes() AS n').get();
+    expect((await request(env, `/api/me/business/${workspace.id}`, json('PUT', { services_json: '[{"name":"Replacement"}]' }))).status).toBe(429);
+    expect(db.database.prepare('SELECT total_changes() AS n').get()).toEqual(before);
+    expect((await request(env, '/api/me/bootstrap')).status).toBe(200);
+    expect(db.database.prepare('SELECT services_json FROM businesses WHERE id=?').get(workspace.id)).toEqual({ services_json: '[{"name":"Original"}]' });
+    db.database.prepare('DELETE FROM knowledge_collections WHERE business_id=?').run(workspace.id);
+    const missing = db.database.prepare('SELECT total_changes() AS n').get();
+    expect((await request(env, `/api/me/business/${workspace.id}`, json('PUT', { services_json: '[]' }))).status).toBe(409);
+    expect(db.database.prepare('SELECT total_changes() AS n').get()).toEqual(missing);
+    vi.setSystemTime(new Date('2026-08-11T00:00:00Z'));
+    expect((await request(env, '/api/me/bootstrap')).status).toBe(200);
+    expect((await request(env, `/api/me/business/${workspace.id}`, json('PUT', { services_json: '[]' }))).status).toBe(200);
+  });
+
+  it('rolls back compatibility source when another writer consumes quota after preflight', async () => {
+    const workspace = await createWorkspace() as { id: string };
+    expect((await request(env, `/api/me/business/${workspace.id}`, json('PUT', { services_json: '[{"name":"Original"}]' }))).status).toBe(200);
+    db.database.prepare('UPDATE rate_counters SET count=499 WHERE bucket=?').run(`knowledge:${workspace.id}`);
+    const originalBatch = db.batch.bind(db);
+    const race = vi.spyOn(db, 'batch').mockImplementationOnce(async statements => {
+      // Another committed writer wins after the read-only preflight, before BEGIN.
+      db.database.prepare('UPDATE rate_counters SET count=500 WHERE bucket=?').run(`knowledge:${workspace.id}`);
+      return originalBatch(statements);
+    });
+    try {
+      expect((await request(env, `/api/me/business/${workspace.id}`, json('PUT', { services_json: '[{"name":"Replacement"}]' }))).status).toBe(429);
+    } finally { race.mockRestore(); }
+    expect(db.database.prepare('SELECT services_json FROM businesses WHERE id=?').get(workspace.id)).toEqual({ services_json: '[{"name":"Original"}]' });
+    expect(db.database.prepare('SELECT title FROM knowledge_items WHERE business_id=?').all(workspace.id)).toEqual([{ title: 'Original' }]);
+    expect(db.database.prepare('SELECT count FROM rate_counters WHERE bucket=?').get(`knowledge:${workspace.id}`)).toEqual({ count: 500 });
+    expect((await request(env, '/api/me/bootstrap')).status).toBe(200);
+  });
+
+  it('applies legacy profile engine fields without restoring stale workspace credentials', async () => {
+    const workspace = await createWorkspace() as { id: string };
+    const { assistants } = await data<{ assistants: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'));
+    expect((await request(env, '/api/me/provider', json('PUT', { baseUrl: 'https://old.example/v1', apiKey: 'old-profile-secret' }))).status).toBe(200);
+    const profile = await data<{ id: string }>(await request(env, `/api/me/business/${workspace.id}/profiles`, json('POST', {
+      name: 'Saved engine', llm_base_url: 'https://old.example/v1', engine: 'realtime', language: 'de', realtime_model: 'saved-model',
+    })));
+    expect((await request(env, '/api/me/provider', json('PUT', { baseUrl: 'https://current.example/v1', apiKey: 'current-workspace-secret' }))).status).toBe(200);
+    const provider = db.database.prepare('SELECT * FROM provider_settings WHERE business_id=?').get(workspace.id);
+    expect((await request(env, `/api/me/profiles/${profile.id}/apply`, json('POST', {}))).status).toBe(200);
+    expect((await request(env, '/api/me/bootstrap')).status).toBe(200);
+    expect(db.database.prepare('SELECT * FROM provider_settings WHERE business_id=?').get(workspace.id)).toEqual(provider);
+    expect(db.database.prepare('SELECT llm_base_url,llm_api_key FROM agent_settings WHERE business_id=?').get(workspace.id)).toEqual({ llm_base_url: 'https://current.example/v1', llm_api_key: 'current-workspace-secret' });
+    expect(db.database.prepare('SELECT engine,language,realtime_model FROM assistants WHERE id=?').get(assistants[0].id)).toEqual({ engine: 'realtime', language: 'de', realtime_model: 'saved-model' });
+    // Unused historical endpoint data must neither block application nor be restored.
+    db.database.prepare("UPDATE engine_profiles SET llm_base_url='http://127.0.0.1/private' WHERE id=?").run(profile.id);
+    expect((await request(env, `/api/me/profiles/${profile.id}/apply`, json('POST', {}))).status).toBe(200);
+    expect(db.database.prepare('SELECT * FROM provider_settings WHERE business_id=?').get(workspace.id)).toEqual(provider);
+  });
+
   it('rejects invalid historical preset and profile languages without mutating the assistant or provider', async () => {
     const workspace = (await createWorkspace()) as { id: string };
     const { assistants } = await data<{ assistants: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'));

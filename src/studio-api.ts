@@ -330,7 +330,8 @@ export async function syncLegacyKnowledge(
   env: Env,
   workspace: Pick<Business, 'id' | 'services_json' | 'faqs_json'>,
   collectionId?: string,
-  changed: { services: boolean; faqs: boolean } = { services: true, faqs: true }
+  changed: { services: boolean; faqs: boolean } = { services: true, faqs: true },
+  leadingStatements: D1PreparedStatement[] = []
 ): Promise<void> {
   const collection = collectionId
     ? { id: collectionId }
@@ -339,9 +340,33 @@ export async function syncLegacyKnowledge(
       )
         .bind(workspace.id)
         .first<{ id: string }>();
-  if (!collection) return;
+  if (!collection) {
+    if (leadingStatements.length) throw new Error('OPENFON_KNOWLEDGE_COLLECTION_MISSING');
+    return;
+  }
   const expected = expectedLegacyKnowledge(workspace.id, collection.id, workspace.services_json, workspace.faqs_json);
-  const statements: D1PreparedStatement[] = [];
+  const replacement = expected.filter(entry => entry.kind === 'service' ? changed.services : changed.faqs);
+  // Refuse known quota failures before any compatibility source/counter writes.
+  // SQLite triggers independently enforce the same limits against concurrent writers.
+  const retained = await env.DB.prepare(`SELECT COUNT(*) AS count,
+      COALESCE(SUM(length(CAST(kind AS BLOB))+length(CAST(title AS BLOB))+length(CAST(question AS BLOB))+
+        length(CAST(answer AS BLOB))+length(CAST(content AS BLOB))),0) AS bytes
+      FROM knowledge_items WHERE business_id=? AND NOT (
+        (? AND (instr(id,?)=1 OR instr(id,?)=1)) OR (? AND (instr(id,?)=1 OR instr(id,?)=1)))`)
+    .bind(workspace.id, Number(changed.services), `ki_service_${workspace.id}_`, `legacy_${workspace.id}_service_`,
+      Number(changed.faqs), `ki_faq_${workspace.id}_`, `legacy_${workspace.id}_faq_`)
+    .first<{ count: number; bytes: number }>();
+  const encoder = new TextEncoder();
+  const bytes = replacement.reduce((total, row) => total + [row.kind,row.title,row.question,row.answer,row.content]
+    .reduce((size, value) => size + encoder.encode(value).byteLength, 0), 0);
+  if ((retained?.count ?? 0) + replacement.length > 500 || (retained?.bytes ?? 0) + bytes > 2097152) {
+    throw new Error('OPENFON_KNOWLEDGE_STORAGE_LIMIT');
+  }
+  const budget = await env.DB.prepare(`SELECT count FROM rate_counters WHERE bucket=?
+      AND window_start=CAST(strftime('%s',datetime('now')) AS INTEGER)/86400*86400`)
+    .bind(`knowledge:${workspace.id}`).first<{ count: number }>();
+  if ((budget?.count ?? 0) + replacement.length > 500) throw new Error('OPENFON_KNOWLEDGE_WRITE_LIMIT');
+  const statements: D1PreparedStatement[] = [...leadingStatements];
   if (changed.services) {
     statements.push(
       env.DB.prepare(
@@ -360,9 +385,7 @@ export async function syncLegacyKnowledge(
       ).bind(workspace.id, `ki_faq_${workspace.id}_`, `legacy_${workspace.id}_faq_`)
     );
   }
-  for (const row of expected.filter((entry) =>
-    entry.kind === 'service' ? changed.services : changed.faqs
-  )) {
+  for (const row of replacement) {
     statements.push(
       env.DB.prepare(
         `INSERT INTO knowledge_items (
@@ -408,7 +431,7 @@ export async function ensureWorkspaceFoundation(
   env: Env,
   workspace: Pick<Business, 'id' | 'slug' | 'services_json' | 'faqs_json'>
 ): Promise<void> {
-  let [legacy, assistant, provider, legacyProfilesResult, presetsResult] = await Promise.all([
+  let [legacy, assistant, provider, legacyProfilesResult, presetsResult, defaultCollection] = await Promise.all([
     env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?').bind(workspace.id).first<AgentSettings>(),
     env.DB.prepare('SELECT * FROM assistants WHERE business_id = ? AND public_slug = ? LIMIT 1')
       .bind(workspace.id, workspace.slug)
@@ -416,6 +439,8 @@ export async function ensureWorkspaceFoundation(
     env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?').bind(workspace.id).first<ProviderSettings>(),
     env.DB.prepare('SELECT * FROM engine_profiles WHERE business_id = ? ORDER BY id').bind(workspace.id).all<LegacyProfile>(),
     env.DB.prepare('SELECT * FROM engine_presets WHERE business_id = ? ORDER BY id').bind(workspace.id).all<LegacyProfile>(),
+    env.DB.prepare('SELECT id FROM knowledge_collections WHERE business_id=? AND is_default=1 LIMIT 1')
+      .bind(workspace.id).first<{ id: string }>(),
   ]);
   if (!legacy) {
     if (assistant) {
@@ -598,7 +623,7 @@ export async function ensureWorkspaceFoundation(
       ).bind(workspace.id)
     );
   }
-  if (!syncState || !assistant) {
+  if (!syncState || !assistant || !defaultCollection) {
     statements.push(
       env.DB.prepare(
         `INSERT OR IGNORE INTO knowledge_collections (id, business_id, name, description, is_default)
@@ -640,7 +665,7 @@ export async function ensureWorkspaceFoundation(
     .bind(workspace.id)
     .first<{ id: string }>();
   if (!collection) throw new Error('Could not restore workspace knowledge');
-  if (!syncState || !assistant || syncState.collection_id !== collection.id) {
+  if (!syncState || !assistant || !defaultCollection || syncState.collection_id !== collection.id) {
     await env.DB.prepare(
       `INSERT OR IGNORE INTO assistant_knowledge_collections (assistant_id, collection_id)
        SELECT assistants.id, ? FROM assistants
@@ -649,7 +674,7 @@ export async function ensureWorkspaceFoundation(
       .bind(collection.id, workspace.id, workspace.slug)
       .run();
   }
-  const collectionChanged = !syncState || syncState.collection_id !== collection.id;
+  const collectionChanged = !defaultCollection || !syncState || syncState.collection_id !== collection.id;
   const servicesChanged =
     !syncState || !sameLegacyKnowledgeProjection('service', syncState.services_json, workspace.services_json);
   const faqsChanged =

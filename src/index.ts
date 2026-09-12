@@ -1,5 +1,6 @@
 import { OPENAI_REALTIME_VOICES, retainedProviderKey, ProviderInputError } from './provider-settings';
 import { Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 import { bodyLimit } from 'hono/body-limit';
 import { readWorkspaceBody } from './request-validation';
 import type { Context } from 'hono';
@@ -26,6 +27,20 @@ export { CallSession, TelnyxCall, AsteriskCall };
 type Vars = { userId: string };
 type Ctx = Context<{ Bindings: Env; Variables: Vars }>;
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
+app.onError((error, c) => {
+  if (error instanceof HTTPException) return error.getResponse();
+  if (error.message.includes('OPENFON_KNOWLEDGE_STORAGE_LIMIT')) {
+    return c.json({ error: 'Workspace knowledge is limited to 500 items and 2 MiB of text. Delete or shorten existing items first.' }, 409);
+  }
+  if (error.message.includes('OPENFON_KNOWLEDGE_COLLECTION_MISSING')) {
+    return c.json({ error: 'Workspace knowledge setup is incomplete. Reload the workspace before saving.' }, 409);
+  }
+  if (error.message.includes('OPENFON_KNOWLEDGE_WRITE_LIMIT')) {
+    return c.json({ error: 'Workspace knowledge allows 500 saves per UTC day. Try again tomorrow.' }, 429);
+  }
+  console.error(error);
+  return c.json({ error: 'Internal server error' }, 500);
+});
 registerTelnyxRoutes(app);
 registerAsteriskRoutes(app);
 
@@ -524,7 +539,9 @@ app.post('/api/me/business', async (c) => {
     ).bind(assistantId, collectionId),
   ];
   try {
-    await c.env.DB.batch(createStatements);
+    await syncLegacyKnowledge(c.env, {
+      id, services_json: body.services_json ?? '[]', faqs_json: body.faqs_json ?? '[]',
+    }, collectionId, { services: true, faqs: true }, createStatements);
   } catch (error) {
     // Concurrent retries race at the database trigger. The winner already
     // persisted the same onboarding stage, so return that canonical workspace
@@ -534,11 +551,6 @@ app.post('/api/me/business', async (c) => {
     await ensureWorkspaceFoundation(c.env, existing);
     return c.json(existing);
   }
-  await syncLegacyKnowledge(c.env, {
-    id,
-    services_json: body.services_json ?? '[]',
-    faqs_json: body.faqs_json ?? '[]',
-  });
   const biz = await c.env.DB.prepare('SELECT * FROM businesses WHERE id = ?').bind(id).first<Business>();
   return c.json(biz, 201);
 });
@@ -560,7 +572,7 @@ app.put('/api/me/business/:id', async (c) => {
   // remain untouched.
   const servicesJson = b.services_json ?? biz.services_json;
   const faqsJson = b.faqs_json ?? biz.faqs_json;
-  await c.env.DB.prepare(
+  const businessUpdate = c.env.DB.prepare(
     `UPDATE businesses SET name=?, description=?, address=?, phone=?, website=?, timezone=?, hours_json=?, services_json=?, faqs_json=?, closures_json=?, max_concurrent_calls=?, max_calls_per_day=? WHERE id=?`
   )
     .bind(
@@ -577,15 +589,14 @@ app.put('/api/me/business/:id', async (c) => {
       clampCap(b.max_concurrent_calls, biz.max_concurrent_calls, 50),
       clampCap(b.max_calls_per_day, biz.max_calls_per_day, 100_000),
       biz.id
-    )
-    .run();
+    );
   if (servicesChanged || faqsChanged) {
     await syncLegacyKnowledge(c.env, {
       id: biz.id,
       services_json: servicesJson,
       faqs_json: faqsJson,
-    }, undefined, { services: servicesChanged, faqs: faqsChanged });
-  }
+    }, undefined, { services: servicesChanged, faqs: faqsChanged }, [businessUpdate]);
+  } else await businessUpdate.run();
   return c.json({ ok: true });
 });
 
@@ -874,26 +885,18 @@ app.delete('/api/me/profiles/:pid', async (c) => {
 app.post('/api/me/profiles/:pid/apply', async (c) => {
   const p = await ownedProfile(c.env, c.get('userId'), c.req.param('pid'));
   if (!p) return c.json({ error: 'Not found' }, 404);
-  // Profiles saved before the endpoint rules existed are re-checked here.
-  const bad = llmEndpointError(c.env, p.llm_base_url, p.llm_api_key);
-  if (bad) return c.json({ error: `Cannot apply "${p.name}": ${bad}` }, 400);
+  // A profile selects engine fields; workspace credentials are managed separately.
   if (!p.language.trim()) return c.json({ error: `Cannot apply "${p.name}": language is required` }, 400);
   const legacySettings = c.env.DB.prepare(
-    `UPDATE agent_settings SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_base_url=?, llm_api_key=?, llm_model=? WHERE business_id=?`
-  ).bind(p.engine, p.realtime_model, p.realtime_voice, p.language, p.voice, p.llm_base_url, p.llm_api_key, p.llm_model, p.business_id);
+    `UPDATE agent_settings SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=? WHERE business_id=?`
+  ).bind(p.engine, p.realtime_model, p.realtime_voice, p.language, p.voice, p.llm_model, p.business_id);
   const assistantUpdate = c.env.DB.prepare(
     `UPDATE assistants SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?, updated_at=datetime('now')
      WHERE business_id = ? AND public_slug = (SELECT slug FROM businesses WHERE id = ?)`
   ).bind(p.engine, p.realtime_model, p.realtime_voice, p.language, p.voice, p.llm_model, p.business_id, p.business_id);
-  const providerUpdate = c.env.DB.prepare(
-    `INSERT INTO provider_settings (business_id, llm_base_url, llm_api_key) VALUES (?, ?, ?)
-     ON CONFLICT(business_id) DO UPDATE SET llm_base_url=excluded.llm_base_url,
-       llm_api_key=excluded.llm_api_key, updated_at=datetime('now')`
-  ).bind(p.business_id, p.llm_base_url, p.llm_api_key);
   await c.env.DB.batch([
     legacySettings,
     assistantUpdate,
-    providerUpdate,
     updateCompatibilitySnapshot(c.env, p.business_id),
   ]);
   return c.json({ ok: true });

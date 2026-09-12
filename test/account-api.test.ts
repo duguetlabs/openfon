@@ -154,9 +154,15 @@ describe('account self service', () => {
   });
 
   it('refuses a byte-heavy export even when there are only a few records', async () => {
+    // Oversized historical data remains export-bounded after quota migration.
+    db.close(); db = new SqliteD1(); applyMigrations(db, 1, 12);
+    env = { ...env, DB: db as unknown as D1Database };
+    db.database.prepare('INSERT INTO users(id,email,password_hash) VALUES(?,?,?)').run('owner','owner@example.test',oldHash);
+    db.exec("INSERT INTO sessions(token,user_id,expires_at) VALUES('owner-session','owner','2026-10-11T12:00:00Z'); INSERT INTO businesses(id,user_id,slug,name) VALUES('biz-owner','owner','owner','Owner');");
     db.database.prepare('INSERT INTO knowledge_collections (id,business_id,name) VALUES (?,?,?)').run('large', 'biz-owner', 'Large notes');
     const insert = db.database.prepare('INSERT INTO knowledge_items (id,business_id,collection_id,kind,content) VALUES (?,?,?, ?,?)');
     for (let i = 0; i < 5; i++) insert.run(`large-${i}`, 'biz-owner', 'large', 'note', 'x'.repeat(1024 * 1024));
+    applyMigrations(db, 13, 13);
     db.database.function('json_object', { varargs: true }, () => { throw new Error('Rejected exports must not construct JSON'); });
     const response = await call('/api/me/account/export');
     expect(response.status).toBe(413);

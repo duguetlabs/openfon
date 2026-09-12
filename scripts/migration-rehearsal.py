@@ -13,7 +13,7 @@ import pathlib
 import sqlite3
 import tempfile
 
-RELEASE_MIGRATION_TARGET = 12
+RELEASE_MIGRATION_TARGET = 13
 
 
 def require(condition, message):

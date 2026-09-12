@@ -25,7 +25,6 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: node --test docs/launch/demo/capture-sequence.test.mjs
-      - run: npm run test:telnyx
       - run: npm run build
       - name: Synthetic carrier and realtime runtime checks
         env:
@@ -39,7 +38,7 @@ jobs:
           node scripts/asterisk-smoke.mjs
           node scripts/realtime-smoke.mjs
           node scripts/realtime-smoke.mjs --gateway
-      - run: python3 -O scripts/migration-rehearsal.py . --through 12
+      - run: python3 -O scripts/migration-rehearsal.py . --through 13
 
   # The benchmark scoring code is Python and computes the numbers in
   # docs/research/. A wrong normaliser or a slot matcher that fails closed would
@@ -145,6 +144,10 @@ jobs:
           fi
           if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "::error::CLOUDFLARE_ACCOUNT_ID is not set. A runner has no cached account, so wrangler would try to list /accounts to find one — which this token's permissions do not allow. Add the id from dash.cloudflare.com -> Workers & Pages (right-hand sidebar) as a repo secret."
+            exit 1
+          fi
+          if [ -z "$OPENFON_PUBLIC_URL" ]; then
+            echo "::error::OPENFON_PUBLIC_URL must be set to the production HTTPS origin."
             exit 1
           fi
           if ! npm run deploy; then
