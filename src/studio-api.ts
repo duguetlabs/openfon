@@ -497,6 +497,21 @@ export async function ensureWorkspaceFoundation(
       .bind(workspace.id)
       .first<{ found: number }>(),
   ]);
+  const legacyCallRepair = legacyLiveCall ? env.DB.prepare(
+      `UPDATE calls SET assistant_id=(
+         SELECT assistants.id FROM assistants
+          WHERE assistants.business_id=calls.business_id
+            AND assistants.public_slug=? LIMIT 1
+       )
+       WHERE business_id=? AND environment='live' AND assistant_id IS NULL
+         AND EXISTS (
+           SELECT 1 FROM assistants
+            WHERE assistants.business_id=calls.business_id
+              AND assistants.public_slug=?
+         )`
+    )
+      .bind(workspace.slug, workspace.id, workspace.slug)
+      : null;
   const statements: D1PreparedStatement[] = [];
   const assistantValues = [
     legacy.agent_name,
@@ -628,8 +643,9 @@ export async function ensureWorkspaceFoundation(
       env.DB.prepare(
         `INSERT OR IGNORE INTO knowledge_collections (id, business_id, name, description, is_default)
          SELECT ?, ?, 'Workspace knowledge', 'Services and answers shared by default with new assistants.', 1
-         WHERE NOT EXISTS (SELECT 1 FROM knowledge_collections WHERE business_id = ? AND is_default = 1)`
-      ).bind(`kc_default_${workspace.id}`, workspace.id, workspace.id),
+         WHERE NOT EXISTS (SELECT 1 FROM knowledge_collections WHERE business_id = ? AND is_default = 1)
+           AND NOT EXISTS (SELECT 1 FROM knowledge_collections WHERE business_id = ? AND name='Workspace knowledge')`
+      ).bind(`kc_default_${workspace.id}`, workspace.id, workspace.id, workspace.id),
       env.DB.prepare(
         `UPDATE knowledge_collections SET is_default=1, updated_at=datetime('now')
          WHERE business_id=? AND name='Workspace knowledge'
@@ -657,6 +673,20 @@ export async function ensureWorkspaceFoundation(
           AND NOT EXISTS (SELECT 1 FROM engine_profiles WHERE engine_profiles.id=engine_presets.id)`
       ).bind(workspace.id)
     );
+  }
+  if (!defaultCollection) {
+    // Do not publish an empty repaired collection before its knowledge is restored.
+    // A deterministic ID alone cannot distinguish a completed repair on retry.
+    const named = await env.DB.prepare(
+      "SELECT id FROM knowledge_collections WHERE business_id=? AND name='Workspace knowledge' ORDER BY created_at,id LIMIT 1"
+    ).bind(workspace.id).first<{ id: string }>();
+    const collectionId = named?.id ?? `kc_default_${workspace.id}`;
+    const attach = env.DB.prepare(
+      `INSERT OR IGNORE INTO assistant_knowledge_collections (assistant_id,collection_id)
+       SELECT assistants.id,? FROM assistants WHERE assistants.business_id=? AND assistants.public_slug=?`
+    ).bind(collectionId,workspace.id,workspace.slug);
+    await syncLegacyKnowledge(env, workspace, collectionId, { services: true, faqs: true }, [...statements,attach,...(legacyCallRepair ? [legacyCallRepair] : [])]);
+    return;
   }
   if (statements.length > 0) await env.DB.batch(statements);
   const collection = await env.DB.prepare(
@@ -697,21 +727,7 @@ export async function ensureWorkspaceFoundation(
     // observe a repaired id with half-repaired knowledge. Test rows deliberately
     // remain explicit: they are created by the authenticated assistant route
     // and must never be guessed from the workspace slug.
-    await env.DB.prepare(
-      `UPDATE calls SET assistant_id=(
-         SELECT assistants.id FROM assistants
-          WHERE assistants.business_id=calls.business_id
-            AND assistants.public_slug=? LIMIT 1
-       )
-       WHERE business_id=? AND environment='live' AND assistant_id IS NULL
-         AND EXISTS (
-           SELECT 1 FROM assistants
-            WHERE assistants.business_id=calls.business_id
-              AND assistants.public_slug=?
-         )`
-    )
-      .bind(workspace.slug, workspace.id, workspace.slug)
-      .run();
+    await legacyCallRepair!.run();
   }
 }
 

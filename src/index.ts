@@ -29,6 +29,12 @@ type Ctx = Context<{ Bindings: Env; Variables: Vars }>;
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 app.onError((error, c) => {
   if (error instanceof HTTPException) return error.getResponse();
+  if (error.message.includes('OPENFON_KNOWLEDGE_COLLECTION_STORAGE_LIMIT')) {
+    return c.json({ error: 'Workspace knowledge is limited to 64 collections and 256 KiB of collection names/descriptions. Delete or shorten collections first.' }, 409);
+  }
+  if (error.message.includes('OPENFON_KNOWLEDGE_COLLECTION_WRITE_LIMIT')) {
+    return c.json({ error: 'Workspace knowledge allows 100 collection saves per UTC day. Try again tomorrow.' }, 429);
+  }
   if (error.message.includes('OPENFON_KNOWLEDGE_STORAGE_LIMIT')) {
     return c.json({ error: 'Workspace knowledge is limited to 500 items and 2 MiB of text. Delete or shorten existing items first.' }, 409);
   }

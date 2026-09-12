@@ -5,14 +5,15 @@ import { fakeEnv, fakeCtx } from './fake-d1';
 import type { Env } from '../src/types';
 let db: SqliteD1;
 let env: Env;
-beforeEach(() => {
+beforeEach(async () => {
   vi.useFakeTimers(); vi.setSystemTime(new Date('2026-08-10T12:00:00Z'));
   db = new SqliteD1(); applyMigrations(db);
   db.exec(`INSERT INTO users(id,email,password_hash) VALUES('owner','owner@example.invalid','unused');
     INSERT INTO sessions(token,user_id,expires_at) VALUES('session','owner','2026-09-10T12:00:00Z');
     INSERT INTO businesses(id,user_id,slug,name) VALUES('biz','owner','biz','Business');
-    INSERT INTO knowledge_collections(id,business_id,name) VALUES('one','biz','One'),('two','biz','Two');`);
+    INSERT INTO knowledge_collections(id,business_id,name,is_default) VALUES('one','biz','One',1),('two','biz','Two',0);`);
   env = { ...fakeEnv(undefined as never), DB: db as unknown as D1Database };
+  expect((await worker.fetch(new Request('https://example.invalid/api/me/bootstrap', { headers: { Cookie: 'ofs=session' } }), env, fakeCtx)).status).toBe(200);
 });
 afterEach(() => { db.close(); vi.useRealTimers(); });
 function request(path: string, body: unknown, method = 'POST', token = 'session') {
@@ -96,4 +97,27 @@ it('allows call-reference cleanup after the daily editing allowance is spent', (
   db.exec("DELETE FROM calls WHERE id='call'");
   expect(db.database.prepare("SELECT source_call_id,source_turn_id FROM knowledge_items WHERE id='linked'").get()).toEqual({ source_call_id: null, source_turn_id: null });
   expect(db.database.prepare("SELECT count FROM rate_counters WHERE bucket='knowledge:biz'").get()).toEqual({ count: 500 });
+});
+it('bounds collection count and refuses repeated inserts without writes', async () => {
+  for (let i=2;i<64;i++) db.database.prepare("INSERT INTO knowledge_collections(id,business_id,name) VALUES(?,'biz',?)").run(`collection-${i}`,`Collection ${i}`);
+  const before = changes();
+  for (let i=0;i<3;i++) expect((await request('/api/me/knowledge/collections',{name:'Too many'})).status).toBe(409);
+  expect(changes()).toEqual(before);
+});
+it('bounds collection UTF-8 metadata and daily edits without blocking deletion', async () => {
+  db.database.prepare("UPDATE knowledge_collections SET description=? WHERE id='one'").run('é'.repeat((262144-6)/2)); // One+Two names consume6 bytes.
+  const full = changes();
+  expect((await request('/api/me/knowledge/collections/two',{description:'x'},'PUT')).status).toBe(409);
+  expect((await request('/api/me/knowledge/collections',{name:'New'})).status).toBe(409);
+  expect(changes()).toEqual(full);
+  expect((await request('/api/me/knowledge/collections/one',{description:'short'},'PUT')).status).toBe(200);
+  db.exec("UPDATE rate_counters SET count=100 WHERE bucket='knowledge-collections:biz'");
+  const spent = changes();
+  expect((await request('/api/me/knowledge/collections/two',{name:'Changed'},'PUT')).status).toBe(429);
+  expect((await request('/api/me/knowledge/collections',{name:'New'})).status).toBe(429);
+  expect(changes()).toEqual(spent);
+  expect((await request('/api/me/knowledge/collections/two',{},'DELETE')).status).toBe(200);
+  expect((await request('/api/me/knowledge/collections',{name:'New'})).status).toBe(429);
+  vi.setSystemTime(new Date('2026-08-11T00:00:00Z'));
+  expect((await request('/api/me/knowledge/collections',{name:'New'})).status).toBe(201);
 });

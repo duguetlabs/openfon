@@ -1739,7 +1739,7 @@ describe('Calm Studio API foundation', () => {
     expect(providerFetch).not.toHaveBeenCalled();
     expect(
       db.database
-        .prepare("SELECT COUNT(*) AS n FROM rate_counters WHERE bucket<>?")
+        .prepare("SELECT COUNT(*) AS n FROM rate_counters WHERE bucket LIKE 'studio:%' AND bucket<>?")
         .get(`studio:provider-day:${workspace.id}`)
     ).toEqual({ n: 0 });
   });
@@ -2009,8 +2009,13 @@ describe('Calm Studio API foundation', () => {
     const missing = db.database.prepare('SELECT total_changes() AS n').get();
     expect((await request(env, `/api/me/business/${workspace.id}`, json('PUT', { services_json: '[]' }))).status).toBe(409);
     expect(db.database.prepare('SELECT total_changes() AS n').get()).toEqual(missing);
+    for (let retry=0;retry<2;retry++) {
+      expect((await request(env, '/api/me/bootstrap')).status).toBe(429);
+      expect(db.database.prepare('SELECT COUNT(*) AS n FROM knowledge_collections WHERE business_id=?').get(workspace.id)).toEqual({ n: 0 });
+    }
     vi.setSystemTime(new Date('2026-08-11T00:00:00Z'));
     expect((await request(env, '/api/me/bootstrap')).status).toBe(200);
+    expect(db.database.prepare('SELECT title FROM knowledge_items WHERE business_id=?').all(workspace.id)).toEqual([{ title: 'Original' }]);
     expect((await request(env, `/api/me/business/${workspace.id}`, json('PUT', { services_json: '[]' }))).status).toBe(200);
   });
 
@@ -2031,6 +2036,18 @@ describe('Calm Studio API foundation', () => {
     expect(db.database.prepare('SELECT title FROM knowledge_items WHERE business_id=?').all(workspace.id)).toEqual([{ title: 'Original' }]);
     expect(db.database.prepare('SELECT count FROM rate_counters WHERE bucket=?').get(`knowledge:${workspace.id}`)).toEqual({ count: 500 });
     expect((await request(env, '/api/me/bootstrap')).status).toBe(200);
+  });
+
+  it('repairs an existing named default without attempting a quota-charged duplicate insert', async () => {
+    const workspace = await createWorkspace() as { id: string };
+    expect((await request(env, `/api/me/business/${workspace.id}`, json('PUT', { services_json: '[{"name":"Original"}]' }))).status).toBe(200);
+    for (let i=0;i<63;i++) db.database.prepare('INSERT INTO knowledge_collections(id,business_id,name) VALUES(?,?,?)').run(`extra-${i}`,workspace.id,`Extra ${i}`);
+    db.database.prepare('UPDATE knowledge_collections SET is_default=0 WHERE business_id=?').run(workspace.id);
+    db.database.prepare('UPDATE rate_counters SET count=100 WHERE bucket=?').run(`knowledge-collections:${workspace.id}`);
+    expect((await request(env, '/api/me/bootstrap')).status).toBe(200);
+    expect(db.database.prepare('SELECT COUNT(*) AS n FROM knowledge_collections WHERE business_id=?').get(workspace.id)).toEqual({ n: 64 });
+    expect(db.database.prepare('SELECT count FROM rate_counters WHERE bucket=?').get(`knowledge-collections:${workspace.id}`)).toEqual({ count: 100 });
+    expect(db.database.prepare('SELECT title FROM knowledge_items WHERE business_id=?').all(workspace.id)).toEqual([{ title: 'Original' }]);
   });
 
   it('applies legacy profile engine fields without restoring stale workspace credentials', async () => {
