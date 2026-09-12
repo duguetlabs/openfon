@@ -75,3 +75,8 @@ Independent integration inspection found account export's explicit provider allo
 - Saturday closed answer followed contradictory fixture data: onboarding hours_json closed Saturday while description/instructions said09–14. This is a fixture conflict, not established provider hallucination. Preserve original evidence.
 - Independently verified literal string "null" phone defect: summary persistence copied raw parsed.caller_phone and UI treated any nonblank string as a number. Added shared normalizeCallerPhone at persistence and historical-row display, preserving actual numbers and legitimate caller surname Null. No historical data rewritten.
 - Local typecheck/build and22 focused summary/contact tests pass, including null/case/whitespace/invalid-type suppression. Staging not redeployed yet; original capture remains unchanged. No real call used for the correction.
+
+## Final capture consolidation and scoped QA
+- Full assembled npm test at696a34a:508/508 PASS. Independent QA4c6c64a approves polling/pagination4a5d562, export63c0487 and exact696a34a phone correction:68 API tests,7 browser scenarios, independent pagination/poll-stop probe,22 contact/summary tests,typecheck/build pass. No major/new security issues in scope; no extra live call.
+- Launch e42531a consolidated as63b0708: original58.197s lossless audio,68.24s disclosed video, sanitized result/metadata/report. Real gateway audio and persisted result are established; clean acceptance failed. Provider/readiness documentation refreshed accordingly. Budget ZERO.
+- PR16 current696a34a CI application/browser/scoring green; realtime benchmark and Codex code/security pending at inspection. PR-Agent absent; no merge or substitute authorized.

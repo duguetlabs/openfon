@@ -9,7 +9,7 @@ Updated 2026-09-12. **Release candidate in progress; not production-launch appro
 | Public website with original CSS 3D telephone, interactive examples, responsive layout | Implemented; desktop/mobile inspected |
 | Workspace signup and setup | Implemented; browser flow passed |
 | Multiple assistants; draft, active and paused lifecycle | Implemented; browser persistence test passed |
-| Private Test Studio with audio/text and transcripts | Implemented; real provider call still required |
+| Private Test Studio with audio/text and transcripts | Real Kataleptic audio recorded with synthetic caller; failed clean acceptance retained |
 | Knowledge collections, attachments, drafts and approval | Implemented; browser creation/approval/attachment/reload flow passed |
 | Calls, filters, summaries and caller-question draft creation | Implemented; typed mock-provider call verifies persisted transcript, summary and detail rendering; question drafts covered by API tests |
 | Password change, private export, account deletion | Implemented; API and browser password/export/deletion flows passed |
@@ -22,25 +22,25 @@ Updated 2026-09-12. **Release candidate in progress; not production-launch appro
 
 ## Consolidated validation — 2026-09-12
 
-Implementation candidate `6e64872` includes presets `ce62114`, realtime `18d3638`/`13f037b`/`ca0d901` plus handshake fix `083dae3` and replacement regressions `5411999`, Telnyx `37b3575`, Asterisk `aac57a2`/`0737b0b`, launch documentation, and both PR #14 correction rounds (`a50bc84`, `f839527`). Default providers are preserved; carrier rollout flags remain false.
+Implementation candidate `696a34a` includes presets `ce62114`, realtime `18d3638`/`13f037b`/`ca0d901` plus handshake fix `083dae3` and replacement regressions `5411999`, Telnyx `37b3575`, Asterisk `aac57a2`/`0737b0b`, launch documentation, and three PR #14 correction rounds (`a50bc84`, `f839527`, `cf1f6ec`), export metadata preservation and missing-phone normalization. Default providers are preserved; carrier rollout flags remain false.
 
-- TypeScript and **496/496 unit/API tests** across 24 files passed on the assembled candidate.
+- TypeScript and **508/508 unit/API tests** across 24 files passed on the assembled candidate.
 - Actual local-workerd smoke tests passed Telnyx native and synthesized greeting modes, Asterisk auth/admission/media/drain/hangup, direct OpenAI GA protocol and the existing gateway. The direct path includes an authenticated static voice catalog, blocks unmatched hosts, and uses no Kataleptic/instance AI/Azure credentials. All upstreams/carrier events are synthetic.
 - **Seven Chrome/workerd browser scenarios passed on the assembled candidate**, including private calls, account export, provider settings/mobile layout, onboarding/collection draft guards and URL/search synchronization.
 - Quality benchmarks: **220 tests, one skip**. Realtime benchmarks: **206 tests passed**. Standalone report checker: 122 verified figure rows, four allowlisted, zero unresolved. Dependency audit: **zero vulnerabilities**.
 - Synthetic `python3 scripts/migration-rehearsal.py . --through 11` passed 0006→0011 preservation, binary/SQL restore, pre-upgrade rollback and re-upgrade.
 - A restricted production D1 SQL backup was restored into a **separate Cloudflare rehearsal D1 database** and upgraded through 0011. Six legacy-data fingerprints (businesses, settings, presets, completed calls, turns, public slugs) matched exactly; foreign-key and integrity checks passed. Production migrations were not applied.
-- Independent QA approved the initial launch fixes and explicit deployment gate, and closed the direct pre-ack event leak at exact fix `083dae3` with independent failing-then-passing probes and actual-workerd checks. Final assembled review is pending.
+- Independent QA approved the initial launch fixes and explicit deployment gate, and closed the direct pre-ack event leak at exact fix `083dae3` with independent failing-then-passing probes and actual-workerd checks. QA approved assembled `6e64872` and independently approved polling/pagination/export/phone follow-ups through exact `696a34a`. Hosted PR review remains separate.
 
-[Provider configuration and compatibility](../providers.md), [direct realtime recipe](../realtime-providers.md), [Asterisk recipe](../asterisk.md), and [production/staging evidence](production-preflight.md) separate implementation from live acceptance. No live AI conversation, audible browser acceptance or handset pilot is claimed. Real source-built Asterisk 22.11.0 Local-channel validation also passed on the integrated branch: generated caller/assistant audio, 11 mark acknowledgements, flush/hangup, revoked-route rejection and completed/released D1 history, with zero remaining channels. AI was mocked; no SIP trunk/PSTN or public WSS PBX pass is claimed. See the [dated runtime report](../asterisk-runtime-validation-2026-09-12.md).
+[Provider configuration and compatibility](../providers.md), [direct realtime recipe](../realtime-providers.md), [Asterisk recipe](../asterisk.md), and [production/staging evidence](production-preflight.md) separate implementation from live acceptance. The [actual audible capture](demo/audible/README.md) verifies a 58-second real Kataleptic browser conversation, ten turns and persisted summary/message with synthetic caller audio. Clean acceptance failed because canonical Saturday hours conflicted with the scenario and missing contact was displayed as literal null. The latter is fixed and QA-checked at `696a34a`; original evidence is retained without live retest. No physical microphone/handset or clean acceptance claim is made. Call budget is zero. Real source-built Asterisk 22.11.0 Local-channel validation also passed on the integrated branch: generated caller/assistant audio, 11 mark acknowledgements, flush/hangup, revoked-route rejection and completed/released D1 history, with zero remaining channels. AI was mocked; no SIP trunk/PSTN or public WSS PBX pass is claimed. See the [dated runtime report](../asterisk-runtime-validation-2026-09-12.md).
 
 ## Isolated staging
 
-https://openfon-staging.duguetlabs.workers.dev runs Worker version `8439378c-eeda-4fb7-83e5-a01a2f986fb0` from source `41041c1`. Its D1 binding is the separate rehearsal database upgraded through 0011. Both carrier flags are false; copied assistants/routes are disabled and copied sessions cleared. HTTP checks returned 200 for root, 401 for signed-out account and 503 for each disabled carrier endpoint. This is staging deployment evidence, not live-provider/carrier acceptance. Production remains on its prior version.
+https://openfon-staging.duguetlabs.workers.dev runs capture Worker version `76a515eb-877e-48ef-bdcd-1ab8ea7095ef` from source `718d233`. Its D1 binding is the separate rehearsal database upgraded through 0011. Both carrier flags are false; copied assistants/routes are disabled and copied sessions cleared. HTTP checks returned 200 for root, 401 for signed-out account and 503 for each disabled carrier endpoint. The private fictional capture used staging-only provider secrets; latest corrections have not yet been redeployed. This is not carrier or clean release acceptance. Production remains on its prior version.
 
 ## PR and review state
 
-PR #13 `d6ea5d2` has Codex no major issues and green applicable checks. PR #15 `37b3575` has green CI and Codex code/security no-issues results. PR #14 `f839527` fixes the latest verified findings (bounded export construction, URL/search synchronization, collection detail and onboarding draft guards); it was pushed, closed/reopened and separately requested for Codex review. Its latest CI/review result remains pending. Every finding has a reasoned reply.
+PR #13 `d6ea5d2` has Codex no major issues and green applicable checks. PR #15 `37b3575` has green CI and Codex code/security no-issues results. PR #14 `cf1f6ec` fixes all three verified rounds, including active-call polling, assistant-list retry and bounded Knowledge pagination; it was pushed, closed/reopened and separately requested for Codex review. Its latest CI/review result remains pending. Every finding has a reasoned reply.
 
 Consolidated [PR #16](https://github.com/duguetlabs/openfon/pull/16) has separately requested Codex code/security reviews; current-head CI and review results must be checked before acceptance.
 
@@ -72,5 +72,5 @@ After an approved release, check public root, authentication, existing-account d
 - Mandatory PR-Agent gate or explicit accepted substitute.
 - Whether PSTN is required for the initial public launch. The current website truthfully describes browser-only calling.
 
-- Real-provider preflight: the scoped vault credential returned HTTP 403 from the configured Kataleptic model catalog. No live provider conversation was claimed or completed; valid provider access still needs verification.
+- Actual realtime authentication/ack/audio and text completion succeeded with the existing scoped credential. One preflight conversation and one recorded Northwheel conversation exhausted authorization; no retry is permitted. Further clean acceptance requires consistent fixture data, corrected application code and renewed authorization.
 - Inbound Telnyx control and media runtime is included behind the disabled rollout flag. The synthetic workerd harness proved ingress, bidirectional PCM, interruption, playback drain, hangup and release without external calls. The public website still describes browser calling until a real carrier pilot passes.

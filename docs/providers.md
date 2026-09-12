@@ -8,12 +8,12 @@ Kataleptic is the default and is operated by the OpenFon founder. It is an optio
 
 | Capability / recipe | Engine and channel | Configuration | Verification / limitation |
 | --- | --- | --- | --- |
-| Kataleptic text + transcription | Pipeline, browser | `DEFAULT_LLM_*` and `DEFAULT_STT_*`; shipped models `llama-3.3-70b` / `whisper-large-v3-turbo` | Implemented; real credential preflight recorded a catalog 403. No current live voice pass. |
+| Kataleptic text + transcription | Pipeline, browser | `DEFAULT_LLM_*` and `DEFAULT_STT_*`; shipped models `llama-3.3-70b` / `whisper-large-v3-turbo` | Real llama-3.3-70b text preflight and call summary passed; pipeline transcription remains unverified. Earlier catalog 403 did not establish endpoint access. |
 | Custom chat completions endpoint | Text replies and summaries | Business text URL, model and matching key | Implemented and synthetic-tested; does not configure transcription, synthesis or realtime. No universal provider compatibility claim. |
 | Custom transcription endpoint | Pipeline microphone input | Workspace STT URL/model/key or instance defaults | Must implement the app’s `/audio/transcriptions` contract; verify audio formats/authentication with your service. |
 | Browser speech synthesis | Pipeline browser output | `DEFAULT_TTS_PROVIDER=browser` | Implemented; voices/device behavior vary. Cannot supply telephone audio. |
 | Azure speech synthesis | Pipeline output and current carrier greeting | Azure key, region and voice | Implemented; requires real audio verification with your account. |
-| Kataleptic realtime gateway | Realtime browser; experimental Telnyx | Instance `REALTIME_*`, business realtime model | Implemented; synthetic transport evidence only for this release. Default model `llama-3.3-70b`. |
+| Kataleptic realtime gateway | Realtime browser; experimental Telnyx | Instance `REALTIME_*`, business realtime model | Real browser audio captured using `gpt-realtime-2` and provider-default voice; known fixture/contact failures retained. Default model remains `llama-3.3-70b`; override it for this recipe. |
 | Direct OpenAI realtime | Independent realtime; browser and experimental telephone | Workspace provider, own realtime key, assistant model/voice; separate text key for summaries | Implemented; direct Authorization upgrade, native greeting, interruption, tools and persistence pass synthetic workerd tests without Kataleptic credentials. Live OpenAI access remains unverified. |
 | Groq, Ollama, vLLM or other custom services | Capability-specific candidates | Custom endpoint only where the protocol matches | Experimental until the complete intended workflow passes. A text-only server does not supply voice. |
 
@@ -54,9 +54,9 @@ The existing text API uses `baseUrl`, `apiKey`, `clearApiKey`, with a new `model
 
 ### Consolidated evidence
 
-Integration passed TypeScript and **496/496 unit/API tests** across 24 files. Actual local-workerd smoke tests passed Telnyx native and synthesized greeting paths, Asterisk protocol/media handling, direct OpenAI GA protocol and the existing gateway. The direct synthetic call uses no instance AI or Azure credentials and blocks unmatched outbound hosts. Final browser/benchmark results are recorded in [readiness](launch/readiness.md).
+Integration passed TypeScript and **508/508 unit/API tests** across 24 files. Actual local-workerd smoke tests passed Telnyx native and synthesized greeting paths, Asterisk protocol/media handling, direct OpenAI GA protocol and the existing gateway. The direct synthetic call uses no instance AI or Azure credentials and blocks unmatched outbound hosts. Final browser/benchmark results are recorded in [readiness](launch/readiness.md).
 
-**No live provider call, audible browser acceptance or PSTN validation is established by these results.** No live OpenAI credential was available; the recorded Kataleptic catalog preflight returned 403. Real Asterisk 22.11.0 Local-channel/audio verification passed against the integrated adapter with mocked AI; see the [dated runtime report](asterisk-runtime-validation-2026-09-12.md). SIP trunk/PSTN and live-provider acceptance still need the [gateway recipe and pilot](asterisk.md).
+A separate [actual Kataleptic browser recording](launch/demo/audible/README.md) contains a completed 58-second call with ten turns and persisted summary/message. The caller was synthetic; replies were real. Conflicting Saturday fixture data and literal null contact display prevented clean acceptance. Phone normalization was subsequently fixed and independently QA-checked without another live call; the original recording remains unchanged. The authorized call budget is zero. Direct OpenAI and PSTN remain unverified. Real Asterisk 22.11.0 Local-channel/audio verification passed against the integrated adapter with mocked AI; see the [dated runtime report](asterisk-runtime-validation-2026-09-12.md). SIP trunk/PSTN and live-provider acceptance still need the [gateway recipe and pilot](asterisk.md).
 
 
 ## Telephone channels
