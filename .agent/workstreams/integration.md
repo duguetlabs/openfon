@@ -1,12 +1,12 @@
 # Integration checkpoint
 
-- Status: In progress — QA found recovery loss in ccdd85d; atomic repair and collection quotas are validating locally
+- Status: In progress — 6ff5058 validated and independently quota-closed; preparing exact-head full reviews
 - Owner: openfon-integration, gpt-6-astra / medium
 - Branch/worktree: codex/integrated-release, /Users/cristian/projects/fun/openfon-worktrees/integration
 - Updated: 2026-09-12
-- Application candidate: ccdd85df0145607736d9705760aebaafc082dffe
+- Application candidate: 6ff505837cbf090f5dceb29bc62abf273ff18b6c
 - Published PR16 head: 7a8cb53c167d20e33b9f71ee4937182bdbecc5d7 (unchanged while corrections are local)
-- Validation slot: QA exclusively; integration and all other owners run no validation until QA releases it
+- Validation slot: released by QA; no validation process running
 - Ports: integration8814/9254, optional real-PBX proxy8824; never8787
 - Read first: root orchestration-rules/current-task/manifest (read-only), this file, docs/launch/readiness.md
 - Earlier detailed milestones and failures remain in this file's history through ccdd85d and the linked original review reports. This checkpoint records current state.
@@ -32,16 +32,16 @@ Latest corrections from the completed7a8 review round:
 | STT custom base-path corruption | 98e65d5, owner8e9699e | Explicit resource pathname append; resolved sole merge conflict retaining workspace key/model/validation/manual redirects; owner141 focused/both typechecks with duration |
 | Sibling Settings draft loss3996464100 | b7248d6, ownerbb5c951 | Old7a8 browser negative fails; fixed4 provider E2E/both typechecks; final integrated14-browser suite passes |
 | Profile restores stale workspace credentials3996464064 | ccdd85d | Apply engine/model/language/voices only; provider and legacy credentials unchanged after apply/bootstrap; old-source negative fails |
-| Knowledge persistence security3996484838 | ccdd85d /0013 | Atomic500 items,2MiB UTF8,500 accepted creates/updates per UTC day; refusal before counter write; all collections/statuses/writers |
+| Knowledge persistence security3996484838 | ccdd85d +6ff5058 /0013 | Atomic500 items/2MiB/500 item saves per UTC day;64 collections/256KiB/100 metadata saves; independent workerd boundaries and repair pass |
 | Duplicate Telnyx CI invocation / missing public origin | ccdd85d | One scoped invocation retained; actual deploy shell refuses absent origin before mocked npm; build validates supplied HTTPS origin before migrations |
 | Alleged lockfile mismatch | Declined5646673872 | Tracked package-lock root ranges equal package.json; exact7a8 npm ci jobs succeeded |
 
 Knowledge quota details: indexed business_id COUNT/SUM; SQL triggers enforce concurrent boundaries; compatibility source and projection share one transaction, with read-only preflight for known refusals. Deletes remain available; shrinking uses the daily edit allowance. Pure FK source-reference cleanup is exempt. Existing oversized data is preserved. Missing default collection refuses writes and bootstrap restores the collection/attachment/projection. Tests cover mixed legacy prefixes, quota429 with item room, stale-preflight competing writer, zero-write refusals, byte/NUL boundaries, tenant isolation, day reset, FK cleanup and legacy migration preservation.
 
 ## Current validation
-- `node node_modules/vitest/vitest.mjs run --maxWorkers=1`: **660/660 tests,28 files PASS12.93s** after final fixture correction.
+- `node node_modules/vitest/vitest.mjs run --maxWorkers=1`: **663/663 tests,28 files PASS13.13s** on final application6ff5058.
 - `npm run typecheck`: worker and web PASS.
-- Explicit8814/9254 Chrome/workerd E2E: **14/14 PASS51.5s**, including sibling provider/draft refresh and prior guards/retries/export/private calls.
+- Explicit8814/9254 Chrome/workerd E2E: **14/14 PASS46.6s**, including sibling provider/draft refresh and prior guards/retries/export/private calls.
 - Quota/profile focused69/69 PASS. Original7a8 profile code fails stale-provider assertion; removing0013 enforcement makes three quota tests fail. Fixed bytes restored.
 - `python3 -O scripts/migration-rehearsal.py .`:0006→0013 preservation, binary/SQL restore, rollback/re-upgrade, integrity/FK PASS. Missing0013 copy rejected under-O.
 - Actual production deploy shell tested only with mocked npm and synthetic credentials: absent public origin exits1 before deployment; configured origin reaches mock. No deployment executed.
@@ -53,7 +53,7 @@ Failures preserved accurately: initial profile negative under extreme host load 
 ## Independent review and remaining gate
 QA independently scoped prior carrier/auth/provider fixes and used original-source negatives. Its restored Astra source recheck preserves prior159-test evidence accurately: those159 cover Studio, route security, presets and Telnyx control, not Asterisk cleanup tests; cleanup has separate owner/runtime evidence. Official reviewer remains unchanged gpt-5.6-sol medium, distinct from owner agent model. Root verified QA's native Astra-medium restoration at14:22Z; earlier Luna interval is not relabelled.
 
-QA source review of0013 identified and drove fixes for outer-save atomicity, FK cleanup, missing index, NUL test design, mismatched legacy prefix and missing-default recovery. Candidate ccdd85d is now assigned to QA for **bounded independent actual-workerd quota/atomicity** with the sole validation slot. No final security closure is assumed before that result and renewed full reviews.
+QA source review of0013 identified and drove fixes for outer-save atomicity, FK cleanup, missing index, NUL test design, mismatched legacy prefix and missing-default recovery. QA independently closed the repair and collection follow-up on exact6ff5058 with actual-workerd/D1 probes. The original repair probe passes unchanged (429/429, then200 and one restored Original item after replenishment); its ccdd failure remains preserved. Collection checks pass64-count/256KiB UTF8/100-day boundaries, refusal snapshots, deletion without refund, batch rollback, named-default repair at caps and atomic failed repair including live-call attribution. This scoped closure does not replace renewed full reviews.
 
 Original genuine official reports are unchanged:
 
@@ -83,11 +83,5 @@ Preserve root branch codex/launch-studio's original coordination commits and unt
 
 Next: receive QA runtime/scoped result and fix any actual issue; finish current docs/replies; publish one validated exact head, close/reopen and retrigger both hosted reviews plus QA official full review. Keep remote/staging freeze until normal coordinated next candidate. After exact-head clean reviewers and CI, squash merge/delete release branch under existing authorization and coordinate root/stack reconciliation without losing research. Staging refresh remains separate, explicit and production-preserving; no competing live call.
 
-## Active independent runtime finding
-QA actual-workerd ccdd85d reproduced missing-default recovery loss at exhausted daily quota: first bootstrap429 created empty collection; second200 and next-day200 left knowledge empty because deterministic collection ID matched stale sync marker. Source fix pending validation: collection creation/attachment/projection/sync marker share one batch; quota preflight happens before publishing the repair. Added repeated429/no-collection then next-day restored-item regression. QA still owns sole slot for bounded remaining byte/cleanup probe; integration starts no runner until release. No security closure or new published head.
-
-- QA released sole slot; integration now owns validation. Additional knowledge-scope bypass confirmed: unlimited collection metadata. Local0013 extension adds64 collections/256KiB names+descriptions/100 accepted collection edits per UTCday, rejects before counter write, permitsdelete and exempts is_default-only maintenance. Existing local0013 has not been staged/deployed; no new migration number needed. Tests and atomic-repair regression pending validation; remote remains7a8.
-
-- Collection quotas added locally to unreleased0013:64 collections/256KiB UTF8 metadata/100 accepted collection saves perUTCday. Missing-default creation/attachment/projection/live-call attribution now atomic.71 focused PASS; oldccdd recovery negative and two absent-collection-guard negatives fail. Updated662 full/typecheck/optimized13rehearsal PASS. Further named-existing repair guard avoids a redundant INSERTORIGNORE consuming/rejecting collection quota; added cap64/spent100 regression, current663 full+typecheck+14browser running sequentially in sole integration slot. No current-source runtime security closure yet.
-
-- Corrected follow-up validates663/663 tests28files PASS13.13s, both typechecks PASS,14/14 actual-workerd Chrome PASS46.6s (8814/9254), optimized13rehearsal PASS. No active integration runner. Committing repair/metadata follow-up then QA receives sole slot to rerun unchanged failed actual-workerd repair probe plus bounded collection quota checks; no security closure before independent result.
+## Independent quota closure and publication readiness
+QA's exact6ff5058 checkpoint records unchanged recovery probe SHA25609d27e915cd82475e4d69a1d02a2f1fc8a70900fc0d8ee40d3a777f5bd38b4c6 and original failing ccdd output. Collection metadata limits and atomic repair passed independent actual-workerd checks; no new major/security issue found in the bounded delta. Both runtimes disposed; QA explicitly released the sole slot. All prior evidence/failures remain in git history. Documentation-only finalization follows the validated application; publish exact head and obtain fresh hosted code/security, genuine official full review and CI before merge. Staging remains b15/0012 and production untouched.
