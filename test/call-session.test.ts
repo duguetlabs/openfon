@@ -2570,3 +2570,90 @@ describe('transcript budget preserves native farewell ordering', () => {
     expect(caller.countOf('agent_text')).toBe(2);
   });
 });
+
+describe('established realtime provider error policy', () => {
+  async function connected(protocol: 'openai' | 'gateway' = 'openai', carrier = false, firstAudio = true) {
+    const sockets = [new FakeSocket(), new FakeSocket()]; let connects = 0;
+    if (protocol === 'openai') globalThis.fetch = vi.fn(async () => ({ status: 101, webSocket: sockets[connects++] })) as unknown as typeof fetch;
+    const backing = newSession('realtime', protocol === 'openai'
+      ? { realtime_provider: 'openai', realtime_api_key: 'synthetic-key', realtime_model: '', realtime_voice: 'marin' } as never
+      : { realtime_model: 'gpt-realtime-2' });
+    backing.ctl.channel = carrier ? 'telnyx' : 'web';
+    await backing.session.fetch(upgradeRequest());
+    const caller = serverSockets[0]; caller.receive({ type: 'start' }); await flush(50);
+    const up = protocol === 'openai' ? sockets[0] : upstreamSockets[0];
+    if (protocol === 'openai') up.receive({ type: 'session.updated', session: up.messages().find(m => m.type === 'session.update')!.session });
+    else up.emit('open', {});
+    await flush(50);
+    if (carrier && firstAudio) { up.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' }); await flush(50); }
+    return { ...backing, caller, up, replacement: sockets[1] };
+  }
+  function cancel(up: FakeSocket): string {
+    // Exercise the actual vocabulary-echo cancellation path, not a test-only API.
+    up.receive({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'Riverside Dental' });
+    return up.messages().filter(m => m.type === 'response.cancel').at(-1)!.event_id as string;
+  }
+  const raceError = (eventId: string) => ({ type: 'error', error: { type: 'invalid_request_error', code: 'response_cancel_not_active', event_id: eventId, message: 'synthetic private cancellation details' } });
+
+  it.each(['openai', 'gateway'] as const)('fails established %s errors without leaking payload or waiting for close', async protocol => {
+    const { up, caller, callUpdates } = await connected(protocol);
+    const secret = 'private-provider-error-detail';
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      up.receive({ type: 'error', error: { type: secret, code: secret, message: secret.repeat(1000), param: secret, event_id: secret } });
+      // The provider leaves its socket open; our code must stop subsequent output.
+      up.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' });
+      await flush(100);
+      expect(caller.countOf('error')).toBe(1); expect(caller.countOf('ended')).toBe(1);
+      expect(up.closed).not.toBeNull(); expect(caller.binaryCount()).toBe(0);
+      const update = callUpdates().find(w => w.args[0] === 'failed'); expect(update).toBeDefined();
+      expect(String(update!.args[3]).length).toBeLessThan(256);
+      expect(JSON.stringify([caller.messages(), callUpdates(), log.mock.calls])).not.toContain(secret);
+    } finally { log.mockRestore(); }
+  });
+
+  it.each(['openai', 'gateway'] as const)('fails a %s error during firstPCM wait before ready', async protocol => {
+    const { up, caller, callUpdates } = await connected(protocol, true, false);
+    up.receive({ type: 'error', error: { code: 'rate_limit_exceeded' } });
+    up.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' });
+    await flush(100);
+    expect(caller.countOf('ready')).toBe(0); expect(caller.binaryCount()).toBe(0);
+    expect(callUpdates().some(w => w.args[0] === 'failed')).toBe(true);
+  });
+
+  it.each(['openai', 'gateway'] as const)('keeps %s alive for a correlated benign cancel race', async protocol => {
+    const { up, caller, callUpdates } = await connected(protocol);
+    const id = cancel(up); expect(id.length).toBeLessThan(128);
+    up.receive(raceError(id)); up.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' });
+    await flush(50);
+    expect(caller.countOf('error')).toBe(0); expect(up.closed).toBeNull(); expect(caller.binaryCount()).toBe(1);
+    caller.receive({ type: 'hangup' }); await flush(100);
+    expect(callUpdates().some(w => w.args[0] === 'completed')).toBe(true);
+  });
+
+  it.each(['unmatched', 'expired', 'replayed', 'evicted', 'different-error'])('does not exempt %s cancellation metadata', async reason => {
+    vi.useFakeTimers();
+    const { up, caller, callUpdates } = await connected();
+    let id = cancel(up);
+    if (reason === 'unmatched') id = 'not-locally-issued';
+    if (reason === 'expired') await vi.advanceTimersByTimeAsync(10001);
+    if (reason === 'replayed') { up.receive(raceError(id)); await flush(); }
+    if (reason === 'evicted') for (let i = 0; i < 4; i++) cancel(up);
+    const event = raceError(id);
+    if (reason === 'different-error') event.error.code = 'server_error';
+    up.receive(event); await flush(100);
+    expect(caller.countOf('error')).toBe(1);
+    expect(callUpdates().some(w => w.args[0] === 'failed')).toBe(true);
+  });
+
+  it('does not carry a cancellation exemption across an acknowledged rotation', async () => {
+    const { up, replacement, caller, callUpdates } = await connected();
+    const id = cancel(up);
+    up.receive({ type: 'session.expiring' }); await flush(50);
+    replacement.receive({ type: 'session.updated', session: replacement.messages().find(m => m.type === 'session.update')!.session });
+    await flush(50); expect(up.closed).not.toBeNull();
+    replacement.receive(raceError(id)); await flush(100);
+    expect(caller.countOf('error')).toBe(1);
+    expect(callUpdates().some(w => w.args[0] === 'failed')).toBe(true);
+  });
+});

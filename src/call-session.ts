@@ -53,7 +53,7 @@ interface UpstreamMessage {
   item?: { type?: string; name?: string };
   name?: string;
   session?: SessionConfig;
-  error?: { message?: string };
+  error?: { type?: unknown; code?: unknown; event_id?: unknown; message?: unknown };
 }
 
 interface SummaryResult {
@@ -683,6 +683,26 @@ export class CallSession implements DurableObject {
     }
   }
 
+  private cancelResponse(from: WebSocket): void {
+    if (from.readyState !== WS_OPEN) return;
+    const pending = this.cancelRequests.get(from) ?? new Map<string, number>();
+    for (const [id, until] of pending) if (until <= Date.now()) pending.delete(id);
+    while (pending.size >= 4) pending.delete(pending.keys().next().value!);
+    const eventId = crypto.randomUUID();
+    pending.set(eventId, Date.now() + 10_000);
+    this.cancelRequests.set(from, pending);
+    this.sendUpstream({ type: 'response.cancel', event_id: eventId }, from);
+  }
+
+  private consumeCancelRace(error: UpstreamMessage['error'], from: WebSocket): boolean {
+    if (error?.type !== 'invalid_request_error' || error.code !== 'response_cancel_not_active' ||
+      typeof error.event_id !== 'string' || error.event_id.length > 128) return false;
+    const pending = this.cancelRequests.get(from);
+    const until = pending?.get(error.event_id);
+    pending?.delete(error.event_id); // one acknowledgement, never a reusable exemption
+    return until !== undefined && until > Date.now();
+  }
+
   private closeUpstream(): void {
     this.nativeGreeting?.resolve(false);
     this.nativeGreeting = null;
@@ -706,6 +726,7 @@ export class CallSession implements DurableObject {
   private recovering: Promise<void> | null = null;
   private static readonly MAX_TOTAL_RECONNECTS = 5;
   private greetingGuardUntil = 0; // ignore barge-in flushes while our greeting plays
+  private cancelRequests = new WeakMap<WebSocket, Map<string, number>>();
   private endPending = false; // caller said farewell; hang up after the agent's sign-off
 
   // ---- session echo read-back ----
@@ -1333,7 +1354,7 @@ export class CallSession implements DurableObject {
           const vocab = this.biz && this.settings ? sttVocab(this.biz, this.settings, this.knowledge) : '';
           if (vocab && isVocabEcho(text, vocab)) {
             console.log(`call ${this.callId}: dropped vocab-echo transcript: ${text.slice(0, 80)}`);
-            this.sendUpstream({ type: 'response.cancel' });
+            this.cancelResponse(from);
             this.send({ type: 'flush' });
             break;
           }
@@ -1397,10 +1418,13 @@ export class CallSession implements DurableObject {
         void this.recoverUpstream();
         break;
       case 'error':
-        // Realtime credentials travel in the upstream URL. Error frames are
-        // untrusted and some gateways echo request details, so never persist or
-        // log their arbitrary payload.
-        console.error('realtime engine error: provider response redacted');
+        // A cancel can race a response that already ended. Only a recent
+        // locally issued cancel on this exact socket can exempt that one code.
+        if (this.consumeCancelRace(msg.error, from)) break;
+        // Unknown/input/auth/quota/server failures cannot leave a silent call
+        // alive. Store only a fixed local reason, never provider fields/URLs.
+        this.failInternally(new Error('Realtime provider rejected a request; provider response redacted'));
+        this.closeUpstream();
         break;
     }
   }
