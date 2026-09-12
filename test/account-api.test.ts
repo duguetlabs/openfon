@@ -131,6 +131,26 @@ describe('account self service', () => {
     expect((await response.text()).length).toBeLessThan(1024);
   });
 
+  it('rejects aggregate escaping expansion before constructing any JSON rows', async () => {
+    // Each row is below the existing240KB raw guard, and the whole account
+    // is below4MiB raw, but control escaping across rows exceeds4MiB.
+    const row = db.database.prepare('INSERT INTO calls(id,business_id,summary) VALUES (?,?,?)');
+    for (let i=0; i<8; i++) row.run(`escaped-${i}`, 'biz-owner', '\u0001'.repeat(100000));
+    db.database.function('json_object', { varargs: true }, () => { throw new Error('Escaping refusal must precede JSON materialization'); });
+    const response = await call('/api/me/account/export');
+    expect(response.status).toBe(413);
+    expect((await response.text()).length).toBeLessThan(1024);
+  });
+
+  it('preserves control-heavy text when its conservative escaped bound fits', async () => {
+    const summary = '\u0001'.repeat(100000);
+    db.database.prepare('INSERT INTO calls(id,business_id,summary) VALUES (?,?,?)').run('escaped-fit', 'biz-owner', summary);
+    const response = await call('/api/me/account/export');
+    expect(response.status).toBe(200);
+    const result = await response.json() as { data: { calls: Array<{ id: string; summary: string }> } };
+    expect(result.data.calls.find(row => row.id === 'escaped-fit')?.summary).toBe(summary);
+  });
+
   it('rejects excessive row counts before constructing JSON', async () => {
     db.database.exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<10001)
       INSERT INTO calls(id,business_id) SELECT 'bulk-' || i, 'biz-owner' FROM n`);
