@@ -44,7 +44,16 @@ export default { async fetch(request, env) {
     const send = value => socket.send(JSON.stringify(value));
     socket.addEventListener('message', event => {
       const msg = JSON.parse(event.data);
-      if (msg.type === 'session.update') send({type:'session.updated',session:msg.session});
+      if (msg.type === 'session.update') {
+        if (${!gateway}) {
+          // Adversarial ordering: pending direct output must not escape the
+          // configuration handshake, even on the actual Worker socket path.
+          send({type:'response.output_audio.delta',delta:audio});
+          send({type:'response.output_audio_transcript.done',transcript:'UNACKNOWLEDGED OUTPUT'});
+          send({type:'response.function_call_arguments.done',name:'end_call',arguments:'{}'});
+        }
+        send({type:'session.updated',session:msg.session});
+      }
       if (msg.type === 'response.create') setTimeout(() => {
         send({type:'response.output_audio.delta',delta:audio});
         send({type:'response.output_audio_transcript.done',transcript:'Synthetic greeting.'});
@@ -168,7 +177,7 @@ try {
   const result = await db.prepare("SELECT summary FROM calls WHERE channel='telnyx'").first();
   assert.equal(result.summary, 'Synthetic call completed.');
   const turns = await db.prepare("SELECT COUNT(*) AS n FROM call_turns").first();
-  assert.ok(turns.n >= 3, 'greeting, caller and reply persisted');
+  assert.equal(turns.n, 3, 'only acknowledged greeting, caller and reply persisted');
   console.log(`PASS ${gateway ? 'gateway' : 'direct OpenAI'} realtime workerd smoke (synthetic upstreams): ${gateway ? '' : 'authenticated static voice catalog, '}signed ingress, idempotent admission, authenticated media, realtime PCM, clear/marks/drain, carrier hangup, D1 release. No external requests.`);
 } finally {
   try { carrier?.close(); } catch {}

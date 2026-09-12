@@ -1123,6 +1123,10 @@ export class CallSession implements DurableObject {
             }
           } catch { /* malformed events are handled below without logging their payload */ }
         }
+        // This socket is readable for handshake events while pending, but
+        // application output must remain inert until its own configuration is
+        // confirmed. The acknowledged old socket remains live during rotation.
+        if (config.protocol === 'openai' && !opened) return;
         this.onUpstreamMessage(ev, ws).catch(() =>
           console.error('upstream handler error: provider response redacted')
         );

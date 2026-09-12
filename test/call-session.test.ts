@@ -2131,6 +2131,62 @@ describe('direct OpenAI realtime independence', () => {
     expect(requests).toHaveLength(2); // no greeting synthesis, STT catalog or gateway request
   });
 
+  it.each(['startup', 'rotation'])('keeps pending direct application events inert during %s', async phase => {
+    vi.useFakeTimers();
+    const first = new FakeSocket();
+    const replacement = new FakeSocket();
+    let upgrades = 0;
+    globalThis.fetch = vi.fn(async () => ({ status: 101, webSocket: upgrades++ === 0 ? first : replacement })) as unknown as typeof fetch;
+    const { session, turnWrites } = newSession('realtime', directSettings);
+    await session.fetch(upgradeRequest());
+    const caller = serverSockets[0];
+    caller.receive({ type: 'start' });
+    await flush(50);
+    const acknowledge = (socket: FakeSocket) => socket.receive({
+      type: 'session.updated', session: socket.messages().find(m => m.type === 'session.update')!.session,
+    });
+    if (phase === 'rotation') {
+      acknowledge(first);
+      await flush();
+      first.receive({ type: 'session.expiring' });
+      await flush(50);
+    }
+    const pending = phase === 'startup' ? first : replacement;
+    pending.receive({ type: 'session.updated', session: { instructions: 'Unrelated configuration' } });
+    pending.receive({ type: 'response.output_audio.delta', item_id: 'pending-audio', delta: 'AAAAAA==' });
+    pending.receive({ type: 'response.output_audio_transcript.done', transcript: 'Unacknowledged assistant' });
+    pending.receive({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'Unacknowledged caller' });
+    pending.receive({ type: 'input_audio_buffer.speech_started' });
+    pending.receive({ type: 'response.function_call_arguments.done', name: 'end_call' });
+    pending.receive({ type: 'response.output_item.done', item: { type: 'function_call', name: 'end_call' } });
+    await flush(50);
+    expect(caller.binaryCount()).toBe(0);
+    expect(turnWrites()).toHaveLength(0);
+    expect(caller.countOf('ready')).toBe(phase === 'startup' ? 0 : 1);
+    expect(caller.countOf('ending')).toBe(0);
+    expect(caller.countOf('flush')).toBe(0);
+    if (phase === 'rotation') {
+      expect(first.closed).toBeNull();
+      first.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' });
+      first.receive({ type: 'response.output_audio_transcript.done', transcript: 'Acknowledged old socket' });
+      caller.receive({ type: 'text', text: 'Still here' });
+      await flush(50);
+      expect(caller.binaryCount()).toBe(1);
+      expect(turnWrites()).toHaveLength(2);
+      expect(first.messages().some(m => m.type === 'conversation.item.create')).toBe(true);
+      expect(pending.messages().some(m => m.type === 'conversation.item.create')).toBe(false);
+    }
+    acknowledge(pending);
+    await flush(50);
+    pending.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' });
+    pending.receive({ type: 'response.output_audio_transcript.done', transcript: 'Now acknowledged' });
+    await flush(50);
+    expect(caller.binaryCount()).toBe(phase === 'startup' ? 1 : 2);
+    expect(turnWrites()).toHaveLength(phase === 'startup' ? 1 : 3);
+    expect(caller.countOf('ready')).toBe(1);
+    if (phase === 'rotation') expect(first.closed).not.toBeNull();
+  });
+
   it.each(['reject', 'redirect', 'session-error', 'session-mismatch', 'session-timeout'])('fails closed on %s without pipeline fallback', async failure => {
     vi.useFakeTimers();
     const up = new FakeSocket();

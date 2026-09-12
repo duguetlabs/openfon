@@ -4,7 +4,7 @@
 - Owner: openfon-realtime
 - Branch: codex/realtime-providers
 - Base at arrival: a9b33c5c46ccb441e4c07f50b81469354d3cf700
-- Updated: 2026-09-12T11:49:00Z
+- Updated: 2026-09-12T11:49:47.559992+00:00
 - Rules: root AGENTS.md, orchestration-rules.md/current-task/manifest, assigned handoff, strategy and readiness read. Root shared documents untouched.
 - Ports: 8813 test, 9253 inspector; never 8787.
 
@@ -52,3 +52,8 @@ Integrate provider module commit, presets final shared commit, then realtime ses
 Presets final commit ce62114 received; replaced the five dependency snapshots with exact final files. Typecheck and full 450 tests passed again; direct workerd smoke passed again. Adding final presets src/index.ts/src/studio-api.ts snapshots solely to extend the direct runtime smoke through its authenticated static voice catalog; these also remain presets-owned/uncommitted.
 
 Authenticated direct static voice catalog now also passes in the actual workerd independence smoke with all unmatched network destinations blocked. Initial probe failed 401 because the harness used the wrong cookie name; corrected to the application ofs session cookie, then the complete workflow passed. Final dependency snapshots include src/index.ts and src/studio-api.ts from ce62114; none are owned or committed by realtime.
+
+## QA handshake follow-up
+QA reported P2 pre-ack application events reaching onUpstreamMessage. Confirmed locally with new startup and proactive rotation regressions: both failed before the fix (binaryCount 1 with no matching acknowledgement; tool event also triggered ending). Added a per-socket direct application-event gate after handshake handling; only a validated session.updated opens that socket. Old acknowledged socket stays readable and writable during replacement handshake.
+
+Validation after fix: focused call-session/telnyx-control/realtime-providers 145/145 pass; typecheck passes with final ce62114 dependency snapshots. Regressions cover pending audio, caller/assistant transcripts, speech-start/flush, both tool event forms, unmatched ack, old socket bidirectional continuity, and successful post-ack handover. Runtime smoke now injects pre-ack audio/transcript/end_call in direct mode and requires exactly three legitimate persisted turns; both direct and gateway workerd runs passed on 8813/9253 with no unexpected outbound requests.
