@@ -18,6 +18,7 @@ import { resolveRealtime, realtimeConnection, realtimeCapabilities } from './rea
 import type { RealtimeConfig } from './realtime-providers';
 import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './prompt';
 import type { PromptKnowledgeItem } from './prompt';
+import { loadCallKnowledge } from './call-knowledge';
 import { chatComplete, detectLang, isFarewell, isVocabEcho, LlmConfigError, normalizeLang, piperVoiceFor, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
 
 // WebSocket binary payloads vary by runtime: ArrayBuffer, ArrayBufferView, or Blob.
@@ -372,20 +373,7 @@ export class CallSession implements DurableObject {
       )
         .bind(assistantId, businessId)
         .first<AgentSettings>();
-      const { results } = await this.env.DB.prepare(
-        `SELECT knowledge_items.kind, knowledge_items.title, knowledge_items.question,
-          knowledge_items.answer, knowledge_items.content
-         FROM knowledge_items
-         JOIN assistant_knowledge_collections
-           ON assistant_knowledge_collections.collection_id = knowledge_items.collection_id
-         WHERE assistant_knowledge_collections.assistant_id = ?
-           AND knowledge_items.business_id = ?
-           AND knowledge_items.status = 'active'
-         ORDER BY knowledge_items.created_at, knowledge_items.id`
-      )
-        .bind(assistantId, businessId)
-        .all<PromptKnowledgeItem>();
-      this.knowledge = results;
+      this.knowledge = await loadCallKnowledge(this.env.DB, assistantId, businessId);
     }
     // Compatibility for a call row created before 0008 or during a mixed-version
     // rollout. Migration 0008 backfills assistant_id, but an old worker can
