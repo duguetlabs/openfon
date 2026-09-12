@@ -50,3 +50,13 @@ describe('takenMessage', () => {
     });
   });
 });
+
+// Historical rows must render correctly without rewriting their source evidence.
+describe('absent caller phone rendering', () => {
+  it.each(['null', ' NULL ', '', null, 123])('hides absent/invalid phone %j', (caller_phone) => {
+    expect(takenMessage(JSON.stringify({caller_name:'Null',caller_phone,message:'Please prepare the repair.'}))).toEqual({caller_name:'Null',caller_phone:null,message:'Please prepare the repair.'});
+  });
+  it('preserves a real phone number', () => {
+    expect(callContact(JSON.stringify({caller_phone:' +43 1 234567 '}))?.caller_phone).toBe('+43 1 234567');
+  });
+});

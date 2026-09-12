@@ -1,3 +1,4 @@
+import { normalizeCallerPhone } from '../../src/contact';
 export interface AccountExport {
   schemaVersion: number;
   exportedAt: string;
@@ -117,7 +118,7 @@ export function callContact(messageJson: string | null): CallContact | null {
     const parsed = JSON.parse(messageJson) as Record<string, unknown>;
     const message = typeof parsed.message === 'string' ? parsed.message.trim() : '';
     const callerName = typeof parsed.caller_name === 'string' ? parsed.caller_name.trim() : '';
-    const callerPhone = typeof parsed.caller_phone === 'string' ? parsed.caller_phone.trim() : '';
+    const callerPhone = normalizeCallerPhone(parsed.caller_phone);
     if (!callerName && !callerPhone && !message) return null;
     return { caller_name: callerName || null, caller_phone: callerPhone || null, message: message || null };
   } catch {

@@ -1,3 +1,4 @@
+import { normalizeCallerPhone } from './contact';
 // CallSession Durable Object: one instance per live call.
 // Owns the WebSocket to the caller's browser and runs the voice loop:
 //   caller audio -> STT -> LLM -> TTS -> caller.
@@ -1813,10 +1814,11 @@ export class CallSession implements DurableObject {
         const parsed = parseSummary(raw);
         summary = parsed.summary ?? null;
         intent = parsed.intent ?? null;
-        if (parsed.caller_name || parsed.caller_phone || parsed.message) {
+        const callerPhone = normalizeCallerPhone(parsed.caller_phone);
+        if (parsed.caller_name || callerPhone || parsed.message) {
           messageJson = JSON.stringify({
             caller_name: parsed.caller_name ?? null,
-            caller_phone: parsed.caller_phone ?? null,
+            caller_phone: callerPhone,
             message: parsed.message ?? null,
           });
         }

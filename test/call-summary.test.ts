@@ -166,6 +166,13 @@ describe('finalize', () => {
     expect(update.args[6]).toBe('message_taken');
   });
 
+  it.each(['null', ' NULL ', null, 123])('normalizes absent/invalid phone %j before persisting a message', async (caller_phone) => {
+    stubSummaryResult({summary:'Caller declined to provide a number.',intent:'message',caller_name:'Jamie',caller_phone,message:'Please prepare the repair.'});
+    const { s, calls } = session(null);
+    await s.finalize();
+    expect(JSON.parse(String(finalUpdate(calls).args[5]))).toEqual({caller_name:'Jamie',caller_phone:null,message:'Please prepare the repair.'});
+  });
+
   it('keeps an answered question classified as answered', async () => {
     stubSummaryResult({
       summary: 'Caller asked about opening hours.',

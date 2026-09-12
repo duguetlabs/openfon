@@ -57,3 +57,21 @@ Next: publish latest evidence/harness head to PR16, retrigger required reviews, 
 
 ## Post-consolidation export correction
 Independent integration inspection found account export's explicit provider allowlist still omitted migration0010 non-secret settings (model, STT choice/URL/model, realtime choice/URL). Adding those fields while retaining key exclusions; regression verifies all three credentials absent and configuration preserved. This is an integration-only migration0010 follow-up, not applicable to stacked PR14's older schema. Targeted validation running before push/review retrigger.
+
+## Working staging provider configuration — 2026-09-12T12:09Z
+- Realtime owner independently validated personal vault item `kataleptic api key - broser-use`, field `credential`: real gpt-realtime-2 upgrade101 + matching session.updated +146400 PCM bytes/transcript, and llama-3.3-70b chat completion200. One short Northwheel call consumed; ONE authorized short conversation remains.
+- Integration injected only REALTIME_API_KEY and DEFAULT_LLM_API_KEY into explicit openfon-staging config via subprocess memory/stdin. No values emitted/stored in files/messages. Readback verifies both secret names and both carrier flags false.
+- Current staging version76a515eb-877e-48ef-bdcd-1ab8ea7095ef at100%, source718d233e3754e53b800a397b1e600ffea492bb79. D1 remains separate rehearsal target. No production mutation.
+- Approved private Northwheel assistant must set engine=realtime, realtime_model=gpt-realtime-2, realtime_voice blank (provider default); instance model default llama-3.3-70b must be overridden. No Azure/STT key needed for verified native path. Remaining conversation belongs to realtime/launch capture; integration makes no extra provider call.
+
+## Review continuation / staging freeze
+- PR16 at718d233 has all CI checks green; Codex code/security reviews still running. PR-Agent remains absent.
+- PR14 f839527 latest findings independently verified: active CallDetail fetches only once before finalization; assistant filter load does not retry; Knowledge details/items load unbounded rows. Implemented active-call polling, assistant-list refresh and20-item keyset pages with stable status/created/id cursor in launch-review. Typecheck and initial49 API tests pass; new pagination/regression browser suite running.
+- Staging frozen at76a515eb/source718d233 while launch owns the ONE remaining live call. Do not deploy or trigger a duplicate provider conversation during capture.
+- PR14 cf1f6ec fixes third confirmed round; integrated4a5d562 and pushed to PR16. Required close/reopen and separate Codex code/security retriggered; all three findings replied. Fifty targeted API tests/typecheck and six launch browser scenarios pass. Assembled rerun ongoing. Staging intentionally remains source718d233/version76a515eb for exclusive launch capture.
+
+## Permitted live capture and confirmed phone normalization defect
+- Launch completed the final permitted short Northwheel staging call (58s,10 turns, summary/message persisted). Call budget is ZERO; no retry/new provider conversation permitted. Launch preserves original WAV/video and labels failed acceptance honestly.
+- Saturday closed answer followed contradictory fixture data: onboarding hours_json closed Saturday while description/instructions said09–14. This is a fixture conflict, not established provider hallucination. Preserve original evidence.
+- Independently verified literal string "null" phone defect: summary persistence copied raw parsed.caller_phone and UI treated any nonblank string as a number. Added shared normalizeCallerPhone at persistence and historical-row display, preserving actual numbers and legitimate caller surname Null. No historical data rewritten.
+- Local typecheck/build and22 focused summary/contact tests pass, including null/case/whitespace/invalid-type suppression. Staging not redeployed yet; original capture remains unchanged. No real call used for the correction.
