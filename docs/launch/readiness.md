@@ -35,7 +35,11 @@ Read-only production inspection is recorded in [production-preflight.md](product
 
 ## Latest review findings still open
 
-At the final check on 2026-09-12, PR #14 head `370be80` still needs knowledge-draft navigation protection, connected-call-only headline totals, and browser retry isolation. One CI browser run failed because a status locator matched both the success notice and loading indicator; retries then exceeded the shared signup limit. PR #15 head `d616fff` has green CI and no security findings, but needs carrier input gated until Azure greeting synthesis/queueing completes. These are confirmed open fixes, despite the final local suite passing. The overnight automation is paused.
+Integration refresh on 2026-09-12: PR #14 fixes are pushed at `a50bc84` and consolidated as `51bfe28`. Knowledge drafts now confirm navigation/replacement, the headline live-call total excludes unconnected reservations, assistant creation preserves boolean `take_messages: false`, and browser attempts isolate their signup limiter buckets. TypeScript and 285 launch-branch unit/API tests passed. The six Chrome/workerd browser scenarios passed twice against one database (12/12, ten signups), including knowledge draft protection. This is synthetic-provider evidence. Required reviews were retriggered by close/reopen and a separate Codex request; latest-commit review/CI results remain pending.
+
+Repository workflow inventory still exposes CI only and no PR-Agent review is present. PR #13 at `d6ea5d2` has Codex no-major-issues and green applicable checks, but lacks the mandatory PR-Agent result. PR #15 remains owned by the Telnyx workstream, which is validating its greeting readiness fix; no carrier pilot or staging webhook origin is validated by integration. PR #10 remains open; integrated commit `8666e7e` already qualifies its semantic-VAD evidence without changing detector behavior. Do not blindly merge the older comments over that correction.
+
+The synthetic migration rehearsal is now reproducible with `python3 scripts/migration-rehearsal.py . --through 9`. This session passed preservation, binary backup/restore, SQL restore, pre-upgrade rollback and re-upgrade checks through 0009. It uses temporary fictional data and does not establish a production D1 backup or staging restore. Migrations 0010 (provider presets) and 0011 (Asterisk) are reserved; rerun the explicit target after consolidation.
 
 ## Required release gate
 
