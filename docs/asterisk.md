@@ -30,21 +30,47 @@ and [websocket_client.conf sample](https://github.com/asterisk/asterisk/blob/mas
 2. Configure and activate a realtime assistant. Telephone audio requires a working
    realtime provider and server-generated greeting audio; browser speech synthesis
    cannot serve this route. The existing CallSession checks apply.
-3. Create a unique route identifier such as `pbx`, and a random password of at least
-   32 bytes in your secret manager. Store only the lowercase hexadecimal SHA-256
-   digest of the password in D1. Operator route provisioning (bind these values):
+3. Apply migration `0014_asterisk_credentials.sql` before deploying this adapter.
+   It preserves route IDs and workspace/assistant assignments, disables every
+   legacy route, and discards its fast SHA-256 verifier. **Existing routes require
+   password rotation and explicit reprovisioning before they can be enabled.**
+   Previously revoked routes remain disabled. There is no legacy-hash fallback.
+
+   Create a unique route identifier such as `pbx` and generate a new random
+   password (32–512 printable ASCII characters without spaces) in your secret manager.
+   Provisioning and authentication reject Unicode and whitespace to keep Basic
+   authentication byte encoding unambiguous. Pass the password through
+   stdin to `node scripts/asterisk-credential.mjs`, redirecting its output to a
+   protected local file. Never pass the password as a command-line argument.
+   The helper emits only a salted PBKDF2-SHA256 verifier: a fresh 16-byte salt and
+   32-byte key, using 100,000 iterations, in the existing `src/auth.ts` format.
+   Bind that verifier as `password_hash` in operator provisioning:
 
    ```sql
    INSERT INTO asterisk_routes
-     (id,business_id,assistant_id,password_sha256,enabled)
-   VALUES (?, ?, ?, ?, 1);
+     (id,business_id,assistant_id,password_sha256,enabled,password_hash)
+   VALUES (?, ?, ?, lower(hex(randomblob(32))), 1, ?);
    ```
+
+   For an existing route, bind its new verifier and ID explicitly:
+
+   ```sql
+   UPDATE asterisk_routes
+   SET password_hash=?, password_sha256=lower(hex(randomblob(32))), enabled=1
+   WHERE id=?;
+   ```
+
+   Update the PBX password to the same rotated secret. The old `password_sha256`
+   column remains only for deployed-schema compatibility and contains a random
+   placeholder; never store a password digest there. Authentication reads only
+   `password_hash`. A null verifier is permitted only while a route is disabled.
+   Do not bulk re-enable migrated or previously revoked routes.
 
    The composite foreign key requires the assistant to belong to that business.
    A route credential authorizes only this assignment. Do not use caller-supplied
    phone numbers to select a workspace. The authenticated PBX is trusted to admit
    only your intended inbound calls. Revoke a credential by disabling its route;
-   rotate by replacing its hash and PBX configuration. Existing calls end at their
+   rotate by replacing its salted verifier and PBX configuration. Existing calls end at their
    normal hangup/duration limit; route revocation prevents new calls.
 4. Copy the relevant sections from
    [websocket_client.conf](../examples/asterisk/websocket_client.conf) and

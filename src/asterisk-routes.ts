@@ -1,3 +1,4 @@
+import { verifyPassword } from './auth';
 import type { Hono } from 'hono';
 import type { Env } from './types';
 
@@ -10,8 +11,13 @@ export async function authenticateAsterisk(env: Env, route: string, authorizatio
   try { decoded = atob(authorization.slice(6)); } catch { return false; }
   const split = decoded.indexOf(':');
   if (split < 1 || decoded.slice(0, split) !== route || decoded.length - split - 1 < 32) return false;
-  const hash = await asteriskDigest(decoded.slice(split + 1));
-  return Boolean(await env.DB.prepare('SELECT id FROM asterisk_routes WHERE id=? AND password_sha256=? AND enabled=1').bind(route, hash).first());
+  const password = decoded.slice(split + 1);
+  // Basic authentication and provisioning share an unambiguous byte contract.
+  if (!/^[\x21-\x7e]{32,512}$/.test(password)) return false;
+  const credential = await env.DB.prepare('SELECT password_hash FROM asterisk_routes WHERE id=? AND enabled=1').bind(route).first<{ password_hash: string | null }>();
+  if (!credential?.password_hash || !await verifyPassword(password, credential.password_hash)) return false;
+  // Revocation or rotation during the asynchronous KDF must win this admission.
+  return Boolean(await env.DB.prepare('SELECT id FROM asterisk_routes WHERE id=? AND enabled=1 AND password_hash=?').bind(route, credential.password_hash).first());
 }
 export function registerAsteriskRoutes(app: Hono<{ Bindings: Env; Variables: { userId: string } }>): void {
   app.get('/ws/asterisk/:route', async c => {

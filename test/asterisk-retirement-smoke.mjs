@@ -2,6 +2,7 @@
 /** Real SQLite-backed workerd DO/D1 retirement and restart, no external calls.
  * Test-only Probe routes/injected transaction failure never enter the app bundle.
  */
+import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -95,7 +96,7 @@ try{
     db.prepare("INSERT INTO users(id,email,password_hash) VALUES('owner','owner@example.invalid','unused')"),
     db.prepare("INSERT INTO businesses(id,user_id,slug,name) VALUES('biz','owner','retirement','Fixture')"),
     db.prepare("INSERT INTO assistants(id,business_id,public_slug,state,name,persona,language,engine,realtime_model) VALUES('assistant','biz','retirement','active','Alex','Helpful','en','realtime','gpt-realtime-2')"),
-    db.prepare("INSERT INTO asterisk_routes VALUES('pbx','biz','assistant',?,1)").bind(createHash('sha256').update(password).digest('hex')),
+    db.prepare("INSERT INTO asterisk_routes(id,business_id,assistant_id,password_sha256,enabled,password_hash) VALUES('pbx','biz','assistant',lower(hex(randomblob(32))),1,?)").bind(execFileSync(process.execPath,[resolve(root,'scripts/asterisk-credential.mjs')],{input:password,encoding:'utf8'}).trim()),
   ]);
   await db.prepare("INSERT INTO calls(id,business_id,assistant_id,channel,status,environment,connected_at,carrier_released_at) VALUES(?,'biz','assistant','asterisk','completed','live',datetime('now'),datetime('now'))").bind(call('completed')).run();
   assert.equal((await send('completed','/seed-completed')).status,204);

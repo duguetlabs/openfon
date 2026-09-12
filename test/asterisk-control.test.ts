@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { hashPassword } from '../src/auth';
 import { AsteriskCall } from '../src/asterisk-control';
-import { asteriskDigest, authenticateAsterisk } from '../src/asterisk-routes';
+import { authenticateAsterisk } from '../src/asterisk-routes';
 import { applyMigrations, SqliteD1 } from './sqlite-d1';
 import worker from '../src/index';
 import { fakeEnv, fakeCtx } from './fake-d1';
@@ -38,7 +39,7 @@ beforeEach(async()=>{
   db.exec(`INSERT INTO users(id,email,password_hash) VALUES('owner','owner@example.invalid','unused');
     INSERT INTO businesses(id,user_id,slug,name,max_concurrent_calls,max_calls_per_day) VALUES('biz','owner','biz','Business',1,2);
     INSERT INTO assistants(id,business_id,public_slug,state,name,persona,language,engine,realtime_model) VALUES('assistant','biz','assistant','active','Alex','Helpful','en','realtime','gpt-realtime-2');`);
-  await db.prepare("INSERT INTO asterisk_routes VALUES('pbx','biz','assistant',?,1)").bind(await asteriskDigest(password)).run();
+  await db.prepare("INSERT INTO asterisk_routes(id,business_id,assistant_id,password_sha256,enabled,password_hash) VALUES('pbx','biz','assistant',lower(hex(randomblob(32))),1,?)").bind(await hashPassword(password)).run();
   env={...fakeEnv(undefined as never),DB:db as unknown as D1Database,ASTERISK_ENABLED:'true',REALTIME_BASE_URL:'wss://realtime.example.invalid/v1/realtime',REALTIME_MODEL:'gpt-realtime-2',REALTIME_API_KEY:'synthetic-only'};
 });
 afterEach(()=>{vi.useRealTimers();db.close();});
@@ -221,9 +222,9 @@ describe('Asterisk startup connection boundary',()=>{
   it('waits for delayed real authentication before starting the upstream timeout',async()=>{
     vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});
     const entered=deferred<void>(), release=deferred<void>();
-    const digest=crypto.subtle.digest.bind(crypto.subtle);
-    const auth=vi.spyOn(crypto.subtle,'digest').mockImplementation(async(algorithm,data)=>{
-      entered.resolve();await release.promise;return digest(algorithm,data);
+    const derive=crypto.subtle.deriveBits.bind(crypto.subtle);
+    const auth=vi.spyOn(crypto.subtle,'deriveBits').mockImplementation(async(algorithm,key,length)=>{
+      entered.resolve();await release.promise;return derive(algorithm,key,length);
     });
     const upstream=pendingSession(), live=owner();const result=live.object.fetch(request());
     try {

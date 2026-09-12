@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 /** Synthetic PBX + real local workerd/D1/DO; all provider requests intercepted. */
+import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { runAsteriskRuntime } from './asterisk-runtime.mjs';
 import { createHash } from 'node:crypto';
@@ -77,13 +78,13 @@ try {
     await db.batch(unstable_splitSqlQuery(await readFile(resolve(root,'migrations',name),'utf8')).map(sql=>db.prepare(sql)));
   }
   const password='synthetic-only-asterisk-password-32-bytes';
-  const hash=createHash('sha256').update(password).digest('hex');
+  const hash=execFileSync(process.execPath,[resolve(root,'scripts/asterisk-credential.mjs')],{input:password,encoding:'utf8'}).trim();
   await db.batch([
     db.prepare("INSERT INTO users(id,email,password_hash) VALUES('owner','owner@example.invalid','unused')"),
     db.prepare("INSERT INTO businesses(id,user_id,slug,name,max_concurrent_calls) VALUES('business','owner','smoke','Synthetic business',1)"),
     db.prepare("INSERT INTO provider_settings(business_id,llm_base_url) VALUES('business','')"),
     db.prepare("INSERT INTO assistants(id,business_id,public_slug,state,name,persona,language,engine,realtime_model) VALUES('assistant','business','smoke-agent','active','Alex','Helpful receptionist','en','realtime','gpt-realtime-2')"),
-    db.prepare("INSERT INTO asterisk_routes(id,business_id,assistant_id,password_sha256,enabled) VALUES('pbx','business','assistant',?,1)").bind(hash),
+    db.prepare("INSERT INTO asterisk_routes(id,business_id,assistant_id,password_sha256,enabled,password_hash) VALUES('pbx','business','assistant',lower(hex(randomblob(32))),1,?)").bind(hash),
   ]);
   if (process.argv.includes('--asterisk')) {
     await runAsteriskRuntime({temp,db,telemetry,wait,password});
