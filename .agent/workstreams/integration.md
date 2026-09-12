@@ -1,12 +1,12 @@
 # Integration checkpoint
 
-- Status: In progress — official a20f2d8 complete with two findings/no security; hosted reviews/CI pending; owner verification assigned
+- Status: In progress — QA closed both a20 corrections on2bcd30b; preparing next exact publication and dual-review retriggers
 - Owner: openfon-integration, gpt-6-astra / medium
 - Branch/worktree: codex/integrated-release, /Users/cristian/projects/fun/openfon-worktrees/integration
 - Updated: 2026-09-13
-- Application candidate: c06ee1c adds atomic provider cleanup snapshot to publisheda20; owner101 focused/both types and2 original privacy negatives; prior42077ab813/types/runtime and QA317 remain attributed
+- Application candidate: 2bcd30b includes c06ee1c atomic snapshot and daf1c99 PBX harness;105 focused/both types and independent QA8/workerd privacy probe PASS; prior42077ab813/types/runtime retained
 - Published PR16 head: a20f2d8225f6485f499959eeecf820bc3e62ddc1 (docs-only over QA-scoped486bb25/application42077ab; frozen for required reviews)
-- Validation slot: integration released after105 focused/both types; QA granted bounded independent follow-up review, no other runner
+- Validation slot: QA released after8 focused/independent workerd privacy probe; no runner active
 - Ports: integration8814/9254, optional real-PBX proxy8824; never8787
 - Read first: root orchestration-rules/current-task/manifest (read-only), this file, docs/launch/readiness.md
 - Earlier detailed milestones and failures remain in this file's history through ccdd85d and the linked original review reports. This checkpoint records current state.
@@ -24,6 +24,8 @@ Realtimec58b17d→42077ab assembled with application hunks clean. Docs conflict 
 Final42077ab direct/gateway and Telnyx native+synthesized actual-workerd smokes PASS, all processes exited. Logs/tmp/openfon-420-direct.log,/tmp/openfon-420-gateway.log,/tmp/openfon-420-telnyx.log. Prior08cc Asterisk/retirement runtime unchanged by later Telnyx/preset/error-event deltas; full813 covers assembled interfaces. Reporting-only rehearsal9/17 previously passed without behavior change. Integration releases sole slot to QA for bounded independent combined closure, no full-suite duplication or official inference until published freeze. Remote5e0 and stagingb15 remain unchanged.
 
 ## Authorization and ownership
+QA closes exact2bcd30b:8/8 focused plus unchanged actual-workerd privacy probe failsa20(public200 vs404), passes2bcd with full429 rollback, repeated bootstrap/public draft privacy and genuine later legacy reconciliation. ProbeSHA77430137799430e0eb82b4b55732ba675fe4b5aff021e8cfa4d5f491d4f0a4db; original logs retained. Harness fresh correlated401/zero attempted writes source reviewed; owner real22.11 runtime reused. No new major/security concern scoped, all processes exited/Miniflare disposed. Next docs-only publication requires fresh official and hosted reviews; a20 hostedcode clean/security still running, bothCIgreen.
+
 Assembled fe8e9b4→daf1c99 harness-only correction after snapshotc06ee1c. Only owner checkpoint append conflicted; source preserved. Integration105/105 four focused files and worker/web types PASS, logs/tmp/openfon-a20-followup-focused.log,/tmp/openfon-a20-followup-types.log. Owner actual Asterisk22.11 Local-channel/workerd PASS with fresh seq2/runtime-revoked401,0 rate-write attempts,unchanged rows/no extra call/zerochannels;4 harness tests PASS. Docker fixture gone and8811/9251/8821 clear perowner. Reused real runtime evidence, no duplicate PBX run. All integration processes exited; QA nextsole scoped review of these two deltas, no full duplication/inference. Hosted codea20 clean comment5649405765; security still pending. Newhead reviews remain required.
 
 Presets0bb382c→c06ee1c assembled clean application hunk (existing snapshot helper appended within OpenAI cleanup batch). Only owner checkpoint append conflicted; retained original and new evidence. Asterisk sole runtime grant active; integration no runner. Exact snapshot regression/source review and combined next-candidate validation remain pending before publication.
