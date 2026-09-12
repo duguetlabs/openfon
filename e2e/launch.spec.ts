@@ -268,3 +268,26 @@ test('cancel real pending test reservations on end and navigation', async ({ pag
     });
   }
 });
+
+test('assistant-list retries recover Test Studio and preserve Knowledge drafts', async ({ page }) => {
+  await signup(page);
+  let failNext = true;
+  await page.route('**/api/me/assistants', async route => {
+    if (failNext) { failNext = false; await route.fulfill({ status: 503, json: { error: 'Temporary assistant failure' } }); }
+    else await route.continue();
+  });
+  await page.goto('/test');
+  await expect(page.getByRole('button', { name: 'Start test call' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Retry assistants' }).click();
+  await expect(page.getByRole('button', { name: 'Start test call' })).toBeEnabled();
+  failNext = true;
+  await page.goto('/knowledge');
+  await page.getByRole('button', { name: 'Add knowledge' }).click();
+  await page.getByLabel('Question', { exact: true }).fill('Unsaved question');
+  await page.getByLabel('Answer', { exact: true }).fill('Unsaved answer');
+  await page.getByRole('button', { name: 'Retry assistants' }).click();
+  await expect(page.locator('.studio-actions .studio-check')).not.toHaveCount(0);
+  await expect(page.getByLabel('Question', { exact: true })).toHaveValue('Unsaved question');
+  await expect(page.getByLabel('Answer', { exact: true })).toHaveValue('Unsaved answer');
+  await expect(page.getByRole('button', { name: 'Retry assistants' })).toHaveCount(0);
+});
