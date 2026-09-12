@@ -500,23 +500,71 @@ describe('signed ingress and provider API contract', () => {
     expect(get).not.toHaveBeenCalled();
   });
 
-  it('bounds media attempts without saturated writes, preserves lifecycle ingress and recovers next minute', async () => {
-    const get = vi.fn(() => ({ fetch: async () => new Response(null, { status: 204 }) }));
-    env.TELNYX_CALL = { idFromName: (n: string) => n, get } as unknown as DurableObjectNamespace;
-    await reserveTelnyxCall(env, callId, correlation, '+12025550101', '+12025550100');
-    const request = (forwarded = 'one') => new Request(`https://openfon.test/ws/telnyx/${callId}`, { headers: {
-      Upgrade: 'websocket', 'x-telnyx-streaming-auth-token': 'a'.repeat(64), 'X-Forwarded-For': forwarded,
-    } });
-    for (let i = 0; i < 120; i++) expect((await worker.fetch(request(), env, fakeCtx)).status).toBe(204);
-    const before = db.database.prepare('SELECT total_changes() AS n').get();
-    const blocked = await worker.fetch(request('spoofed-new-ip'), env, fakeCtx);
-    expect(blocked.status).toBe(429); expect(blocked.headers.get('Retry-After')).toBe('60');
+  it('rejects well-formed invented call IDs without any D1 writes or DO dispatch', async () => {
+    const get=vi.fn();
+    env.TELNYX_CALL={idFromName:(n:string)=>n,get} as unknown as DurableObjectNamespace;
+    const before=db.database.prepare('SELECT total_changes() AS n').get();
+    for(let i=0;i<125;i++) {
+      const id='tnx_'+i.toString(16).padStart(64,'0');
+      const response=await worker.fetch(new Request(`https://openfon.test/ws/telnyx/${id}`,{headers:{
+        Upgrade:'websocket','x-telnyx-streaming-auth-token':'a'.repeat(64),'CF-Connecting-IP':`192.0.2.${i+1}`,
+      }}),env,fakeCtx);
+      expect(response.status).toBe(404);
+    }
     expect(db.database.prepare('SELECT total_changes() AS n').get()).toEqual(before);
-    expect(get).toHaveBeenCalledTimes(120);
-    expect((await worker.fetch(webhook('call.hangup'), env, fakeCtx)).status).toBe(200);
-    vi.setSystemTime(Date.now() + 60_000);
-    expect((await worker.fetch(request(), env, fakeCtx)).status).toBe(204);
-    expect(get).toHaveBeenCalledTimes(122);
+    expect(get).not.toHaveBeenCalled();
+    expect(requests).toHaveLength(0);
+  });
+
+  it('rejects bogus tokens for a real active call without D1 or durable writes', async () => {
+    const o=owner(); await o.event('call.initiated'); await o.drain();
+    await o.event('call.answered'); await o.drain();
+    const get=vi.fn(()=>({fetch:(r:Request)=>o.object.fetch(r)}));
+    env.TELNYX_CALL={idFromName:(n:string)=>n,get} as unknown as DurableObjectNamespace;
+    const state=await o.storage.get<{streamToken:string}>('control');
+    const bogus=state!.streamToken==='a'.repeat(64)?'b'.repeat(64):'a'.repeat(64);
+    const before=db.database.prepare('SELECT total_changes() AS n').get();
+    const beforeStorage=structuredClone([...o.storage.data]), beforeAlarm=o.storage.alarm;
+    const beforeCommands=requests.length;
+    for(let i=0;i<125;i++) {
+      const response=await worker.fetch(new Request(`https://openfon.test/ws/telnyx/${callId}`,{headers:{
+        Upgrade:'websocket','x-telnyx-streaming-auth-token':bogus,'CF-Connecting-IP':`192.0.2.${i+1}`,
+      }}),env,fakeCtx);
+      expect(response.status).toBe(403);
+    }
+    expect(get).toHaveBeenCalledTimes(125); // real owner performed authentication
+    expect(db.database.prepare('SELECT total_changes() AS n').get()).toEqual(before);
+    expect([...o.storage.data]).toEqual(beforeStorage);
+    expect(o.storage.alarm).toBe(beforeAlarm);
+    expect(requests).toHaveLength(beforeCommands);
+  });
+
+  it('preserves authenticated single media claim and signed hangup through the public route', async () => {
+    const o=owner(); await o.event('call.initiated'); await o.drain();
+    await o.event('call.answered'); await o.drain();
+    env.TELNYX_CALL={idFromName:(n:string)=>n,get:()=>({fetch:(r:Request)=>o.object.fetch(r)})} as unknown as DurableObjectNamespace;
+    let reject!: (error:Error)=>void;
+    const stub=vi.fn(()=>new Promise<Response>((_,no)=>{reject=no;}));
+    env.CALL_SESSION={idFromName:(n:string)=>n,get:()=>({fetch:stub})} as unknown as DurableObjectNamespace;
+    const state=await o.storage.get<{streamToken:string}>('control');
+    const request=()=>new Request(`https://openfon.test/ws/telnyx/${callId}`,{headers:{
+      Upgrade:'websocket','x-telnyx-streaming-auth-token':state!.streamToken,
+    }});
+    const first=worker.fetch(request(),env,fakeCtx);
+    try {
+      for(let i=0;i<200&&!stub.mock.calls.length;i++) await Promise.resolve();
+      expect(stub).toHaveBeenCalledOnce();
+      const before=db.database.prepare('SELECT total_changes() AS n').get();
+      const beforeStorage=structuredClone([...o.storage.data]);
+      expect((await worker.fetch(request(),env,fakeCtx)).status).toBe(409);
+      expect(stub).toHaveBeenCalledOnce();
+      expect(db.database.prepare('SELECT total_changes() AS n').get()).toEqual(before);
+      expect([...o.storage.data]).toEqual(beforeStorage);
+      expect(await occupied()).toBe(1);
+      expect((await worker.fetch(webhook('call.hangup'),env,fakeCtx)).status).toBe(200);
+      await o.drain(); expect(await occupied()).toBe(0);
+    } finally {reject(new Error('test connection ended'));await first;}
+    expect((await worker.fetch(request(),env,fakeCtx)).status).toBe(404);
   });
 
   it('uses fixed origin, escaped control token, and fails closed on redirects/errors', async () => {

@@ -67,16 +67,9 @@ export function registerTelnyxRoutes(app: Hono<{ Bindings: Env; Variables: { use
     const headers = new Headers({ Upgrade: 'websocket' });
     const token = c.req.header('x-telnyx-streaming-auth-token');
     if (!token || !/^[0-9a-f]{64}$/.test(token)) return c.json({ error: 'Invalid stream authorization' }, 403);
-    // Cloudflare supplies this header at the edge. Local requests without it
-    // share a bucket; never trust caller-controlled forwarding headers.
-    const source = c.req.header('CF-Connecting-IP')?.trim() || 'unknown';
-    const window = Math.floor(Date.now() / 60_000) * 60;
-    const admitted = await c.env.DB.prepare(
-      `INSERT INTO rate_counters (bucket, window_start, count) VALUES (?, ?, 1)
-       ON CONFLICT(bucket, window_start) DO UPDATE SET count=rate_counters.count+1
-         WHERE rate_counters.count<120 RETURNING count`
-    ).bind(`telnyx-media:${source}`, window).first();
-    if (!admitted) return c.json({ error: 'Too many stream attempts' }, 429, { 'Retry-After': '60' });
+    // No public D1 write-based limiter: even well-formed bogus credentials
+    // must not consume the database write budget. Lookup is read-only; the
+    // owner authenticates the token and rejects duplicate claims before writes.
     // Reject invented object names before DO dispatch. The owner still checks
     // the secret token and current route policy; row existence is not auth.
     const call = await c.env.DB.prepare(
