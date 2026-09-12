@@ -4,7 +4,7 @@
 - Owner: openfon-realtime
 - Branch: codex/realtime-providers
 - Base at arrival: a9b33c5c46ccb441e4c07f50b81469354d3cf700
-- Updated: 2026-09-12T11:44:00Z
+- Updated: 2026-09-12T11:49:00Z
 - Rules: root AGENTS.md, orchestration-rules.md/current-task/manifest, assigned handoff, strategy and readiness read. Root shared documents untouched.
 - Ports: 8813 test, 9253 inspector; never 8787.
 
@@ -14,6 +14,7 @@ Explicit Kataleptic gateway and independent direct OpenAI realtime resolver, aut
 Agreed provider fields: realtime_provider=instance|kataleptic|openai|custom (default instance), realtime_base_url/api_key. Env REALTIME_PROVIDER defaults kataleptic. Explicit choices require own key; custom is experimental GA protocol. Assistant model/voice overrides remain. Blank direct model -> gpt-realtime. Presets owns static direct catalogs and independent text/STT settings. Realtime owns SELECT/loading including workspace llm_model fallback and STT fifth argument.
 
 ## Completed
+- Commits: 18d3638 provider helper; 13f037b session/admission/runtime implementation.
 - Commit 18d3638: new src/realtime-providers.ts, resolver/capability/telephone eligibility tests and first checkpoint. Shared telephoneRealtimeAvailable helper sent to Asterisk/integration.
 - Direct Worker fetch Upgrade uses Authorization header, refuses redirects, and requires matching session.updated before readiness/greeting. Key never enters URL. Gateway token-query path retained.
 - Native direct greeting, whisper-1 caller transcription, PCM24, tools, existing recovery/finalization and saved turns/summary. Direct startup fails closed without instance pipeline fallback.
@@ -46,3 +47,8 @@ Copied with presets owner's acknowledgment from its in-progress worktree: src/ty
 
 ## Next action
 Integrate provider module commit, presets final shared commit, then realtime session/admission commit; preserve Telnyx greeting and Asterisk predicate changes. Run both runtime smoke variants sequentially and the consolidated suite. Obtain authorized direct provider credential for live acceptance when available.
+
+## Final dependency verification
+Presets final commit ce62114 received; replaced the five dependency snapshots with exact final files. Typecheck and full 450 tests passed again; direct workerd smoke passed again. Adding final presets src/index.ts/src/studio-api.ts snapshots solely to extend the direct runtime smoke through its authenticated static voice catalog; these also remain presets-owned/uncommitted.
+
+Authenticated direct static voice catalog now also passes in the actual workerd independence smoke with all unmatched network destinations blocked. Initial probe failed 401 because the harness used the wrong cookie name; corrected to the application ofs session cookie, then the complete workflow passed. Final dependency snapshots include src/index.ts and src/studio-api.ts from ce62114; none are owned or committed by realtime.

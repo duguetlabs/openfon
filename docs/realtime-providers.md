@@ -78,7 +78,8 @@ The smoke uses actual workerd, D1, Durable Objects and WebSockets on test port
 8813 and inspector port 9253. All outbound traffic is intercepted by a synthetic
 provider Worker. Only explicit OpenAI realtime/text and synthetic carrier endpoints
 are accepted; Kataleptic endpoints and every unmatched request are blocked. No
-instance AI credentials or Azure credentials are supplied. It checks header auth,
+instance AI credentials or Azure credentials are supplied. It checks the authenticated direct voice catalog without network
+access, header auth,
 signed/idempotent telephone admission, greeting, incoming/outgoing PCM, interruption,
 `end_call`, playback drain, carrier release, saved turns and the text summary.
 The unit suite also covers direct authentication/redirect/session rejection with no

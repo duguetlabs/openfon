@@ -107,11 +107,20 @@ try {
   }
   await db.batch([
     db.prepare("INSERT INTO users(id,email,password_hash) VALUES('smoke-owner','smoke@example.invalid','unused')"),
+    db.prepare("INSERT INTO sessions(token,user_id,expires_at) VALUES('synthetic-session','smoke-owner',?)").bind(new Date(Date.now()+3600000).toISOString()),
     db.prepare("INSERT INTO businesses(id,user_id,slug,name) VALUES('smoke-business','smoke-owner','smoke','Synthetic business')"),
     db.prepare("INSERT INTO provider_settings(business_id,llm_base_url,llm_api_key,llm_model,realtime_provider,realtime_api_key) VALUES('smoke-business','https://api.openai.com/v1','synthetic-text-key','gpt-4o-mini',?,?)").bind(gateway ? 'instance' : 'openai', gateway ? '' : 'synthetic-direct-key'),
     db.prepare("INSERT INTO assistants(id,business_id,public_slug,state,name,persona,language,engine,realtime_model) VALUES('smoke-assistant','smoke-business','smoke-agent','active','Alex','Helpful receptionist','en','realtime','')"),
     db.prepare("INSERT INTO telnyx_number_routes(connection_id,phone_number,business_id,assistant_id,enabled) VALUES(?, '+12025550101','smoke-business','smoke-assistant',1)").bind(call.connection_id),
   ]);
+  if (!gateway) {
+    const catalog = await mf.dispatchFetch('https://openfon.smoke.invalid/api/me/voices', { headers: { Cookie: 'ofs=synthetic-session' } });
+    assert.equal(catalog.status, 200, 'authenticated direct voice catalog');
+    const voices = await catalog.json();
+    assert.ok(voices.native.some(voice => voice.id === 'marin'));
+    assert.deepEqual(voices.cascade, []);
+    assert.deepEqual(voices.azure, []);
+  }
   const webhook = async (type, id=randomUUID()) => {
     const body=JSON.stringify({data:{id,record_type:'event',event_type:type,occurred_at:new Date().toISOString(),payload:{...call,from:'+12025550100',to:'+12025550101',direction:'incoming'}}});
     const timestamp=String(Math.floor(Date.now()/1000));
@@ -160,7 +169,7 @@ try {
   assert.equal(result.summary, 'Synthetic call completed.');
   const turns = await db.prepare("SELECT COUNT(*) AS n FROM call_turns").first();
   assert.ok(turns.n >= 3, 'greeting, caller and reply persisted');
-  console.log(`PASS ${gateway ? 'gateway' : 'direct OpenAI'} realtime workerd smoke (synthetic upstreams): signed ingress, idempotent admission, authenticated media, realtime PCM, clear/marks/drain, carrier hangup, D1 release. No external requests.`);
+  console.log(`PASS ${gateway ? 'gateway' : 'direct OpenAI'} realtime workerd smoke (synthetic upstreams): ${gateway ? '' : 'authenticated static voice catalog, '}signed ingress, idempotent admission, authenticated media, realtime PCM, clear/marks/drain, carrier hangup, D1 release. No external requests.`);
 } finally {
   try { carrier?.close(); } catch {}
   await mf?.dispose();
