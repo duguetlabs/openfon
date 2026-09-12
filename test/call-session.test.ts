@@ -2187,6 +2187,41 @@ describe('direct OpenAI realtime independence', () => {
     if (phase === 'rotation') expect(first.closed).not.toBeNull();
   });
 
+  it.each(['error', 'timeout'])('keeps the acknowledged socket when replacement handshake fails by %s', async failure => {
+    vi.useFakeTimers();
+    const old = new FakeSocket();
+    const replacement = new FakeSocket();
+    let upgrades = 0;
+    globalThis.fetch = vi.fn(async () => ({ status: 101, webSocket: upgrades++ === 0 ? old : replacement })) as unknown as typeof fetch;
+    const { session, turnWrites } = newSession('realtime', directSettings);
+    await session.fetch(upgradeRequest());
+    const caller = serverSockets[0];
+    caller.receive({ type: 'start' });
+    await flush(50);
+    old.receive({ type: 'session.updated', session: old.messages().find(m => m.type === 'session.update')!.session });
+    await flush();
+    old.receive({ type: 'session.expiring' });
+    await flush(50);
+    replacement.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' });
+    replacement.receive({ type: 'response.function_call_arguments.done', name: 'end_call' });
+    if (failure === 'error') replacement.receive({ type: 'error' });
+    else await vi.advanceTimersByTimeAsync(5001);
+    await flush(50);
+    expect(replacement.closed).not.toBeNull();
+    expect(old.closed).toBeNull();
+    expect(caller.binaryCount()).toBe(0);
+    expect(caller.countOf('ending')).toBe(0);
+    expect(caller.countOf('ended')).toBe(0);
+    old.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' });
+    old.receive({ type: 'response.output_audio_transcript.done', transcript: 'Still connected' });
+    caller.receive({ type: 'text', text: 'Thank you' });
+    await flush(50);
+    expect(caller.binaryCount()).toBe(1);
+    expect(turnWrites()).toHaveLength(2);
+    expect(old.messages().some(m => m.type === 'conversation.item.create')).toBe(true);
+    expect(upgrades).toBe(2);
+  });
+
   it.each(['reject', 'redirect', 'session-error', 'session-mismatch', 'session-timeout'])('fails closed on %s without pipeline fallback', async failure => {
     vi.useFakeTimers();
     const up = new FakeSocket();

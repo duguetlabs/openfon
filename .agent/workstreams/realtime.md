@@ -4,7 +4,7 @@
 - Owner: openfon-realtime
 - Branch: codex/realtime-providers
 - Base at arrival: a9b33c5c46ccb441e4c07f50b81469354d3cf700
-- Updated: 2026-09-12T11:49:47.559992+00:00
+- Updated: 2026-09-12T11:52:46.067657+00:00
 - Rules: root AGENTS.md, orchestration-rules.md/current-task/manifest, assigned handoff, strategy and readiness read. Root shared documents untouched.
 - Ports: 8813 test, 9253 inspector; never 8787.
 
@@ -57,3 +57,9 @@ Authenticated direct static voice catalog now also passes in the actual workerd 
 QA reported P2 pre-ack application events reaching onUpstreamMessage. Confirmed locally with new startup and proactive rotation regressions: both failed before the fix (binaryCount 1 with no matching acknowledgement; tool event also triggered ending). Added a per-socket direct application-event gate after handshake handling; only a validated session.updated opens that socket. Old acknowledged socket stays readable and writable during replacement handshake.
 
 Validation after fix: focused call-session/telnyx-control/realtime-providers 145/145 pass; typecheck passes with final ce62114 dependency snapshots. Regressions cover pending audio, caller/assistant transcripts, speech-start/flush, both tool event forms, unmatched ack, old socket bidirectional continuity, and successful post-ack handover. Runtime smoke now injects pre-ack audio/transcript/end_call in direct mode and requires exactly three legitimate persisted turns; both direct and gateway workerd runs passed on 8813/9253 with no unexpected outbound requests.
+
+
+Root status clarification: ca0d9018acce1b885bbe8529a836d7249fffb8f3 only adds catalog smoke/docs and does NOT resolve QA's handshake finding. Exact application fix is 083dae372fa0ca875a5745769e9876213bdd7827, already sent to QA and integration for re-review. Additional regressions cover failed replacement handshake (error and timeout) preserving the acknowledged old socket; full suite 454/454 passed after these test-only additions. No new paid accounts created, no Kataleptic dependency introduced, and no authorized direct OpenAI credential has been found.
+
+
+Independent QA closure received and verified in release-audit/.agent/workstreams/qa.md: P2 resolved at exact 083dae372fa0ca875a5745769e9876213bdd7827 with ce62114 dependencies; original independent failing probe passes unchanged, QA focused147 (owner145 plus two independent probes), typecheck, adversarial direct/catalog and gateway actual-workerd smoke pass. Scoped no remaining major/new security issues; not a whole-release, live-provider or PR-Agent substitute verdict. Integration notified by QA.
