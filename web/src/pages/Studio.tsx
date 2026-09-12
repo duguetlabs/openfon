@@ -140,6 +140,8 @@ export function TestStudio() {
     const [id, setId] = useState(params.get('assistant') || '');
     const [phase, setPhase] = useState('idle');
     const [error, setError] = useState('');
+    const [assistantError, setAssistantError] = useState('');
+    const [assistantReload, setAssistantReload] = useState(0);
     const [callId, setCallId] = useState('');
     const [lines, setLines] = useState<{
         who: string;
@@ -156,7 +158,8 @@ export function TestStudio() {
         pendingCallId.current = null;
         if (id) retire(id);
     }
-    useEffect(() => { void api.assistants().then(a => { setAssistants(a); setId(current => a.some(x => x.id === current) ? current : a[0]?.id || ''); }).catch(e => setError(errorText(e))); return () => { attempt.current++; call.current?.hangup(); cancelPending(); }; }, []);
+    useEffect(() => { let current = true; setAssistantError(''); void api.assistants().then(a => { if (!current) return; setAssistants(a); setId(selected => a.some(x => x.id === selected) ? selected : a[0]?.id || ''); }).catch(e => { if (current) setAssistantError(errorText(e)); }); return () => { current = false; }; }, [assistantReload]);
+    useEffect(() => () => { attempt.current++; call.current?.hangup(); cancelPending(); }, []);
     const active = phase === 'connecting' || phase === 'live';
     async function start() { if (active) return; const run = ++attempt.current; call.current?.hangup(); cancelPending(); setPhase('connecting'); setError(''); setLines([]); setCallId(''); try {
         const reserved = await api.startTestCall(id);
@@ -194,7 +197,7 @@ export function TestStudio() {
             setPhase('error');
         }
     } }
-    return <><PageTitle title="Test Studio" description="A private rehearsal. Test calls are kept separate from your live activity."/><Notice error={error}/><div className="studio-grid"><Card><h2 className="studio-heading">Try the conversation</h2><label>Assistant<select disabled={active} className={inputClass} value={id} onChange={e => setId(e.target.value)}>{assistants.map(a => <option key={a.id} value={a.id}>{a.name} · {a.state}</option>)}</select></label><p className="studio-description">Ask about opening hours, request a service, or leave a message. Use headphones for the clearest audio. You can also type once connected.</p><div className="studio-actions">{active ? <Button variant="danger" onClick={() => { attempt.current++; call.current?.hangup(); cancelPending(); if (phase === 'connecting') setCallId(''); setPhase('ended'); }}>End test call</Button> : <Button disabled={!id} onClick={() => void start()}>Start test call</Button>}<span role="status">{phase === 'connecting' ? 'Connecting…' : phase === 'live' ? hasMic ? 'Microphone on' : 'Text mode — microphone unavailable' : phase === 'ended' ? 'Call ended' : phase === 'error' ? 'Call failed' : 'Ready to test'}</span></div>{id && <Link className="studio-link" to={`/assistants/${id}`}>Edit assistant →</Link>}{callId && !active && <Link className="studio-link" to={`/calls/${callId}`}>Review this call →</Link>}</Card><Card><h2 className="studio-heading">Live transcript</h2><div className="studio-transcript" role="log" aria-live="polite">{!lines.length && <p className="studio-muted">Your conversation will appear here.</p>}{lines.map((l, i) => <div key={i}><strong>{l.who}</strong><p>{l.text}</p></div>)}</div><form className="studio-compose" onSubmit={e => { e.preventDefault(); if (text.trim()) {
+    return <><PageTitle title="Test Studio" description="A private rehearsal. Test calls are kept separate from your live activity."/><Notice error={error || assistantError}/>{assistantError && <Button variant="ghost" onClick={() => setAssistantReload(n => n + 1)}>Retry assistants</Button>}<div className="studio-grid"><Card><h2 className="studio-heading">Try the conversation</h2><label>Assistant<select disabled={active} className={inputClass} value={id} onChange={e => setId(e.target.value)}>{assistants.map(a => <option key={a.id} value={a.id}>{a.name} · {a.state}</option>)}</select></label><p className="studio-description">Ask about opening hours, request a service, or leave a message. Use headphones for the clearest audio. You can also type once connected.</p><div className="studio-actions">{active ? <Button variant="danger" onClick={() => { attempt.current++; call.current?.hangup(); cancelPending(); if (phase === 'connecting') setCallId(''); setPhase('ended'); }}>End test call</Button> : <Button disabled={!id} onClick={() => void start()}>Start test call</Button>}<span role="status">{phase === 'connecting' ? 'Connecting…' : phase === 'live' ? hasMic ? 'Microphone on' : 'Text mode — microphone unavailable' : phase === 'ended' ? 'Call ended' : phase === 'error' ? 'Call failed' : 'Ready to test'}</span></div>{id && <Link className="studio-link" to={`/assistants/${id}`}>Edit assistant →</Link>}{callId && !active && <Link className="studio-link" to={`/calls/${callId}`}>Review this call →</Link>}</Card><Card><h2 className="studio-heading">Live transcript</h2><div className="studio-transcript" role="log" aria-live="polite">{!lines.length && <p className="studio-muted">Your conversation will appear here.</p>}{lines.map((l, i) => <div key={i}><strong>{l.who}</strong><p>{l.text}</p></div>)}</div><form className="studio-compose" onSubmit={e => { e.preventDefault(); if (text.trim()) {
         call.current?.sendText(text.trim());
         setText('');
     } }}><input aria-label="Message to assistant" className={inputClass} disabled={phase !== 'live'} value={text} onChange={e => setText(e.target.value)} placeholder="Type a test message…"/><Button disabled={phase !== 'live' || !text.trim()}>Send</Button></form></Card></div></>;
@@ -209,6 +212,8 @@ export function Knowledge() {
     }) | null>(null);
     const [assistants, setAssistants] = useState<Assistant[]>([]);
     const [error, setError] = useState('');
+    const [assistantError, setAssistantError] = useState('');
+    const [assistantReload, setAssistantReload] = useState(0);
     const [message, setMessage] = useState('');
     const [busy, setBusy] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -236,7 +241,8 @@ export function Knowledge() {
         finally { setBusy(false); }
     }
     async function loadCollections() { const c = await api.knowledgeCollections(); setCollections(c); setSelected(s => c.some(x => x.id === s) ? s : c[0]?.id || ''); }
-    useEffect(() => { setLoading(true); setError(''); void Promise.all([loadCollections(), api.assistants().then(setAssistants)]).catch(e => setError(errorText(e))).finally(() => setLoading(false)); }, [reload]);
+    useEffect(() => { setLoading(true); setError(''); void loadCollections().catch(e => setError(errorText(e))).finally(() => setLoading(false)); }, [reload]);
+    useEffect(() => { let current = true; setAssistantError(''); void api.assistants().then(rows => { if (current) setAssistants(rows); }).catch(e => { if (current) setAssistantError(errorText(e)); }); return () => { current = false; }; }, [assistantReload]);
     useEffect(() => { let current = true; setDetail(null); setEditing(null); if (selected)
         void api.knowledgeCollection(selected).then(d => { if (current)
             setDetail(d); }).catch(e => { if (current)
@@ -254,7 +260,7 @@ export function Knowledge() {
     finally {
         setBusy(false);
     } }
-    return <><PageTitle title="Knowledge" description="Write answers once, share them across assistants, and approve every improvement."/><Notice error={error} message={message}/>{(loading || (selected && !detail && !error)) && <LoadingStatus />}{error && !detail && <Button variant="ghost" onClick={() => setReload(n => n + 1)}>Retry knowledge</Button>}<form className="studio-create" onSubmit={e => { e.preventDefault(); if (!discardKnowledge()) return; void action(async () => { const c = await api.createKnowledgeCollection({ name: name.trim(), description: '' }); setName(''); setSelected(c.id); }, 'Collection created.', false); }}><Field label="New collection" required value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Services and pricing"/><Button disabled={busy || !name.trim()}>Create collection</Button></form><label>Collection<select disabled={busy} className={inputClass} value={selected} onChange={e => { if (discardKnowledge()) setSelected(e.target.value); }}>{collections.map(c => <option key={c.id} value={c.id}>{c.name} ({c.item_count || 0} {c.item_count === 1 ? 'item' : 'items'})</option>)}</select></label>{detail && <><Card className="mt-5"><div className="studio-between"><h2>{detail.name}</h2>{!detail.is_default && <Button variant="ghost" disabled={busy} onClick={() => { if (discardKnowledge() && window.confirm(`Delete “${detail.name}” and all its knowledge items? This cannot be undone.`)) {
+    return <><PageTitle title="Knowledge" description="Write answers once, share them across assistants, and approve every improvement."/><Notice error={error || assistantError} message={message}/>{assistantError && <Button variant="ghost" onClick={() => setAssistantReload(n => n + 1)}>Retry assistants</Button>}{(loading || (selected && !detail && !error)) && <LoadingStatus />}{error && !detail && <Button variant="ghost" onClick={() => setReload(n => n + 1)}>Retry knowledge</Button>}<form className="studio-create" onSubmit={e => { e.preventDefault(); if (!discardKnowledge()) return; void action(async () => { const c = await api.createKnowledgeCollection({ name: name.trim(), description: '' }); setName(''); setSelected(c.id); }, 'Collection created.', false); }}><Field label="New collection" required value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Services and pricing"/><Button disabled={busy || !name.trim()}>Create collection</Button></form><label>Collection<select disabled={busy} className={inputClass} value={selected} onChange={e => { if (discardKnowledge()) setSelected(e.target.value); }}>{collections.map(c => <option key={c.id} value={c.id}>{c.name} ({c.item_count || 0} {c.item_count === 1 ? 'item' : 'items'})</option>)}</select></label>{detail && <><Card className="mt-5"><div className="studio-between"><h2>{detail.name}</h2>{!detail.is_default && <Button variant="ghost" disabled={busy} onClick={() => { if (discardKnowledge() && window.confirm(`Delete “${detail.name}” and all its knowledge items? This cannot be undone.`)) {
         setBusy(true);
         setError('');
         void api.deleteKnowledgeCollection(detail.id).then(async () => { setDetail(null); setSelected(''); await loadCollections(); setMessage('Collection deleted.'); }).catch(e => setError(errorText(e))).finally(() => setBusy(false));
