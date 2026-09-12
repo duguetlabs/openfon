@@ -32,6 +32,7 @@ jobs:
           OPENFON_INSPECTOR_PORT: '9254'
         run: |
           npm run test:telnyx
+          node test/telnyx-retirement-smoke.mjs
           node scripts/asterisk-smoke.mjs
           node scripts/realtime-smoke.mjs
           node scripts/realtime-smoke.mjs --gateway
