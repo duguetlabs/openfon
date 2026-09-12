@@ -1,12 +1,12 @@
 # Integration checkpoint
 
-- Status: In progress — published5e0ece3 CIgreen; official5e0 completed with three claims/no security; Telnyx abnormal-hangup correction assembled; presets/realtime hosted findings pending source and serial validation
+- Status: In progress — QA closed486bb25 combined corrections; publishing docs-final candidate for required hosted and official full reviews
 - Owner: openfon-integration, gpt-6-astra / medium
 - Branch/worktree: codex/integrated-release, /Users/cristian/projects/fun/openfon-worktrees/integration
 - Updated: 2026-09-12
 - Application candidate: 42077ab (realtimec58b17d after presets11524e2/Telnyx348dd9c); combined813/813 tests35files and both typechecks PASS; affected workerd smokes running
 - Published PR16 head: 5e0ece34b445297ace05b6474b2fb9e4e968a5b4 (docs-only over applicationd43a3ff; frozen for required reviews)
-- Validation slot: integration released after813/full, both types and direct/gateway/Telnyx workerd PASS; QA granted next sole bounded assembled review
+- Validation slot: QA released after317 focused and independent actual-workerd HTTP reader probe; no validation runner active
 - Ports: integration8814/9254, optional real-PBX proxy8824; never8787
 - Read first: root orchestration-rules/current-task/manifest (read-only), this file, docs/launch/readiness.md
 - Earlier detailed milestones and failures remain in this file's history through ccdd85d and the linked original review reports. This checkpoint records current state.
@@ -24,6 +24,8 @@ Realtimec58b17d→42077ab assembled with application hunks clean. Docs conflict 
 Final42077ab direct/gateway and Telnyx native+synthesized actual-workerd smokes PASS, all processes exited. Logs/tmp/openfon-420-direct.log,/tmp/openfon-420-gateway.log,/tmp/openfon-420-telnyx.log. Prior08cc Asterisk/retirement runtime unchanged by later Telnyx/preset/error-event deltas; full813 covers assembled interfaces. Reporting-only rehearsal9/17 previously passed without behavior change. Integration releases sole slot to QA for bounded independent combined closure, no full-suite duplication or official inference until published freeze. Remote5e0 and stagingb15 remain unchanged.
 
 ## Authorization and ownership
+QAace477c closes exact486bb25 bounded combined scope:317/317 six files plus independent actual-workerd reader exact64KiB UTF8/65537 fragmented pulls, oversized/empty/network refusal, status preservation and15001ms stalled-body deadline despite nonsettlingcancel PASS. Synthetic in-isolate fetch/streams only, no live HTTP claim. All QA processes exited and Miniflare disposed; no inference until next published freeze. Docs-final evidence update follows; app bytes remain42077ab. Original5e0 findings will receive dispositions and renewed hosted/official review, no clean-full verdict yet.
+
 Sole consolidation/release owner. Preserve root coordination commits, user research and other worktrees. Root alone edits shared current-task/manifest. Personal Duguet Labs secrets use dsecret; never expose values, signed export links or legacy credential files. Capture private command output in restricted files. Existing staged keys are retained; no extra live call, purchase, carrier routing or production mutation is part of this correction round.
 
 User requires exactly one local validation process across owners during host overload. All owners have been notified; grants/releases are explicit. Source-only review/editing may continue. Existing owners remain Telnyx, Asterisk, presets, realtime, launch and QA. QA alone owns genuine official PR-Agent execution. No duplicate inference, substituted reviewer, filtered output or security waiver.

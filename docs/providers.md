@@ -1,6 +1,6 @@
 # Provider and channel compatibility
 
-Evidence snapshot: **2026-09-12**, consolidated provider implementation at `d43a3ff` with integration validation recorded in [release readiness](launch/readiness.md). Provider presets, direct realtime and Asterisk are implemented together. The assembled unit/API and local-workerd tests use synthetic upstreams; they do not certify current third-party service access or live telephone operation.
+Evidence snapshot: **2026-09-12**, consolidated provider implementation at `486bb25` with integration validation recorded in [release readiness](launch/readiness.md). Provider presets, direct realtime and Asterisk are implemented together. The assembled unit/API and local-workerd tests use synthetic upstreams; they do not certify current third-party service access or live telephone operation.
 
 Kataleptic is the default and is operated by the OpenFon founder. It is an optional paid service with a separate account. MIT covers OpenFon’s code, not inference, hosting or telephone service. Selecting a model through Kataleptic still uses Kataleptic; it is not an independent provider route.
 
@@ -54,7 +54,7 @@ The existing text API uses `baseUrl`, `apiKey`, `clearApiKey`, with a new `model
 
 ### Consolidated evidence
 
-Integration passed TypeScript and **753/753 unit/API tests** across 33 files on d33e43f; the final NUL-preview guardd43a3ff passes nine preset tests and both typechecks. Earlier adapter validation passed actual local-workerd smoke tests for Telnyx native and synthesized greeting paths, Asterisk protocol/media handling, direct OpenAI GA protocol and the existing gateway. The direct synthetic call uses no instance AI or Azure credentials and blocks unmatched outbound hosts. Final browser/benchmark results are recorded in [readiness](launch/readiness.md).
+Integration passed TypeScript and **813/813 unit/API tests** across35 files on `42077ab`. Direct/gateway and Telnyx native/synthesized actual-workerd smokes pass; preceding single-KDF Asterisk call/retirement checks also pass. Independent QA scoped candidate `486bb25` with317 focused tests and a bounded HTTP reader workerd probe. All these upstreams are synthetic. Final browser/benchmark results are recorded in [readiness](launch/readiness.md).
 
 A separate [actual Kataleptic browser recording](launch/demo/audible/README.md) contains a completed 58-second call with ten turns and persisted summary/message. The caller was synthetic; replies were real. Conflicting Saturday fixture data and literal null contact display prevented clean acceptance. Phone normalization was subsequently fixed and independently QA-checked without another live call; the original recording remains unchanged. A separately authorized [corrective call](launch/demo/corrected/README.md) on `526be52` passed the canonical-hours and missing-phone checks with persisted summary/message. Its interruption follow-up remains inconclusive due capture timing; no full barge-in acceptance is claimed. Direct OpenAI and PSTN remain unverified. Real Asterisk 22.11.0 Local-channel/audio verification passed against the integrated adapter with mocked AI; see the [dated runtime report](asterisk-runtime-validation-2026-09-12.md). SIP trunk/PSTN and live-provider acceptance still need the [gateway recipe and pilot](asterisk.md).
 
