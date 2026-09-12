@@ -1,4 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
+
+// Local workerd accepts this edge header; each attempt gets its own production
+// limiter bucket, including retries. No application limit or auth is bypassed.
+test.beforeEach(async ({ context }) => {
+  await context.setExtraHTTPHeaders({ 'CF-Connecting-IP': `e2e-${randomUUID()}` });
+});
 
 async function signup(page: Page) {
   await page.goto('/auth');
@@ -59,7 +66,7 @@ test('new workspace remains private, assistant edits persist, pause survives rel
   expect((await page.request.get('/api/me')).status()).toBe(200);
 
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Assistant saved');
+  await expect(page.getByRole('status').filter({ hasText: 'Assistant saved' })).toBeVisible();
   // Explicit discard proceeds; cancelling above preserved the same draft.
   await page.getByLabel('Opening greeting').fill('This edit should be discarded.');
   page.once('dialog', dialog => void dialog.accept());
@@ -83,17 +90,32 @@ test('knowledge draft, approval and attachment survive reload; all app menus wor
   await page.goto('/knowledge');
   await page.getByLabel('New collection', { exact: true }).fill('Workshop services');
   await page.getByRole('button', { name: 'Create collection' }).click();
-  await expect(page.getByRole('status')).toContainText('Collection created');
+  await expect(page.getByRole('status').filter({ hasText: 'Collection created' })).toBeVisible();
   await page.getByRole('button', { name: 'Add knowledge' }).click();
   await page.getByLabel('Question', { exact: true }).fill('Do you fix punctures?');
   await page.getByLabel('Answer', { exact: true }).fill('Yes. Bring your bicycle during opening hours.');
+  const knowledgeUrl = page.url();
+  for (const action of [
+    () => page.getByRole('navigation', { name: 'Workspace' }).getByRole('link', { name: 'Assistants', exact: true }).click(),
+    () => page.getByRole('combobox', { name: 'Collection', exact: true }).selectOption({ index: 0 }),
+    () => page.getByRole('button', { name: 'Add knowledge' }).click(),
+    () => page.goBack({ timeout: 1500 }),
+    () => page.reload({ timeout: 1500 }),
+  ]) {
+    const dialog = page.waitForEvent('dialog');
+    const navigation = action().catch(() => undefined);
+    await (await dialog).dismiss();
+    await navigation;
+    await expect(page).toHaveURL(knowledgeUrl);
+    await expect(page.getByLabel('Question', { exact: true })).toHaveValue('Do you fix punctures?');
+  }
   await page.getByRole('button', { name: 'Save knowledge' }).click();
   await expect(page.getByText('Draft', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Approve', exact: true }).click();
   await expect(page.getByText('Approved', { exact: true })).toBeVisible();
   await page.getByRole('checkbox', { name: 'Alex', exact: true }).click();
   await expect(page.getByRole('checkbox', { name: 'Alex', exact: true })).toBeChecked();
-  await expect(page.getByRole('status')).toContainText('Assistant knowledge updated');
+  await expect(page.getByRole('status').filter({ hasText: 'Assistant knowledge updated' })).toBeVisible();
   await page.reload();
   await page.getByRole('combobox', { name: 'Collection', exact: true }).selectOption({ label: 'Workshop services (1 item)' });
   await expect(page.getByRole('checkbox', { name: 'Alex', exact: true })).toBeChecked();
@@ -116,7 +138,7 @@ test('account can change password, export data without credentials, and delete',
   await page.getByLabel('New password', { exact: true }).fill('Changed-Local-Test-Password-1234');
   await page.getByLabel('Repeat new password', { exact: true }).fill('Changed-Local-Test-Password-1234');
   await page.getByRole('button', { name: 'Update password', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Password updated');
+  await expect(page.getByRole('status').filter({ hasText: 'Password updated' })).toBeVisible();
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download data', exact: true }).click();
   const download = await downloadPromise;

@@ -1972,8 +1972,8 @@ describe('Calm Studio API foundation', () => {
     const insert = db.database.prepare(
       `INSERT INTO calls (
         id, business_id, assistant_id, status, environment, direction, duration_s,
-        intent, message_json, outcome
-       ) VALUES (?, ?, ?, 'completed', 'live', 'inbound', 20, ?, ?, ?)`
+        intent, message_json, outcome, connected_at
+       ) VALUES (?, ?, ?, 'completed', 'live', 'inbound', 20, ?, ?, ?, datetime('now'))`
     );
     insert.run(
       'booking-contact',
@@ -2028,13 +2028,32 @@ describe('Calm Studio API foundation', () => {
     });
   });
 
+  it('counts connected live conversations but keeps unused reservations visible in history', async () => {
+    const workspace = await createWorkspace();
+    const insert = db.database.prepare(`INSERT INTO calls (id, business_id, status, environment, connected_at)
+      VALUES (?, ?, ?, ?, ?)`);
+    insert.run('unused-active', workspace.id, 'active', 'live', null);
+    insert.run('unused-abandoned', workspace.id, 'abandoned', 'live', null);
+    insert.run('connected', workspace.id, 'active', 'live', '2026-08-10 12:00:00');
+    insert.run('private', workspace.id, 'completed', 'test', '2026-08-10 12:00:00');
+    const overview = await data<{metrics: {total: number}; recentCalls: Array<{id: string}>}>(await request(env, '/api/me/overview'));
+    expect(overview.metrics.total).toBe(1);
+    expect(overview.recentCalls.map(c => c.id)).toContain('unused-abandoned');
+  });
+
+  it('preserves boolean false when creating an assistant', async () => {
+    await createWorkspace();
+    const assistant = await data<{take_messages: number}>(await request(env, '/api/me/assistants', json('POST', {name: 'No messages', take_messages: false})));
+    expect(assistant.take_messages).toBe(0);
+  });
+
   it('keeps overview totals accurate beyond 100 and cursors stable while excluding tests', async () => {
     const workspace = await createWorkspace();
     const { assistants } = await data<{ assistants: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'));
     const insert = db.database.prepare(
       `INSERT INTO calls (
-        id, business_id, assistant_id, status, environment, direction, started_at, duration_s
-       ) VALUES (?, ?, ?, 'completed', ?, 'inbound', ?, 30)`
+        id, business_id, assistant_id, status, environment, direction, started_at, duration_s, connected_at
+       ) VALUES (?, ?, ?, 'completed', ?, 'inbound', ?, 30, datetime('now'))`
     );
     for (let i = 0; i < 135; i++) {
       const seconds = String(i).padStart(3, '0');
