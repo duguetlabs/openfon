@@ -182,19 +182,26 @@ describe('Asterisk operational state retirement',()=>{
 
 
 describe('Asterisk startup connection boundary',()=>{
-  function pendingSession(){
-    let resolve!:(response:Response)=>void;
-    const fetch=vi.fn(()=>new Promise<Response>(r=>{resolve=r;}));
-    env.CALL_SESSION={idFromName:()=>call,get:()=>({fetch})} as unknown as DurableObjectNamespace;
-    return {fetch,resolve:(response:Response)=>resolve(response)};
+  function deferred<T>(){
+    let resolve!:(value:T)=>void;
+    const promise=new Promise<T>(r=>{resolve=r;});
+    return {promise,resolve};
   }
-  const waitOpening=async(fetch:ReturnType<typeof vi.fn>)=>{
-    for(let i=0;i<100 && !fetch.mock.calls.length;i++)await new Promise(r=>setImmediate(r));
-    expect(fetch).toHaveBeenCalledTimes(1);
+  function pendingSession(){
+    const response=deferred<Response>(), opened=deferred<void>();
+    const fetch=vi.fn(()=>{opened.resolve();return response.promise;});
+    env.CALL_SESSION={idFromName:()=>call,get:()=>({fetch})} as unknown as DurableObjectNamespace;
+    return {fetch,opened:opened.promise,resolve:response.resolve};
+  }
+  const waitOpening=async(upstream:ReturnType<typeof pendingSession>,result:Promise<Response>)=>{
+    // Authentication performs real asynchronous crypto. Observe the operation,
+    // rather than assuming any number of event-loop turns means it completed.
+    await Promise.race([upstream.opened,result.then(response=>{throw Error(`startup returned ${response.status} before session fetch`);})]);
+    expect(upstream.fetch).toHaveBeenCalledTimes(1);
   };
   const row=()=>db.prepare('SELECT status,outcome,connected_at,carrier_released_at,failure_code FROM calls WHERE id=?').bind(call).first<Record<string,unknown>>();
   it('alarm progresses during stalled session upgrade and rejects/closes late installation',async()=>{
-    const upstream=pendingSession(), live=owner();const result=live.object.fetch(request());await waitOpening(upstream.fetch);
+    const upstream=pendingSession(), live=owner();const result=live.object.fetch(request());await waitOpening(upstream,result);
     expect((await row())?.connected_at).toBeNull();
     await live.object.alarm();
     expect(await row()).toMatchObject({status:'failed',outcome:'failed',connected_at:null,failure_code:'asterisk_start_failed'});
@@ -205,11 +212,37 @@ describe('Asterisk startup connection boundary',()=>{
   });
   it('bounds startup to ten seconds, releases capacity, and closes a socket arriving after timeout',async()=>{
     vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});
-    const upstream=pendingSession(), live=owner();const result=live.object.fetch(request());await waitOpening(upstream.fetch);
+    const upstream=pendingSession(), live=owner();const result=live.object.fetch(request());await waitOpening(upstream,result);
     await vi.advanceTimersByTimeAsync(10000);expect((await result).status).toBe(503);
     expect(await row()).toMatchObject({status:'failed',outcome:'failed',connected_at:null});expect((await row())?.carrier_released_at).toBeTruthy();
     const socket={accept:vi.fn(),close:vi.fn()};upstream.resolve({status:101,webSocket:socket} as unknown as Response);
     await Promise.resolve();await Promise.resolve();expect(socket.close).toHaveBeenCalledTimes(1);expect(vi.getTimerCount()).toBe(0);
+  });
+  it('waits for delayed real authentication before starting the upstream timeout',async()=>{
+    vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});
+    const entered=deferred<void>(), release=deferred<void>();
+    const digest=crypto.subtle.digest.bind(crypto.subtle);
+    const auth=vi.spyOn(crypto.subtle,'digest').mockImplementation(async(algorithm,data)=>{
+      entered.resolve();await release.promise;return digest(algorithm,data);
+    });
+    const upstream=pendingSession(), live=owner();const result=live.object.fetch(request());
+    try {
+      await entered.promise;
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(upstream.fetch).not.toHaveBeenCalled();
+      expect(await row()).toBeNull();expect(vi.getTimerCount()).toBe(0);
+      release.resolve();await waitOpening(upstream,result);
+      expect(await row()).toMatchObject({status:'active',connected_at:null});
+      await vi.advanceTimersByTimeAsync(9999);
+      expect((await row())?.status).toBe('active');
+      await vi.advanceTimersByTimeAsync(1);
+      expect((await result).status).toBe(503);
+      expect(await row()).toMatchObject({status:'failed',connected_at:null});
+      expect((await row())?.carrier_released_at).toBeTruthy();
+    } finally {
+      release.resolve();upstream.resolve(new Response(null,{status:503}));
+      await result;auth.mockRestore();
+    }
   });
   it('projects unready failure even if ordinary CallSession close finalized first',async()=>{
     db.exec(`INSERT INTO calls(id,business_id,assistant_id,channel,status,environment,outcome) VALUES('${call}','biz','assistant','asterisk','completed','live','answered')`);
