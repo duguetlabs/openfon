@@ -500,17 +500,17 @@ export async function ensureWorkspaceFoundation(
          )
          SELECT ?, ?, ?,
            CASE WHEN
-             trim(agent_name, char(9) || char(10) || char(11) || char(12) || char(13) || ' ')<>''
-             AND trim(persona, char(9) || char(10) || char(11) || char(12) || char(13) || ' ')<>''
-             AND trim(language, char(9) || char(10) || char(11) || char(12) || char(13) || ' ')<>''
+             trim(agent_name, char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>''
+             AND trim(persona, char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>''
+             AND trim(language, char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>''
            THEN 'active' ELSE 'draft' END,
            agent_name, greeting, persona, language,
            voice, take_messages, custom_instructions, engine, realtime_model,
            realtime_voice, llm_model,
            CASE WHEN
-             trim(agent_name, char(9) || char(10) || char(11) || char(12) || char(13) || ' ')<>''
-             AND trim(persona, char(9) || char(10) || char(11) || char(12) || char(13) || ' ')<>''
-             AND trim(language, char(9) || char(10) || char(11) || char(12) || char(13) || ' ')<>''
+             trim(agent_name, char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>''
+             AND trim(persona, char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>''
+             AND trim(language, char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>''
            THEN datetime('now') ELSE NULL END
            FROM agent_settings WHERE business_id=?`
       ).bind(`asst_${workspace.id}`, workspace.id, workspace.slug, workspace.id)
@@ -1087,9 +1087,9 @@ export function registerStudioApi(app: StudioApp): void {
       `UPDATE assistants SET state='active', activated_at=COALESCE(activated_at, datetime('now')),
         updated_at=datetime('now')
        WHERE id=?
-         AND trim(name, char(9) || char(10) || char(11) || char(12) || char(13) || ' ')<>''
-         AND trim(persona, char(9) || char(10) || char(11) || char(12) || char(13) || ' ')<>''
-         AND trim(language, char(9) || char(10) || char(11) || char(12) || char(13) || ' ')<>''`
+         AND trim(name, char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>''
+         AND trim(persona, char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>''
+         AND trim(language, char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>''`
     )
       .bind(assistant.id)
       .run();
@@ -1174,24 +1174,30 @@ export function registerStudioApi(app: StudioApp): void {
       return c.json({ error: 'Not found' }, 404);
     }
     const callId = newId();
-    const inserted = await c.env.DB.prepare(
-      `INSERT INTO calls (id, business_id, assistant_id, channel, caller_id, environment, direction, started_at)
-       SELECT ?, ?, ?, 'web', ?, 'test', 'inbound', datetime(?, 'unixepoch')
-        WHERE (SELECT COUNT(*) FROM calls
-                WHERE business_id=? AND environment='test'
-                  AND started_at > datetime(?, 'unixepoch', '-1 day')) < ?`
-    )
-      .bind(
-        callId,
-        assistant.business_id,
-        assistant.id,
-        `owner:${c.get('userId')}`,
-        rateLimitNow / 1000,
-        assistant.business_id,
-        rateLimitNow / 1000,
-        TEST_CALLS_PER_DAY
+    let inserted: D1Result;
+    try {
+      inserted = await c.env.DB.prepare(
+        `INSERT INTO calls (id, business_id, assistant_id, channel, caller_id, environment, direction, started_at)
+         SELECT ?, ?, ?, 'web', ?, 'test', 'inbound', datetime(?, 'unixepoch')
+          WHERE (SELECT COUNT(*) FROM calls
+                  WHERE business_id=? AND environment='test'
+                    AND started_at > datetime(?, 'unixepoch', '-1 day')) < ?`
       )
-      .run();
+        .bind(
+          callId,
+          assistant.business_id,
+          assistant.id,
+          `owner:${c.get('userId')}`,
+          rateLimitNow / 1000,
+          assistant.business_id,
+          rateLimitNow / 1000,
+          TEST_CALLS_PER_DAY
+        )
+        .run();
+    } catch (error) {
+      await refundStudioSpend(c.env, reservations);
+      throw error;
+    }
     if ((inserted.meta.changes ?? 0) !== 1) {
       await refundStudioSpend(c.env, reservations);
       const currentDay = await testCallDayState(c.env, assistant.business_id, rateLimitNow);

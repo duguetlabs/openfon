@@ -60,6 +60,10 @@ describe('Calm Studio migration 0008', () => {
         applyMigrations(db, 8);
         expect(db.database.prepare("SELECT state,activated_at,public_slug FROM assistants WHERE id='asst_b'").get()).toEqual({state:'draft',activated_at:null,public_slug:'legacy-link'});
         expect(db.database.prepare(`SELECT ${field} AS value FROM agent_settings WHERE business_id='b'`).get()).toEqual({value:blank});
+        expect(() => db.database.prepare("UPDATE assistants SET state='active' WHERE id='asst_b'").run()).toThrow('active assistant requires complete essentials');
+        const essentials = { agent_name: 'Maya', persona: 'calm', language: 'en', [field]: blank };
+        expect(() => db.database.prepare("INSERT INTO assistants(id,business_id,public_slug,state,name,persona,language) VALUES('invalid','b','invalid-slug','active',?,?,?)").run(essentials.agent_name, essentials.persona, essentials.language)).toThrow('active assistant requires complete essentials');
+
         expect((await request(makeEnv(db), '/api/public/agent/legacy-link', {}, '')).status).toBe(404);
       } finally { db.close(); }
     }
@@ -1573,6 +1577,24 @@ describe('Calm Studio API foundation', () => {
         nextDay
       )
     ).toBeUndefined();
+  });
+
+  it('refunds workspace and IP reservations when ticket insertion throws', async () => {
+    await createWorkspace();
+    const { assistants } = await data<{ assistants: Array<{ id: string }> }>(await request(env, '/api/me/bootstrap'));
+    const path = `/api/me/assistants/${assistants[0].id}/test-calls`;
+    db.hook = sql => {
+      if (sql.trim().startsWith('INSERT INTO calls') && sql.includes('WHERE (SELECT COUNT(*)')) throw new Error('Synthetic insert outage');
+    };
+    const init = { ...json('POST', {}), headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '198.51.100.34' } };
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect((await request(env, path, init)).status).toBe(500);
+      expect(db.database.prepare("SELECT COUNT(*) AS n FROM rate_counters WHERE bucket LIKE 'studio:%'").get()).toEqual({ n: 0 });
+      expect(db.database.prepare("SELECT COUNT(*) AS n FROM calls WHERE environment='test'").get()).toEqual({ n: 0 });
+      db.hook = null;
+      expect((await request(env, path, init)).status).toBe(201);
+    } finally { db.hook = null; log.mockRestore(); }
   });
 
   it('refunds every broader reservation when the race-safe test insert finds a newly full day', async () => {
