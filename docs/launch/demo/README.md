@@ -20,3 +20,7 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE='/absolute/path/to/installed/Chromium' node docs/
 Omit the executable override if the browser revision expected by the installed Playwright package is already installed. Requires existing ffmpeg with drawtext support; nothing is installed by the script. This macOS export uses `/System/Library/Fonts/Helvetica.ttc`; adjust the font path on another OS.
 
 The script checks that ports 8791 and 9233 are free before starting. Override `DEMO_PORT` and `DEMO_INSPECTOR_PORT` if needed. It reuses `scripts/e2e-server.mjs` through a disposable copy with those alternate ports, seeds only fictional local data, and removes temporary server/database state on exit. It does not read production credentials or deploy anything. Existing provider responses are intentionally deterministic, so this asset is UI evidence only.
+
+## Audible demonstration
+
+The [60–90 second audible script](audible-script.md) is ready for scenario approval and an authorized working provider. No audible recording is supplied yet; the silent MP4 above remains UI evidence only.
