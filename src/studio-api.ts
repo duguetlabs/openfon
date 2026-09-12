@@ -938,7 +938,7 @@ export function registerStudioApi(app: StudioApp): void {
   app.post('/api/me/assistants', async (c) => {
     const workspace = await workspaceForUser(c.env, c.get('userId'));
     if (!workspace) return c.json({ error: 'Create a workspace first' }, 409);
-    const body = await readWorkspaceBody<Partial<Assistant>>(c.req);
+    const body = await readWorkspaceBody<Partial<Omit<Assistant, 'take_messages'>> & { take_messages?: number | boolean }>(c.req);
     if (
       (body.name !== undefined && !body.name.trim()) ||
       (body.persona !== undefined && !body.persona.trim()) ||
@@ -964,7 +964,7 @@ export function registerStudioApi(app: StudioApp): void {
         body.persona?.trim() || 'friendly and professional',
         body.language?.trim() || 'en',
         body.voice ?? '',
-        body.take_messages === 0 ? 0 : 1,
+        body.take_messages === 0 || body.take_messages === false ? 0 : 1,
         body.custom_instructions ?? '',
         body.engine === 'realtime' ? 'realtime' : 'pipeline',
         body.realtime_model ?? '',
@@ -995,7 +995,7 @@ export function registerStudioApi(app: StudioApp): void {
   app.put('/api/me/assistants/:assistantId', async (c) => {
     const assistant = await ownedAssistant(c.env, c.get('userId'), c.req.param('assistantId'));
     if (!assistant) return c.json({ error: 'Not found' }, 404);
-    const body = await readWorkspaceBody<Partial<Assistant>>(c.req);
+    const body = await readWorkspaceBody<Partial<Omit<Assistant, 'take_messages'>> & { take_messages?: number | boolean }>(c.req);
     if (
       (body.name !== undefined && !body.name.trim()) ||
       (body.persona !== undefined && !body.persona.trim()) ||
@@ -1283,7 +1283,7 @@ export function registerStudioApi(app: StudioApp): void {
     const [metrics, recent] = await Promise.all([
       c.env.DB.prepare(
         `SELECT
-          COUNT(*) AS total,
+          COALESCE(SUM(CASE WHEN connected_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS total,
           COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed,
           COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed,
           COALESCE(SUM(CASE

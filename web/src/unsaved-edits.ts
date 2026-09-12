@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useBeforeUnload, useBlocker } from 'react-router-dom';
 
-const message = 'Discard your unsaved assistant changes?';
+const message = 'Discard your unsaved changes?';
 // Sign-out changes authentication before navigating, so it asks the same guard
 // before that mutation. Normal links and browser Back use the router blocker.
 const guards = new Set<{ dirty: boolean; approved: boolean }>();
