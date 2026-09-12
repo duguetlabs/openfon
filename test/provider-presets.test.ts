@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from '../src/index';
 import { transcribe } from '../src/providers';
-import { providerUpdate } from '../src/provider-settings';
+import { providerUpdate, OPENAI_REALTIME_VOICES } from '../src/provider-settings';
 import type { Env } from '../src/types';
 import { SqliteD1, applyMigrations } from './sqlite-d1';
 
@@ -94,7 +94,7 @@ it('sends transcription only to its workspace provider with redirects disabled',
   expect(fetch).toHaveBeenCalledWith('https://api.openai.com/v1/audio/transcriptions', expect.objectContaining({ redirect: 'manual', headers: { Authorization: 'Bearer workspace-stt' } }));
   expect(fetch.mock.calls[0][1].body.get('model')).toBe('whisper-1');
 });
-it('clears known gateway assistant presets for OpenAI while preserving custom overrides', async () => {
+it('clears incompatible gateway models and voices for OpenAI while preserving custom model IDs', async () => {
   db.exec(`INSERT INTO assistants(id,business_id,public_slug,realtime_model,realtime_voice) VALUES
     ('a1','b1','gateway','kataleptic-realtime-hd','azure-voice'),
     ('a2','b1','custom','my-custom-model','my-custom-voice');`);
@@ -102,5 +102,26 @@ it('clears known gateway assistant presets for OpenAI while preserving custom ov
   expect(db.database.prepare('SELECT realtime_model,realtime_voice FROM assistants WHERE id=?').get('a1'))
     .toEqual({ realtime_model: '', realtime_voice: '' });
   expect(db.database.prepare('SELECT realtime_model,realtime_voice FROM assistants WHERE id=?').get('a2'))
-    .toEqual({ realtime_model: 'my-custom-model', realtime_voice: 'my-custom-voice' });
+    .toEqual({ realtime_model: 'my-custom-model', realtime_voice: '' });
+});
+
+it.each([
+  ['', 'en_US-lessac-medium', '', ''],
+  ['my-custom-model', 'en-US-AvaMultilingualNeural', 'my-custom-model', ''],
+  ['kataleptic-realtime-hd', 'marin', '', 'marin'],
+  ['gpt-realtime-2', 'cedar', '', 'cedar'],
+  ['', '', '', ''],
+  ...OPENAI_REALTIME_VOICES.map(voice => ['my-custom-model', voice, 'my-custom-model', voice]),
+])('validates voice independently on OpenAI switch: model=%s voice=%s', async (model, voice, expectedModel, expectedVoice) => {
+  db.database.prepare('INSERT INTO assistants(id,business_id,public_slug,realtime_model,realtime_voice) VALUES (?,?,?,?,?)')
+    .run('a1', 'b1', 'voice-check', model, voice);
+  db.database.prepare('UPDATE agent_settings SET realtime_model=?,realtime_voice=?').run(model, voice);
+  expect((await request('/api/me/provider', { realtime_provider: 'openai', realtime_api_key: 'synthetic-key' })).status).toBe(200);
+  for (const table of ['assistants', 'agent_settings']) {
+    expect(db.database.prepare(`SELECT realtime_model,realtime_voice FROM ${table} WHERE business_id=?`).get('b1'))
+      .toEqual({ realtime_model: expectedModel, realtime_voice: expectedVoice });
+  }
+  // Compatibility settings for another workspace must remain untouched.
+  expect(db.database.prepare('SELECT realtime_model,realtime_voice FROM agent_settings WHERE business_id=?').get('b2'))
+    .toEqual({ realtime_model: model, realtime_voice: voice });
 });

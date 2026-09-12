@@ -1,4 +1,4 @@
-import { providerUpdate, ProviderInputError, TEXT_PRESETS } from './provider-settings';
+import { providerUpdate, ProviderInputError, TEXT_PRESETS, OPENAI_REALTIME_VOICES } from './provider-settings';
 import type { Hono } from 'hono';
 import { readWorkspaceBody } from './request-validation';
 import { newId } from './auth';
@@ -1624,13 +1624,21 @@ export function registerStudioApi(app: StudioApp): void {
         next.realtime_api_key, next.stt_provider, next.stt_base_url, next.stt_api_key, next.stt_model),
       c.env.DB.prepare('UPDATE agent_settings SET llm_base_url=?, llm_api_key=? WHERE business_id=?').bind(baseUrl, apiKey, workspace.id),
     ];
-    // Gateway model/voice presets cannot be carried into OpenAI's protocol.
-    // Custom assistant models remain untouched. Blank uses the adapter default.
+    // Model and voice compatibility are independent. Keep custom model IDs,
+    // but clear any voice outside the direct OpenAI catalog, even with a blank
+    // or custom model. Blank fields use the adapter defaults.
     if (next.realtime_provider === 'openai' && current?.realtime_provider !== 'openai') {
-      for (const table of ['assistants', 'agent_settings']) statements.push(c.env.DB.prepare(
-        `UPDATE ${table} SET realtime_model='', realtime_voice='' WHERE business_id=?
-         AND (realtime_model LIKE 'kataleptic-%' OR realtime_model='gpt-realtime-2')`
-      ).bind(workspace.id));
+      const voicePlaceholders = OPENAI_REALTIME_VOICES.map(() => '?').join(', ');
+      for (const table of ['assistants', 'agent_settings']) {
+        statements.push(c.env.DB.prepare(
+          `UPDATE ${table} SET realtime_model='' WHERE business_id=?
+           AND (realtime_model LIKE 'kataleptic-%' OR realtime_model='gpt-realtime-2')`
+        ).bind(workspace.id));
+        statements.push(c.env.DB.prepare(
+          `UPDATE ${table} SET realtime_voice='' WHERE business_id=?
+           AND realtime_voice<>'' AND realtime_voice NOT IN (${voicePlaceholders})`
+        ).bind(workspace.id, ...OPENAI_REALTIME_VOICES));
+      }
     }
     await c.env.DB.batch(statements);
     return c.json({
