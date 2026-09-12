@@ -132,7 +132,7 @@ try {
     db.prepare("INSERT INTO telnyx_number_routes(connection_id,phone_number,business_id,assistant_id,enabled) VALUES(?, '+12025550101','smoke-business','smoke-assistant',1)").bind(call.connection_id),
   ]);
   const webhook = async (type, id=randomUUID()) => {
-    const body=JSON.stringify({data:{id,record_type:'event',event_type:type,occurred_at:new Date().toISOString(),payload:{...call,from:'+12025550100',to:'+12025550101',direction:'incoming'}}});
+    const body=JSON.stringify({data:{id,record_type:'event',event_type:type,occurred_at:new Date().toISOString(),payload:{...call,...(type==='call.hangup'?{hangup_cause:'normal_clearing'}:{}),from:'+12025550100',to:'+12025550101',direction:'incoming'}}});
     const timestamp=String(Math.floor(Date.now()/1000));
     const signature=sign(null,Buffer.from(timestamp+'|'+body),privateKey).toString('base64');
     const response=await mf.dispatchFetch('https://openfon.smoke.invalid/api/telnyx/webhooks',{method:'POST',headers:{'Content-Type':'application/json','telnyx-timestamp':timestamp,'telnyx-signature-ed25519':signature},body});

@@ -136,7 +136,7 @@ export function equalStreamToken(actual: string | null, expected: string): boole
 }
 
 const CARRIER_FAILURES = new Set([
-  'carrier_stream_failed', 'media_owner_restarted', 'media_setup_timeout',
+  'carrier_hangup_failed', 'carrier_stream_failed', 'media_owner_restarted', 'media_setup_timeout',
   'media_bridge_failed', 'assistant_unavailable', 'start_timeout', 'carrier_error',
   'invalid_carrier_frame', 'invalid_media_order', 'drain_timeout',
   'session_error', 'invalid_session_frame', 'playback_error', 'playback_overflow', 'socket_closed', 'socket_error', 'session_socket_closed',
@@ -235,6 +235,11 @@ export class TelnyxCall implements DurableObject {
   private async consume(s: ControlState, event: TelnyxControlEvent): Promise<void> {
     if (event.type === 'call.hangup') {
       if (s.reason === 'socket_closed' && event.normalHangup) s.reason = 'carrier_hangup';
+      // Signed abnormal or missing causes must classify even when the webhook
+      // wins the socket race. Preserve more specific, established failures.
+      if (!event.normalHangup && (s.reason === 'socket_closed' || !CARRIER_FAILURES.has(s.reason))) {
+        s.reason = 'carrier_hangup_failed';
+      }
       s.terminal = true;
       s.ending = true;
       s.commands = {};

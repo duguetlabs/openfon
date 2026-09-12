@@ -43,7 +43,7 @@ function owner(storage = new Storage()) {
   const object = new TelnyxCall(state, env);
   return { object, storage, pending, async drain() { while (pending.length) await pending.shift(); },
     event(type: string, id = crypto.randomUUID()) {
-      const event: TelnyxControlEvent = { id, type, callId, call: correlation, ...(type === 'call.initiated' ? { to: '+12025550101', from: '+12025550100' } : {}) };
+      const event: TelnyxControlEvent = { id, type, callId, call: correlation, ...(type === 'call.hangup' ? { normalHangup: true } : {}), ...(type === 'call.initiated' ? { to: '+12025550101', from: '+12025550100' } : {}) };
       return object.fetch(new Request('https://internal/events', { method: 'POST', body: JSON.stringify(event) }));
     },
   };
@@ -52,7 +52,7 @@ async function occupied() {
   return (await env.DB.prepare(`SELECT COUNT(*) AS n FROM calls WHERE business_id='biz' AND environment='live' AND ${OCCUPIED_CALL_SQL}`).first<{n:number}>())!.n;
 }
 function webhook(type: string, patch: Record<string, unknown> = {}) {
-  const payload = { call_control_id: correlation.callControlId, call_leg_id: correlation.callLegId, call_session_id: correlation.callSessionId, connection_id: correlation.connectionId, direction: 'incoming', from: '+12025550100', to: '+12025550101', ...patch };
+  const payload = { call_control_id: correlation.callControlId, call_leg_id: correlation.callLegId, call_session_id: correlation.callSessionId, connection_id: correlation.connectionId, direction: 'incoming', from: '+12025550100', to: '+12025550101', hangup_cause: 'normal_clearing', ...patch };
   const body = JSON.stringify({ data: { record_type: 'event', event_type: type, id: crypto.randomUUID(), occurred_at: new Date().toISOString(), payload } });
   const timestamp = String(Math.floor(Date.now() / 1000));
   return new Request('https://openfon.test/api/telnyx/webhooks', { method: 'POST', body, headers: {
@@ -204,7 +204,28 @@ describe('durable carrier control', () => {
     env.TELNYX_CALL = {idFromName:(n:string)=>n,get:()=>({fetch:(r:Request)=>o.object.fetch(r)})} as unknown as DurableObjectNamespace;
     expect((await worker.fetch(webhook('call.hangup',{hangup_cause:cause}),env,fakeCtx)).status).toBe(200);
     await o.drain(); expect(await occupied()).toBe(0);
-    expect(db.database.prepare('SELECT status,outcome,failure_code FROM calls WHERE id=?').get(callId)).toEqual({status:'failed',outcome:'failed',failure_code:reason});
+    expect(db.database.prepare('SELECT status,outcome,failure_code FROM calls WHERE id=?').get(callId)).toEqual({status:'failed',outcome:'failed',failure_code:reason === 'socket_closed' ? 'carrier_hangup_failed' : reason});
+  });
+
+  it.each(['user_busy', undefined, 'unrecognized-private-cause'].flatMap(cause =>
+    ['webhook-first', 'socket-first'].map(order => [cause, order])))('classifies signed abnormal/unknown hangup %s: %s', async (cause, order) => {
+    let o = owner(); await o.event('call.initiated'); await o.drain();
+    db.database.prepare("UPDATE calls SET connected_at=datetime('now') WHERE id=?").run(callId);
+    const endSocket = () => (o.object as unknown as {terminate(reason:string):Promise<void>}).terminate('socket_closed');
+    env.TELNYX_CALL = {idFromName:(n:string)=>n,get:()=>({fetch:(r:Request)=>o.object.fetch(r)})} as unknown as DurableObjectNamespace;
+    if (order === 'socket-first') {await endSocket();await o.object.alarm();}
+    expect(await occupied()).toBe(1);
+    expect((await worker.fetch(webhook('call.hangup',{hangup_cause:cause}),env,fakeCtx)).status).toBe(200);
+    await o.drain(); if (order === 'webhook-first') await endSocket();
+    expect(await occupied()).toBe(0);
+    // Shared finalization can race; durable reconciliation restores the failure.
+    db.database.prepare("UPDATE calls SET status='completed',outcome='answered',failure_code=NULL WHERE id=?").run(callId);
+    o = owner(o.storage); await o.object.alarm();
+    expect(db.database.prepare('SELECT status,outcome,failure_code FROM calls WHERE id=?').get(callId)).toEqual({status:'failed',outcome:'failed',failure_code:'carrier_hangup_failed'});
+    vi.setSystemTime(Date.now()+36*60_000); await o.object.alarm();
+    expect([...o.storage.data]).toEqual([['retired',true]]);
+    await o.event('call.initiated');await o.drain();await o.object.alarm();
+    expect(o.storage.alarm).toBeNull(); expect([...o.storage.data]).toEqual([['retired',true]]);
   });
 
   it('does not downgrade explicit stream failure after provisional close', async () => {
