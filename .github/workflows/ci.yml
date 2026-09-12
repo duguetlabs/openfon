@@ -4,6 +4,13 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      deploy_production:
+        description: Deploy after reviewed release, backup and staging acceptance
+        type: boolean
+        required: true
+        default: false
 
 jobs:
   check:
@@ -73,7 +80,8 @@ jobs:
           path: test-results/
           retention-days: 7
 
-  # Deploys on push to main when Cloudflare credentials are configured. Two repo
+  # Production deploy is an explicit dispatch on main after release acceptance.
+  # Merging reviewed code alone must not apply production migrations. Two repo
   # secrets, and both are needed:
   #
   #   CLOUDFLARE_API_TOKEN   dash.cloudflare.com -> My Profile -> API Tokens,
@@ -97,7 +105,7 @@ jobs:
   # account.)
   deploy:
     needs: [check, bench-scoring, bench-realtime, browser]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deploy_production == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

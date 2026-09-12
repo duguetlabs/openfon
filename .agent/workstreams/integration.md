@@ -64,3 +64,6 @@ Historical PR-Agent unavailability and real-provider/carrier gates require fresh
 
 ## Current changed files
 Integration: .agent/workstreams/integration.md, docs/launch/readiness.md, scripts/migration-rehearsal.py. Cherry-picked owner files are preserved in commits 51bfe28, e974f08, 3cd372a.
+
+## Deployment control
+Found existing CI deploys automatically on every main push, which would couple any future merge to unaccepted production migrations. Integration changes CI to explicit workflow_dispatch on main with deploy_production=true (default false), preserving all prerequisite jobs. This makes merge and deployment separate concrete actions and implements the handoff's no-blind-deployment requirement. No dispatch executed.
