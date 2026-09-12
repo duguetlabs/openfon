@@ -170,6 +170,23 @@ export class TelnyxCall implements DurableObject {
     return this.state.storage.get<ControlState>('control');
   }
 
+  // Keep only a non-identifying marker after cleanup. Terminal-first calls may
+  // have no D1 row, so deleting replay protection would let a late initiation
+  // recreate a paid leg. The marker must survive eviction and account deletion.
+  private async retired(): Promise<boolean> {
+    return (await this.state.storage.get<boolean>('retired')) === true;
+  }
+
+  private async compact(): Promise<void> {
+    // Atomically replace operational state and its alarm with replay protection.
+    // A crash can retain the old terminal state or the marker, never neither.
+    await this.state.storage.transaction(async txn => {
+      await txn.put('retired', true);
+      await txn.delete('control');
+      await txn.deleteAlarm();
+    });
+  }
+
   private async persist(s: ControlState): Promise<void> {
     // Arm before storing. If a put fails, ingress does not acknowledge the event;
     // the earlier alarm can safely wake an empty object, and delivery retries.
@@ -246,8 +263,11 @@ export class TelnyxCall implements DurableObject {
     const path = new URL(request.url).pathname;
     if (path === '/media') return this.media(request);
     if (path === '/reconcile' && request.method === 'POST') {
-      await this.state.storage.setAlarm(Date.now() + 1);
-      return new Response(null, { status: 204 });
+      return this.exclusive(async () => {
+        if (await this.retired()) await this.compact();
+        else await this.state.storage.setAlarm(Date.now() + 1);
+        return new Response(null, { status: 204 });
+      });
     }
     if (path !== '/events' || request.method !== 'POST') return new Response(null, { status: 404 });
     const event = await request.json<TelnyxControlEvent>();
@@ -256,6 +276,7 @@ export class TelnyxCall implements DurableObject {
       return new Response(null, { status: 400 });
     }
     return this.exclusive(async () => {
+      if (await this.retired()) return new Response(null, { status: 204 });
       const existing = await this.load();
       if (!existing && this.env.TELNYX_ENABLED !== 'true') return new Response(null, { status: 204 });
       const s = existing ?? newState(event);
@@ -284,6 +305,7 @@ export class TelnyxCall implements DurableObject {
 
   private async tick(): Promise<void> {
     const dispatch = await this.exclusive(async () => {
+      if (await this.retired()) { await this.compact(); return null; }
       const s = await this.load();
       if (!s) { await this.state.storage.deleteAlarm(); return null; }
       if (!this.recoveryChecked) {
@@ -298,17 +320,16 @@ export class TelnyxCall implements DurableObject {
       }
       if (s.terminal) {
         await this.projectFailure(s);
-        if (s.cleanupAt !== null && Date.now() >= s.cleanupAt) {
+        if (s.cleanupAt === null || Date.now() >= s.cleanupAt) {
           await this.env.DB.prepare(
             `UPDATE calls SET status='abandoned', ended_at=COALESCE(ended_at, datetime('now')),
               failure_code=COALESCE(failure_code, 'carrier_finalization_timeout')
              WHERE id=? AND channel='telnyx' AND status='active' AND carrier_released_at IS NOT NULL`
           ).bind(s.callId).run();
-          s.cleanupAt = null;
-          await this.state.storage.put('control', s);
-          await this.state.storage.deleteAlarm();
-        } else if (s.cleanupAt !== null) await this.persist(s);
-        else await this.state.storage.deleteAlarm();
+          // Reconcile first, then compact atomically. Null also handles legacy
+          // records whose previous cleanup left the full state with no alarm.
+          await this.compact();
+        } else await this.persist(s);
         return null;
       }
       if (this.env.TELNYX_ENABLED !== 'true') this.end(s, 'feature_disabled');
@@ -380,6 +401,7 @@ export class TelnyxCall implements DurableObject {
   private async media(request: Request): Promise<Response> {
     if (request.method !== 'GET' || request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return new Response(null, { status: 426 });
     return this.exclusive(async () => {
+      if (await this.retired()) return new Response(null, { status: 403 });
       const s = await this.load();
       if (this.env.TELNYX_ENABLED !== 'true' || !s || !s.admitted || s.ending || !s.answered ||
           Date.now() >= s.tokenExpiresAt || !equalStreamToken(request.headers.get('x-telnyx-streaming-auth-token'), s.streamToken)) {

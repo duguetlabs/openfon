@@ -20,10 +20,22 @@ class Storage {
   data = new Map<string, unknown>();
   alarm: number | null = null;
   failPut = false;
+  failDelete = false;
+  failDeleteAlarm = false;
+  failCommit = false;
   async get<T>(key: string): Promise<T | undefined> { return structuredClone(this.data.get(key)) as T | undefined; }
   async put(key: string, value: unknown) { if (this.failPut) throw new Error('storage unavailable'); this.data.set(key, structuredClone(value)); }
+  async delete(key: string) { if (this.failDelete) throw new Error('storage unavailable'); return this.data.delete(key); }
   async setAlarm(time: number) { this.alarm = time; }
-  async deleteAlarm() { this.alarm = null; }
+  async deleteAlarm() { if (this.failDeleteAlarm) throw new Error('alarm unavailable'); this.alarm = null; }
+  async transaction<T>(callback: (txn: Storage) => Promise<T>): Promise<T> {
+    const data = structuredClone(this.data), alarm = this.alarm;
+    try {
+      const result = await callback(this);
+      if (this.failCommit) throw new Error('commit interrupted');
+      return result;
+    } catch (error) { this.data = data; this.alarm = alarm; throw error; }
+  }
 }
 function owner(storage = new Storage()) {
   const pending: Promise<unknown>[] = [];
@@ -198,6 +210,87 @@ describe('durable carrier control', () => {
   it('does not resurrect a terminal-first event when initiation arrives later', async () => {
     const o = owner(); await o.event('call.hangup'); await o.drain(); await o.event('call.initiated'); await o.drain();
     expect(requests).toHaveLength(0); expect(await occupied()).toBe(0);
+  });
+
+  it('compacts terminal state only after its cleanup deadline and finalizes the released row', async () => {
+    const o = owner(); await o.event('call.initiated'); await o.drain();
+    await o.event('call.answered'); await o.drain();
+    await o.event('call.hangup'); await o.drain();
+    const control = await o.storage.get<{cleanupAt:number}>('control');
+    vi.setSystemTime(control!.cleanupAt - 1); await o.object.alarm();
+    expect(o.storage.data.has('control')).toBe(true);
+    expect(o.storage.data.has('retired')).toBe(false);
+    vi.setSystemTime(control!.cleanupAt); await o.object.alarm();
+    expect([...o.storage.data]).toEqual([['retired', true]]);
+    expect(o.storage.alarm).toBeNull();
+    expect(await occupied()).toBe(0);
+    expect(db.database.prepare('SELECT status FROM calls WHERE id=?').get(callId)).toEqual({status:'abandoned'});
+  });
+
+  it.each(['terminal-first', 'admitted', 'deleted-account'])('rejects late initiation/replay after compaction and restart (%s)', async scenario => {
+    const o = owner();
+    if (scenario !== 'terminal-first') { await o.event('call.initiated', 'initial'); await o.drain(); }
+    await o.event('call.hangup', 'terminal'); await o.drain();
+    vi.setSystemTime(Date.now() + 36 * 60_000); await o.object.alarm();
+    const count = requests.length;
+    // Replay protection must not depend on retaining the business/account row.
+    if (scenario === 'deleted-account') db.exec('DELETE FROM users');
+    const restarted = owner(o.storage);
+    for (const [type, id] of [['call.initiated','initial'], ['call.initiated','fresh-retry'], ['call.hangup','terminal'], ['call.answered','late-answer']]) {
+      expect((await restarted.event(type, id)).status).toBe(204); await restarted.drain();
+    }
+    expect([...o.storage.data]).toEqual([['retired', true]]);
+    expect(requests).toHaveLength(count);
+    expect(db.database.prepare('SELECT COUNT(*) AS n FROM calls').get()).toEqual({n:scenario === 'admitted' ? 1 : 0});
+    expect(await occupied()).toBe(0);
+    expect(o.storage.alarm).toBeNull();
+  });
+
+  it('rejects retired media and leaves reconcile/alarm wakeups compact after restart', async () => {
+    const o = owner(); await o.event('call.hangup'); await o.drain();
+    vi.setSystemTime(Date.now() + 36 * 60_000); await o.object.alarm();
+    const restarted = owner(o.storage);
+    const response = await restarted.object.fetch(new Request('https://internal/media', {headers:{Upgrade:'websocket','x-telnyx-streaming-auth-token':'a'.repeat(64)}}));
+    expect(response.status).toBe(403);
+    expect((await restarted.object.fetch(new Request('https://internal/reconcile', {method:'POST'}))).status).toBe(204);
+    await restarted.object.alarm();
+    expect([...o.storage.data]).toEqual([['retired', true]]);
+    expect(o.storage.alarm).toBeNull();
+    expect(requests).toHaveLength(0);
+  });
+
+  it.each(['database', 'marker', 'delete', 'alarm', 'commit'])('retries interrupted compaction safely: %s failure', async failure => {
+    const o = owner(); await o.event('call.hangup'); await o.drain();
+    vi.setSystemTime(Date.now() + 36 * 60_000);
+    if (failure === 'database') db.hook = () => { throw new Error('D1 unavailable'); };
+    if (failure === 'marker') o.storage.failPut = true;
+    if (failure === 'delete') o.storage.failDelete = true;
+    if (failure === 'alarm') o.storage.failDeleteAlarm = true;
+    if (failure === 'commit') o.storage.failCommit = true;
+    await o.object.alarm();
+    expect(o.storage.data.has('control')).toBe(true);
+    expect(o.storage.data.has('retired')).toBe(false);
+    expect(o.storage.alarm).toBeGreaterThan(Date.now());
+    db.hook = null; o.storage.failPut = false; o.storage.failDelete = false; o.storage.failDeleteAlarm = false; o.storage.failCommit = false;
+    const restarted = owner(o.storage);
+    // Ingress can race the retry; it must never restart carrier admission.
+    await restarted.event('call.initiated'); await restarted.drain();
+    await restarted.object.alarm();
+    expect([...o.storage.data]).toEqual([['retired', true]]);
+    expect(o.storage.alarm).toBeNull();
+    expect(requests).toHaveLength(0);
+  });
+
+  it('compacts a legacy terminal cleanupAt=null record when reconciliation wakes it', async () => {
+    const o = owner(); await o.event('call.hangup'); await o.drain();
+    const s = await o.storage.get<Record<string, unknown>>('control');
+    await o.storage.put('control', {...s, cleanupAt:null, streamToken:'expired-capability'});
+    await o.storage.deleteAlarm();
+    const restarted = owner(o.storage);
+    await restarted.object.fetch(new Request('https://internal/reconcile', {method:'POST'}));
+    await restarted.object.alarm();
+    expect([...o.storage.data]).toEqual([['retired', true]]);
+    expect(o.storage.alarm).toBeNull();
   });
 
   it('keeps the carrier reservation after accepted hangup until terminal confirmation', async () => {
