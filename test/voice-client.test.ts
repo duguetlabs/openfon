@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { VoiceCall } from '../web/src/voice';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe('browser voice connection', () => {
   it('releases a microphone granted after hangup without opening a socket', async () => {
@@ -137,5 +137,45 @@ describe('browser voice resource lifetime', () => {
     voice.hangup();
     await voice.connect('cancelled-reservation');
     expect(getUserMedia).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('browser goodbye playback failure', () => {
+  it.each(['reject', 'ended', 'error'])('releases mic and socket after ending followed by playback %s', async failure => {
+    vi.useFakeTimers();
+    const { socket, stop } = prepareConnection();
+    let reject!: (error: Error) => void;
+    const playback = new Promise<void>((_, rejectPromise) => { reject = rejectPromise; });
+    const audio = { play: () => playback, pause: vi.fn(), onended: null as (() => void)|null, onerror: null as (() => void)|null };
+    const revoke = vi.fn();
+    vi.stubGlobal('URL', { createObjectURL: () => 'blob:goodbye', revokeObjectURL: revoke });
+    vi.stubGlobal('Audio', vi.fn(function () { return audio; }));
+    const voice = new VoiceCall(); await voice.connect('test');
+    socket.onmessage!({ data: new ArrayBuffer(4) });
+    socket.onmessage!({ data: JSON.stringify({type:'ending'}) });
+    if (failure === 'reject') reject(new Error('Autoplay blocked'));
+    else if (failure === 'ended') audio.onended!();
+    else audio.onerror!();
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(599); expect(stop).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(stop).toHaveBeenCalledOnce(); expect(socket.close).toHaveBeenCalledOnce();
+    expect(revoke).toHaveBeenCalledWith('blob:goodbye'); expect(voice.ended).toBe(true);
+    expect(socket.send).toHaveBeenCalledWith(JSON.stringify({type:'hangup'}));
+  });
+  it('ignores a stale rejected player while a replacement is playing', async () => {
+    vi.useFakeTimers();
+    const { socket, stop } = prepareConnection(); let reject!: (error: Error) => void;
+    let index = 0;
+    vi.stubGlobal('URL', { createObjectURL: () => `blob:${++index}`, revokeObjectURL: vi.fn() });
+    const first = new Promise<void>((_, rejectPromise) => { reject = rejectPromise; });
+    let players = 0;
+    vi.stubGlobal('Audio', vi.fn(function () { return { play: () => ++players === 1 ? first : Promise.resolve(), pause: vi.fn(), onended:null,onerror:null }; }));
+    const voice = new VoiceCall(); await voice.connect('test');
+    socket.onmessage!({data:new ArrayBuffer(4)}); socket.onmessage!({data:new ArrayBuffer(4)});
+    socket.onmessage!({data:JSON.stringify({type:'ending'})}); reject(new Error('Old player rejected'));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(stop).not.toHaveBeenCalled(); expect(voice.ended).toBe(false); voice.hangup();
   });
 });

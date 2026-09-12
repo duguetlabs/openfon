@@ -380,18 +380,15 @@ export class VoiceCall {
     const url = URL.createObjectURL(new Blob([buf], { type: 'audio/mpeg' }));
     this.playerUrl = url;
     this.player = new Audio(url);
-    this.player.onended = this.player.onerror = () => {
+    const finished = () => {
+      if (this.playerUrl !== url) return;
       this.releasePlayer();
       this.agentSpeaking = false;
       this.emit({ type: 'speaking', who: 'none' });
       if (this.hangupWhenDone) setTimeout(() => this.hangup(), 600);
     };
-    void this.player.play().catch(() => {
-      if (this.playerUrl !== url) return;
-      this.releasePlayer();
-      this.agentSpeaking = false;
-      this.emit({ type: 'speaking', who: 'none' });
-    });
+    this.player.onended = this.player.onerror = finished;
+    void this.player.play().catch(finished);
   }
 
   private releasePlayer(): void {
