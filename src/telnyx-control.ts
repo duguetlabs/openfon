@@ -11,6 +11,7 @@ export interface TelnyxControlEvent {
   call: TelnyxCallCorrelation;
   from?: string;
   to?: string;
+  normalHangup?: boolean;
 }
 interface Command {
   id: string;
@@ -69,6 +70,7 @@ export function telnyxControlEvent(event: VerifiedTelnyxEvent, callId: string): 
   }
   return {
     id: event.eventId, type: event.eventType, callId, call: event.call,
+    ...(event.eventType === 'call.hangup' ? { normalHangup: event.payload.hangup_cause === 'normal_clearing' } : {}),
     ...(event.eventType === 'call.initiated' ? { to: event.payload.to as string, from: event.payload.from as string } : {}),
   };
 }
@@ -137,7 +139,7 @@ const CARRIER_FAILURES = new Set([
   'carrier_stream_failed', 'media_owner_restarted', 'media_setup_timeout',
   'media_bridge_failed', 'assistant_unavailable', 'start_timeout', 'carrier_error',
   'invalid_carrier_frame', 'invalid_media_order', 'drain_timeout',
-  'session_error', 'invalid_session_frame', 'playback_error', 'playback_overflow', 'socket_closed',
+  'session_error', 'invalid_session_frame', 'playback_error', 'playback_overflow', 'socket_closed', 'socket_error', 'session_socket_closed',
 ]);
 
 function newState(event: TelnyxControlEvent): ControlState {
@@ -211,6 +213,9 @@ export class TelnyxCall implements DurableObject {
 
   private async projectFailure(s: ControlState): Promise<void> {
     if (!s.admitted || !CARRIER_FAILURES.has(s.reason)) return;
+    // A normal carrier WebSocket close can precede its signed hangup webhook.
+    // Keep capacity reserved and defer classification until terminal confirmation.
+    if (s.reason === 'socket_closed' && !s.terminal) return;
     // Only fixed internal reason codes become owner-visible. Keep this separate
     // from carrier release, and repeat after session finalization may overwrite it.
     await this.env.DB.prepare(`UPDATE calls SET
@@ -229,6 +234,7 @@ export class TelnyxCall implements DurableObject {
 
   private async consume(s: ControlState, event: TelnyxControlEvent): Promise<void> {
     if (event.type === 'call.hangup') {
+      if (s.reason === 'socket_closed' && event.normalHangup) s.reason = 'carrier_hangup';
       s.terminal = true;
       s.ending = true;
       s.commands = {};
@@ -247,7 +253,10 @@ export class TelnyxCall implements DurableObject {
       if (s.ending || this.env.TELNYX_ENABLED !== 'true') { this.end(s, 'feature_disabled'); return; }
       s.admitted = await reserveTelnyxCall(this.env, s.callId, s.call, event.to || '', event.from || 'anonymous');
       if (!s.admitted) this.end(s, 'admission_rejected');
-    } else if (s.ending) return;
+    } else if (s.ending) {
+      if (event.type === 'streaming.failed' && s.reason === 'socket_closed') s.reason = 'carrier_stream_failed';
+      return;
+    }
     else if (event.type === 'call.answered') {
       s.answered = true;
       delete s.commands.answer;

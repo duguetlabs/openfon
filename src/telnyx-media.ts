@@ -270,7 +270,7 @@ export function createTelnyxMediaBridge(input: {
       input.carrier.removeEventListener('message', carrierMessage);
       input.session.removeEventListener('message', sessionMessage);
       for (const socket of [input.carrier, input.session]) {
-        socket.removeEventListener('close', disconnected); socket.removeEventListener('error', disconnected);
+        socket.removeEventListener('close', disconnected); socket.removeEventListener('error', transportError);
         try { socket.close(1000, 'call ended'); } catch { /* already closed */ }
       }
       input.onEnded(reason);
@@ -278,11 +278,16 @@ export function createTelnyxMediaBridge(input: {
   });
   const carrierMessage = (event: MessageEvent) => { void adapter.carrierMessage(event.data); };
   const sessionMessage = (event: MessageEvent) => adapter.sessionMessage(event.data);
-  const disconnected = () => adapter.close('socket_closed');
+  const disconnected = (event: Event) => {
+    const code = (event as CloseEvent).code;
+    adapter.close(event.currentTarget === input.session ? 'session_socket_closed'
+      : code === 1000 || code === 1005 ? 'socket_closed' : 'socket_error');
+  };
+  const transportError = () => adapter.close('socket_error');
   input.carrier.addEventListener('message', carrierMessage);
   input.session.addEventListener('message', sessionMessage);
   for (const socket of [input.carrier, input.session]) {
-    socket.addEventListener('close', disconnected); socket.addEventListener('error', disconnected);
+    socket.addEventListener('close', disconnected); socket.addEventListener('error', transportError);
   }
   return { close: reason => adapter.close(reason) };
 }

@@ -195,6 +195,27 @@ describe('Telnyx media bridge', () => {
     expect(f.onEnd).toHaveBeenCalledWith('session_error');
   });
 
+  it.each([
+    ['carrier', 'close', 1000, 'socket_closed'],
+    ['carrier', 'close', 1005, 'socket_closed'],
+    ['carrier', 'close', 1006, 'socket_error'],
+    ['carrier', 'error', 1000, 'socket_error'],
+    ['session', 'close', 1000, 'session_socket_closed'],
+    ['session', 'error', 1000, 'socket_error'],
+  ])('distinguishes %s %s %s termination', (side, type, code, reason) => {
+    class Socket extends EventTarget {
+      readyState = 1; binaryType = 'blob';
+      send() {}
+      close() { this.readyState = 3; this.dispatchEvent(new Event('close')); }
+    }
+    const carrier = new Socket(), session = new Socket(), onEnded = vi.fn();
+    createTelnyxMediaBridge({carrier:carrier as unknown as WebSocket,session:session as unknown as WebSocket,callId:'call',callControlId:'control',callLegId:'leg',callSessionId:'session',streamToken:identity.authToken,onEnded});
+    const event = new Event(type); Object.defineProperty(event,'code',{value:code});
+    (side === 'carrier' ? carrier : session).dispatchEvent(event);
+    expect(onEnded).toHaveBeenCalledExactlyOnceWith(reason);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('socket wrapper forwards close once and removes all owned listeners', async () => {
     class Socket extends EventTarget {
       binaryType = 'blob';

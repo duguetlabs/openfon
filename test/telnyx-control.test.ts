@@ -167,6 +167,56 @@ describe('durable carrier control', () => {
     expect(db.database.prepare('SELECT failure_code FROM calls WHERE id=?').get(callId)).toEqual({ failure_code: null });
   });
 
+  it.each(['socket-first', 'webhook-first'])('reconciles normal hangup without false failure: %s', async order => {
+    let o = owner(); await o.event('call.initiated'); await o.drain();
+    db.database.prepare("UPDATE calls SET status='completed',outcome='answered',connected_at=datetime('now') WHERE id=?").run(callId);
+    const endSocket = () => (o.object as unknown as { terminate(reason: string): Promise<void> }).terminate('socket_closed');
+    const hangup = async () => {
+      env.TELNYX_CALL = { idFromName: (n:string) => n, get: () => ({ fetch: (r:Request) => o.object.fetch(r) }) } as unknown as DurableObjectNamespace;
+      expect((await worker.fetch(webhook('call.hangup', { hangup_cause: 'normal_clearing' }), env, fakeCtx)).status).toBe(200);
+      await o.drain();
+    };
+    if (order === 'socket-first') {
+      await endSocket(); await o.object.alarm();
+      expect(await occupied()).toBe(1); // accepted command is not confirmed release
+      expect(db.database.prepare('SELECT failure_code FROM calls WHERE id=?').get(callId)).toEqual({failure_code:null});
+      o = owner(o.storage); // provisional reason must survive restart
+      await hangup();
+    } else { await hangup(); await endSocket(); }
+    await o.object.alarm();
+    expect(await occupied()).toBe(0);
+    expect(db.database.prepare('SELECT status,outcome,failure_code FROM calls WHERE id=?').get(callId)).toEqual({status:'completed',outcome:'answered',failure_code:null});
+    vi.setSystemTime(Date.now()+36*60_000); await o.object.alarm();
+    expect([...o.storage.data]).toEqual([['retired',true]]);
+    o = owner(o.storage); await o.event('call.initiated'); await o.drain(); await o.object.alarm();
+    expect([...o.storage.data]).toEqual([['retired',true]]); expect(o.storage.alarm).toBeNull();
+  });
+
+  it.each([
+    ['socket_closed', 'user_busy'], ['socket_closed', undefined],
+    ['socket_error', 'normal_clearing'], ['session_socket_closed', 'normal_clearing'],
+    ['session_error', 'normal_clearing'],
+  ])('preserves abnormal failure %s with hangup cause %s', async (reason, cause) => {
+    const o = owner(); await o.event('call.initiated'); await o.drain();
+    db.database.prepare("UPDATE calls SET status='completed',outcome='answered',connected_at=datetime('now') WHERE id=?").run(callId);
+    await (o.object as unknown as {terminate(reason:string):Promise<void>}).terminate(reason!);
+    await o.object.alarm(); expect(await occupied()).toBe(1);
+    env.TELNYX_CALL = {idFromName:(n:string)=>n,get:()=>({fetch:(r:Request)=>o.object.fetch(r)})} as unknown as DurableObjectNamespace;
+    expect((await worker.fetch(webhook('call.hangup',{hangup_cause:cause}),env,fakeCtx)).status).toBe(200);
+    await o.drain(); expect(await occupied()).toBe(0);
+    expect(db.database.prepare('SELECT status,outcome,failure_code FROM calls WHERE id=?').get(callId)).toEqual({status:'failed',outcome:'failed',failure_code:reason});
+  });
+
+  it('does not downgrade explicit stream failure after provisional close', async () => {
+    const o = owner(); await o.event('call.initiated'); await o.drain();
+    await (o.object as unknown as {terminate(reason:string):Promise<void>}).terminate('socket_closed');
+    await o.event('streaming.failed'); await o.drain();
+    env.TELNYX_CALL = {idFromName:(n:string)=>n,get:()=>({fetch:(r:Request)=>o.object.fetch(r)})} as unknown as DurableObjectNamespace;
+    await worker.fetch(webhook('call.hangup',{hangup_cause:'normal_clearing'}),env,fakeCtx); await o.drain();
+    expect(db.database.prepare('SELECT failure_code FROM calls WHERE id=?').get(callId)).toEqual({failure_code:'carrier_stream_failed'});
+    expect(await occupied()).toBe(0);
+  });
+
   it('persists admission then answers once across duplicate event deliveries', async () => {
     const o = owner();
     expect((await o.event('call.initiated', 'same-event')).status).toBe(204); await o.drain();
