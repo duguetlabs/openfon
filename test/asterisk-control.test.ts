@@ -13,9 +13,19 @@ const call='ast_'+'a'.repeat(64);
 class Storage {
   data=new Map<string,unknown>();alarm: number|null=null;
   async get<T>(key:string){return this.data.get(key) as T|undefined;}
-  async put(key:string,value:unknown){this.data.set(key,value);}
+  failTransactionAt='';
+  inTransaction=false;
+  check(step:string){if(this.inTransaction && this.failTransactionAt===step)throw Error('transaction '+step);}
+  async put(key:string,value:unknown){this.check('put');this.data.set(key,value);}
+  async delete(keys:string|string[]){this.check('delete');for(const key of typeof keys==='string'?[keys]:keys)this.data.delete(key);}
+  async transaction<T>(run:(txn:Storage)=>Promise<T>){
+    const txn=new Storage();txn.data=structuredClone(this.data);txn.alarm=this.alarm;
+    txn.failTransactionAt=this.failTransactionAt;txn.inTransaction=true;
+    const result=await run(txn);txn.check('commit');
+    this.data=txn.data;this.alarm=txn.alarm;return result;
+  }
   async setAlarm(time:number){this.alarm=time;}
-  async deleteAlarm(){this.alarm=null;}
+  async deleteAlarm(){this.check('deleteAlarm');this.alarm=null;}
 }
 function owner(storage=new Storage()) {
   return {storage,object:new AsteriskCall({storage,waitUntil:()=>{}} as unknown as DurableObjectState,env)};
@@ -89,5 +99,81 @@ describe('Asterisk authorization, admission and recovery',()=>{
     expect((await db.prepare('SELECT carrier_released_at FROM calls WHERE id=?').bind(call).first<{carrier_released_at:string}>())?.carrier_released_at).toBeTruthy();
     await recovered.object.alarm();expect((await db.prepare('SELECT status FROM calls WHERE id=?').bind(call).first<{status:string}>())?.status).toBe('failed');
     expect(recovered.storage.alarm).toBeNull();
+    expect([...recovered.storage.data]).toEqual([['retired',true]]);
+  });
+});
+
+
+describe('Asterisk operational state retirement',()=>{
+  const marker=(storage:Storage)=>{expect([...storage.data]).toEqual([['retired',true]]);expect(storage.alarm).toBeNull();};
+  it('compacts a completed legacy call without altering its completed outcome',async()=>{
+    db.exec(`INSERT INTO calls(id,business_id,assistant_id,channel,status,environment,connected_at,carrier_released_at) VALUES('${call}','biz','assistant','asterisk','completed','live',datetime('now'),datetime('now'))`);
+    const completed=owner();
+    for(const [key,value] of Object.entries({call,deadline:1,ending:'playback_complete',cleanup:1}))await completed.storage.put(key,value);
+    await completed.object.alarm();marker(completed.storage);
+    expect((await db.prepare('SELECT status FROM calls WHERE id=?').bind(call).first<{status:string}>())?.status).toBe('completed');
+  });
+  it('provider and quota rejections retain only the replay marker',async()=>{
+    for(const rejection of ['provider','quota']){
+      if(rejection==='provider')env.REALTIME_API_KEY='';
+      else {env.REALTIME_API_KEY='synthetic';db.exec('UPDATE businesses SET max_concurrent_calls=0');}
+      const rejected=owner();expect((await rejected.object.fetch(request())).status).toBe(403);marker(rejected.storage);
+      expect((await owner(rejected.storage).object.fetch(request())).status).toBe(409);marker(rejected.storage);
+    }
+  });
+  it('retires failed setup after projection and keeps replay protection without a D1 row',async()=>{
+    const failed=owner();expect((await failed.object.fetch(request())).status).toBe(503);
+    expect(failed.storage.data.get('call')).toBe(call);
+    await failed.object.alarm();marker(failed.storage);
+    db.exec('DELETE FROM calls');
+    const restarted=owner(failed.storage);expect((await restarted.object.fetch(request())).status).toBe(409);
+    await restarted.object.alarm();marker(failed.storage);
+    expect(await db.prepare('SELECT COUNT(*) n FROM calls').first()).toEqual({n:0});
+  });
+  it('recovers an admission query error before retiring its identifying state',async()=>{
+    db.hook=sql=>{if(sql.includes('SELECT a.engine'))throw Error('admission outage');};
+    const failed=owner();expect((await failed.object.fetch(request())).status).toBe(503);
+    expect(failed.storage.data.get('call')).toBe(call);expect(failed.storage.alarm).toBeTruthy();
+    db.hook=null;await failed.object.alarm();marker(failed.storage);
+  });
+  it('does not compact before terminal D1 projection succeeds',async()=>{
+    const failed=owner();await failed.object.fetch(request());
+    const retained=structuredClone([...failed.storage.data]);
+    db.hook=sql=>{if(sql.includes("failure_code=COALESCE"))throw Error('projection outage');};
+    await expect(failed.object.alarm()).rejects.toThrow('projection outage');
+    expect([...failed.storage.data]).toEqual(retained);expect(failed.storage.alarm).toBeGreaterThan(Date.now());
+    db.hook=null;await failed.object.alarm();marker(failed.storage);
+  });
+  for(const step of ['put','delete','deleteAlarm','commit']) it(`retains recovery state and alarm on compaction transaction ${step} failure`,async()=>{
+    const failed=owner();await failed.object.fetch(request());
+    await failed.storage.put('deadline',Date.now()+10000);
+    const retained=structuredClone([...failed.storage.data]);failed.storage.failTransactionAt=step;
+    await expect(failed.object.alarm()).rejects.toThrow('transaction '+step);
+    expect([...failed.storage.data]).toEqual(retained);expect(failed.storage.alarm).toBeGreaterThan(Date.now());
+    failed.storage.failTransactionAt='';await owner(failed.storage).object.alarm();marker(failed.storage);
+  });
+  it('keeps a recovery alarm when rejection compaction fails',async()=>{
+    env.REALTIME_API_KEY='';const rejected=owner();rejected.storage.failTransactionAt='delete';
+    expect((await rejected.object.fetch(request())).status).toBe(503);
+    expect(rejected.storage.data.get('call')).toBe(call);expect(rejected.storage.alarm).toBeGreaterThan(Date.now());
+    rejected.storage.failTransactionAt='';await rejected.object.alarm();marker(rejected.storage);
+  });
+  it('initial transaction failure creates neither unarmed identity nor a D1 call',async()=>{
+    const failed=owner();failed.storage.failTransactionAt='commit';
+    expect((await failed.object.fetch(request())).status).toBe(503);
+    expect([...failed.storage.data]).toEqual([]);expect(failed.storage.alarm).toBeNull();
+    expect(await db.prepare('SELECT COUNT(*) n FROM calls').first()).toEqual({n:0});
+    failed.storage.failTransactionAt='';expect((await failed.object.fetch(request())).status).toBe(503);
+    expect(failed.storage.data.get('call')).toBe(call); // retry reached setup
+  });
+  it('wakes a legacy rejected object with no alarm without admitting a replay',async()=>{
+    const legacy=owner();await legacy.storage.put('call',call);
+    expect((await legacy.object.fetch(request())).status).toBe(409);expect(legacy.storage.alarm).toBeTruthy();
+    await legacy.object.alarm();await legacy.object.alarm();marker(legacy.storage);
+  });
+  it('late queued finish cannot resurrect a retired owner',async()=>{
+    const failed=owner();await failed.object.fetch(request());await failed.object.alarm();
+    await (failed.object as unknown as {finish(call:string,reason:string):Promise<void>}).finish(call,'late_close');
+    marker(failed.storage);
   });
 });
