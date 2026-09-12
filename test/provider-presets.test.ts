@@ -125,3 +125,18 @@ it.each([
   expect(db.database.prepare('SELECT realtime_model,realtime_voice FROM agent_settings WHERE business_id=?').get('b2'))
     .toEqual({ realtime_model: model, realtime_voice: voice });
 });
+
+it('rejects custom STT WebSocket URLs without changing saved configuration, while allowing realtime WSS', async () => {
+  const original = { stt_provider: 'custom', stt_base_url: 'https://speech.example/v1', stt_api_key: 'original-key', stt_model: 'whisper-custom' };
+  expect((await request('/api/me/provider', original)).status).toBe(200);
+  for (const protocol of ['wss', 'ws']) {
+    const rejected = await request('/api/me/provider', { ...original, stt_base_url: `${protocol}://speech.example/v1`, stt_api_key: 'replacement-key' });
+    expect(rejected.status).toBe(400);
+    expect(await rejected.json()).toEqual({ error: 'stt URL must be an http(s) URL' });
+    expect(db.database.prepare('SELECT stt_base_url,stt_api_key,stt_model FROM provider_settings WHERE business_id=?').get('b1'))
+      .toEqual({ stt_base_url: original.stt_base_url, stt_api_key: original.stt_api_key, stt_model: original.stt_model });
+  }
+  expect((await request('/api/me/provider', { realtime_provider: 'custom', realtime_base_url: 'wss://speech.example/realtime', realtime_api_key: 'realtime-key' })).status).toBe(200);
+  expect(db.database.prepare('SELECT realtime_base_url FROM provider_settings WHERE business_id=?').get('b1'))
+    .toEqual({ realtime_base_url: 'wss://speech.example/realtime' });
+});

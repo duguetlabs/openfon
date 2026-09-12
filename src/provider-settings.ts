@@ -59,7 +59,7 @@ export function providerUpdate(env: Env, current: ProviderSettings | null, body:
     const credential = key(keyField, `${capability}_clear_api_key`, current?.[keyField] ?? '', oldIdentity, newIdentity);
     if (provider !== 'instance') {
       if (capability === 'realtime' && !url.startsWith('wss://')) throw new ProviderInputError('Realtime URL must use wss://');
-      const bad = validateLlmBaseUrl(url.replace(/^wss:/, 'https:'));
+      const bad = validateLlmBaseUrl(capability === 'realtime' ? url.replace(/^wss:/, 'https:') : url);
       if (bad) throw new ProviderInputError(`${capability} URL ${bad}`);
       if (!credential) throw new ProviderInputError(`${capability} provider needs its own API key; instance keys are never inherited.`);
     }
