@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Link, useLocation, useNavigate, useNavigationType, useParams, useSearchParams } from 'react-router-dom';
 import { api, type Assistant, type CallRow, type KnowledgeCollection, type KnowledgeItem, type OverviewResponse } from '../api';
 import { Button, Card, Field, TextArea, Spinner, inputClass, fmtDuration, fmtTime } from '../ui';
 import { VoiceCall } from '../voice';
@@ -98,7 +98,15 @@ export function Calls() {
     const [busy, setBusy] = useState(true);
     const [error, setError] = useState('');
     const [search, setSearch] = useState(params.get('search') || '');
-    useEffect(() => { setSearch(params.get('search') || ''); }, [params]);
+    const location = useLocation();
+    const navigationType = useNavigationType();
+    useLayoutEffect(() => {
+      // Our own pending filter navigation must not overwrite a newer keystroke.
+      // Back/Forward and external links still restore their URL's search value.
+      if (navigationType === 'POP' || !location.state?.callsFilterUpdate) {
+        setSearch(params.get('search') || '');
+      }
+    }, [location.key, navigationType, params]);
     const generation = useRef(0);
     const [reload, setReload] = useState(0);
     useEffect(() => { let current = true; void api.assistants().then(rows => { if (current) setAssistants(rows); }).catch(e => { if (current) setError(errorText(e)); }); return () => { current = false; }; }, [reload]);
@@ -113,7 +121,7 @@ export function Calls() {
     function filter(key: string, value: string) { const p = new URLSearchParams(params); if (search.trim()) p.set('search', search.trim()); else p.delete('search'); if (value)
         p.set(key, value);
     else
-        p.delete(key); p.delete('cursor'); setParams(p); }
+        p.delete(key); p.delete('cursor'); setParams(p, { state: { callsFilterUpdate: true } }); }
     return <><PageTitle title="Conversations" description="Review what callers needed, what worked, and what to improve."><Button disabled={busy} variant="ghost" onClick={() => setReload(n => n + 1)}>Refresh calls</Button></PageTitle><div className="studio-filters"><form onSubmit={e => { e.preventDefault(); filter('search', search); }}><Field label="Search conversations" value={search} onChange={e => setSearch(e.target.value)} placeholder="Caller, summary, or transcript"/><Button variant="ghost">Search</Button></form><label>Environment<select className={inputClass} value={params.get('environment') || 'all'} onChange={e => filter('environment', e.target.value)}><option value="all">Live & test</option><option value="live">Live only</option><option value="test">Test only</option></select></label><label>Assistant<select className={inputClass} value={params.get('assistantId') || ''} onChange={e => filter('assistantId', e.target.value)}><option value="">All assistants</option>{assistants.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label><label>Status<select className={inputClass} value={params.get('status') || ''} onChange={e => filter('status', e.target.value)}><option value="">All statuses</option>{['active', 'completed', 'failed', 'abandoned'].map(s => <option key={s}>{s}</option>)}</select></label></div><Notice error={error}/>{busy && <LoadingStatus />}{!busy && !rows.length && !error && <Card>No conversations match these filters. <Link to="/test">Start a private test call →</Link></Card>}<CallList calls={rows}/>{cursor && <Button disabled={busy} className="mt-5" variant="ghost" onClick={async () => { if (busy) return; const run = generation.current; setBusy(true); setError(''); try {
         const p = new URLSearchParams(query);
         if (!p.has('environment'))

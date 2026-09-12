@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, bookingRequestContact, takenMessage, type CallDetail, type KnowledgeCollection } from '../api';
-import { Card, Spinner, fmtDuration, fmtTime } from '../ui';
+import { api, ApiError, bookingRequestContact, takenMessage, type CallDetail, type KnowledgeCollection } from '../api';
+import { Button, Card, Spinner, fmtDuration, fmtTime } from '../ui';
 
 export default function CallDetailPage() {
   const { callId } = useParams();
   const [call, setCall] = useState<CallDetail | null>(null);
   const [error, setError] = useState('');
+  const [reload, setReload] = useState(0);
   const [collections, setCollections] = useState<KnowledgeCollection[]>([]);
   const [collectionId, setCollectionId] = useState('');
   const [drafting, setDrafting] = useState<number | null>(null);
@@ -17,22 +18,29 @@ export default function CallDetailPage() {
     let active = true;
     setCall(null); setError(''); setSaved('');
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let failures = 0;
     async function refreshCall() {
       if (!callId) return;
       try {
         const next = await api.call(callId);
         if (!active) return;
-        setCall(next); setError('');
+        failures = 0; setCall(next); setError('');
         if (next.status === 'active') timer = setTimeout(refreshCall, 1500);
       } catch (e) {
-        if (active) { setError(e instanceof Error ? e.message : 'Could not refresh call.'); timer = setTimeout(refreshCall, 3000); }
+        if (active) {
+          setError(e instanceof Error ? e.message : 'Could not refresh call.');
+          failures++;
+          const transient = !(e instanceof ApiError) || e.status === 429 || e.status >= 500;
+          if (transient && failures < 3) timer = setTimeout(refreshCall, 3000);
+        }
       }
     }
     void refreshCall();
     return () => { active = false; clearTimeout(timer); };
-  }, [callId]);
+  }, [callId, reload]);
 
-  if (error && !call) return <p role="alert" className="text-rose">{error}</p>;
+  const retry = <Button variant="ghost" onClick={() => setReload(n => n + 1)}>Retry call</Button>;
+  if (error && !call) return <div><p role="alert" className="text-rose">{error}</p>{retry}</div>;
   if (!call) return <Spinner />;
 
   const message = takenMessage(call.message_json);
@@ -62,7 +70,7 @@ export default function CallDetailPage() {
       </div>
 
       {call.status === 'active' && <p role="status">Waiting for the conversation to finish saving…</p>}
-      {error && <p role="alert" className="text-rose">{error}</p>}
+      {error && <div><p role="alert" className="text-rose">{error}</p>{retry}</div>}
       {message && (
         <Card className="rise rise-1 mb-8 border-rose/20 bg-wash-rose">
           <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-rose">☎ Message taken</p>

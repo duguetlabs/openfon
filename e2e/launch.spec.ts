@@ -304,3 +304,67 @@ test('settings identifies a saved business when active assistant validation reje
   await expect(page.getByRole('status').filter({ hasText: 'Saved.' })).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
+
+test('a search navigation cannot overwrite a newer draft before changing filters', async ({ page }) => {
+  await page.addInitScript(() => {
+    const NativeChannel = window.MessageChannel;
+    const queued: Array<() => void> = [];
+    let held = false;
+    (window as any).holdReactTasks = () => { held = true; };
+    (window as any).releaseReactTasks = () => { held = false; queued.splice(0).forEach(run => run()); };
+    window.MessageChannel = class extends NativeChannel {
+      constructor() {
+        super();
+        const post = this.port2.postMessage.bind(this.port2);
+        this.port2.postMessage = (...args: any[]) => {
+          const send = () => (post as any)(...args);
+          if (held) queued.push(send); else send();
+        };
+      }
+    };
+  });
+  await signup(page);
+  await page.goto('/calls');
+  await page.getByLabel('Search conversations').fill('first');
+  // Hold React's scheduled navigation commit while the next discrete input
+  // arrives, reproducing the ordering observed in both failed CI traces.
+  await page.evaluate(() => (window as any).holdReactTasks());
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await page.getByLabel('Search conversations').fill('second');
+  const applied = page.waitForResponse(r => r.url().includes('/api/me/calls?') && r.url().includes('search=first'));
+  await page.evaluate(() => (window as any).releaseReactTasks());
+  await applied;
+  await expect(page.getByLabel('Search conversations')).toHaveValue('second');
+  await page.getByRole('combobox', { name: 'Environment' }).selectOption('live');
+  await expect(page).toHaveURL(/search=second&environment=live/);
+  await page.goBack();
+  await expect(page.getByLabel('Search conversations')).toHaveValue('first');
+  await page.goForward();
+  await expect(page.getByLabel('Search conversations')).toHaveValue('second');
+});
+
+test('call detail stops permanent errors and bounds transient retries with manual recovery', async ({ page }) => {
+  await signup(page);
+  await page.clock.install();
+  let count = 0;
+  let status = 404;
+  await page.route('**/api/me/calls/missing-call', async route => { count++; await route.fulfill({ status, json: { error: 'Unavailable call' } }); });
+  await page.goto('/calls/missing-call');
+  await expect(page.getByRole('alert')).toContainText('Unavailable call');
+  await page.clock.runFor(10000);
+  expect(count).toBe(1);
+  status = 503;
+  await page.getByRole('button', { name: 'Retry call' }).click();
+  await expect.poll(() => count).toBe(2);
+  await page.clock.runFor(3001);
+  await expect.poll(() => count).toBe(3);
+  await page.clock.runFor(3001);
+  await expect.poll(() => count).toBe(4);
+  await page.clock.runFor(10000);
+  expect(count).toBe(4);
+  status = 404;
+  await page.getByRole('button', { name: 'Retry call' }).click();
+  await expect.poll(() => count).toBe(5);
+  await page.clock.runFor(10000);
+  expect(count).toBe(5);
+});
