@@ -48,7 +48,12 @@ speech synthesis or the browser pipeline.
 
 Configure the application's V2 webhook URL as
 `https://YOUR_ORIGIN/api/telnyx/webhooks`. The adapter sends the media URL and a
-fresh per-call token through a separate `streaming_start` command. Do not place
+fresh per-call token through a separate `streaming_start` command.
+That command requests `inbound_track`, PCMU in both directions, `rtp` bidirectional
+mode, 8000 Hz and target leg `self`. The bridge expects mono PCMU/8000 in the
+`start` frame and rejects a different codec; include PCMU in the application's
+allowed codecs when configuring the pilot. These settings follow the
+[streaming command contract](https://developers.telnyx.com/api-reference/call-commands/streaming-start). Do not place
 that token in a URL or configure a shared media token manually.
 
 Only the instance operator provisions `telnyx_number_routes`. A business's contact
@@ -67,6 +72,44 @@ These are placeholders. Use an actual E.164 number and verified IDs. The databas
 checks that the assistant belongs to the workspace. Start disabled; enable only
 the specific route for the controlled pilot, then set the Worker rollout flag.
 No tenant-facing API can claim or purchase a telephone number.
+
+## Staging handoff and setup diagnostics
+
+Before changing account routing, record the agreed HTTPS staging origin, Worker
+version/commit, D1 migration result, application ID, route/assistant IDs and the
+owner of the pilot. Do not substitute a local `.invalid` harness URL or an
+unverified workers.dev hostname. No staging origin or deployed version was
+validated by this workstream on 2026-09-12. The desktop account owner configures
+the portal only after integration provides those verified references.
+
+Use this sequence to narrow setup failures without exposing credentials:
+
+| Observation | Check |
+|---|---|
+| Webhook returns 503 | Required DO binding, account public key and application ID; when rollout is enabled also API-key presence and a valid fixed HTTPS origin. A configured name does not prove the credential works. |
+| Webhook returns 401 | Account Ed25519 key and signature/timestamp headers; proxy must preserve the exact body. Do not log the body or signature. |
+| Webhook returns 403 | The event's application ID differs from `TELNYX_CONNECTION_ID`. Check number assignment against the intended application. |
+| Webhook returns 200 but no answered call | Acknowledgement only means accepted processing. Check rollout flag, exact owned E.164 route, enabled route, active realtime assistant, server greeting capability and workspace call limits. |
+| Media upgrade returns 403/404 | Match current active reservation and route; token must come from that call's streaming command. Never replay or print a token to diagnose this. |
+| `start_timeout` / `media_setup_timeout` | Public WSS reachability, upstream realtime handshake and greeting synthesis. The bridge's ready deadline is 10 seconds; slow synthesis now fails closed instead of admitting caller input early. |
+| `invalid_carrier_frame` | Check only sanitized event type, codec, rate and identity-match result against the documented configured-token protocol. Do not dump full frames. |
+| `session_error` / failed greeting | Verify realtime credentials/model and, for external greetings, Azure TTS configuration. Telephone calls cannot use browser speech fallback. |
+| `drain_timeout` / unreleased reservation | Inspect mark acknowledgements and actual carrier-leg status. Wait for signed hangup/status confirmation; do not clear reservation rows manually. |
+
+For a private database inspection, this aggregate query omits caller identities,
+transcripts, carrier control IDs and stream credentials:
+
+```sql
+SELECT status, failure_code, COUNT(*) AS calls,
+       SUM(CASE WHEN reserved_at IS NOT NULL AND carrier_released_at IS NULL
+                THEN 1 ELSE 0 END) AS unreleased
+FROM calls WHERE channel='telnyx'
+GROUP BY status, failure_code;
+```
+
+Keep rollout and the route disabled during configuration. Only enable the agreed
+pilot route when account access, deployment and a consented test caller are ready.
+A successful unsigned HTTP probe is not carrier verification.
 
 ## Operation and failure handling
 
@@ -102,6 +145,13 @@ npm test
 npm run typecheck
 npm run test:telnyx
 ```
+
+The harness uses application port 8810 and inspector port 9250; run its two modes
+sequentially (the default command runs both; `-- --synthesized` runs only the
+synthesis regression). The synthesized mode holds a local TTS response pending, sends early
+caller audio, verifies no upstream input is released, then checks the greeting and
+normal conversation after releasing synthesis. The native mode exercises an
+engine-generated greeting. Neither mode uses a real AI or telephone provider.
 
 The harness bundles the real Worker, uses ephemeral D1 and generated signing keys,
 and replaces outbound provider services with local mocks. It makes no real calls

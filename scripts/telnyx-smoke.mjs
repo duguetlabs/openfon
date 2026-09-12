@@ -5,6 +5,7 @@
  * No deployment configuration, credentials, production database or API override.
  */
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { generateKeyPairSync, sign, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -13,8 +14,20 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { unstable_splitSqlQuery } from 'wrangler';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
+// CI's existing command runs both scenarios sequentially on the reserved ports.
+if (!process.argv.includes('--native') && !process.argv.includes('--synthesized')) {
+  for (const mode of ['--native', '--synthesized']) {
+    const result = spawnSync(process.execPath, [fileURLToPath(import.meta.url), mode], { stdio: 'inherit' });
+    if (result.error) throw result.error;
+    if (result.status !== 0) process.exit(result.status ?? 1);
+  }
+  process.exit(0);
+}
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const temp = await mkdtemp(resolve(tmpdir(), 'openfon-telnyx-smoke-'));
+const synthesized = process.argv.includes('--synthesized');
+const model = synthesized ? 'kataleptic-realtime-hd' : 'gpt-realtime-2';
+let releaseSynthesis;
 const commands = [];
 const telemetry = [];
 let mf;
@@ -32,6 +45,12 @@ const call = { call_control_id: 'smoke-control', call_leg_id: randomUUID(), call
 const mockScript = `
 export default { async fetch(request, env) {
   const url = new URL(request.url);
+  if (url.hostname === 'westeurope.tts.speech.microsoft.com' && url.pathname === '/cognitiveservices/v1') {
+    await env.RECORD.fetch('https://telemetry.smoke.invalid/synthesis', {method:'POST',body:'{}'});
+    const tone = new ArrayBuffer(4800); const view = new DataView(tone);
+    for (let i=0;i<2400;i++) view.setInt16(i*2,Math.round(8000*Math.sin(2*Math.PI*440*i/24000)),true);
+    return new Response(tone);
+  }
   if (url.hostname === 'api.telnyx.com') return env.RECORD.fetch(request);
   if (url.hostname === 'realtime.smoke.invalid' && request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
     const pair = new WebSocketPair(); const socket = pair[1]; socket.accept();
@@ -72,14 +91,14 @@ export default { async fetch(request, env) {
 `;
 try {
   const bundle = await build({ entryPoints: [resolve(root, 'src/index.ts')], bundle: true, format: 'esm', platform: 'browser', target: 'es2022', write: false, external: ['cloudflare:*'] });
-  mf = new Miniflare(convertV4MiniflareOptions({ defaultPersistRoot: temp, cf: false, workers: [
+  mf = new Miniflare(convertV4MiniflareOptions({ defaultPersistRoot: temp, cf: false, port: 8810, inspectorPort: 9250, workers: [
     { name: 'openfon', modules: true, script: bundle.outputFiles[0].text, compatibilityDate: '2026-05-01',
       d1Databases: { DB: 'smoke-db' }, durableObjects: { CALL_SESSION: { className:'CallSession',useSQLite:true }, TELNYX_CALL:{className:'TelnyxCall',useSQLite:true} },
       outboundService: 'mock-provider', bindings: {
         TELNYX_ENABLED:'true',TELNYX_API_KEY:'synthetic-test-only',TELNYX_PUBLIC_KEY:key,TELNYX_CONNECTION_ID:call.connection_id,TELNYX_PUBLIC_ORIGIN:'https://openfon.smoke.invalid',
         DEFAULT_LLM_BASE_URL:'https://llm.smoke.invalid/v1',DEFAULT_LLM_MODEL:'synthetic',DEFAULT_LLM_API_KEY:'synthetic-test-only',
-        DEFAULT_TTS_PROVIDER:'browser',DEFAULT_TTS_VOICE:'en-US-AvaMultilingualNeural',
-        REALTIME_BASE_URL:'wss://realtime.smoke.invalid/v1/realtime',REALTIME_MODEL:'gpt-realtime-2',REALTIME_API_KEY:'synthetic-test-only',
+        DEFAULT_TTS_PROVIDER:synthesized?'azure':'browser',AZURE_SPEECH_KEY:'synthetic-test-only',AZURE_SPEECH_REGION:'westeurope',DEFAULT_TTS_VOICE:'en-US-AvaMultilingualNeural',
+        REALTIME_BASE_URL:'wss://realtime.smoke.invalid/v1/realtime',REALTIME_MODEL:model,REALTIME_API_KEY:'synthetic-test-only',
       },
     },
     { name:'mock-provider',modules:true,script:mockScript,compatibilityDate:'2026-05-01',
@@ -91,7 +110,10 @@ try {
           assert.equal(request.headers.get('authorization'),'Bearer synthetic-test-only');
           assert.match(url.pathname,/^\/v2\/calls\/smoke-control\/actions\/(answer|streaming_start|hangup)$/);
           commands.push({action:url.pathname.split('/').at(-1),body});
-        } else telemetry.push({path:url.pathname,body});
+        } else {
+          telemetry.push({path:url.pathname,body});
+          if (url.pathname === '/synthesis') await new Promise(resolve => { releaseSynthesis = resolve; });
+        }
         return Response.json({data:{result:'ok'}});
       }},
     },
@@ -106,7 +128,7 @@ try {
     db.prepare("INSERT INTO users(id,email,password_hash) VALUES('smoke-owner','smoke@example.invalid','unused')"),
     db.prepare("INSERT INTO businesses(id,user_id,slug,name) VALUES('smoke-business','smoke-owner','smoke','Synthetic business')"),
     db.prepare("INSERT INTO provider_settings(business_id,llm_base_url) VALUES('smoke-business','')"),
-    db.prepare("INSERT INTO assistants(id,business_id,public_slug,state,name,persona,language,engine,realtime_model) VALUES('smoke-assistant','smoke-business','smoke-agent','active','Alex','Helpful receptionist','en','realtime','gpt-realtime-2')"),
+    db.prepare("INSERT INTO assistants(id,business_id,public_slug,state,name,persona,language,engine,realtime_model) VALUES('smoke-assistant','smoke-business','smoke-agent','active','Alex','Helpful receptionist','en','realtime',?)").bind(model),
     db.prepare("INSERT INTO telnyx_number_routes(connection_id,phone_number,business_id,assistant_id,enabled) VALUES(?, '+12025550101','smoke-business','smoke-assistant',1)").bind(call.connection_id),
   ]);
   const webhook = async (type, id=randomUUID()) => {
@@ -138,9 +160,17 @@ try {
   });
   carrier.send(JSON.stringify({event:'connected',version:'1.0.0',connected:{'x-telnyx-streaming-auth-token':stream.body.stream_auth_token}}));
   carrier.send(JSON.stringify({event:'start',sequence_number:'1',stream_id:'smoke-stream',start:{...call,media_format:{encoding:'PCMU',sample_rate:8000,channels:1}}}));
+  if (synthesized) {
+    await wait(()=>releaseSynthesis,'greeting synthesis begins');
+    carrier.send(JSON.stringify({event:'media',sequence_number:'2',stream_id:'smoke-stream',media:{track:'inbound',chunk:'1',timestamp:'0',payload:Buffer.alloc(160,255).toString('base64')}}));
+    await new Promise(resolve=>setTimeout(resolve,150));
+    assert.equal(telemetry.filter(x=>x.path==='/input').length,0,'caller input stays gated during pending synthesis');
+    assert.equal(received.filter(x=>x.event==='media').length,0,'no response overtakes pending greeting');
+    releaseSynthesis();
+  }
   await wait(()=>received.some(x=>x.event==='media'),'realtime greeting PCM');
   assert.ok(received.some(x=>x.event==='media' && [...Buffer.from(x.media.payload,'base64')].some(byte=>byte!==255)), 'non-silent tone survives codec');
-  carrier.send(JSON.stringify({event:'media',sequence_number:'2',stream_id:'smoke-stream',media:{track:'inbound',chunk:'1',timestamp:'0',payload:Buffer.alloc(160,255).toString('base64')}}));
+  if (!synthesized) carrier.send(JSON.stringify({event:'media',sequence_number:'2',stream_id:'smoke-stream',media:{track:'inbound',chunk:'1',timestamp:'0',payload:Buffer.alloc(160,255).toString('base64')}}));
   await wait(()=>telemetry.some(x=>x.path==='/input'),'PCM reaches realtime');
   assert.equal(telemetry.find(x=>x.path==='/input').body.bytes,960);
   await wait(()=>received.some(x=>x.event==='clear'),'barge-in clear');
@@ -153,8 +183,10 @@ try {
   assert.equal(rows.n,1,'duplicate initiated must not create another call');
   assert.equal(commands.filter(x=>x.action==='answer').length,1);
   assert.equal(telemetry.filter(x=>x.path==='/unexpected').length,0,'all outbound requests matched local mocks');
+  console.log(synthesized ? 'Synthesized greeting ordering verified.' : 'Native greeting verified.');
   console.log('PASS Telnyx workerd smoke: signed ingress, idempotent admission, authenticated media, realtime PCM, clear/marks/drain, carrier hangup, D1 release. No external requests.');
 } finally {
+  releaseSynthesis?.();
   try { carrier?.close(); } catch {}
   await mf?.dispose();
   await rm(temp,{recursive:true,force:true});
