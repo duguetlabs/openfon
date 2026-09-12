@@ -6,7 +6,7 @@ SQLite excludes any item whose combined kind, title, question, answer and conten
 
 From those candidates, calls use a whole-item prefix within a 32 KiB budget: combined field bytes plus 32 bytes per item and 256 bytes for section formatting. Selection stops at the first item that would exceed this budget; it does not skip forward to smaller newer items. FAQs are never cut in half. The budget is conservative because some fields are not rendered. It bounds the knowledge sections, not the entire system prompt or model token count. Omitted items remain saved and active; they are not available to the assistant on that call. Shorten older items or detach collections to make room. Draft and unattached items are never included.
 
-Suggested Knowledge UI disclosure:
+The Knowledge page discloses these limits:
 
 > Calls use active items from attached collections, oldest first (creation time, then ID). Items over 8 KiB of combined UTF-8 fields are omitted. Of the first 32 eligible items, only the whole-item prefix fitting a 32 KiB budget, including formatting allowance, is used. Selection stops at the first item that does not fit. Omitted items stay saved but are unavailable during calls; shorten items or detach collections to make room.
 

@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const port = process.env.OPENFON_E2E_PORT || '8790';
+const port = process.env.OPENFON_E2E_PORT || process.env.OPENFON_TEST_PORT || '8790';
 
 export default defineConfig({
   testDir: './e2e',

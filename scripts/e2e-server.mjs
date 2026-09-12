@@ -35,7 +35,7 @@ if (migrated.status !== 0) {
   rmSync(state, { recursive: true, force: true });
   process.exit(migrated.status || 1);
 }
-const worker = spawn(npx, ['wrangler', 'dev', '--local', '--port', process.env.OPENFON_E2E_PORT || '8790', '--inspector-port', process.env.OPENFON_E2E_INSPECTOR_PORT || '9232', '--persist-to', state,
+const worker = spawn(npx, ['wrangler', 'dev', '--local', '--port', process.env.OPENFON_E2E_PORT || process.env.OPENFON_TEST_PORT || '8790', '--inspector-port', process.env.OPENFON_E2E_INSPECTOR_PORT || process.env.OPENFON_INSPECTOR_PORT || '9232', '--persist-to', state,
   '--var', `DEFAULT_LLM_BASE_URL:${providerUrl}`, '--var', `DEFAULT_STT_BASE_URL:${providerUrl}`,
   '--var', `REALTIME_BASE_URL:${providerUrl.replace('http:', 'ws:')}/realtime`, '--var', 'DEFAULT_TTS_PROVIDER:browser',
   '--var', 'DEFAULT_LLM_API_KEY:local-test-key', '--var', 'DEFAULT_STT_API_KEY:local-test-key',
