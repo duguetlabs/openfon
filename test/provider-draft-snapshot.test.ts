@@ -30,8 +30,8 @@ async function privatePrimary() {
   db.exec("UPDATE assistants SET state='draft',activated_at=NULL WHERE business_id='b1'");
   expect((await request('/api/public/agent/one', undefined, '')).status).toBe(404);
 }
-async function switchProvider() {
-  return request('/api/me/provider', { realtime_provider: 'openai', realtime_api_key: 'synthetic-key' });
+async function switchProvider(selection = 'openai') {
+  return request('/api/me/provider', { realtime_provider: selection, realtime_api_key: 'synthetic-key' });
 }
 function primary() {
   return db.database.prepare("SELECT state,activated_at,realtime_model,realtime_voice FROM assistants WHERE business_id='b1'").get();
@@ -41,9 +41,15 @@ function snapshot() {
     db.database.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all());
 }
 
-it.each([true, false])('OpenAI cleanup keeps primary draft private (bootstrap first=%s)', async bootstrapFirst => {
+it.each([{ bootstrapFirst: true, selection: 'openai' }, { bootstrapFirst: false, selection: 'openai' },
+  { bootstrapFirst: true, selection: 'instance' }, { bootstrapFirst: false, selection: 'instance' }])
+('OpenAI cleanup keeps primary draft private (%j)', async ({ bootstrapFirst, selection }) => {
   await privatePrimary();
-  expect((await switchProvider()).status).toBe(200);
+  if (selection === 'instance') {
+    env.REALTIME_PROVIDER = 'openai';
+    db.exec("UPDATE provider_settings SET realtime_provider='kataleptic' WHERE business_id='b1'");
+  }
+  expect((await switchProvider(selection)).status).toBe(200);
   expect(primary()).toEqual({ state: 'draft', activated_at: null, realtime_model: '', realtime_voice: '' });
   if (bootstrapFirst) expect((await request('/api/me/bootstrap')).status).toBe(200);
   expect((await request('/api/public/agent/one', undefined, '')).status).toBe(404);

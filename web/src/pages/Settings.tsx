@@ -108,6 +108,10 @@ export default function Settings() {
     } finally { setSaving(false); }
   }
 
+  const profileFields = ['engine', 'realtime_model', 'realtime_voice', 'language', 'voice', 'llm_model'] as const;
+  const profileDraftDirty = profileFields.some(key => agent[key] !== loaded.current?.agent?.[key]);
+  const profileApplyReason = 'Save or revert your engine, model, language, and voice edits before applying a profile.';
+
   const set = (patch: Partial<Business>) => setBiz({ ...biz, ...patch });
   const setA = (patch: Partial<Agent>) => setAgent({ ...agent, ...patch });
 
@@ -304,6 +308,7 @@ export default function Settings() {
         <Card className="space-y-3">
           <p className="text-xs text-ink-soft">Up to 64 profiles are shown. Long historical values are previews and cannot be renamed here; applying uses the full saved configuration. Delete unused profiles to reveal more.</p>
           {profiles.length === 0 && <p className="text-sm text-ink-soft">No profiles yet. Configure the engine below, then save it here under a name.</p>}
+          {profileDraftDirty && profiles.length > 0 && <p className="text-sm text-ink-soft">{profileApplyReason}</p>}
           {profiles.map((p) => (
             <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-wash-iris/50 px-3 py-2">
               <input
@@ -318,7 +323,9 @@ export default function Settings() {
                 {(p.realtime_voice || p.voice) && ` · ${p.realtime_voice || p.voice}`}
               </span>
               <button
-                className="rounded-lg bg-iris px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-iris-deep"
+                disabled={profileDraftDirty || saving}
+                title={profileDraftDirty ? profileApplyReason : undefined}
+                className="rounded-lg bg-iris px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-iris-deep disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={() =>
                   void api
                     .applyProfile(p.id)

@@ -1665,7 +1665,10 @@ export function registerStudioApi(app: StudioApp): void {
     // Model and voice compatibility are independent. Keep custom model IDs,
     // but clear any voice outside the direct OpenAI catalog, even with a blank
     // or custom model. Blank fields use the adapter defaults.
-    if (next.realtime_provider === 'openai' && current?.realtime_provider !== 'openai') {
+    const effectiveRealtimeProvider = (selection: string | undefined) =>
+      !selection || selection === 'instance' ? c.env.REALTIME_PROVIDER || 'kataleptic' : selection;
+    if (effectiveRealtimeProvider(next.realtime_provider) === 'openai' &&
+        effectiveRealtimeProvider(current?.realtime_provider) !== 'openai') {
       const voicePlaceholders = OPENAI_REALTIME_VOICES.map(() => '?').join(', ');
       for (const table of ['assistants', 'agent_settings']) {
         statements.push(c.env.DB.prepare(
