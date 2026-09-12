@@ -22,7 +22,7 @@ Transcripts, summaries, and messages land in your dashboard (D1/SQLite). When a 
 
 ## Launch status
 
-The current launch branch adds a public website and a complete browser-call studio: assistants, private tests, knowledge approval, call review, and account controls. Browser calling is the implemented channel; current real-provider voice acceptance and a fresh staging HTTPS deployment are still pending. This is public development, not a production-readiness claim. Inbound Telnyx integration is implemented behind a disabled rollout flag and still needs a real carrier pilot. Email password recovery is not available yet. Do not describe booking requests as confirmed calendar appointments.
+The current launch branch adds a public website and a complete browser-call studio: assistants, private tests, knowledge approval, call review, and account controls. Browser calling is the implemented channel; an isolated staging HTTPS deployment has been verified, while real-provider voice acceptance remains pending. Staging probes do not establish audible-call success. This is public development, not a production-readiness claim. Inbound Telnyx integration is implemented behind a disabled rollout flag and still needs a real carrier pilot. Email password recovery is not available yet. Do not describe booking requests as confirmed calendar appointments.
 
 ## Features
 
