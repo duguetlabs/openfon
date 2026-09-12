@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Synthetic PBX + real local workerd/D1/DO; all provider requests intercepted. */
 import assert from 'node:assert/strict';
+import { runAsteriskRuntime } from './asterisk-runtime.mjs';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -32,9 +33,11 @@ export default { async fetch(request, env) {
         send({type:'response.output_audio_transcript.done',transcript:'Synthetic greeting.'});
       }, 30);
       if (msg.type === 'input_audio_buffer.append' && !responded) {
+        const nonSilent=[...atob(msg.audio)].some(x=>x.charCodeAt(0)!==0);
+        if (${process.argv.includes('--asterisk')} && !nonSilent) return;
         responded = true;
         const bytes = atob(msg.audio).length;
-        env.RECORD.fetch('https://telemetry.smoke.invalid/input', {method:'POST',body:JSON.stringify({bytes})});
+        env.RECORD.fetch('https://telemetry.smoke.invalid/input', {method:'POST',body:JSON.stringify({bytes,nonSilent})});
         // After greeting guard expires, emit barge-in then a short goodbye.
         setTimeout(() => {
           send({type:'input_audio_buffer.speech_started'});
@@ -80,6 +83,9 @@ try {
     db.prepare("INSERT INTO assistants(id,business_id,public_slug,state,name,persona,language,engine,realtime_model) VALUES('assistant','business','smoke-agent','active','Alex','Helpful receptionist','en','realtime','gpt-realtime-2')"),
     db.prepare("INSERT INTO asterisk_routes(id,business_id,assistant_id,password_sha256,enabled) VALUES('pbx','business','assistant',?,1)").bind(hash),
   ]);
+  if (process.argv.includes('--asterisk')) {
+    await runAsteriskRuntime({temp,db,telemetry,wait,password});
+  } else {
   const authorization='Basic '+Buffer.from('pbx:'+password).toString('base64');
   const upgrade=async(call,auth=authorization)=>mf.dispatchFetch('https://openfon.smoke.invalid/ws/asterisk/pbx?call='+call,{headers:{Upgrade:'websocket',Authorization:auth,'Sec-WebSocket-Protocol':'media'}});
   assert.equal((await upgrade('bad','Basic '+Buffer.from('pbx:'+'x'.repeat(32)).toString('base64'))).status,401);
@@ -107,4 +113,5 @@ try {
   assert.equal((await upgrade('first')).status,409,'completed channel cannot replay');
   await db.prepare("UPDATE asterisk_routes SET enabled=0").run();assert.equal((await upgrade('disabled')).status,401);
   console.log('PASS Asterisk synthetic workerd smoke: auth, duplicate rejection, admission limit, greeting PCM, inbound conversion, flush, marks/drain, hangup, D1 finalization, disabled route. No real PBX/provider/PSTN.');
+  }
 } finally {try{carrier?.close();}catch{}await mf?.dispose();await rm(temp,{recursive:true,force:true});}

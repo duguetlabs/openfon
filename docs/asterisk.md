@@ -92,5 +92,32 @@ paused assistant, full concurrency, provider failure, PBX disconnect and network
 loss. Use `channel originate Local/s@openfon-inbound application Echo` only for a
 local PBX smoke, with no external trunk. Confirm no remaining channels using
 `core show channels`. No real PBX/provider/PSTN success is claimed by the synthetic
-suite. This development host has no Asterisk executable and Docker's daemon was
-unavailable at the 2026-09-12 check.
+suite. A real local Asterisk 22.11.0 runtime test subsequently passed on
+2026-09-12 after starting the installed Docker Desktop. See
+[the runtime evidence](asterisk-runtime-validation-2026-09-12.md).
+
+
+## Repeat the actual PBX runtime test
+
+Start your installed Docker runtime, then from the repository root run:
+
+```sh
+docker build -t openfon-asterisk-runtime:22.11.0 examples/asterisk/runtime
+node scripts/asterisk-smoke.mjs --asterisk
+```
+
+The Dockerfile builds the pinned official Asterisk source and checks its SHA-256.
+The harness creates and removes only its own `openfon-asterisk-<pid>` container,
+fixture config and recordings. It exposes no SIP ports. Asterisk Local channels
+play a generated 660 Hz caller tone, while the mocked AI sends a 440 Hz response;
+MixMonitor and signal checks verify the response in the real PBX. A transparent
+local WebSocket proxy counts actual commands/acknowledgments without modifying
+the adapter. It also verifies revoked-route rejection and zero remaining PBX
+channels. Temporary audio is deleted after validation.
+
+Ports default to Worker 8811, inspector 9251 and capture proxy 8821. Override with
+`OPENFON_TEST_PORT`, `OPENFON_INSPECTOR_PORT`, and `OPENFON_ASTERISK_PROXY_PORT` for
+concurrent work. `OPENFON_ASTERISK_IMAGE` selects another locally built image.
+The fixture-only Docker-to-host hop uses plain WS with a synthetic password;
+production configuration continues to require verified WSS. The test does not
+use a real AI account, microphone, SIP trunk, telephone number or PSTN carrier.
