@@ -1,3 +1,4 @@
+import { asteriskAuthBudget } from './asterisk-auth-budget';
 import { verifyPassword } from './auth';
 import type { Hono } from 'hono';
 import type { Env } from './types';
@@ -6,18 +7,22 @@ export async function asteriskDigest(value: string): Promise<string> {
   return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))), b => b.toString(16).padStart(2, '0')).join('');
 }
 export async function authenticateAsterisk(env: Env, route: string, authorization: string | null): Promise<boolean> {
-  if (!authorization || authorization.length > 1024 || !authorization.startsWith('Basic ')) return false;
+  if (env.ASTERISK_ENABLED !== 'true' || !authorization || authorization.length > 1024 || !authorization.startsWith('Basic ')) return false;
   let decoded: string;
   try { decoded = atob(authorization.slice(6)); } catch { return false; }
   const split = decoded.indexOf(':');
   if (split < 1 || decoded.slice(0, split) !== route || decoded.length - split - 1 < 32) return false;
   const password = decoded.slice(split + 1);
   // Basic authentication and provisioning share an unambiguous byte contract.
-  if (!/^[\x21-\x7e]{32,512}$/.test(password)) return false;
-  const credential = await env.DB.prepare('SELECT password_hash FROM asterisk_routes WHERE id=? AND enabled=1').bind(route).first<{ password_hash: string | null }>();
-  if (!credential?.password_hash || !await verifyPassword(password, credential.password_hash)) return false;
-  // Revocation or rotation during the asynchronous KDF must win this admission.
-  return Boolean(await env.DB.prepare('SELECT id FROM asterisk_routes WHERE id=? AND enabled=1 AND password_hash=?').bind(route, credential.password_hash).first());
+  if (!/^[A-Za-z0-9_-]{32,512}$/.test(password)) return false;
+  const release = asteriskAuthBudget.acquire();
+  if (!release) return false;
+  try {
+    const credential = await env.DB.prepare('SELECT password_hash FROM asterisk_routes WHERE id=? AND enabled=1').bind(route).first<{ password_hash: string | null }>();
+    if (!credential?.password_hash || !await verifyPassword(password, credential.password_hash)) return false;
+    // Revocation or rotation during the asynchronous KDF must win this admission.
+    return Boolean(await env.DB.prepare('SELECT id FROM asterisk_routes WHERE id=? AND enabled=1 AND password_hash=?').bind(route, credential.password_hash).first());
+  } finally { release(); }
 }
 export function registerAsteriskRoutes(app: Hono<{ Bindings: Env; Variables: { userId: string } }>): void {
   app.get('/ws/asterisk/:route', async c => {

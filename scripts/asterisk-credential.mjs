@@ -4,8 +4,8 @@
 import { readFileSync } from 'node:fs';
 import { webcrypto } from 'node:crypto';
 const password=readFileSync(0,'utf8').replace(/\r?\n$/,'');
-if(!/^[\x21-\x7e]{32,512}$/.test(password)){
-  console.error('PBX password must contain 32–512 printable ASCII characters without spaces.');process.exit(1);
+if(!/^[A-Za-z0-9_-]{32,512}$/.test(password)){
+  console.error('PBX password must contain 32–512 characters using only A-Z, a-z, 0-9, underscore and hyphen.');process.exit(1);
 }
 const salt=webcrypto.getRandomValues(new Uint8Array(16));
 const key=await webcrypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveBits']);

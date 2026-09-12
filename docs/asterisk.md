@@ -37,9 +37,11 @@ and [websocket_client.conf sample](https://github.com/asterisk/asterisk/blob/mas
    Previously revoked routes remain disabled. There is no legacy-hash fallback.
 
    Create a unique route identifier such as `pbx` and generate a new random
-   password (32–512 printable ASCII characters without spaces) in your secret manager.
-   Provisioning and authentication reject Unicode and whitespace to keep Basic
-   authentication byte encoding unambiguous. Pass the password through
+   password (32–512 characters using only `A-Z`, `a-z`, `0-9`, `_` and `-`) in your secret manager.
+   Provisioning and authentication enforce this configuration-safe token alphabet.
+   Asterisk treats semicolons as comments; punctuation, whitespace and Unicode
+   are rejected rather than relying on config escaping. Generate a fresh token
+   using this alphabet; rotate any previously provisioned password outside it. Pass the password through
    stdin to `node scripts/asterisk-credential.mjs`, redirecting its output to a
    protected local file. Never pass the password as a command-line argument.
    The helper emits only a salted PBKDF2-SHA256 verifier: a fresh 16-byte salt and
@@ -147,3 +149,24 @@ concurrent work. `OPENFON_ASTERISK_IMAGE` selects another locally built image.
 The fixture-only Docker-to-host hop uses plain WS with a synthetic password;
 production configuration continues to require verified WSS. The test does not
 use a real AI account, microphone, SIP trunk, telephone number or PSTN carrier.
+
+### Authentication resource bounds
+
+Before route lookup or PBKDF2, each Worker isolate has one constant-size budget:
+16 starts initially, replenished at two per second, with at most four concurrent
+checks. Invalid known-route attempts consume the same budget as valid ones.
+Excess attempts fail authentication without database access, writes, durable
+objects, attacker-indexed keys, or an in-memory wait queue. Database/KDF failures
+release concurrency; they do not refund the attempt. The existing authenticated
+D1 admission limit still runs only after successful verification. Both the public
+route and the call owner verify credentials, so one admitted call uses two checks.
+
+This is an isolate-local CPU/concurrency bound, not a global distributed rate
+limit: isolate creation/restart replenishes its budget. An attack can exhaust
+local authentication capacity and temporarily deny legitimate PBX connections.
+For exposed deployments, apply operator-managed edge/network restrictions for
+trusted PBX egress as well; this code does not create or configure those policies.
+The budget holds no per-IP/route entries and needs no persistent cleanup.
+
+Config syntax source: [Asterisk22.11.0 main/config.c](https://github.com/asterisk/asterisk/blob/22.11.0/main/config.c)
+uses semicolon as COMMENT_META and strips it during config parsing.

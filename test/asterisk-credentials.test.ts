@@ -1,3 +1,4 @@
+import { AsteriskAuthBudget, asteriskAuthBudget } from '../src/asterisk-auth-budget';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -11,6 +12,7 @@ let db:SqliteD1,env:Env;
 const password='a'.repeat(32), authorization='Basic '+btoa('pbx:'+password);
 const migration=(name:string)=>db.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
 beforeEach(()=>{
+  const budget=new AsteriskAuthBudget();vi.spyOn(asteriskAuthBudget,'acquire').mockImplementation(()=>budget.acquire());
   db=new SqliteD1();applyMigrations(db,1,9);migration('0010_provider_capabilities.sql');migration('0011_asterisk_inbound.sql');
   db.exec("INSERT INTO users(id,email,password_hash) VALUES('owner','owner@example.invalid','unused'); INSERT INTO businesses(id,user_id,slug,name) VALUES('biz','owner','biz','Business'); INSERT INTO assistants(id,business_id,public_slug) VALUES('assistant','biz','public')");
   env={...fakeEnv(undefined as never),DB:db as unknown as D1Database,ASTERISK_ENABLED:'true'};
@@ -81,4 +83,53 @@ it('rejects non-ASCII provisioning and authentication rather than accepting ambi
   for(const encoded of [btoa('pbx:'+unicode),Buffer.from('pbx:'+unicode,'utf8').toString('base64')]){
     expect(await authenticateAsterisk(env,'pbx','Basic '+encoded)).toBe(false);
   }
+});
+it('bounds known-route KDF starts without attacker-indexed state or D1 writes',async()=>{
+  await provision();const now=Date.now();vi.spyOn(Date,'now').mockReturnValue(now);
+  const derive=vi.spyOn(crypto.subtle,'deriveBits').mockResolvedValue(new ArrayBuffer(32));const statements:string[]=[];db.hook=sql=>statements.push(sql);
+  for(let i=0;i<100;i++)expect(await authenticateAsterisk(env,'pbx','Basic '+btoa('pbx:'+'b'.repeat(32)))).toBe(false);
+  expect(derive).toHaveBeenCalledTimes(16);expect(statements).toHaveLength(16);
+  expect(statements.every(sql=>sql.startsWith('SELECT'))).toBe(true);
+});
+it('bounds concurrent checks before lookup across arbitrary route names and releases after errors',async()=>{
+  await provision();let unblock!:()=>void,started!:()=>void;const gate=new Promise<void>(r=>{unblock=r;}),entered=new Promise<void>(r=>{started=r;});
+  const original=crypto.subtle.deriveBits.bind(crypto.subtle);let count=0;
+  const spy=vi.spyOn(crypto.subtle,'deriveBits').mockImplementation(async(...args)=>{if(++count===4)started();await gate;return original(...args);});
+  const checks=Array.from({length:4},()=>authenticateAsterisk(env,'pbx',authorization));
+  try{
+    await entered;const reads:string[]=[];db.hook=sql=>reads.push(sql);
+    for(let i=0;i<100;i++)expect(await authenticateAsterisk(env,'route'+i,'Basic '+btoa('route'+i+':'+password))).toBe(false);
+    expect(reads).toEqual([]);expect(count).toBe(4);
+  }finally{unblock();await Promise.all(checks);spy.mockRestore();}
+  db.hook=()=>{throw Error('lookup outage');};await expect(authenticateAsterisk(env,'pbx',authorization)).rejects.toThrow('lookup outage');
+  db.hook=null;expect(await authenticateAsterisk(env,'pbx',authorization)).toBe(true);
+  const failure=vi.spyOn(crypto.subtle,'deriveBits').mockRejectedValueOnce(Error('KDF outage'));
+  await expect(authenticateAsterisk(env,'pbx',authorization)).rejects.toThrow('KDF outage');failure.mockRestore();
+  expect(await authenticateAsterisk(env,'pbx',authorization)).toBe(true);
+});
+it('refills at two starts per second without clock rollback credit or double-release capacity',()=>{
+  let now=1000;vi.spyOn(Date,'now').mockImplementation(()=>now);const budget=new AsteriskAuthBudget();
+  const held=Array.from({length:4},()=>budget.acquire()!);expect(budget.acquire()).toBeNull();
+  held[0]();held[0]();const fifth=budget.acquire()!;expect(budget.acquire()).toBeNull();
+  fifth();for(const release of held.slice(1))release();
+  for(let i=0;i<11;i++)budget.acquire()!();expect(budget.acquire()).toBeNull();
+  now=500;expect(budget.acquire()).toBeNull();now=1499;expect(budget.acquire()).toBeNull();
+  now=1500;budget.acquire()!();expect(budget.acquire()).toBeNull();
+  now=100000;for(let i=0;i<16;i++)budget.acquire()!();expect(budget.acquire()).toBeNull();
+});
+it('disabled carrier skips the budget, lookup and KDF',async()=>{
+  await provision();env.ASTERISK_ENABLED='false';const reads:string[]=[];db.hook=sql=>reads.push(sql);
+  expect(await authenticateAsterisk(env,'pbx',authorization)).toBe(false);expect(reads).toEqual([]);expect(asteriskAuthBudget.acquire).not.toHaveBeenCalled();
+});
+it('rejects configuration syntax in helper and authenticator',async()=>{
+  await provision();
+  for(const symbol of [';', '#', '=', '\\', '"', '[', ']', ':']){
+    const secret='a'.repeat(32)+symbol;
+    const result=spawnSync(process.execPath,['scripts/asterisk-credential.mjs'],{input:secret,encoding:'utf8'});
+    expect(result.status).toBe(1);expect(result.stdout).toBe('');
+    await db.prepare('UPDATE asterisk_routes SET password_hash=?').bind(await hashPassword(secret)).run();
+    expect(await authenticateAsterisk(env,'pbx','Basic '+btoa('pbx:'+secret))).toBe(false);
+  }
+  const safe='AZaz09_-'.repeat(4),result=spawnSync(process.execPath,['scripts/asterisk-credential.mjs'],{input:safe,encoding:'utf8'});
+  expect(result.status).toBe(0);expect(await verifyPassword(safe,result.stdout.trim())).toBe(true);
 });

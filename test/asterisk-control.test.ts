@@ -1,3 +1,4 @@
+import { AsteriskAuthBudget, asteriskAuthBudget } from '../src/asterisk-auth-budget';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hashPassword } from '../src/auth';
 import { AsteriskCall } from '../src/asterisk-control';
@@ -35,6 +36,7 @@ function owner(storage=new Storage()) {
 async function expire(live:ReturnType<typeof owner>){if(live.storage.data.has('cleanup'))await live.storage.put('cleanup',1);await live.object.alarm();}
 const request=()=>new Request(`https://internal/media?call=${call}&route=pbx`,{headers:{Upgrade:'websocket',Authorization:auth}});
 beforeEach(async()=>{
+  const budget=new AsteriskAuthBudget();vi.spyOn(asteriskAuthBudget,'acquire').mockImplementation(()=>budget.acquire());
   db=new SqliteD1();applyMigrations(db);
   db.exec(`INSERT INTO users(id,email,password_hash) VALUES('owner','owner@example.invalid','unused');
     INSERT INTO businesses(id,user_id,slug,name,max_concurrent_calls,max_calls_per_day) VALUES('biz','owner','biz','Business',1,2);
@@ -42,7 +44,7 @@ beforeEach(async()=>{
   await db.prepare("INSERT INTO asterisk_routes(id,business_id,assistant_id,password_sha256,enabled,password_hash) VALUES('pbx','biz','assistant',lower(hex(randomblob(32))),1,?)").bind(await hashPassword(password)).run();
   env={...fakeEnv(undefined as never),DB:db as unknown as D1Database,ASTERISK_ENABLED:'true',REALTIME_BASE_URL:'wss://realtime.example.invalid/v1/realtime',REALTIME_MODEL:'gpt-realtime-2',REALTIME_API_KEY:'synthetic-only'};
 });
-afterEach(()=>{vi.useRealTimers();db.close();});
+afterEach(()=>{vi.restoreAllMocks();vi.useRealTimers();db.close();});
 describe('Asterisk authorization, admission and recovery',()=>{
   it('requires matching route identity and full secret; disabled routes revoke new calls',async()=>{
     expect(await authenticateAsterisk(env,'pbx',auth)).toBe(true);
