@@ -24,6 +24,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: node --test docs/launch/demo/capture-sequence.test.mjs
       - run: npm run test:telnyx
       - run: npm run build
       - name: Synthetic carrier and realtime runtime checks
@@ -33,10 +34,11 @@ jobs:
         run: |
           npm run test:telnyx
           node test/telnyx-retirement-smoke.mjs
+          node test/asterisk-retirement-smoke.mjs
           node scripts/asterisk-smoke.mjs
           node scripts/realtime-smoke.mjs
           node scripts/realtime-smoke.mjs --gateway
-      - run: python3 scripts/migration-rehearsal.py . --through 12
+      - run: python3 -O scripts/migration-rehearsal.py . --through 12
 
   # The benchmark scoring code is Python and computes the numbers in
   # docs/research/. A wrong normaliser or a slot matcher that fails closed would
