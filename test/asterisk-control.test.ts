@@ -24,12 +24,14 @@ class Storage {
     const result=await run(txn);txn.check('commit');
     this.data=txn.data;this.alarm=txn.alarm;return result;
   }
-  async setAlarm(time:number){this.alarm=time;}
+  failAlarmAt=0;alarmWrites=0;
+  async setAlarm(time:number){if(++this.alarmWrites===this.failAlarmAt)throw Error('alarm outage');this.alarm=time;}
   async deleteAlarm(){this.check('deleteAlarm');this.alarm=null;}
 }
 function owner(storage=new Storage()) {
   return {storage,object:new AsteriskCall({storage,waitUntil:()=>{}} as unknown as DurableObjectState,env)};
 }
+async function expire(live:ReturnType<typeof owner>){if(live.storage.data.has('cleanup'))await live.storage.put('cleanup',1);await live.object.alarm();}
 const request=()=>new Request(`https://internal/media?call=${call}&route=pbx`,{headers:{Upgrade:'websocket',Authorization:auth}});
 beforeEach(async()=>{
   db=new SqliteD1();applyMigrations(db);
@@ -97,7 +99,7 @@ describe('Asterisk authorization, admission and recovery',()=>{
     db.exec(`INSERT INTO calls(id,business_id,assistant_id,channel,environment,reserved_at,connected_at) VALUES('${call}','biz','assistant','asterisk','live',datetime('now'),datetime('now'))`);
     const recovered=owner();await recovered.storage.put('call',call);await recovered.object.alarm();
     expect((await db.prepare('SELECT carrier_released_at FROM calls WHERE id=?').bind(call).first<{carrier_released_at:string}>())?.carrier_released_at).toBeTruthy();
-    await recovered.object.alarm();expect((await db.prepare('SELECT status FROM calls WHERE id=?').bind(call).first<{status:string}>())?.status).toBe('failed');
+    await expire(recovered);expect((await db.prepare('SELECT status FROM calls WHERE id=?').bind(call).first<{status:string}>())?.status).toBe('failed');
     expect(recovered.storage.alarm).toBeNull();
     expect([...recovered.storage.data]).toEqual([['retired',true]]);
   });
@@ -124,7 +126,7 @@ describe('Asterisk operational state retirement',()=>{
   it('retires failed setup after projection and keeps replay protection without a D1 row',async()=>{
     const failed=owner();expect((await failed.object.fetch(request())).status).toBe(503);
     expect(failed.storage.data.get('call')).toBe(call);
-    await failed.object.alarm();marker(failed.storage);
+    await expire(failed);marker(failed.storage);
     db.exec('DELETE FROM calls');
     const restarted=owner(failed.storage);expect((await restarted.object.fetch(request())).status).toBe(409);
     await restarted.object.alarm();marker(failed.storage);
@@ -134,29 +136,29 @@ describe('Asterisk operational state retirement',()=>{
     db.hook=sql=>{if(sql.includes('SELECT a.engine'))throw Error('admission outage');};
     const failed=owner();expect((await failed.object.fetch(request())).status).toBe(503);
     expect(failed.storage.data.get('call')).toBe(call);expect(failed.storage.alarm).toBeTruthy();
-    db.hook=null;await failed.object.alarm();marker(failed.storage);
+    db.hook=null;await expire(failed);marker(failed.storage);
   });
   it('does not compact before terminal D1 projection succeeds',async()=>{
     const failed=owner();await failed.object.fetch(request());
-    const retained=structuredClone([...failed.storage.data]);
+    await failed.storage.put('cleanup',1);const retained=structuredClone([...failed.storage.data]);
     db.hook=sql=>{if(sql.includes("failure_code=COALESCE"))throw Error('projection outage');};
-    await expect(failed.object.alarm()).rejects.toThrow('projection outage');
+    await expect(expire(failed)).rejects.toThrow('projection outage');
     expect([...failed.storage.data]).toEqual(retained);expect(failed.storage.alarm).toBeGreaterThan(Date.now());
-    db.hook=null;await failed.object.alarm();marker(failed.storage);
+    db.hook=null;await expire(failed);marker(failed.storage);
   });
   for(const step of ['put','delete','deleteAlarm','commit']) it(`retains recovery state and alarm on compaction transaction ${step} failure`,async()=>{
     const failed=owner();await failed.object.fetch(request());
     await failed.storage.put('deadline',Date.now()+10000);
-    const retained=structuredClone([...failed.storage.data]);failed.storage.failTransactionAt=step;
-    await expect(failed.object.alarm()).rejects.toThrow('transaction '+step);
+    await failed.storage.put('cleanup',1);const retained=structuredClone([...failed.storage.data]);failed.storage.failTransactionAt=step;
+    await expect(expire(failed)).rejects.toThrow('transaction '+step);
     expect([...failed.storage.data]).toEqual(retained);expect(failed.storage.alarm).toBeGreaterThan(Date.now());
-    failed.storage.failTransactionAt='';await owner(failed.storage).object.alarm();marker(failed.storage);
+    failed.storage.failTransactionAt='';await expire(owner(failed.storage));marker(failed.storage);
   });
   it('keeps a recovery alarm when rejection compaction fails',async()=>{
     env.REALTIME_API_KEY='';const rejected=owner();rejected.storage.failTransactionAt='delete';
     expect((await rejected.object.fetch(request())).status).toBe(503);
     expect(rejected.storage.data.get('call')).toBe(call);expect(rejected.storage.alarm).toBeGreaterThan(Date.now());
-    rejected.storage.failTransactionAt='';await rejected.object.alarm();marker(rejected.storage);
+    rejected.storage.failTransactionAt='';await expire(rejected);marker(rejected.storage);
   });
   it('initial transaction failure creates neither unarmed identity nor a D1 call',async()=>{
     const failed=owner();failed.storage.failTransactionAt='commit';
@@ -169,10 +171,10 @@ describe('Asterisk operational state retirement',()=>{
   it('wakes a legacy rejected object with no alarm without admitting a replay',async()=>{
     const legacy=owner();await legacy.storage.put('call',call);
     expect((await legacy.object.fetch(request())).status).toBe(409);expect(legacy.storage.alarm).toBeTruthy();
-    await legacy.object.alarm();await legacy.object.alarm();marker(legacy.storage);
+    await legacy.object.alarm();await expire(legacy);marker(legacy.storage);
   });
   it('late queued finish cannot resurrect a retired owner',async()=>{
-    const failed=owner();await failed.object.fetch(request());await failed.object.alarm();
+    const failed=owner();await failed.object.fetch(request());await expire(failed);
     await (failed.object as unknown as {finish(call:string,reason:string):Promise<void>}).finish(call,'late_close');
     marker(failed.storage);
   });
@@ -199,7 +201,7 @@ describe('Asterisk startup connection boundary',()=>{
     expect((await row())?.carrier_released_at).toBeTruthy();
     const socket={accept:vi.fn(),close:vi.fn()};upstream.resolve({status:101,webSocket:socket} as unknown as Response);
     expect((await result).status).toBe(409);expect(socket.close).toHaveBeenCalledTimes(1);
-    await live.object.alarm();expect([...live.storage.data]).toEqual([['retired',true]]);
+    await expire(live);expect([...live.storage.data]).toEqual([['retired',true]]);
   });
   it('bounds startup to ten seconds, releases capacity, and closes a socket arriving after timeout',async()=>{
     vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});
@@ -216,3 +218,54 @@ describe('Asterisk startup connection boundary',()=>{
     expect(await row()).toMatchObject({status:'failed',outcome:'failed',connected_at:null,failure_code:'asterisk_start_failed'});
   });
 });
+
+describe('Asterisk cleanup grace and terminal classification',()=>{
+  const finish=(live:ReturnType<typeof owner>,reason:string)=>(live.object as unknown as {finish(call:string,reason:string):Promise<void>}).finish(call,reason);
+  const seed=()=>db.exec(`INSERT INTO calls(id,business_id,assistant_id,channel,environment,reserved_at,connected_at) VALUES('${call}','biz','assistant','asterisk','live',datetime('now'),datetime('now'))`);
+  const row=()=>db.prepare('SELECT status,outcome,failure_code,failure_message,ended_at,carrier_released_at FROM calls WHERE id=?').bind(call).first<Record<string,unknown>>();
+  it('queued early alarm preserves normal call and rearms exact future cleanup deadline',async()=>{
+    seed();const live=owner();await live.storage.put('call',call);await finish(live,'socket_closed');
+    const cleanup=live.storage.data.get('cleanup');
+    await live.object.alarm();
+    expect(live.storage.alarm).toBe(cleanup);expect(live.storage.data.has('retired')).toBe(false);
+    expect(await row()).toMatchObject({status:'active',failure_code:null});
+    db.exec("UPDATE calls SET status='completed',outcome='answered'");
+    await expire(live);expect(await row()).toMatchObject({status:'completed',outcome:'answered',failure_code:null});
+  });
+  it('failed final alarm write and failed early rearm retain grace and recovery state',async()=>{
+    seed();const live=owner();await live.storage.put('call',call);live.storage.failAlarmAt=2;
+    await expect(finish(live,'playback_complete')).rejects.toThrow('alarm outage');
+    const cleanup=live.storage.data.get('cleanup') as number;
+    expect(live.storage.alarm).toBeLessThan(cleanup);
+    live.storage.failAlarmAt=4;await expect(live.object.alarm()).rejects.toThrow('alarm outage');
+    expect(live.storage.data.get('cleanup')).toBe(cleanup);expect(live.storage.data.has('retired')).toBe(false);
+    expect(await row()).toMatchObject({status:'active',failure_code:null});
+    live.storage.failAlarmAt=0;await live.object.alarm();expect(live.storage.alarm).toBe(cleanup);
+    await expire(live);expect(await row()).toMatchObject({status:'failed',failure_code:'asterisk_session_lost'});
+  });
+  for(const reason of ['invalid_carrier_frame','invalid_session_frame','playback_error','playback_overflow','drain_timeout','session_error','socket_error','readiness_projection_failed'])
+    it(`records connected ${reason} even when generic completion wins first`,async()=>{
+      seed();db.exec("UPDATE calls SET status='completed',outcome='answered'");const live=owner();await live.storage.put('call',call);
+      await finish(live,reason);await finish(live,'socket_closed');
+      expect(await row()).toMatchObject({status:'failed',outcome:'failed',failure_code:`asterisk_${reason}`,failure_message:'The telephone audio connection failed.'});
+      expect((await row())?.ended_at).toBeTruthy();expect((await row())?.carrier_released_at).toBeTruthy();
+      db.exec("UPDATE calls SET status='completed',outcome='answered',failure_code=NULL WHERE status='active'");
+      expect((await row())?.status).toBe('failed');
+    });
+  for(const reason of ['socket_closed','session_ended','playback_complete'])it(`preserves normal connected ${reason}`,async()=>{
+    seed();const live=owner();await live.storage.put('call',call);await finish(live,reason);
+    expect(await row()).toMatchObject({status:'active',failure_code:null,failure_message:null});
+    db.exec("UPDATE calls SET status='completed',outcome='answered' WHERE status='active'");
+    await finish(live,reason);expect(await row()).toMatchObject({status:'completed',outcome:'answered',failure_code:null});
+  });
+  it('preserves existing provider failure metadata',async()=>{
+    seed();db.exec("UPDATE calls SET status='failed',outcome='failed',failure_code='provider_error',failure_message='Provider failed'");
+    await finish(owner(),'session_error');expect(await row()).toMatchObject({status:'failed',failure_code:'provider_error',failure_message:'Provider failed'});
+  });
+});
+
+ it('owner recovery preserves an already completed connected call',async()=>{
+   db.exec(`INSERT INTO calls(id,business_id,assistant_id,channel,status,environment,connected_at,outcome) VALUES('${call}','biz','assistant','asterisk','completed','live',datetime('now'),'answered')`);
+   const live=owner();await live.storage.put('call',call);await live.object.alarm();
+   expect(await db.prepare('SELECT status,outcome,failure_code FROM calls WHERE id=?').bind(call).first()).toEqual({status:'completed',outcome:'answered',failure_code:null});
+ });

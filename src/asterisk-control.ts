@@ -176,15 +176,25 @@ export class AsteriskCall implements DurableObject {
   private async finish(call: string, reason: string): Promise<void> {
     if (await this.state.storage.get('retired')) return;
     // Alarm is retained until D1 release succeeds, including a failed waitUntil.
+    const previous = await this.state.storage.get<string>('ending');
+    // A generic hangup cannot convey these errors to CallSession. Preserve the
+    // first known failure across retries; ordinary close/recovery is not proof
+    // of failure for a connected call.
+    const failures = new Set(['invalid_carrier_frame', 'invalid_session_frame', 'playback_error',
+      'playback_overflow', 'drain_timeout', 'start_timeout', 'session_error', 'socket_error',
+      'readiness_projection_failed', 'setup_failed', 'setup_cancelled', 'call_duration_or_owner_limit']);
+    if (previous && failures.has(previous)) reason = previous;
+    const failed = failures.has(reason) ? 1 : 0;
     await this.state.storage.put('ending', reason);
     await this.state.storage.setAlarm(Date.now() + 30000);
     await this.env.DB.prepare(`UPDATE calls SET carrier_released_at=COALESCE(carrier_released_at,datetime('now')),
-      status=CASE WHEN connected_at IS NULL THEN 'failed' ELSE status END,
-      outcome=CASE WHEN connected_at IS NULL THEN 'failed' ELSE outcome END,
-      failure_code=CASE WHEN connected_at IS NULL THEN COALESCE(failure_code,'asterisk_start_failed') ELSE failure_code END,
-      failure_message=CASE WHEN connected_at IS NULL THEN COALESCE(failure_message,'The telephone audio connection did not become ready.') ELSE failure_message END,
-      ended_at=CASE WHEN connected_at IS NULL THEN COALESCE(ended_at,datetime('now')) ELSE ended_at END
-      WHERE id=? AND channel='asterisk'`).bind(call).run();
+      status=CASE WHEN connected_at IS NULL OR ? THEN 'failed' ELSE status END,
+      outcome=CASE WHEN connected_at IS NULL OR ? THEN 'failed' ELSE outcome END,
+      failure_code=CASE WHEN connected_at IS NULL OR ? THEN COALESCE(failure_code,CASE WHEN connected_at IS NULL THEN 'asterisk_start_failed' ELSE ? END) ELSE failure_code END,
+      failure_message=CASE WHEN connected_at IS NULL OR ? THEN COALESCE(failure_message,CASE WHEN connected_at IS NULL THEN 'The telephone audio connection did not become ready.' ELSE ? END) ELSE failure_message END,
+      ended_at=CASE WHEN connected_at IS NULL OR ? THEN COALESCE(ended_at,datetime('now')) ELSE ended_at END
+      WHERE id=? AND channel='asterisk'`).bind(failed, failed, failed, `asterisk_${reason}`,
+        failed, 'The telephone audio connection failed.', failed, call).run();
     // CallSession normally persists the transcript/outcome. Let it finish before
     // a recovery alarm retires any row left active by a lost session owner.
     await this.state.storage.put('cleanup', Date.now() + 60000);
@@ -202,6 +212,7 @@ export class AsteriskCall implements DurableObject {
     await this.state.storage.setAlarm(Date.now() + 30000);
     const cleanup = await this.state.storage.get<number>('cleanup');
     if (cleanup) {
+      if (Date.now() < cleanup) { await this.state.storage.setAlarm(cleanup); return; }
       await this.env.DB.prepare(`UPDATE calls SET status='failed',ended_at=COALESCE(ended_at,datetime('now')),
         failure_code=COALESCE(failure_code,'asterisk_session_lost') WHERE id=? AND status='active' AND channel='asterisk'`).bind(call).run();
       await this.compact(); return;

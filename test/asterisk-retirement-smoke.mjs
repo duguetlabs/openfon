@@ -33,7 +33,7 @@ export class Probe extends AsteriskCall {
     }});
     super({storage,waitUntil:p=>ctx.waitUntil(p)}, {...env,DB,ASTERISK_ENABLED:'true',REALTIME_BASE_URL:'wss://provider.invalid/v1/realtime',REALTIME_API_KEY:'fixture-only',REALTIME_MODEL:'gpt-realtime-2',DEFAULT_TTS_PROVIDER:'browser',CALL_SESSION:{idFromName:x=>x,get:()=>({fetch:async request=>{
       const id=new URL(request.url).searchParams.get('call');
-      if(${JSON.stringify(['adjacent-ready','ended-ready'].map(name=>'ast_'+createHash('sha256').update(name).digest('hex')))}.includes(id)){
+      if(${JSON.stringify(['adjacent-ready','ended-ready','connected-failure'].map(name=>'ast_'+createHash('sha256').update(name).digest('hex')))}.includes(id)){
         const pair=new WebSocketPair();pair[1].accept();
         pair[1].addEventListener('message',event=>{
           const msg=JSON.parse(event.data);
@@ -61,7 +61,10 @@ export class Probe extends AsteriskCall {
       await this.ctx.storage.setAlarm(Date.now()+60000);
       return new Response(null,{status:204});
     }
+    if(url.pathname==='/due'){if(await this.ctx.storage.get('cleanup'))await this.ctx.storage.put('cleanup',1);return new Response(null,{status:204});}
+    if(url.pathname==='/alarm'){await super.alarm();return new Response(null,{status:204});}
     if(url.pathname==='/expire'){
+      if(await this.ctx.storage.get('cleanup'))await this.ctx.storage.put('cleanup',1);
       this.fail(url.searchParams.get('fail')==='true');
       try{await super.alarm();return new Response(null,{status:204});}
       catch{return new Response(null,{status:503});}
@@ -99,7 +102,7 @@ try{
   assert.equal((await send('completed','/expire')).status,204);assert.deepEqual(await snapshot('completed'),marker);
   assert.equal((await db.prepare('SELECT status FROM calls WHERE id=?').bind(call('completed')).first()).status,'completed');
   assert.equal((await send('failed','/media')).status,503);
-  const before=await snapshot('failed');assert.ok(before.entries.some(([key])=>key==='call'));assert.ok(before.alarm);
+  await send('failed','/due');const before=await snapshot('failed');assert.ok(before.entries.some(([key])=>key==='call'));assert.ok(before.alarm);
   assert.equal((await send('failed','/expire','&fail=true')).status,503);
   const rolledBack=await snapshot('failed');assert.deepEqual(rolledBack.entries,before.entries);assert.ok(rolledBack.alarm);
   assert.equal((await send('failed','/expire')).status,204);assert.deepEqual(await snapshot('failed'),marker);
@@ -121,7 +124,7 @@ try{
     assert.equal((await (await send(object,'/opening')).json()).lateClosed,true,'late actual workerd socket closed');
     assert.equal((await send(object,'/expire')).status,204);assert.deepEqual(await snapshot(object),marker);
   }
-  for(const object of ['adjacent-ready','ended-ready']){
+  for(const object of ['adjacent-ready','ended-ready','connected-failure']){
     const response=await send(object,'/media');assert.equal(response.status,101);const pbx=response.webSocket;pbx.accept();pbx.binaryType='arraybuffer';
     let pcmBytes=0;pbx.addEventListener('message',event=>{if(typeof event.data!=='string')pcmBytes+=event.data.byteLength;});
     pbx.send(JSON.stringify({event:'MEDIA_START',connection_id:'fixture',channel:'fixture',format:'ulaw',optimal_frame_size:160,ptime:20}));
@@ -136,19 +139,24 @@ try{
     assert.equal((await send(object,'/release-readiness')).status,204);
     for(let i=0;i<100;i++){
       const row=await db.prepare('SELECT connected_at,carrier_released_at FROM calls WHERE id=?').bind(call(object)).first();
-      if(object==='adjacent-ready'?row.connected_at:row.carrier_released_at)break;
+      if(object!=='ended-ready'?row.connected_at:row.carrier_released_at)break;
       await new Promise(r=>setTimeout(r,10));
     }
     const row=await db.prepare('SELECT status,connected_at FROM calls WHERE id=?').bind(call(object)).first();
-    if(object==='adjacent-ready'){assert.ok(row.connected_at);pbx.close();}
+    if(object!=='ended-ready'){assert.ok(row.connected_at);if(object==='connected-failure')pbx.send('invalid frame');else pbx.close();}
     else {assert.equal(row.status,'failed');assert.equal(row.connected_at,null,'pending readiness cannot resurrect terminal row');}
     for(let i=0;i<100;i++){if((await snapshot(object)).entries.some(([key])=>key==='cleanup'))break;await new Promise(r=>setTimeout(r,10));}
+    const grace=await snapshot(object);
+    assert.equal((await send(object,'/alarm')).status,204);
+    assert.deepEqual((await snapshot(object)).entries,grace.entries,'early alarm retains cleanup state');
+    assert.equal((await snapshot(object)).alarm,grace.entries.find(([key])=>key==='cleanup')[1]);
+    if(object==='connected-failure'){const failed=await db.prepare('SELECT status,outcome,failure_code FROM calls WHERE id=?').bind(call(object)).first();assert.deepEqual(failed,{status:'failed',outcome:'failed',failure_code:'asterisk_invalid_carrier_frame'});}
     assert.equal((await send(object,'/expire')).status,204);assert.deepEqual(await snapshot(object),marker);
   }
   await db.prepare('DELETE FROM calls').run();
   await mf.dispose();mf=new Miniflare(options());await mf.ready;
   db=await mf.getD1Database('DB','asterisk-retirement');
-  for(const object of ['completed','failed','rejected','stalled-alarm','stalled-timeout','adjacent-ready','ended-ready']){
+  for(const object of ['completed','failed','rejected','stalled-alarm','stalled-timeout','adjacent-ready','ended-ready','connected-failure']){
     assert.deepEqual(await snapshot(object),marker);
     assert.equal((await send(object,'/media')).status,409);
     assert.equal((await send(object,'/expire')).status,204);
