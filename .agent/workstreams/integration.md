@@ -1,12 +1,12 @@
 # Integration checkpoint
 
-- Status: In progress — 1428a50 published and frozen for required full reviews; application6ff5058 independently quota-closed
+- Status: In progress — assembled application passes719/typechecks/15browser/optimized16; preparing independent scoped QA
 - Owner: openfon-integration, gpt-6-astra / medium
 - Branch/worktree: codex/integrated-release, /Users/cristian/projects/fun/openfon-worktrees/integration
 - Updated: 2026-09-12
-- Application candidate: 6ff505837cbf090f5dceb29bc62abf273ff18b6c
+- Application candidate: local assembled corrections after c0da310; exact commit recorded next
 - Published PR16 head: 1428a50046eb06cf6c348fa672ebbd8c396b6f56 (documentation-only finalization over application6ff5058)
-- Validation slot: Telnyx exclusively after Asterisk release; integration runs no validation
+- Validation slot: integration checks finished; next exclusive grant to QA after committing exact candidate
 - Ports: integration8814/9254, optional real-PBX proxy8824; never8787
 - Read first: root orchestration-rules/current-task/manifest (read-only), this file, docs/launch/readiness.md
 - Earlier detailed milestones and failures remain in this file's history through ccdd85d and the linked original review reports. This checkpoint records current state.
@@ -38,7 +38,7 @@ Latest corrections from the completed7a8 review round:
 
 Knowledge quota details: indexed business_id COUNT/SUM; SQL triggers enforce concurrent boundaries; compatibility source and projection share one transaction, with read-only preflight for known refusals. Deletes remain available; shrinking uses the daily edit allowance. Pure FK source-reference cleanup is exempt. Existing oversized data is preserved. Missing default collection refuses writes and bootstrap restores the collection/attachment/projection. Tests cover mixed legacy prefixes, quota429 with item room, stale-preflight competing writer, zero-write refusals, byte/NUL boundaries, tenant isolation, day reset, FK cleanup and legacy migration preservation.
 
-## Current validation
+## Published1428 validation (before current corrections)
 - `node node_modules/vitest/vitest.mjs run --maxWorkers=1`: **663/663 tests,28 files PASS13.13s** on final application6ff5058.
 - `npm run typecheck`: worker and web PASS.
 - Explicit8814/9254 Chrome/workerd E2E: **14/14 PASS46.6s**, including sibling provider/draft refresh and prior guards/retries/export/private calls.
@@ -79,7 +79,7 @@ No report above supplied the required clean latest-head major-issue verdict. Hos
 - Offline capture helper ce6eccb has14 tests and requires reviewed correlated input/response/playback events. Public anonymous PCM cannot satisfy it; no complete interruption acceptance claim.
 
 ## Root/stack reconciliation and next actions
-Preserve root branch codex/launch-studio's original coordination commits and untracked docs/research/sim-ai-voice-gateway-2026-09-08.md. Preserve research-only codex/telephony-options/worktree; its8340544 memo is nongating. PR13/14/15 and researchPR10 remain open for coordinated disposition after consolidated acceptance; do not merge old defective heads or delete another owner's worktree. Telnyx account desktop task01a09561-5595-7a20-8871-c9e2b72ecef9 owns pending identity/country/provider choices; no competing account mutation.
+Preserve root branch codex/launch-studio's original coordination commits and untracked docs/research/sim-ai-voice-gateway-2026-09-08.md. Preserve research-only codex/telephony-options/worktree; its8340544 memo is nongating. PR13/14/15 and researchPR10 remain open for coordinated disposition after consolidated acceptance; do not merge old defective heads or delete another owner's worktree. Telnyx account desktop task01a09561-5595-7a20-8871-c9e2b72ecef9 owns the blocked account/support path. Root18f208a/72da538 report blocked account, unknown cause, routine polling suspended until user/support changes; no support message sent or competing account mutation.
 
 Next: receive QA runtime/scoped result and fix any actual issue; finish current docs/replies; publish one validated exact head, close/reopen and retrigger both hosted reviews plus QA official full review. Keep remote/staging freeze until normal coordinated next candidate. After exact-head clean reviewers and CI, squash merge/delete release branch under existing authorization and coordinate root/stack reconciliation without losing research. Staging refresh remains separate, explicit and production-preserving; no competing live call.
 
@@ -104,3 +104,10 @@ Completed code5187021813/security5187021327: security3996742229 assistant persis
 Current source work:0015 assistants32/count,1MiB aggregate config,200 accepted saves/day; bounded bootstrap metadata and paged list previews, guarded nonprimary assistant deletion preserving history. Studio check explicitly text-only. Tests written, not run.0016 reserved presets for one-time legacy profile credential/URL scrub preserving behavior/IDs/current workspace keys. Realtime reports142 focused/both typechecks/oversized +normal direct/gateway synthetic runtime pass, original7 negatives fail; slot released then explicitly granted to presets. Integration no runner.
 
 Assistant source/tests ready for review:0015 indexed-table32/1MiB/200-day SQL budgets, rollback and deletion/history guards,32-row bounded bootstrap metadata (primary first) +paged list previews, editor full configuration separate, onboarding compatibility fields preserved, explicit text-only check label. New boundary/UTF8/day/batch/history/legacy-bootstrap tests written, no runner yet. Known non-API missing-primary-at-cap requires operator repair; primary deletion API forbidden. QA source-only review requested before integration slot.
+
+Integration sole slot active after presets release. Assembled095a→02fb,2435→1fb,d555→3c945,7bc17→c0da. New0015 tests24 focused/typecheck pass; full719 had7 failures: six real activation meta.changes mismatch from quota trigger writes, one historical export fixture. Corrected activation uses RETURNING; fixture seeds prequota then reapplies15. Affected86 pass. Removing0015 enforcement gives3 intended count/byte/day assertion failures. Browser original pagination negative running with Studio temporary1cef bytes restored in finally; do not source-review temporary negative as final. Final full/browser/rehearsal pending.
+
+Current validation correction: pagination first probe accidentally used already-fixed1cef source and hit a locator issue; not valid negative evidence. Preserved separately. Restoring original first-page selection behavior now fails at requested-target assertion; fixed bytes restored. Full15 browser suite running. Current full719 remains712pass/7fail until fresh run; affected86 pass after activation RETURNING and historical export fixture. Both remote1428 CI green; official +hosted reviews completed with explicitly assigned findings, no clean verdict. Root/research preserved; account blocked/polling suspended.
+
+## Current assembled validation
+Final719/719 tests32files PASS17.84s; worker/web typechecks PASS;15/15 fresh Chrome/workerd PASS55.3s on8814/9254; optimized0006→0016 preservation/restore/rollback/reupgrade PASS. Rehearsal explicitly expects obsolete profile URL/key erasure at16 while preserving behavioral fields/current workspace credentials, exact preupgrade rollback. Missing16 copy exits1 on consecutive-target guard. All integration processes finished. Original failed719 run and invalid first browser probe preserved; corrected affected86,3quota negatives and restored-selection browser negative are separately attributed. No extra live provider/staging/production mutation. Next commit and bounded independent QA on exact bytes; full hosted+official reviewers remain required after publication.

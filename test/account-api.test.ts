@@ -116,12 +116,15 @@ describe('account self service', () => {
   });
 
   it('enforces a combined byte budget across otherwise individually bounded tables', async () => {
+    // Preserve oversized pre0015 assistant rows while testing the separate export cap.
+    db.exec('DROP TRIGGER assistant_insert_budget; DROP TRIGGER assistant_update_budget;');
     const assistant = db.database.prepare('INSERT INTO assistants(id,business_id,public_slug,name,persona) VALUES (?,?,?,?,?)');
     const callRow = db.database.prepare('INSERT INTO calls(id,business_id,summary) VALUES (?,?,?)');
     for (let i=0; i<12; i++) {
       assistant.run(`a${i}`, 'biz-owner', `slug${i}`, 'Agent', 'x'.repeat(190000));
       callRow.run(`c${i}`, 'biz-owner', 'y'.repeat(190000));
     }
+    applyMigrations(db, 15, 15);
     db.database.function('json_object', { varargs: true }, () => { throw new Error('Rejected exports must not construct JSON'); });
     const response = await call('/api/me/account/export');
     expect(response.status).toBe(413);

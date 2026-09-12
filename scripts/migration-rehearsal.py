@@ -13,7 +13,7 @@ import pathlib
 import sqlite3
 import tempfile
 
-RELEASE_MIGRATION_TARGET = 15
+RELEASE_MIGRATION_TARGET = 16
 
 
 def require(condition, message):
@@ -72,6 +72,10 @@ def main():
             }
 
         original = preserved(db)
+        upgraded_expected = dict(original)
+        if args.through >= 16:
+            credential_columns = {old_columns['engine_profiles'].index(name) for name in ['llm_api_key', 'llm_base_url']}
+            upgraded_expected['engine_profiles'] = [tuple('' if index in credential_columns else value for index, value in enumerate(row)) for row in original['engine_profiles']]
         history = db.execute("SELECT * FROM calls WHERE id='history'").fetchone()
         old_call_cols = [row[1] for row in db.execute('PRAGMA table_info(calls)')]
         with sqlite3.connect(temp / 'before-upgrade.sqlite') as backup:
@@ -79,7 +83,7 @@ def main():
         before_dump = '\n'.join(db.iterdump())
         for path in migrations[6:]:
             db.executescript(path.read_text())
-        require(preserved(db) == original, 'Rehearsal check failed: preserved(db) == original')
+        require(preserved(db) == upgraded_expected, 'Legacy behavior changed or credential scrub missing')
         require(db.execute(f"SELECT {','.join(old_call_cols)} FROM calls WHERE id='history'").fetchone() == history, 'Rehearsal check failed: db.execute(f"SELECT {\',\'.join(old_call_cols)} FROM calls WHERE id=\'history\'").fetchone() == history')
         require(db.execute('SELECT public_slug FROM assistants ORDER BY public_slug').fetchall() == [('legacy-public-slug',), ('legacy-second-slug',)], "Rehearsal check failed: db.execute('SELECT public_slug FROM assistants ORDER BY public_slug').fetchall() == [('legacy-public-slug',), ('legacy-second-slug',)]")
         require(db.execute("SELECT connected_at FROM calls WHERE id='history'").fetchone()[0] == '2025-01-01 10:00:02', 'Rehearsal check failed: db.execute("SELECT connected_at FROM calls WHERE id=\'history\'").fetchone()[0] == \'2025-01-01 10:00:02\'')
@@ -114,10 +118,10 @@ def main():
         with sqlite3.connect(temp / 'before-upgrade.sqlite') as backup:
             backup.backup(db)
         require('\n'.join(db.iterdump()) == before_dump, "Rehearsal check failed: '\\n'.join(db.iterdump()) == before_dump")
-        require(preserved(db) == original, 'Rehearsal check failed: preserved(db) == original')
+        require(preserved(db) == original, 'Pre-upgrade rollback changed legacy rows')
         for path in migrations[6:]:
             db.executescript(path.read_text())
-        require(preserved(db) == original, 'Rehearsal check failed: preserved(db) == original')
+        require(preserved(db) == upgraded_expected, 'Legacy behavior changed or credential scrub missing')
         require(db.execute('PRAGMA foreign_key_check').fetchall() == [], "Rehearsal check failed: db.execute('PRAGMA foreign_key_check').fetchall() == []")
         db.close()
 
@@ -125,7 +129,7 @@ def main():
         'result': 'PASS', 'source_base': 'migration 0006', 'upgraded_through': f'{args.through:04d}',
         'workspaces': 2, 'historical_calls': 3, 'transcript_turns': 3,
         'checks': [
-            'legacy columns unchanged', 'both public slugs preserved',
+            'legacy behavior unchanged; obsolete profile credentials scrubbed at0016', 'both public slugs preserved',
             'completed history preserved', 'connected history backfilled',
             'only stale active calls reclassified', 'presets and knowledge copied',
             'carrier tables empty and reservations null', 'SQLite integrity and FK checks',

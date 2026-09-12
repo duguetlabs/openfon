@@ -372,3 +372,40 @@ test('call detail stops permanent errors and bounds transient retries with manua
   await page.clock.runFor(10000);
   expect(count).toBe(5);
 });
+
+test('historical assistant pages preserve the requested test target and expose recovery controls', async ({ page }) => {
+  await signup(page);
+  const created = await page.request.post('/api/me/assistants', { data: { name: 'Historical page two', engine: 'realtime' } });
+  expect(created.status()).toBe(201);
+  const target = await created.json();
+  const firstPage = Array.from({ length: 32 }, (_, i) => ({ ...target, id: `older-${i}`, name: `Older ${i}`, public_slug: `older-${i}` }));
+  // Model a preserved pre-quota workspace without creating excess new rows.
+  await page.route(/\/api\/me\/assistants(?:\?.*)?$/, route => route.fulfill({ json: new URL(route.request().url()).searchParams.get('offset') === '32' ? [target] : firstPage }));
+  await page.goto('/assistants');
+  await page.getByRole('button', { name: 'Next assistants' }).click();
+  await expect(page.getByRole('heading', { name: target.name })).toBeVisible();
+  await page.getByRole('link', { name: 'Test ↗', exact: true }).click();
+  await expect(page.locator('select').first()).toHaveValue(target.id);
+  let requested = '';
+  await page.route('**/api/me/assistants/*/test-calls', route => {
+    requested = route.request().url();
+    return route.fulfill({ status: 409, json: { error: 'Synthetic admission probe; no call created' } });
+  });
+  await page.getByRole('button', { name: 'Start test call', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Synthetic admission probe');
+  expect(new URL(requested).pathname).toBe(`/api/me/assistants/${target.id}/test-calls`);
+  await page.goto('/calls');
+  await page.getByRole('button', { name: 'Load more assistants' }).click();
+  await expect(page.getByRole('combobox', { name: 'Assistant', exact: true }).locator('option').filter({ hasText: target.name })).toHaveCount(1);
+  await page.goto('/knowledge');
+  await page.getByRole('button', { name: 'Load more assistants' }).click();
+  await expect(page.getByLabel(target.name, { exact: true })).toBeVisible();
+  await page.goto(`/assistants/${target.id}`);
+  await page.route('**/api/me/provider/check', route => route.fulfill({ json: { ok: true } }));
+  await page.getByRole('button', { name: 'Check text provider', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Realtime audio and speech were not tested');
+  page.once('dialog', dialog => void dialog.accept());
+  await page.getByRole('button', { name: 'Delete assistant', exact: true }).click();
+  await expect(page).toHaveURL('/assistants');
+  expect((await page.request.get(`/api/me/assistants/${target.id}`)).status()).toBe(404);
+});
