@@ -28,6 +28,8 @@ def main():
                         help=f'Explicit final migration number (default: {RELEASE_MIGRATION_TARGET})')
     args = parser.parse_args()
     root = args.repository.resolve()
+    # Migration0009 introduces every carrier table/reservation column queried below.
+    # Earlier supported targets intentionally preserve credentials until0016.
     if args.through < 9:
         parser.error('--through must be at least 9')
     migrations = sorted((root / 'migrations').glob('*.sql'))
@@ -129,7 +131,7 @@ def main():
         'result': 'PASS', 'source_base': 'migration 0006', 'upgraded_through': f'{args.through:04d}',
         'workspaces': 2, 'historical_calls': 3, 'transcript_turns': 3,
         'checks': [
-            'legacy behavior unchanged; obsolete profile credentials scrubbed at0016', 'both public slugs preserved',
+            ('legacy behavior unchanged; obsolete profile credentials scrubbed at0016' if args.through >= 16 else 'legacy behavior and credentials unchanged'), 'both public slugs preserved',
             'completed history preserved', 'connected history backfilled',
             'only stale active calls reclassified', 'presets and knowledge copied',
             'carrier tables empty and reservations null', 'SQLite integrity and FK checks',
