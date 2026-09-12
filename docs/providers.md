@@ -21,7 +21,7 @@ Source: [`src/providers.ts`](../src/providers.ts), [`src/call-session.ts`](../sr
 
 ## Incoming workspace settings contract
 
-The presets owner finalized this contract on **2026-09-12** in the provider-presets worktree. It is implemented there and awaiting its final commit/integration; the baseline table above remains the description of this launch checkout. Apply migration `0010_provider_capabilities.sql` together with the matching provider API/UI and realtime adapter changes before following this section. Integration must record the final release commit here.
+The presets owner finalized this contract on **2026-09-12** in the provider-presets worktree. It is committed as `ce62114` and awaiting consolidation into this launch checkout; the baseline table above remains the description of this launch checkout. Apply migration `0010_provider_capabilities.sql` together with the matching provider API/UI and realtime adapter changes before following this section. Integration must record the final release commit here.
 
 ### Text presets
 
@@ -54,7 +54,12 @@ The existing text API uses `baseUrl`, `apiKey`, `clearApiKey`, with a new `model
 
 ### Evidence received from owners
 
-Presets reports 439 full unit tests passed, plus a subsequent 48-test legacy security regression run; do not add these overlapping counts into a new total. Its actual local-workerd browser run verified settings save/reload and key retention. A mobile sizing fix is awaiting its rerun/final commit. Realtime reports a synthetic complete independent workflow; consult its final report for exact commit and runtime checks. **No live provider calls or refreshed Kataleptic catalog are established by these results.** Launch has reviewed the contract, not rerun the other owners’ suites.
+Presets commit `ce62114` records a full 440/440 unit run, followed by a final 16/16 capability suite after adding another regression; these are separate, overlapping runs, not a combined total. Its browser test passed 1/1 on fresh local workerd/D1, covering text preset selection, custom model persistence, speech save/reload, key-change rejection and mobile width. Synthetic keys were used with no outbound inference.
+
+Realtime commit `13f037b` (helper `18d3638`) supplies the runtime adapter and `docs/realtime-providers.md` recipe. Its owner reports 450 tests passed and a successful actual-workerd synthetic independent workflow without instance AI or Azure credentials. Integrate both owners’ code before treating the workspace settings as a complete runtime path, then rerun combined checks against the release commit.
+
+**No live provider calls, audible browser acceptance, PSTN validation or refreshed Kataleptic catalog are established by these results.** No live OpenAI credential was available. Launch reviewed the committed owner evidence, not rerun those suites.
+
 
 ## Telephone channels
 
