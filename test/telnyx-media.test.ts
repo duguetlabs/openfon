@@ -130,6 +130,48 @@ describe('Telnyx media bridge', () => {
     expect(f.session.at(-1)).toBe('{"type":"hangup"}');
   });
 
+  it('stops direct and pending reordered input while delivering the complete goodbye', async () => {
+    const f = fixture(); await f.boot();
+    await f.receive(media(1));
+    await f.receive(media(3)); // missing chunk 2 arms loss recovery
+    const before = f.session.slice();
+    expect(before.filter(x => x instanceof ArrayBuffer)).toHaveLength(1);
+    f.server({ type: 'ending' });
+    await f.receive(media(2)); // must not release either buffered or new audio
+    vi.advanceTimersByTime(100); // original gap callback would forward chunk 3
+    await f.receive(media(4));
+    expect(f.session).toEqual(before);
+    expect(f.onEnd).not.toHaveBeenCalled();
+    f.server(pcm(3)); // goodbye generation remains accepted after ending
+    vi.advanceTimersByTime(100);
+    await f.receive(media(5));
+    f.server(pcm(2)); // more goodbye PCM resets the quiet drain period
+    vi.advanceTimersByTime(240);
+    expect(f.session).toEqual(before);
+    expect(f.carrier.filter(x => x.event === 'media')).toHaveLength(6); // five frames plus padded FIR tail
+    expect(f.carrier.some(x => x.event === 'clear')).toBe(false);
+    expect(f.onEnd).not.toHaveBeenCalled();
+    const marks = f.carrier.filter(x => x.event === 'mark');
+    for (const item of marks.slice(0, -1)) await f.receive(mark(item.mark.name));
+    expect(f.onEnd).not.toHaveBeenCalled();
+    await f.receive(mark(marks.at(-1)!.mark.name));
+    expect(f.onEnd).toHaveBeenCalledExactlyOnceWith('playback_complete');
+    expect(f.session.at(-1)).toBe('{"type":"hangup"}');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('discards a pending input gap when ending starts without another carrier packet', async () => {
+    const f = fixture(); await f.boot(); await f.receive(media(2));
+    const before = f.session.slice();
+    f.server({ type: 'ending' });
+    vi.advanceTimersByTime(100);
+    expect(f.session).toEqual(before);
+    f.server(pcm());
+    vi.advanceTimersByTime(12000);
+    expect(f.onEnd).toHaveBeenCalledExactlyOnceWith('drain_timeout');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('times out missing playback acknowledgements and bounds queued output', async () => {
     const f = fixture(); await f.boot(); f.server(pcm()); f.server({ type: 'ending' }); vi.advanceTimersByTime(12000);
     expect(f.onEnd).toHaveBeenCalledWith('drain_timeout');

@@ -98,7 +98,7 @@ export class TelnyxMediaAdapter {
       }
       if (!this.streamId || msg.stream_id !== this.streamId) throw new Error('invalid_stream');
       if (msg.event === 'media') {
-        if (this.drained) return;
+        if (this.ending || this.drained) return;
         const media = object(msg.media);
         if (media.track !== 'inbound') throw new Error('invalid_track');
         const chunk = integer(media.chunk);
@@ -187,6 +187,13 @@ export class TelnyxMediaAdapter {
         if (!this.ready) throw new Error('not_ready');
         if (!this.ending) {
           this.ending = true;
+          // Stop caller audio, including packets awaiting loss recovery, while
+          // the final response continues through playback and mark acknowledgement.
+          if (this.gap) clearTimeout(this.gap);
+          this.gap = undefined;
+          this.reorder.clear(); this.reorderBytes = 0;
+          this.preReady = []; this.preReadyBytes = 0;
+          this.up.reset();
           this.endingDeadline = setTimeout(() => this.close('drain_timeout'), 12000);
         }
         this.armDrain();
