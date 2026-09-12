@@ -348,7 +348,7 @@ test('call detail stops permanent errors and bounds transient retries with manua
   await page.clock.install();
   let count = 0;
   let status = 404;
-  await page.route('**/api/me/calls/missing-call', async route => { count++; await route.fulfill({ status, json: { error: 'Unavailable call' } }); });
+  await page.route('**/api/me/calls/missing-call', async route => { count++; await route.fulfill({ status, json: { error: `Unavailable call ${count}` } }); });
   await page.goto('/calls/missing-call');
   await expect(page.getByRole('alert')).toContainText('Unavailable call');
   await page.clock.runFor(10000);
@@ -356,15 +356,19 @@ test('call detail stops permanent errors and bounds transient retries with manua
   status = 503;
   await page.getByRole('button', { name: 'Retry call' }).click();
   await expect.poll(() => count).toBe(2);
+  await expect(page.getByRole('alert')).toContainText('Unavailable call 2');
   await page.clock.runFor(3001);
   await expect.poll(() => count).toBe(3);
+  await expect(page.getByRole('alert')).toContainText('Unavailable call 3');
   await page.clock.runFor(3001);
   await expect.poll(() => count).toBe(4);
+  await expect(page.getByRole('alert')).toContainText('Unavailable call 4');
   await page.clock.runFor(10000);
   expect(count).toBe(4);
   status = 404;
   await page.getByRole('button', { name: 'Retry call' }).click();
   await expect.poll(() => count).toBe(5);
+  await expect(page.getByRole('alert')).toContainText('Unavailable call 5');
   await page.clock.runFor(10000);
   expect(count).toBe(5);
 });

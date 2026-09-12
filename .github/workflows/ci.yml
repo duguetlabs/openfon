@@ -35,6 +35,7 @@ jobs:
           npm run test:telnyx
           node test/telnyx-retirement-smoke.mjs
           node test/asterisk-retirement-smoke.mjs
+          node test/asterisk-playback-smoke.mjs
           node scripts/asterisk-smoke.mjs
           node scripts/realtime-smoke.mjs
           node scripts/realtime-smoke.mjs --gateway
@@ -139,8 +140,8 @@ jobs:
           OPENFON_PUBLIC_URL: ${{ vars.OPENFON_PUBLIC_URL }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "CLOUDFLARE_API_TOKEN not set — skipping deploy."
-            exit 0
+            echo "::error::CLOUDFLARE_API_TOKEN is not set. This explicit production deployment cannot proceed."
+            exit 1
           fi
           if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "::error::CLOUDFLARE_ACCOUNT_ID is not set. A runner has no cached account, so wrangler would try to list /accounts to find one — which this token's permissions do not allow. Add the id from dash.cloudflare.com -> Workers & Pages (right-hand sidebar) as a repo secret."
