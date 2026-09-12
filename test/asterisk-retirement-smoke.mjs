@@ -85,9 +85,10 @@ const options=()=>({...convertV4MiniflareOptions({cf:false,port:Number(process.e
 }]}),resourcePersistencePath:persist});
 let mf;
 const password='synthetic-password-with-at-least-32-bytes';
-const auth='Basic '+Buffer.from('pbx:'+password).toString('base64');
 const call=object=>'ast_'+createHash('sha256').update(object).digest('hex');
-const send=(object,path,extra='')=>mf.dispatchFetch(`http://local.test${path}?object=${object}&call=${call(object)}&route=pbx${extra}`,{headers:{Authorization:auth,...(path==='/media'?{Upgrade:'websocket','Sec-WebSocket-Protocol':'media'}:{})}});
+const verifier=execFileSync(process.execPath,[resolve(root,'scripts/asterisk-credential.mjs')],{input:password,encoding:'utf8'}).trim();
+const admission=createHash('sha256').update(JSON.stringify(['pbx','biz','assistant',verifier])).digest('hex');
+const send=(object,path,extra='')=>mf.dispatchFetch(`http://local.test${path}?object=${object}&call=${call(object)}&route=pbx${extra}`,{headers:{'X-Openfon-Asterisk-Admission':admission,...(path==='/media'?{Upgrade:'websocket','Sec-WebSocket-Protocol':'media'}:{})}});
 const snapshot=async object=>(await send(object,'/snapshot')).json();
 const marker={entries:[['retired',true]],alarm:null};
 try{
@@ -98,7 +99,7 @@ try{
     db.prepare("INSERT INTO users(id,email,password_hash) VALUES('owner','owner@example.invalid','unused')"),
     db.prepare("INSERT INTO businesses(id,user_id,slug,name) VALUES('biz','owner','retirement','Fixture')"),
     db.prepare("INSERT INTO assistants(id,business_id,public_slug,state,name,persona,language,engine,realtime_model) VALUES('assistant','biz','retirement','active','Alex','Helpful','en','realtime','gpt-realtime-2')"),
-    db.prepare("INSERT INTO asterisk_routes(id,business_id,assistant_id,password_sha256,enabled,password_hash) VALUES('pbx','biz','assistant',lower(hex(randomblob(32))),1,?)").bind(execFileSync(process.execPath,[resolve(root,'scripts/asterisk-credential.mjs')],{input:password,encoding:'utf8'}).trim()),
+    db.prepare("INSERT INTO asterisk_routes(id,business_id,assistant_id,password_sha256,enabled,password_hash) VALUES('pbx','biz','assistant',lower(hex(randomblob(32))),1,?)").bind(verifier),
   ]);
   await db.prepare("INSERT INTO calls(id,business_id,assistant_id,channel,status,environment,connected_at,carrier_released_at) VALUES(?,'biz','assistant','asterisk','completed','live',datetime('now'),datetime('now'))").bind(call('completed')).run();
   assert.equal((await send('completed','/seed-completed')).status,204);

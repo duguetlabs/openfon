@@ -1,6 +1,6 @@
 import { telephoneRealtimeAvailable, type RealtimeSettings } from './realtime-providers';
 import type { AgentSettings, Env } from './types';
-import { authenticateAsterisk } from './asterisk-routes';
+import { ASTERISK_ADMISSION_HEADER, validateAsteriskAdmission } from './asterisk-routes';
 import { AsteriskMediaAdapter } from './asterisk-media';
 import { OCCUPIED_CALL_SQL } from './telnyx-admission';
 
@@ -75,7 +75,8 @@ export class AsteriskCall implements DurableObject {
     const call = url.searchParams.get('call') || '';
     const route = url.searchParams.get('route') || '';
     if (url.pathname !== '/media' || !/^ast_[a-f0-9]{64}$/.test(call) || !/^[a-zA-Z0-9_-]{1,80}$/.test(route)) return new Response(null, { status: 400 });
-    if (this.env.ASTERISK_ENABLED !== 'true' || !await authenticateAsterisk(this.env, route, request.headers.get('Authorization'))) return new Response(null, { status: 403 });
+    const credential = await validateAsteriskAdmission(this.env, route, request.headers.get(ASTERISK_ADMISSION_HEADER));
+    if (!credential) return new Response(null, { status: 403 });
     // Synchronous latch closes the async admission race. Persistent identity
     // prevents reconnect/replay from creating a second session after eviction.
     if (await this.state.storage.get('retired') || this.claimed) return new Response(null, { status: 409 });
@@ -108,12 +109,13 @@ export class AsteriskCall implements DurableObject {
         SELECT ?,r.business_id,r.assistant_id,'asterisk','PBX caller','live','inbound',datetime('now')
         FROM asterisk_routes r JOIN assistants a ON a.id=r.assistant_id AND a.business_id=r.business_id
         JOIN businesses b ON b.id=r.business_id
-        WHERE r.id=? AND r.enabled=1 AND a.state='active' AND a.engine='realtime'
+        WHERE r.id=? AND r.enabled=1 AND r.password_hash=? AND r.business_id=? AND r.assistant_id=?
+          AND a.state='active' AND a.engine='realtime'
           AND trim(a.name)<>'' AND trim(a.persona)<>'' AND trim(a.language)<>''
           AND (SELECT COUNT(*) FROM calls WHERE business_id=r.business_id AND environment='live' AND ${OCCUPIED_CALL_SQL})<b.max_concurrent_calls
           AND (SELECT COUNT(*) FROM calls WHERE business_id=r.business_id AND environment='live'
             AND started_at>datetime('now','-1 day') AND NOT(status='abandoned' AND connected_at IS NULL AND reserved_at IS NULL))<b.max_calls_per_day
-        RETURNING id`).bind(call, route).first();
+        RETURNING id`).bind(call, route, credential.password_hash, credential.business_id, credential.assistant_id).first();
       if (!row) { await this.compact(); return new Response(null, { status: 403 }); }
       return { call };
     } catch {

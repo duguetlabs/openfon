@@ -158,8 +158,15 @@ checks. Invalid known-route attempts consume the same budget as valid ones.
 Excess attempts fail authentication without database access, writes, durable
 objects, attacker-indexed keys, or an in-memory wait queue. Database/KDF failures
 release concurrency; they do not refund the attempt. The existing authenticated
-D1 admission limit still runs only after successful verification. Both the public
-route and the call owner verify credentials, so one admitted call uses two checks.
+D1 admission limit still runs only after successful verification. The public route is the sole PBKDF2 verifier and consumes one budget start.
+It constructs a new request through the AsteriskCall binding with a version of
+the verified route assignment and salted credential; it never forwards the
+caller's admission header or password. The owner performs a fresh enabled-route,
+assignment and credential-version check before reservation, without PBKDF2 or
+another budget charge. Disabling, reassigning or rotating a route invalidates an
+in-flight handoff. This internal version is not a public authentication token:
+`/media` is reachable only through the private binding, not public routing.
+Do not expose a pass-through endpoint to that binding.
 
 This is an isolate-local CPU/concurrency bound, not a global distributed rate
 limit: isolate creation/restart replenishes its budget. An attack can exhaust

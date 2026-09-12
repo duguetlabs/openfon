@@ -3,9 +3,10 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { hashPassword, verifyPassword } from '../src/auth';
-import { asteriskDigest, authenticateAsterisk } from '../src/asterisk-routes';
+import { ASTERISK_ADMISSION_HEADER, asteriskAdmissionVersion, asteriskDigest, authenticateAsterisk, validateAsteriskAdmission } from '../src/asterisk-routes';
 import { applyMigrations, SqliteD1 } from './sqlite-d1';
 import { fakeEnv, fakeCtx } from './fake-d1';
+import { AsteriskCall } from '../src/asterisk-control';
 import worker from '../src/index';
 import type { Env } from '../src/types';
 let db:SqliteD1,env:Env;
@@ -132,4 +133,35 @@ it('rejects configuration syntax in helper and authenticator',async()=>{
   }
   const safe='AZaz09_-'.repeat(4),result=spawnSync(process.execPath,['scripts/asterisk-credential.mjs'],{input:safe,encoding:'utf8'});
   expect(result.status).toBe(0);expect(await verifyPassword(safe,result.stdout.trim())).toBe(true);
+});
+
+it('public-to-owner admission performs one KDF and ignores externally supplied admission headers',async()=>{
+  await provision();
+  db.exec("UPDATE assistants SET state='active',engine='realtime',name='Alex',persona='Helpful',language='en',realtime_model='gpt-realtime-2'");
+  env.REALTIME_API_KEY='fixture';env.REALTIME_BASE_URL='wss://provider.invalid/v1/realtime';env.REALTIME_MODEL='gpt-realtime-2';
+  const derive=vi.spyOn(crypto.subtle,'deriveBits');const data=new Map<string,unknown>();
+  const storage={get:async(key:string)=>data.get(key),put:async(key:string,value:unknown)=>{data.set(key,value);},setAlarm:async()=>{},deleteAlarm:async()=>{},delete:async(keys:string[])=>{for(const key of keys)data.delete(key);},transaction:async(fn:(txn:unknown)=>Promise<unknown>)=>fn(storage)};
+  const owner=new AsteriskCall({storage,waitUntil:()=>{}} as unknown as DurableObjectState,env);let forwarded!:Request;
+  env.ASTERISK_CALL={idFromName:(id:string)=>id,get:()=>({fetch:(request:Request)=>{forwarded=request;return owner.fetch(request);}})} as unknown as DurableObjectNamespace;
+  const response=await worker.fetch(new Request('https://local.test/ws/asterisk/pbx?call=one',{headers:{Upgrade:'websocket',Authorization:authorization,[ASTERISK_ADMISSION_HEADER]:'forged'}}),env,fakeCtx);
+  // Fixture CallSession rejects upgrade, proving the single authentication still
+  // reached reservation and setup, rather than merely stopping at public auth.
+  expect(response.status).toBe(503);expect(derive).toHaveBeenCalledTimes(1);expect(asteriskAuthBudget.acquire).toHaveBeenCalledTimes(1);
+  expect(forwarded.headers.get('Authorization')).toBeNull();expect(forwarded.headers.get(ASTERISK_ADMISSION_HEADER)).toMatch(/^[a-f0-9]{64}$/);
+  expect((await db.prepare('SELECT COUNT(*) n FROM calls').first())?.n).toBe(1);
+  const before=(await db.prepare('SELECT COUNT(*) n FROM rate_counters').first())?.n;
+  expect((await worker.fetch(new Request('https://local.test/ws/asterisk/pbx?call=forged',{headers:{Upgrade:'websocket',[ASTERISK_ADMISSION_HEADER]:forwarded.headers.get(ASTERISK_ADMISSION_HEADER)!}}),env,fakeCtx)).status).toBe(401);
+  expect((await worker.fetch(new Request(forwarded.url,{headers:forwarded.headers}),env,fakeCtx)).status).toBe(404);
+  expect((await db.prepare('SELECT COUNT(*) n FROM rate_counters').first())?.n).toBe(before);
+});
+it('binding admission freshly rejects revocation, rotation, reassignment and missing versions without KDF',async()=>{
+  const hash=await provision();const credential={business_id:'biz',assistant_id:'assistant',password_hash:hash};
+  const version=await asteriskAdmissionVersion('pbx',credential);const derive=vi.spyOn(crypto.subtle,'deriveBits');
+  expect(await validateAsteriskAdmission(env,'pbx',version)).toEqual(credential);
+  for(const value of [null,'forged','a'.repeat(64)])expect(await validateAsteriskAdmission(env,'pbx',value)).toBeNull();
+  db.exec("UPDATE asterisk_routes SET enabled=0");expect(await validateAsteriskAdmission(env,'pbx',version)).toBeNull();
+  await db.prepare('UPDATE asterisk_routes SET enabled=1,password_hash=?').bind(hash+'changed').run();expect(await validateAsteriskAdmission(env,'pbx',version)).toBeNull();
+  db.exec("INSERT INTO assistants(id,business_id,public_slug) VALUES('other','biz','other')");
+  await db.prepare("UPDATE asterisk_routes SET password_hash=?,assistant_id='other'").bind(hash).run();expect(await validateAsteriskAdmission(env,'pbx',version)).toBeNull();
+  expect(derive).not.toHaveBeenCalled();expect(asteriskAuthBudget.acquire).not.toHaveBeenCalled();
 });

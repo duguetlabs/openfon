@@ -2,13 +2,14 @@ import { AsteriskAuthBudget, asteriskAuthBudget } from '../src/asterisk-auth-bud
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hashPassword } from '../src/auth';
 import { AsteriskCall } from '../src/asterisk-control';
-import { authenticateAsterisk } from '../src/asterisk-routes';
+import { ASTERISK_ADMISSION_HEADER, asteriskAdmissionVersion, authenticateAsterisk } from '../src/asterisk-routes';
 import { applyMigrations, SqliteD1 } from './sqlite-d1';
 import worker from '../src/index';
 import { fakeEnv, fakeCtx } from './fake-d1';
 import type { Env } from '../src/types';
 let db: SqliteD1;
 let env: Env;
+let admission: string;
 const password='synthetic-password-with-at-least-32-bytes';
 const auth='Basic '+btoa('pbx:'+password);
 const call='ast_'+'a'.repeat(64);
@@ -34,7 +35,7 @@ function owner(storage=new Storage()) {
   return {storage,object:new AsteriskCall({storage,waitUntil:()=>{}} as unknown as DurableObjectState,env)};
 }
 async function expire(live:ReturnType<typeof owner>){if(live.storage.data.has('cleanup'))await live.storage.put('cleanup',1);await live.object.alarm();}
-const request=()=>new Request(`https://internal/media?call=${call}&route=pbx`,{headers:{Upgrade:'websocket',Authorization:auth}});
+const request=()=>new Request(`https://internal/media?call=${call}&route=pbx`,{headers:{Upgrade:'websocket',[ASTERISK_ADMISSION_HEADER]:admission}});
 beforeEach(async()=>{
   const budget=new AsteriskAuthBudget();vi.spyOn(asteriskAuthBudget,'acquire').mockImplementation(()=>budget.acquire());
   db=new SqliteD1();applyMigrations(db);
@@ -42,6 +43,7 @@ beforeEach(async()=>{
     INSERT INTO businesses(id,user_id,slug,name,max_concurrent_calls,max_calls_per_day) VALUES('biz','owner','biz','Business',1,2);
     INSERT INTO assistants(id,business_id,public_slug,state,name,persona,language,engine,realtime_model) VALUES('assistant','biz','assistant','active','Alex','Helpful','en','realtime','gpt-realtime-2');`);
   await db.prepare("INSERT INTO asterisk_routes(id,business_id,assistant_id,password_sha256,enabled,password_hash) VALUES('pbx','biz','assistant',lower(hex(randomblob(32))),1,?)").bind(await hashPassword(password)).run();
+  admission=await asteriskAdmissionVersion('pbx',(await db.prepare('SELECT business_id,assistant_id,password_hash FROM asterisk_routes').first())! as {business_id:string;assistant_id:string;password_hash:string});
   env={...fakeEnv(undefined as never),DB:db as unknown as D1Database,ASTERISK_ENABLED:'true',REALTIME_BASE_URL:'wss://realtime.example.invalid/v1/realtime',REALTIME_MODEL:'gpt-realtime-2',REALTIME_API_KEY:'synthetic-only'};
 });
 afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks();vi.useRealTimers();db.close();});
@@ -221,12 +223,12 @@ describe('Asterisk startup connection boundary',()=>{
     const socket={accept:vi.fn(),close:vi.fn()};upstream.resolve({status:101,webSocket:socket} as unknown as Response);
     await Promise.resolve();await Promise.resolve();expect(socket.close).toHaveBeenCalledTimes(1);expect(vi.getTimerCount()).toBe(0);
   });
-  it('waits for delayed real authentication before starting the upstream timeout',async()=>{
+  it('waits for delayed admission validation before starting the upstream timeout',async()=>{
     vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});
     const entered=deferred<void>(), release=deferred<void>();
-    const derive=crypto.subtle.deriveBits.bind(crypto.subtle);
-    const auth=vi.spyOn(crypto.subtle,'deriveBits').mockImplementation(async(algorithm,key,length)=>{
-      entered.resolve();await release.promise;return derive(algorithm,key,length);
+    const digest=crypto.subtle.digest.bind(crypto.subtle);
+    const auth=vi.spyOn(crypto.subtle,'digest').mockImplementation(async(algorithm,data)=>{
+      entered.resolve();await release.promise;return digest(algorithm,data);
     });
     const upstream=pendingSession(), live=owner();const result=live.object.fetch(request());
     try {
@@ -337,4 +339,11 @@ describe('Asterisk established socket close codes',()=>{
         expect((await db.prepare('SELECT status FROM calls WHERE id=?').bind(call).first())?.status).toBe(code===1000 || code===1005?'completed':'failed');
       } finally {carrier?.emit('close',{code:1000});session.emit('close',{code:1000});await control.pending;}
     });
+});
+
+it('credential rotation after the fresh owner check cannot reserve against the changed route',async()=>{
+  let changed=false;
+  db.hook=sql=>{if(!changed && sql.includes('SELECT a.engine')){changed=true;db.exec("UPDATE asterisk_routes SET password_hash='rotated'");}};
+  expect((await owner().object.fetch(request())).status).toBe(403);
+  expect(await db.prepare('SELECT COUNT(*) n FROM calls').first()).toEqual({n:0});
 });
