@@ -49,6 +49,6 @@ export async function assertPresetWriteBudget(env: Env, businessId: string, row:
 // Lists are recovery previews, even for pre-quota rows. Apply resolves the full row by ID.
 export const PRESET_LIST_COLUMNS = `id,business_id,created_at,
  ${fields.filter(f=>f!=='id').map(f=>`substr(${f},1,256) AS ${f}`).join(',')},
- CASE WHEN ${fields.filter(f=>f!=='id').map(f=>`length(${f})>256`).join(' OR ')} THEN 1 ELSE 0 END AS preview_only`;
+ CASE WHEN ${fields.filter(f=>f!=='id').map(f=>`length(CAST(${f} AS BLOB))<>length(CAST(substr(${f},1,256) AS BLOB))`).join(' OR ')} THEN 1 ELSE 0 END AS preview_only`;
 
 export const PRESET_ROW_BYTES = (alias: string) => fields.map(field => `length(CAST(${alias}.${field} AS BLOB))`).join('+');

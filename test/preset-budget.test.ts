@@ -95,3 +95,11 @@ it('a refused preset creation does not run unrelated legacy reconciliation first
  expect(changes()).toEqual(before);
  expect(await db.prepare("SELECT name FROM engine_presets WHERE id='p0'").first()).toEqual({name:'Preset'});
 });
+it('marks NUL-shortened previews read-only without changing their stored bytes',async()=>{
+ seed('nul','Visible\0hidden suffix');
+ const stored=await db.prepare("SELECT hex(name) AS bytes FROM engine_profiles WHERE id='nul'").first();
+ const response=await request('/api/me/business/biz/profiles');
+ const list=await response.json() as {id:string;name:string;preview_only:number}[];
+ expect(list[0].name).toBe('Visible');expect(list[0].preview_only).toBe(1);
+ expect(await db.prepare("SELECT hex(name) AS bytes FROM engine_profiles WHERE id='nul'").first()).toEqual(stored);
+});
