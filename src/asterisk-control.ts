@@ -1,4 +1,5 @@
-import type { Env } from './types';
+import { telephoneRealtimeAvailable, type RealtimeSettings } from './realtime-providers';
+import type { AgentSettings, Env } from './types';
 import { authenticateAsterisk } from './asterisk-routes';
 import { AsteriskMediaAdapter } from './asterisk-media';
 import { OCCUPIED_CALL_SQL } from './telnyx-admission';
@@ -27,6 +28,14 @@ export class AsteriskCall implements DurableObject {
     await this.state.storage.put('call', call);
     await this.state.storage.setAlarm(Date.now() + 30000);
     try {
+      const settings = await this.env.DB.prepare(`SELECT a.engine,a.realtime_model,
+        p.realtime_provider,p.realtime_base_url,p.realtime_api_key
+        FROM asterisk_routes r JOIN assistants a ON a.id=r.assistant_id AND a.business_id=r.business_id
+        LEFT JOIN provider_settings p ON p.business_id=r.business_id WHERE r.id=? AND r.enabled=1`)
+        .bind(route).first<AgentSettings & RealtimeSettings>();
+      if (!telephoneRealtimeAvailable(this.env, settings)) {
+        await this.state.storage.deleteAlarm(); return new Response(null, { status: 403 });
+      }
       const row = await this.env.DB.prepare(`INSERT OR IGNORE INTO calls
         (id,business_id,assistant_id,channel,caller_id,environment,direction,reserved_at)
         SELECT ?,r.business_id,r.assistant_id,'asterisk','PBX caller','live','inbound',datetime('now')

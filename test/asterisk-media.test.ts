@@ -51,6 +51,10 @@ describe('Asterisk JSON ulaw transport', () => {
   it('bounds missing start and missing playback acknowledgments',()=>{
     vi.advanceTimersByTime(20000);expect(end).toHaveBeenCalledWith('start_timeout');
   });
+  it('hangs up when playback acknowledgments never arrive',()=>{
+    begin();adapter.sessionMessage(new ArrayBuffer(960));adapter.sessionMessage(JSON.stringify({type:'ending'}));
+    vi.advanceTimersByTime(12000);expect(end).toHaveBeenCalledExactlyOnceWith('drain_timeout');
+  });
   it('keeps transcripts and tools off the PBX socket',()=>{
     begin();const count=carrier.length;adapter.sessionMessage(JSON.stringify({type:'transcript',text:'private'}));
     expect(carrier).toHaveLength(count);

@@ -61,6 +61,8 @@ and [websocket_client.conf sample](https://github.com/asterisk/asterisk/blob/mas
 share a route. Reusing a call ID is rejected, including after hangup. HTTP Basic
 credentials travel only in the upgrade Authorization header. Admission atomically
 checks active realtime assistant state and workspace daily/concurrent limits.
+The shared telephoneRealtimeAvailable resolver checks the selected provider key
+and greeting capability before reservation, including workspace credentials.
 Browser call routes cannot attach to Asterisk calls. The PBX receives only media
 and control commands, never transcript/tool metadata.
 
@@ -78,7 +80,8 @@ separate HTTP API after the websocket ends.
 
 Run `npx vitest run test/asterisk-media.test.ts` and
 `node scripts/asterisk-smoke.mjs`. The latter uses real local workerd, D1 and Durable
-Objects with a **simulated PBX and AI provider**, ports 8811/9251, and blocked
+Objects with a **simulated PBX and AI provider**, default ports 8811/9251 (override
+with OPENFON_TEST_PORT / OPENFON_INSPECTOR_PORT), and blocked
 external provider requests. It is not an Asterisk or PSTN pilot.
 
 Real pilot checklist: record PBX version/loaded modules, route/assistant IDs (no

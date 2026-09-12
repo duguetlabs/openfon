@@ -17,7 +17,6 @@ const wait=async(predicate,label)=>{const deadline=Date.now()+15000;while(Date.n
 const mockScript = `
 export default { async fetch(request, env) {
   const url = new URL(request.url);
-  if (url.hostname === 'api.telnyx.com') return env.RECORD.fetch(request);
   if (url.hostname === 'realtime.smoke.invalid' && request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
     const pair = new WebSocketPair(); const socket = pair[1]; socket.accept();
     let responded = false;
