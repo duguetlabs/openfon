@@ -1996,7 +1996,64 @@ describe('telephone audio capabilities', () => {
     await flush(100);
     expect(serverSockets[0].countOf('ended')).toBe(1);
     expect(serverSockets[0].binaryCount()).toBe(0);
+    expect(serverSockets[0].countOf('ready')).toBe(0);
     expect(callUpdates().some(w => w.args.includes('Telephone greeting audio could not be generated.'))).toBe(true);
+  });
+
+  it('holds carrier readiness through delayed synthesis, then queues greeting immediately', async () => {
+    const { session, ctl } = newSession('realtime', {}, {DEFAULT_TTS_PROVIDER:'azure', AZURE_SPEECH_KEY:'synthetic-unit-test-key'});
+    ctl.channel = 'telnyx';
+    vi.spyOn(session as never, 'startRealtime').mockResolvedValue(true as never);
+    vi.spyOn(session as never, 'engineGreets').mockReturnValue(false as never);
+    const audio = new ArrayBuffer(4800);
+    let release!: (audio: ArrayBuffer) => void;
+    const pending = new Promise<ArrayBuffer>(resolve => { release = resolve; });
+    const synth = vi.fn(async () => ({ok:true, arrayBuffer: () => pending}));
+    globalThis.fetch = synth as unknown as typeof fetch;
+    await session.fetch(upgradeRequest());
+    const socket = serverSockets[0];
+    socket.receive({ type: 'start' });
+    await flush(100);
+    expect(synth).toHaveBeenCalledOnce();
+    expect(socket.countOf('ready')).toBe(0);
+    expect(socket.binaryCount()).toBe(0);
+    // A ready consumer resumes on the next microtask: PCM must already be queued.
+    const send = socket.send.bind(socket);
+    let queuedAtReady = false;
+    vi.spyOn(socket, 'send').mockImplementation(data => {
+      send(data);
+      if (typeof data === 'string' && JSON.parse(data).type === 'ready') {
+        queueMicrotask(() => { queuedAtReady = socket.sent.at(-1) === audio; });
+      }
+    });
+    release(audio);
+    await flush(100);
+    expect(socket.countOf('ready')).toBe(1);
+    expect(queuedAtReady).toBe(true);
+    expect(socket.binaryCount()).toBe(1);
+    socket.receive({type:'hangup'});
+    await flush(100);
+  });
+
+  it('does not announce readiness or send late greeting after hangup during synthesis', async () => {
+    const { session, ctl } = newSession('realtime', {}, {DEFAULT_TTS_PROVIDER:'azure', AZURE_SPEECH_KEY:'synthetic-unit-test-key'});
+    ctl.channel = 'telnyx';
+    vi.spyOn(session as never, 'startRealtime').mockResolvedValue(true as never);
+    vi.spyOn(session as never, 'engineGreets').mockReturnValue(false as never);
+    let release!: (audio: ArrayBuffer) => void;
+    const pending = new Promise<ArrayBuffer>(resolve => { release = resolve; });
+    globalThis.fetch = vi.fn(async () => ({ok:true, arrayBuffer: () => pending})) as unknown as typeof fetch;
+    await session.fetch(upgradeRequest());
+    const socket = serverSockets[0];
+    socket.receive({type:'start'});
+    await flush(100);
+    socket.receive({type:'hangup'});
+    await flush(100);
+    release(new ArrayBuffer(4800));
+    await flush(100);
+    expect(socket.countOf('ready')).toBe(0);
+    expect(socket.binaryCount()).toBe(0);
+    expect(socket.countOf('ended')).toBe(1);
   });
 
   it('allows native realtime greeting audio without a browser TTS provider', async () => {

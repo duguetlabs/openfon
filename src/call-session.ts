@@ -545,16 +545,21 @@ export class CallSession implements DurableObject {
           { role: 'assistant', content: greeting },
         ];
         const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-        this.sendReady({ mode: 'realtime', ttsMode, greeting, engine: engineLabel });
+        if (!this.requiresCarrierAudio) this.sendReady({ mode: 'realtime', ttsMode, greeting, engine: engineLabel });
         await this.saveTurn('agent', greeting);
         // The greeting is ours, not the model's: synthesize it deterministically
         // and stream it as PCM so it matches the realtime audio path.
         const voice = voiceForReply(this.env, this.lang, this.settings!.language, this.settings!.voice || '');
         const audio = await synthesize(this.env, greeting, voice, 'pcm24');
+        if (this.ended) return; // caller hung up while synthesis was pending
         if (this.requiresCarrierAudio && !audio?.byteLength) {
           await this.failCarrierAudio('Telephone greeting audio could not be generated.');
           return;
         }
+        // The carrier bridge releases buffered input on ready. Queue ready and
+        // greeting PCM in the same turn, only after synthesis succeeds, so no
+        // caller response can overtake the greeting during the awaited work.
+        if (this.requiresCarrierAudio) this.sendReady({ mode: 'realtime', ttsMode, greeting, engine: engineLabel });
         if (audio && this.ws) {
           // PCM16 @ 24 kHz = 48000 bytes/s; shield the greeting from
           // noise-triggered barge-in flushes for its playback duration.
