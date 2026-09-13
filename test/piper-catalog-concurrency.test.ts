@@ -115,47 +115,62 @@ describe('Piper concurrent catalog admission', () => {
   });
 
 
-  it('reclaims an abandoned scalar reservation at the deadline and isolates late completion/cleanup', async () => {
+  it('retains an expired unresolved endpoint until settlement and cancels its late response before reading', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     const old = deferred<void>();
-    const fresh = deferred<void>();
-    // Deliberately ignore AbortSignal to model a context that cannot execute
-    // its old continuation until after another request reclaimed capacity.
-    const fetcher = vi.fn(async () => { await old.promise; return catalog({ en: 'en_old' }); });
+    let read = false, cancelled = false;
+    // Deliberately ignore AbortSignal to model unresolved old I/O; elapsed
+    // time must never grant a second operation over this active reservation.
+    const fetcher = vi.fn(async () => {
+      await old.promise;
+      const body = new ReadableStream({
+        pull() { read = true; },
+        cancel() { cancelled = true; },
+      }, { highWaterMark: 0 });
+      return new Response(body);
+    });
     vi.stubGlobal('fetch', fetcher);
     const first = lookup('wss://voice.example/rt', 'en', 'old_fallback');
-    vi.setSystemTime(Date.now() + 1499);
+    vi.setSystemTime(Date.now() + 1500);
     expect(await lookup('wss://voice.example/rt', 'en', 'busy')).toBe('busy');
+    vi.setSystemTime(Date.now() + 60_000);
+    expect(await lookup('wss://voice.example/rt', 'en', 'still_busy')).toBe('still_busy');
     expect(fetcher).toHaveBeenCalledTimes(1);
-    vi.setSystemTime(Date.now() + 1);
-    fetcher.mockImplementation(async () => { await fresh.promise; return catalog({ en: 'en_new' }); });
-    const second = lookup('wss://voice.example/rt', 'en', 'new_fallback');
     old.resolve();
     expect(await first).toBe('old_fallback');
-    // The old finally must not delete the replacement reservation.
-    expect(await lookup('wss://voice.example/rt', 'en', 'still_busy')).toBe('still_busy');
-    expect(fetcher).toHaveBeenCalledTimes(2);
-    fresh.resolve();
-    expect(await second).toBe('en_new');
+    expect(cancelled).toBe(true);
+    expect(read).toBe(false);
+    fetcher.mockImplementation(async () => catalog({ en: 'en_new' }));
     expect(await lookup('wss://voice.example/rt', 'en', 'fallback')).toBe('en_new');
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
-  it('reclaims expired distinct capacity without allowing late owners to populate the cache', async () => {
+  it('keeps32 expired unresolved operations bounded and returns capacity only as each settles', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    const gate = deferred<void>();
-    const fetcher = vi.fn(async () => { await gate.promise; return catalog({ en: 'en_expired' }); });
+    const gates = Array.from({ length: 32 }, () => deferred<void>());
+    const fetcher = vi.fn(async (url: string) => {
+      const index = Number(new URL(url).hostname.split('-')[1].split('.')[0]);
+      await gates[index].promise;
+      return catalog({ en: 'en_expired' });
+    });
     vi.stubGlobal('fetch', fetcher);
     const calls = Array.from({ length: 32 }, (_, i) => lookup(`wss://abandoned-${i}.example/rt`, 'en', `fallback_${i}`));
+    vi.setSystemTime(Date.now() + 60_000);
     expect(await lookup('wss://next.example/rt', 'en', 'busy')).toBe('busy');
     expect(fetcher).toHaveBeenCalledTimes(32);
-    vi.setSystemTime(Date.now() + 1500);
-    fetcher.mockImplementation(async () => catalog({ en: 'en_new' }));
-    expect(await lookup('wss://next.example/rt', 'en', 'fallback')).toBe('en_new');
-    gate.resolve();
+    // Settle exactly one old operation, keeping31 unresolved. Only one new
+    // operation is then allowed, even though every old deadline elapsed.
+    gates[0].resolve();
+    expect(await calls[0]).toBe('fallback_0');
+    const next = deferred<void>();
+    fetcher.mockImplementation(async () => { await next.promise; return catalog({ en: 'en_new' }); });
+    const replacement = lookup('wss://next.example/rt', 'en', 'new_fallback');
+    expect(await lookup('wss://overflow.example/rt', 'en', 'busy')).toBe('busy');
+    expect(fetcher).toHaveBeenCalledTimes(33);
+    for (const gate of gates.slice(1)) gate.resolve();
     expect(await Promise.all(calls)).toEqual(Array.from({ length: 32 }, (_, i) => `fallback_${i}`));
-    expect(await lookup('wss://abandoned-0.example/rt', 'en', 'fallback')).toBe('en_new');
-    expect(fetcher).toHaveBeenCalledTimes(34);
+    next.resolve();
+    expect(await replacement).toBe('en_new');
   });
 
   it.each(['throw', 'reject', 'redirect', 'oversize', 'body-error', 'abort'])('releases a failed lookup for a later retry: %s', async failure => {

@@ -75,16 +75,18 @@ export async function piperVoiceFromCatalog(base: string, lang: string, fallback
     }
     catalogs.delete(endpoint);
     const now = Date.now();
-    // A destroyed initiating context may never run finally. Reclaim its scalar
-    // reservation once its native fetch deadline has elapsed (at most32 scans).
-    for (const [key, pending] of pendingCatalogs) {
-      if (now >= pending.expiresAt) pendingCatalogs.delete(key);
-    }
+    // Only settlement of the initiating lookup releases admission. Expiry
+    // alone does not prove its I/O stopped. If its context vanishes before
+    // finally, retain the slot until isolate recreation and use static fallback.
     if (pendingCatalogs.has(endpoint) || pendingCatalogs.size >= MAX_PENDING_ENDPOINTS) return fallback;
     const reservation = { expiresAt: now + FETCH_TIMEOUT_MS };
     pendingCatalogs.set(endpoint, reservation);
     try {
       const response = await fetch(endpoint, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), redirect: 'manual' });
+      if (Date.now() >= reservation.expiresAt) {
+        await response.body?.cancel();
+        return fallback;
+      }
       const voices = await readVoices(response);
       // Late work from an expired/replaced reservation cannot publish stale
       // data, evict a newer cache entry, or release a newer request's capacity.
