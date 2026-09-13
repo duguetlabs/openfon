@@ -236,6 +236,31 @@ describe('durable carrier control', () => {
     expect(o.storage.alarm).toBeNull(); expect([...o.storage.data]).toEqual([['retired',true]]);
   });
 
+  it.each(['playback_complete', 'session_error', 'carrier_stream_failed', 'socket_closed'])('status-only release preserves existing reason without inventing cause: %s', async reason => {
+    let o=owner(); await o.event('call.initiated'); await o.drain();
+    db.database.prepare("UPDATE calls SET status='completed',outcome='answered',connected_at=datetime('now') WHERE id=?").run(callId);
+    await (o.object as unknown as {terminate(reason:string):Promise<void>}).terminate(reason);
+    await o.object.alarm(); expect(await occupied()).toBe(1);
+    vi.mocked(fetch).mockImplementation(async (url,init) => {
+      requests.push({url:String(url),init:init!});
+      return Response.json(init?.method === 'POST' ? {data:{result:'ok'}} : {data:{record_type:'call',is_alive:false,call_control_id:correlation.callControlId,call_leg_id:correlation.callLegId,call_session_id:correlation.callSessionId}});
+    });
+    vi.setSystemTime(Date.now()+30_000); await o.object.alarm();
+    expect(requests.some(r=>!r.init.method)).toBe(true);
+    expect(await occupied()).toBe(0);
+    expect(await o.storage.get('control')).toMatchObject({terminal:true,reason});
+    o=owner(o.storage); await o.object.alarm();
+    const failure=reason==='playback_complete'?null:reason;
+    expect(db.database.prepare('SELECT status,outcome,failure_code FROM calls WHERE id=?').get(callId)).toEqual({status:failure?'failed':'completed',outcome:failure?'failed':'answered',failure_code:failure});
+    // A later signed missing cause is still conservative after status release.
+    env.TELNYX_CALL={idFromName:(n:string)=>n,get:()=>({fetch:(r:Request)=>o.object.fetch(r)})} as unknown as DurableObjectNamespace;
+    await worker.fetch(webhook('call.hangup',{hangup_cause:undefined}),env,fakeCtx); await o.drain();
+    expect(db.database.prepare('SELECT failure_code FROM calls WHERE id=?').get(callId)).toEqual({failure_code:reason==='playback_complete'||reason==='socket_closed'?'carrier_hangup_failed':reason});
+    vi.setSystemTime(Date.now()+36*60_000); await o.object.alarm();
+    expect([...o.storage.data]).toEqual([['retired',true]]);
+    await o.event('call.initiated');await o.drain();await o.object.alarm();expect(o.storage.alarm).toBeNull();
+  });
+
   it('does not downgrade explicit stream failure after provisional close', async () => {
     const o = owner(); await o.event('call.initiated'); await o.drain();
     await (o.object as unknown as {terminate(reason:string):Promise<void>}).terminate('socket_closed');

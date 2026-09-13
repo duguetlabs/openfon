@@ -232,6 +232,20 @@ export class TelnyxCall implements DurableObject {
     s.commands[action] = { id, action, body: { ...body, command_id: id }, attempts: 0, nextAt: Date.now(), accepted: false };
   }
 
+  /** Authenticated status proves release, not a normal or abnormal cause. */
+  private async confirmEnded(s: ControlState): Promise<void> {
+    s.terminal = true;
+    s.ending = true;
+    s.commands = {};
+    s.streamToken = '';
+    s.cleanupAt ??= Date.now() + 35 * 60_000;
+    await this.env.DB.prepare(
+      "UPDATE calls SET carrier_released_at=COALESCE(carrier_released_at, datetime('now')) WHERE id=? AND channel='telnyx'"
+    ).bind(s.callId).run();
+    await this.env.DB.prepare("UPDATE telnyx_call_links SET carrier_state='ended', updated_at=datetime('now') WHERE call_id=?").bind(s.callId).run();
+    this.bridge?.close('carrier_hangup');
+  }
+
   private async consume(s: ControlState, event: TelnyxControlEvent): Promise<void> {
     if (event.type === 'call.hangup') {
       if (s.reason === 'socket_closed' && event.normalHangup) s.reason = 'carrier_hangup';
@@ -240,16 +254,7 @@ export class TelnyxCall implements DurableObject {
       if (!event.normalHangup && (s.reason === 'socket_closed' || !CARRIER_FAILURES.has(s.reason))) {
         s.reason = 'carrier_hangup_failed';
       }
-      s.terminal = true;
-      s.ending = true;
-      s.commands = {};
-      s.streamToken = '';
-      s.cleanupAt ??= Date.now() + 35 * 60_000;
-      await this.env.DB.prepare(
-        "UPDATE calls SET carrier_released_at=COALESCE(carrier_released_at, datetime('now')) WHERE id=? AND channel='telnyx'"
-      ).bind(s.callId).run();
-      await this.env.DB.prepare("UPDATE telnyx_call_links SET carrier_state='ended', updated_at=datetime('now') WHERE call_id=?").bind(s.callId).run();
-      this.bridge?.close('carrier_hangup');
+      await this.confirmEnded(s);
       return;
     }
     if (s.terminal) return;
@@ -391,7 +396,7 @@ export class TelnyxCall implements DurableObject {
       const command = s?.commands[dispatch.command.action];
       if (!s || !command || command.id !== dispatch.command.id) return;
       if (ended) {
-        await this.consume(s, { id: 'status-reconciled', type: 'call.hangup', callId: s.callId, call: s.call });
+        await this.confirmEnded(s);
         await this.persist(s);
         return;
       }
