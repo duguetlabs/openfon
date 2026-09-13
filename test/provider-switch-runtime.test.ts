@@ -99,3 +99,53 @@ it.each([undefined, 'false', 'true'])('honors realtime insecure-local opt-in=%s 
   expect((await request('/api/me/provider', { ...local, realtime_provider: 'openai' })).status).toBe(400);
   expect(rows()).toEqual(saved);
 });
+
+
+it.each(['\n', '\r', '\u2028', '\u2029'])('matches runtime line-terminator handling without wiping inactive models (%j)', async separator => {
+  await customPrimary();
+  const invalid = `gpt-4o${separator}realtime`;
+  db.database.prepare("UPDATE agent_settings SET realtime_model=? WHERE business_id='b1'").run(invalid);
+  expect((await request('/api/me/bootstrap')).status).toBe(200);
+  for (const [id, state, model] of [
+    ['draft-break', 'draft', invalid],
+    ['trailing-break', 'active', `gpt-4o-realtime${separator}preview`],
+    ['direct-break', 'active', `gpt-realtime${separator}preview`],
+  ]) db.database.prepare("INSERT INTO assistants(id,business_id,public_slug,state,engine,realtime_model) VALUES (?,'b1',?,?,'realtime',?)")
+    .run(id, id, state, model);
+  db.database.prepare("INSERT INTO engine_profiles(id,business_id,name,engine,realtime_model) VALUES ('break-profile','b1','Saved','realtime',?)").run(invalid);
+  expect(() => resolveRealtime(env, { ...openai, realtime_model: invalid } as any)).toThrow('Choose an OpenAI realtime model');
+  expect((await request('/api/me/provider', openai)).status).toBe(200);
+  for (const table of ['assistants', 'agent_settings']) {
+    const row = db.database.prepare(`SELECT realtime_model FROM ${table} WHERE business_id='b1' ${table === 'assistants' ? "AND public_slug='one'" : ''}`).get() as any;
+    expect(row.realtime_model).toBe('');
+    expect(resolveRealtime(env, { ...openai, ...row } as any).model).toBe('gpt-realtime');
+  }
+  for (const id of ['trailing-break', 'direct-break']) {
+    const row = db.database.prepare('SELECT realtime_model FROM assistants WHERE id=?').get(id) as any;
+    expect(row.realtime_model).toContain(separator);
+    expect(resolveRealtime(env, { ...openai, ...row } as any).model).toBe(row.realtime_model);
+  }
+  expect(db.database.prepare("SELECT realtime_model FROM assistants WHERE id='draft-break'").get()).toEqual({ realtime_model: invalid });
+  expect(db.database.prepare("SELECT realtime_model FROM engine_profiles WHERE id='break-profile'").get()).toEqual({ realtime_model: invalid });
+  const snapshot = db.database.prepare("SELECT agent_snapshot FROM compatibility_sync_state WHERE business_id='b1'").get() as any;
+  expect(JSON.parse(snapshot.agent_snapshot).realtime_model).toBe('');
+  expect((await request('/api/me/bootstrap')).status).toBe(200);
+  expect((await request('/api/public/agent/draft-break', undefined, '')).status).toBe(404);
+});
+
+
+it.each([
+  [' gpt-4o-realtime', ''],
+  ['gpt-4o-realtime ', 'gpt-4o-realtime '],
+  ['gpt-4o\trealtime', 'gpt-4o\trealtime'],
+])('matches runtime without trimming persisted model %j', async (model, expected) => {
+  await customPrimary();
+  db.database.prepare("UPDATE agent_settings SET realtime_model=? WHERE business_id='b1'").run(model);
+  expect((await request('/api/me/bootstrap')).status).toBe(200);
+  if (expected) expect(resolveRealtime(env, { ...openai, realtime_model: model } as any).model).toBe(model);
+  else expect(() => resolveRealtime(env, { ...openai, realtime_model: model } as any)).toThrow('Choose an OpenAI realtime model');
+  expect((await request('/api/me/provider', openai)).status).toBe(200);
+  for (const table of ['assistants', 'agent_settings']) {
+    expect(db.database.prepare(`SELECT realtime_model FROM ${table} WHERE business_id='b1'`).get()).toEqual({ realtime_model: expected });
+  }
+});

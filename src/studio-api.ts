@@ -1690,8 +1690,14 @@ export function registerStudioApi(app: StudioApp): void {
         effectiveRealtimeProvider(current?.realtime_provider) !== 'openai') {
       // Inactive drafts and saved profiles keep custom model intent. Active
       // realtime routes must not retain a model the direct adapter rejects.
-      // GLOB is case-sensitive, like the adapter's OpenAI model-prefix check.
-      const incompatibleModel = "realtime_model<>'' AND realtime_model NOT GLOB 'gpt-realtime*' AND realtime_model NOT GLOB 'gpt-4o*realtime*'";
+      // Match /^gpt-(realtime|4o.*realtime)/ exactly: SQL wildcards span
+      // line terminators, but JavaScript dot does not. Only the prefix through
+      // the first "realtime" matters; trailing line terminators remain valid.
+      const uninterruptedPrefix = [10, 13, 0x2028, 0x2029].map(code =>
+        `(instr(realtime_model,char(${code}))=0 OR instr(realtime_model,char(${code}))>instr(realtime_model,'realtime'))`).join(' AND ');
+      const incompatibleModel = `realtime_model<>'' AND NOT (
+        substr(realtime_model,1,12)='gpt-realtime' OR
+        (substr(realtime_model,1,6)='gpt-4o' AND instr(realtime_model,'realtime')>0 AND ${uninterruptedPrefix}))`;
       statements.push(c.env.DB.prepare(
         `UPDATE assistants SET realtime_model='' WHERE business_id=?
          AND state='active' AND engine='realtime' AND ${incompatibleModel}`
