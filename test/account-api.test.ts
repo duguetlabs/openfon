@@ -35,15 +35,34 @@ describe('account self service', () => {
     expect((await call('/api/me/account', 'DELETE', { confirmation: 'DELETE', currentPassword: password }, 'invalid')).status).toBe(401);
   });
 
-  it('changes the password and revokes other sessions while preserving the caller', async () => {
-    expect((await call('/api/me/account/password', 'POST', { currentPassword: password, newPassword: 'new-correct-horse' })).status).toBe(200);
+  it('changes the password and rotates the caller cookie while revoking every old session', async () => {
+    const response = await call('/api/me/account/password', 'POST', { currentPassword: password, newPassword: 'new-correct-horse' });
+    expect(response.status).toBe(200);
+    const cookie = response.headers.get('set-cookie');
+    expect(cookie).toMatch(/^ofs=[a-f0-9]{64};/);
+    for (const attribute of ['HttpOnly', 'Secure', 'SameSite=Lax', 'Path=/', 'Max-Age=2592000']) expect(cookie).toContain(attribute);
+    const replacement = cookie!.match(/^ofs=([^;]+)/)![1];
     const row = db.database.prepare('SELECT password_hash FROM users WHERE id=?').get('owner') as { password_hash: string };
     expect(await verifyPassword('new-correct-horse', row.password_hash)).toBe(true);
-    expect(db.database.prepare('SELECT token FROM sessions ORDER BY token').all()).toEqual([{ token: 'other-session' }, { token: 'owner-session' }]);
+    expect(db.database.prepare('SELECT token FROM sessions WHERE user_id=?').all('owner')).toEqual([{ token: replacement }]);
+    expect((await call('/api/me/account/export')).status).toBe(401);
+    expect((await call('/api/me/account/export', 'GET', undefined, 'owner-second-session')).status).toBe(401);
+    expect((await call('/api/me/account/export', 'GET', undefined, replacement)).status).toBe(200);
+    expect((await call('/api/me/account/export', 'GET', undefined, 'other-session')).status).toBe(200);
     // An in-flight login which verified before the password change cannot
     // restore a session for the previous credential after revocation.
     expect(await createVerifiedSession(env, 'owner', oldHash)).toBeNull();
     expect(await createVerifiedSession(env, 'owner', row.password_hash)).toBeTypeOf('string');
+  });
+
+  it('rolls back the password and all sessions if replacement insertion fails', async () => {
+    db.exec("CREATE TRIGGER refuse_session BEFORE INSERT ON sessions BEGIN SELECT RAISE(ABORT, 'injected session insert failure'); END");
+    const before = db.database.prepare('SELECT * FROM sessions ORDER BY token').all();
+    const response = await call('/api/me/account/password', 'POST', { currentPassword: password, newPassword: 'new-correct-horse' });
+    expect(response.status).toBe(500);
+    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(db.database.prepare('SELECT password_hash FROM users WHERE id=?').get('owner')).toEqual({ password_hash: oldHash });
+    expect(db.database.prepare('SELECT * FROM sessions ORDER BY token').all()).toEqual(before);
   });
 
   it('rejects incorrect current passwords and invalid new passwords without changing credentials', async () => {

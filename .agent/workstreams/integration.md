@@ -1,12 +1,12 @@
 # Integration checkpoint
 
-- Status: In progress — QA closed66397c2 harness-only corrections; publishing next exact review freeze
+- Status: In progress — official f884e81 and hosted security CLEAN, both CI green; hosted code has three findings, remediation underway
 - Owner: openfon-integration, gpt-6-astra / medium
 - Branch/worktree: codex/integrated-release, /Users/cristian/projects/fun/openfon-worktrees/integration
 - Updated: 2026-09-13
 - Application candidate: unchanged fromf143; harness candidate d2a296b adds e3e33f4 realtime and native/synth terminal assertions with owner real-workerd negatives/positives
-- Published PR16 head: f143ca849e3fc39e5330cd50bebdadbc7d5bd7e3 (docs-only over QA-scoped5a9f185; frozen for required reviews)
-- Validation slot: Telnyx/realtime released all runtime processes; QA source-only review next, no runner active
+- Published PR16 head: f884e81927ff4bb9d75a8eae11504ce5111ecd96 (docs-only over QA-scoped66397c2 harness candidate; application unchanged fromf143; frozen for required reviews)
+- Validation slot: integration password validation finished and released; Asterisk next explicit slot, presets source-only
 - Ports: integration8814/9254, optional real-PBX proxy8824; never8787
 - Read first: root orchestration-rules/current-task/manifest (read-only), this file, docs/launch/readiness.md
 - Earlier detailed milestones and failures remain in this file's history through ccdd85d and the linked original review reports. This checkpoint records current state.
@@ -24,6 +24,16 @@ Realtimec58b17d→42077ab assembled with application hunks clean. Docs conflict 
 Final42077ab direct/gateway and Telnyx native+synthesized actual-workerd smokes PASS, all processes exited. Logs/tmp/openfon-420-direct.log,/tmp/openfon-420-gateway.log,/tmp/openfon-420-telnyx.log. Prior08cc Asterisk/retirement runtime unchanged by later Telnyx/preset/error-event deltas; full813 covers assembled interfaces. Reporting-only rehearsal9/17 previously passed without behavior change. Integration releases sole slot to QA for bounded independent combined closure, no full-suite duplication or official inference until published freeze. Remote5e0 and stagingb15 remain unchanged.
 
 ## Authorization and ownership
+Password rotation3998127444 fixed locally: same transactional CAS now deletes every prior session, conditionally inserts a random32-byte replacement with30-day expiry, and emits the existing secure/HttpOnly/Lax cookie only after success. Originalf884 two new regressions fail; fixed20/20account tests and both typechecks PASS. Tests verify old/current/other owner-session rejection, replacement and unrelated account authentication, stale login rejection, concurrent hash conflict, and actual SQLite insertion-trigger rollback with no cookie. Logs /tmp/openfon-f884-session-{negative,fixed,types}.log. Integration releases sole slot; Asterisk next, presets bridge source-only. No published head change.
+
+Hosted f884 code review 5188768438 completed with three verified source concerns: 3998127439 Asterisk failed projection can prevent CallSession finalization; 3998127444 password change preserves copied current cookie; 3998127448 migration0016 scrubs before old Worker replacement. Integration owns atomic current-session rotation and deployment compatibility/disposition; Asterisk owns carrier finalization correction with realtime coordination if shared CallSession is necessary. Presets supplies source-only old/new profile compatibility analysis, no migration edits yet. Integration holds first sole focused validation slot; other owners source-only until explicit grant. No merge, new inference, staging or production change.
+
+Hosted security completed clean on exact f884e81: original comment 5649660908 explicitly reports no security issues, reviewed commit f884e81927. Hosted code remains running; no merge yet. Official clean and both CI successes remain valid, with no head change.
+
+Officialf884 CLEAN original5649635380:both No security concerns identified and No major issues detected,zero findings;3chunks520034tokens,exit0/stderr0,unchanged source/runtime,exacthead verifiedthroughpublication. Independently readback PR16f884 OPEN/mergeable and bothCI34727495487/34727507207 SUCCESS, allfourjobs eachpass/deploySKIPPED. Hosted summary stillcode/securityRUNNING onf884; no newinline since00:06UTC. No merge until actualhostedlatestheadclearance. QAprocessended/noextrareview; keepfreeze/no stagedchanges. Thischeckpointlocalonlypreservesreviewedhead.
+
+Publishedf884e81 readbackOPEN after normalpush/close/reopen. Officialf143 smoke disposition5649614890 posted; PRbodyupdated; hostedcode5649616687/security5649616761 requested. QA alone assignedONE unchanged full officialrun onexacthead, originaloutput/provenance/headchecks required. No otherinference/runner, stagingproduction unchanged. Earlierf143 hostedreviews were stillrunning before supersession; inspect latefindings ifposted. NewCI/reviews pending, no cleanlatestheadclaim. Checkpointreadback localduringfreeze.
+
 QA source/evidence closes exact66397c2:src/web/migrations diffpublishedf143 EMPTY,ports unchanged. Verified signednormalcause,completed/answered/nullfailure/end/release assertions,oversizedfailed/zeroPCM/zeroturns retained. QA read and hashchecked realtime2negative+4PASS andTelnyx2failedstate negative logs; native/synthpositive/cleanup reused asowner evidence. No newmajor/security concern scoped, no runner/duplicateinference. Nextpublication docs-onlyover663 withrequiredfreshreviews/CI; no application/live/stagingchange.
 
 Assembleda8755c1→e3e33f4 andefbc98b→d2a296b cleanly, configurableports preserved. Source/web/migrations diff frompublishedf143 EMPTY. Realtime2 missingcause direct/gateway negatives failfailedvscompleted;4 fixed normal/oversized variants PASS. Telnyx native+synth strictnormal PASS; forcedfailed persistedrow negatives each exit1 atfailedvscompleted, restoredfinally; logs/tmp/openfon-telnyx-terminal-negative-native.log and-synthesized.log/hashesownercheckpoint. All runtimes disposed/slotreleased. No duplicate suite/runtime needed for unchangedapplication; sourceQA checks exactharness deltas/ownerprovenance then freshrequiredreview onpublishedhead. Bothf143CIgreen; hostedreviews stillpending, no live/stagingchange.

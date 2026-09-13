@@ -1,7 +1,7 @@
 import type { Hono, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
-import { deleteCookie, getCookie } from 'hono/cookie';
-import { hashPassword, verifyPassword } from './auth';
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
+import { hashPassword, newToken, verifyPassword } from './auth';
 import type { Env } from './types';
 
 type App = Hono<{ Bindings: Env; Variables: { userId: string } }>;
@@ -52,18 +52,25 @@ export function registerAccountApi(app: App): void {
     if (body.currentPassword === body.newPassword) return c.json({ error: 'Choose a different new password.' }, 400);
     const nextHash = await hashPassword(body.newPassword);
     const token = getCookie(c, 'ofs') ?? '';
+    const replacement = newToken();
+    const now = Date.now();
+    const expires = new Date(now + 30 * 86400_000).toISOString();
     // The compare-and-swap prevents two simultaneous changes from overwriting
     // one another. D1 batch is transactional: session revocation and the hash
     // change succeed together, and a losing request cannot revoke sessions.
     const result = await c.env.DB.batch([
       c.env.DB.prepare(`UPDATE users SET password_hash=? WHERE id=? AND password_hash=?
         AND EXISTS (SELECT 1 FROM sessions WHERE token=? AND user_id=? AND expires_at>?)`)
-        .bind(nextHash, userId, user.password_hash, token, userId, new Date().toISOString()),
-      c.env.DB.prepare(`DELETE FROM sessions WHERE user_id=? AND token<>?
+        .bind(nextHash, userId, user.password_hash, token, userId, new Date(now).toISOString()),
+      c.env.DB.prepare(`DELETE FROM sessions WHERE user_id=?
         AND EXISTS (SELECT 1 FROM users WHERE id=? AND password_hash=?)`)
-        .bind(userId, token, userId, nextHash),
+        .bind(userId, userId, nextHash),
+      c.env.DB.prepare(`INSERT INTO sessions (token, user_id, expires_at)
+        SELECT ?, id, ? FROM users WHERE id=? AND password_hash=?`)
+        .bind(replacement, expires, userId, nextHash),
     ]);
     if (result[0].meta.changes !== 1) return c.json({ error: 'Your account changed during this request. Sign in again and retry.' }, 409);
+    setCookie(c, 'ofs', replacement, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 86400 });
     return c.json({ ok: true });
   });
 
