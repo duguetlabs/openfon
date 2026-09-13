@@ -38,6 +38,22 @@ function settingsSnapshot(business: Business) {
   };
 }
 
+function businessPayload(business: Business, rows: Pick<ReturnType<typeof settingsSnapshot>, 'hours' | 'services' | 'faqs' | 'closures'>) {
+  return {
+    name: business.name.trim(), description: business.description, address: business.address,
+    phone: business.phone, website: business.website, timezone: business.timezone,
+    max_concurrent_calls: business.max_concurrent_calls, max_calls_per_day: business.max_calls_per_day,
+    hours_json: serializeHourRows(rows.hours), services_json: serializeServiceRows(rows.services),
+    faqs_json: serializeFaqRows(rows.faqs), closures_json: serializeClosureRows(rows.closures),
+  };
+}
+
+function assistantPayload(agent: Agent) {
+  const { llm_base_url: _url, llm_api_key: _key, apiKeyConfigured: _configured,
+    workspaceApiKeyConfigured: _workspaceConfigured, ...assistant } = agent;
+  return assistant;
+}
+
 export default function Settings() {
   const { business, refresh } = useSession();
   const [biz, setBiz] = useState<Business | null>(null);
@@ -49,6 +65,7 @@ export default function Settings() {
   const [saved, setSaved] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [refreshFailed, setRefreshFailed] = useState(false);
   const [profiles, setProfiles] = useState<EngineProfile[]>([]);
   const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
   const [newProfileName, setNewProfileName] = useState('');
@@ -83,31 +100,56 @@ export default function Settings() {
 
   if (!biz || !agent) return <p role={error ? 'alert' : 'status'}>{error || 'Loading workspace settings…'}</p>;
 
-  async function save() {
+  const workspacePayload = businessPayload(biz, { hours, services, faqs, closures });
+  const agentPayload = assistantPayload(agent);
+  const baseline = loaded.current;
+  const businessDirty = !baseline || JSON.stringify(workspacePayload) !== JSON.stringify(businessPayload(baseline.business, baseline));
+  const assistantDirty = !baseline?.agent || JSON.stringify(agentPayload) !== JSON.stringify(assistantPayload(baseline.agent));
+  const dirty = businessDirty || assistantDirty;
+
+  async function retryRefresh() {
     if (saving) return;
+    setSaving(true);
+    setError('');
+    try {
+      await refresh();
+      setRefreshFailed(false);
+      setSaved('Saved.');
+    } catch (err) {
+      setError(`Changes were saved, but refreshing the page data failed: ${err instanceof Error ? err.message : 'Request failed'}`);
+    } finally { setSaving(false); }
+  }
+
+  async function save() {
+    if (saving || !dirty) return;
     setSaving(true);
     setError('');
     setSaved('');
     let stage: 'business' | 'assistant' | 'refresh' = 'business';
     try {
-      await api.updateBusiness(biz!.id, {
-        ...biz!,
-        hours_json: serializeHourRows(hours),
-        services_json: serializeServiceRows(services),
-        faqs_json: serializeFaqRows(faqs),
-        closures_json: serializeClosureRows(closures),
-      });
+      if (businessDirty) {
+        await api.updateBusiness(biz!.id, workspacePayload);
+        // Confirm each accepted stage before the next request. Later edits are
+        // compared with exactly what was submitted, including row-list edits.
+        loaded.current = { ...loaded.current!,
+          business: { ...loaded.current!.business, ...workspacePayload },
+          hours, services, faqs, closures };
+      }
       stage = 'assistant';
-      setSaved('Business changes saved. Saving assistant…');
-      const { llm_base_url: _url, llm_api_key: _key, ...assistant } = agent!;
-      await api.updateAgent(biz!.id, assistant);
+      if (assistantDirty) {
+        await api.updateAgent(biz!.id, agentPayload);
+        loaded.current = { ...loaded.current!, agent: { ...agent! } };
+      }
       stage = 'refresh';
       await refresh();
+      setRefreshFailed(false);
       setSaved('Saved.');
-      setTimeout(() => setSaved(''), 2000);
     } catch (err) {
-      setSaved('');
       const detail = err instanceof Error ? err.message : 'Request failed';
+      if (stage === 'refresh') {
+        setRefreshFailed(true);
+        setSaved('Changes saved.');
+      }
       setError(stage === 'assistant' ? `Business changes were saved. Assistant save failed: ${detail}`
         : stage === 'refresh' ? `Business and assistant changes were saved, but refreshing the page data failed: ${detail}`
         : `Business save failed; assistant changes were not submitted: ${detail}`);
@@ -517,7 +559,8 @@ export default function Settings() {
         <div className="flex items-center gap-3">
           {saved && <span role="status" className="text-sm font-semibold text-ok">{saved}</span>}
           {error && <span role="alert" className="text-sm text-rose">{error}</span>}
-          <Button disabled={saving} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</Button>
+          <>{refreshFailed && <Button variant="ghost" disabled={saving} onClick={() => void retryRefresh()}>Retry settings refresh</Button>}</>
+          <Button disabled={saving || !dirty} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</Button>
         </div>
       </div>
     </div>

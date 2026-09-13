@@ -45,7 +45,7 @@ test('profile Apply blocks conflicting drafts and preserves unrelated drafts', a
   const saved = page.waitForResponse(response => response.url().endsWith(`/api/me/business/${business.id}/agent`) && response.request().method() === 'PUT');
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   expect((await saved).ok()).toBe(true);
-  await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
   await page.reload();
   await expect(language).toHaveValue('de');
   await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Unsaved business');
