@@ -34,8 +34,14 @@ one-case browser pass retained. Realtime cumulative-output/receipt accounting pa
 both types, direct/gateway workerd smokes and four stalled/progress carrier probes.
 The assembled application passes1,007 tests across45 files, both typechecks and
 33/33 actual Chrome/workerd browser cases. Initial12 fixture failures and their
-corrections remain recorded. Independent assembled QA and clean latest-head
-PR-Agent/CI remain pending; this is not production-launch approval.
+corrections remain recorded. Independent QA on `ba78f84` passes actual workerd/D1
+legacy migration1–20/bootstrap provenance, public/private ticket issuance, held
+lookup/delete/claim refusal with zero DO dispatch, and four activation
+interleavings. Its narrow output/Telnyx suite passes12 tests with91 deliberate
+skips, including five independent adversarial receipt/debt cases. Owner and
+combined evidence above is reused with attribution. QA found no remaining
+concrete issue in this bounded scope and released its slot (checkpoint0656837).
+Clean latest-head PR-Agent/CI remain pending; this is not production-launch approval.
 
 ## Previous correction evidence
 
