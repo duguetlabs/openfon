@@ -22,7 +22,11 @@ The original source failed the same privacy probe. Initial fixture failures are
 retained in the integration checkpoint. The subsequent assembled account, polling, PBX ingress, profile-blur and greeting
 corrections pass 887 unit tests, both typechecks and five affected browser cases.
 Actual-workerd ingress and synthetic Asterisk lifecycle checks also pass.
-Independent QA remains pending before publication.
+Independent scoped QA passes 36 focused tests and actual-workerd checks for
+concurrent private recovery, migration0019 scope, and HEAD-export exhaustion
+followed by password rotation, copied-cookie rejection and transactional rollback.
+Other owner evidence is reused as attributed; no new major/security issue was
+found in this bounded scope.
 No latest-head review clearance is claimed.
 
 Previously validated cookie rotation, Asterisk failed-call content preservation,

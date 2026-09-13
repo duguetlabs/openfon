@@ -1,12 +1,12 @@
 # Integration checkpoint
 
-- Status: In progress — official67443bc has four findings; verifying and remediating, no latest-head clean gate
+- Status: In progress — all674 findings corrected and scoped QA closed; docs-final publication and fresh exact-head reviews next
 - Owner: openfon-integration, gpt-6-astra / medium
 - Branch/worktree: codex/integrated-release, /Users/cristian/projects/fun/openfon-worktrees/integration
 - Updated: 2026-09-13
-- Application candidate: 02271ee assembles all official and hosted674 corrections; final887/types/5browser/ingress+PBX synthetic runtime passed; docs-final checkpoint pending independent QA
+- Application candidate: 653a88e independently scoped QA closed; next docs-only commit records closure
 - Published PR16 head: 67443bc5e076d3f794cff29cd41e081026c7f8b5 (docs-only over QA-closed28233d5; frozen for required reviews)
-- Validation slot: integration explicitly released all final runners; QA granted sole bounded independent closure
+- Validation slot: QA explicitly released all four processes/runtimes; no local validation active
 - Ports: integration8814/9254, optional real-PBX proxy8824; never8787
 - Read first: root orchestration-rules/current-task/manifest (read-only), this file, docs/launch/readiness.md
 - Earlier detailed milestones and failures remain in this file's history through ccdd85d and the linked original review reports. This checkpoint records current state.
@@ -24,6 +24,8 @@ Realtimec58b17d→42077ab assembled with application hunks clean. Docs conflict 
 Final42077ab direct/gateway and Telnyx native+synthesized actual-workerd smokes PASS, all processes exited. Logs/tmp/openfon-420-direct.log,/tmp/openfon-420-gateway.log,/tmp/openfon-420-telnyx.log. Prior08cc Asterisk/retirement runtime unchanged by later Telnyx/preset/error-event deltas; full813 covers assembled interfaces. Reporting-only rehearsal9/17 previously passed without behavior change. Integration releases sole slot to QA for bounded independent combined closure, no full-suite duplication or official inference until published freeze. Remote5e0 and stagingb15 remain unchanged.
 
 ## Authorization and ownership
+Independent QA exact653a88e CLOSED:36/36 focused, actualD1 concurrent missinglegacy/private repair, independent0019 canonical pause/unrelated active/concurrent privacy, and HEAD10→429 plus unknown404 then rotation200/oldcookies401/newcookie200 including replacementINSERT rollback PASS. All four processes exited0/runtimesdisposed. Remaining scoped source deltas reviewed with owner887/types/5browser/carrier evidence reused as attributed; no new major/security concern. Original negatives and scope limits preserved in QA checkpoint. No official inference yet; next docs-final publication/retrigger required.
+
 Final02271ee assembled validation PASS:887/887 tests41files18.23s, both types,5/5 affected Chrome cases15.3s, actualworkerd/PBKDF2/D1 ingress and synthetic Asterisk lifecycle. Logs /tmp/openfon-674-final-full.log, -types.log, -browser.log, -ingress.log, -asterisk.log. Ingress eight quota403 attempts made0 writes/owner contacts; larger smoke confirms updated known-full duplicate403 plus normal/startup/media/finalization. All processes exited; integration releases sole slot to QA for bounded independent closure, no full duplication or inference until publishedfreeze. Migration19/9 and original privacy negative evidence remains attributed to4fa6f43 unchanged source.
 
 Realtime2ed47c0→02271ee assembled. Conflict preserves integrated ended-after-synthesis check before new carrier size/parity guard; finalization, both-carrier predicate, ready/save ordering retained. Owner208 focused/types, four original negatives, exact480000 through both real adapter classes PASS; browser480002 unchanged. This is synthetic class/clock evidence, not workerd or Azure HTTP allocation hardening. Integration now sole final full/type/browser/affected-runtime sequence, no other runner.
