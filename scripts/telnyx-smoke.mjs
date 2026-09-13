@@ -179,12 +179,19 @@ try {
   assert.equal(before.carrier_released_at,null,'retain reservation until signed carrier confirmation');
   await webhook('call.hangup');
   await wait(async()=>{ const row=await db.prepare("SELECT status,carrier_released_at FROM calls WHERE channel='telnyx'").first(); return row?.carrier_released_at && row.status!=='active'; },'database finalization/release');
+  const terminal=await db.prepare("SELECT status,outcome,failure_code,failure_message,ended_at,carrier_released_at FROM calls WHERE channel='telnyx'").first();
+  assert.equal(terminal.status,'completed','normal call must complete successfully');
+  assert.equal(terminal.outcome,'answered','synthetic normal call must be answered');
+  assert.equal(terminal.failure_code,null,'normal call must have no failure code');
+  assert.equal(terminal.failure_message,null,'normal call must have no failure message');
+  assert.ok(terminal.ended_at,'normal call finalization must be recorded');
+  assert.ok(terminal.carrier_released_at,'signed hangup must confirm carrier release');
   const rows=await db.prepare("SELECT COUNT(*) AS n FROM calls WHERE channel='telnyx'").first();
   assert.equal(rows.n,1,'duplicate initiated must not create another call');
   assert.equal(commands.filter(x=>x.action==='answer').length,1);
   assert.equal(telemetry.filter(x=>x.path==='/unexpected').length,0,'all outbound requests matched local mocks');
   console.log(synthesized ? 'Synthesized greeting ordering verified.' : 'Native greeting verified.');
-  console.log('PASS Telnyx workerd smoke: signed ingress, idempotent admission, authenticated media, realtime PCM, clear/marks/drain, carrier hangup, D1 release. No external requests.');
+  console.log('PASS Telnyx workerd smoke: signed ingress, idempotent admission, authenticated media, realtime PCM, clear/marks/drain, carrier hangup, completed/error-free D1 state and release. No external requests.');
 } finally {
   releaseSynthesis?.();
   try { carrier?.close(); } catch {}
