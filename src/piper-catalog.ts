@@ -2,9 +2,15 @@
 // tenant-specific request headers participate in this unauthenticated lookup.
 const TTL_MS = 3_600_000;
 const MAX_ENDPOINTS = 32;
+const MAX_PENDING_ENDPOINTS = 32;
+const FETCH_TIMEOUT_MS = 1500;
 const MAX_BODY_BYTES = 65_536;
 const MAX_VOICES = 64;
 const catalogs = new Map<string, { voices: Record<string, string>; fetchedAt: number }>();
+
+// Only scalar reservations cross request / Durable Object contexts. Never
+// await another context's promise or retain its Response, reader, or signal.
+const pendingCatalogs = new Map<string, { expiresAt: number }>();
 
 function catalogUrl(base: string): string {
   const url = new URL(base);
@@ -68,11 +74,27 @@ export async function piperVoiceFromCatalog(base: string, lang: string, fallback
       return cached.voices[lang] ?? fallback;
     }
     catalogs.delete(endpoint);
-    const response = await fetch(endpoint, { signal: AbortSignal.timeout(1500), redirect: 'manual' });
-    const voices = await readVoices(response);
-    if (catalogs.size >= MAX_ENDPOINTS) catalogs.delete(catalogs.keys().next().value!);
-    catalogs.set(endpoint, { voices, fetchedAt: Date.now() });
-    return voices[lang] ?? fallback;
+    const now = Date.now();
+    // A destroyed initiating context may never run finally. Reclaim its scalar
+    // reservation once its native fetch deadline has elapsed (at most32 scans).
+    for (const [key, pending] of pendingCatalogs) {
+      if (now >= pending.expiresAt) pendingCatalogs.delete(key);
+    }
+    if (pendingCatalogs.has(endpoint) || pendingCatalogs.size >= MAX_PENDING_ENDPOINTS) return fallback;
+    const reservation = { expiresAt: now + FETCH_TIMEOUT_MS };
+    pendingCatalogs.set(endpoint, reservation);
+    try {
+      const response = await fetch(endpoint, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), redirect: 'manual' });
+      const voices = await readVoices(response);
+      // Late work from an expired/replaced reservation cannot publish stale
+      // data, evict a newer cache entry, or release a newer request's capacity.
+      if (Date.now() >= reservation.expiresAt || pendingCatalogs.get(endpoint) !== reservation) return fallback;
+      if (catalogs.size >= MAX_ENDPOINTS) catalogs.delete(catalogs.keys().next().value!);
+      catalogs.set(endpoint, { voices, fetchedAt: Date.now() });
+      return voices[lang] ?? fallback;
+    } finally {
+      if (pendingCatalogs.get(endpoint) === reservation) pendingCatalogs.delete(endpoint);
+    }
   } catch {
     // Never use another endpoint's entry or expired data after a failed lookup.
     return fallback;
