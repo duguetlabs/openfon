@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from '../src/index';
+import { AccountAuthBudget, accountAuthBudget } from '../src/account-auth-budget';
 import { DatabaseSync } from 'node:sqlite';
 import { createVerifiedSession, hashPassword, verifyPassword } from '../src/auth';
 import { fakeCtx, fakeEnv } from './fake-d1';
@@ -16,6 +17,8 @@ const call = (path: string, method = 'GET', body?: unknown, token = 'owner-sessi
 beforeEach(async ({ task }) => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-09-11T12:00:00Z'));
+  const budget = new AccountAuthBudget();
+  vi.spyOn(accountAuthBudget, 'acquire').mockImplementation(() => budget.acquire());
   db = new SqliteD1();
   // Export must also exclude credentials from historical, pre-barrier rows.
   // Current installations reject creating these snapshots altogether.
@@ -30,7 +33,7 @@ beforeEach(async ({ task }) => {
   }
   db.database.prepare('INSERT INTO sessions (token,user_id,expires_at) VALUES (?,?,?)').run('owner-second-session', 'owner', '2026-10-11T12:00:00.000Z');
 });
-afterEach(() => { db.close(); vi.useRealTimers(); });
+afterEach(() => { db.close(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('account self service', () => {
   it('requires authentication for export and mutations', async () => {
@@ -289,9 +292,45 @@ describe('account self service', () => {
     expect((await call('/api/me/account/export', 'HEAD')).status).toBe(401);
   });
 
-  it('still bounds incorrect password verification independently of export reads', async () => {
-    for (let i = 0; i < 10; i++) expect((await call('/api/me/account/password', 'POST', { currentPassword: 'wrong', newPassword: 'new-correct-horse' })).status).toBe(403);
+  it('caps simultaneous password work and releases permits idempotently', () => {
+    const budget = new AccountAuthBudget();
+    const held = Array.from({ length: 4 }, () => budget.acquire());
+    expect(held.every(Boolean)).toBe(true);
+    expect(budget.acquire()).toBeNull();
+    held[0]!(); held[0]!();
+    const next = budget.acquire();
+    expect(next).not.toBeNull();
+    expect(budget.acquire()).toBeNull();
+    for (const release of held) release!();
+    next!();
+  });
+
+  it('releases password admission after database lookup failures', async () => {
+    db.hook = sql => { if (sql === 'SELECT password_hash FROM users WHERE id=?') throw new Error('synthetic lookup failure'); };
+    for (let i = 0; i < 4; i++) expect((await call('/api/me/account/password', 'POST', { currentPassword: password, newPassword: 'new-correct-horse' })).status).toBe(500);
+    db.hook = null;
+    expect((await call('/api/me/account/password', 'POST', { currentPassword: password, newPassword: 'new-correct-horse' })).status).toBe(200);
+  });
+
+  it('bounds KDF starts briefly without persisting an account lockout', async () => {
+    for (let i = 0; i < 16; i++) expect((await call('/api/me/account/password', 'POST', { currentPassword: 'wrong', newPassword: 'new-correct-horse' })).status).toBe(403);
     expect((await call('/api/me/account/password', 'POST', { currentPassword: 'wrong', newPassword: 'new-correct-horse' })).status).toBe(429);
-    expect((await call('/api/me/account/export')).status).toBe(200);
+    expect(db.database.prepare("SELECT COUNT(*) AS n FROM rate_counters WHERE bucket LIKE 'account:%'").get()).toEqual({ n: 0 });
+    vi.setSystemTime(new Date(Date.now() + 500));
+    expect((await call('/api/me/account/password', 'POST', { currentPassword: password, newPassword: 'new-correct-horse' })).status).toBe(200);
+  });
+
+  it('does not let exhausted deletion quota block password rotation', async () => {
+    for (let i = 0; i < 10; i++) expect((await call('/api/me/account', 'DELETE', { currentPassword: 'wrong', confirmation: 'DELETE' })).status).toBe(403);
+    expect((await call('/api/me/account', 'DELETE', { currentPassword: 'wrong', confirmation: 'DELETE' })).status).toBe(429);
+    expect((await call('/api/me/account/password', 'POST', { currentPassword: password, newPassword: 'new-correct-horse' })).status).toBe(200);
+  });
+
+  it('revokes a stolen session despite ten wrong-password attempts', async () => {
+    for (let i = 0; i < 10; i++) expect((await call('/api/me/account/password', 'POST', { currentPassword: 'wrong', newPassword: 'new-correct-horse' })).status).toBe(403);
+    const rotated = await call('/api/me/account/password', 'POST', { currentPassword: password, newPassword: 'new-correct-horse' }, 'owner-second-session');
+    expect(rotated.status).toBe(200);
+    expect((await call('/api/me/account/export')).status).toBe(401);
+    expect(rotated.headers.get('set-cookie')).toContain('ofs=');
   });
 });

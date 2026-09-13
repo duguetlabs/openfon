@@ -2,6 +2,7 @@ import type { Hono, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { hashPassword, newToken, verifyPassword } from './auth';
+import { accountAuthBudget } from './account-auth-budget';
 import type { Env } from './types';
 
 type App = Hono<{ Bindings: Env; Variables: { userId: string } }>;
@@ -27,9 +28,8 @@ export function registerAccountApi(app: App): void {
   app.use('/api/me/account/*', bodyLimit({ maxSize: 16 * 1024, onError: (c) => c.json({ error: 'Account request is too large.' }, 413) }));
   app.use('/api/me/account', bodyLimit({ maxSize: 16 * 1024, onError: (c) => c.json({ error: 'Account request is too large.' }, 413) }));
   const accountLimit = (action: 'export' | 'mutation'): MiddlewareHandler<{ Bindings: Env; Variables: { userId: string } }> => async (c, next) => {
-    // Export needs only a session cookie. Its read budget must not consume the
-    // password-authenticated mutation budget used to revoke stolen sessions.
-    // Full buckets refuse without growing the counter or repeating PBKDF2.
+    // Persistent limits apply to export and deletion only. Password rotation
+    // has separate short-lived CPU admission and cannot be locked by this bucket.
     const windowStart = Math.floor(Date.now() / 900_000) * 900;
     const reserved = await c.env.DB.prepare(
       `INSERT INTO rate_counters (bucket, window_start, count) VALUES (?, ?, 1)
@@ -38,38 +38,42 @@ export function registerAccountApi(app: App): void {
     if (!reserved) return c.json({ error: 'Too many account actions. Please try again in 15 minutes.' }, 429, { 'Retry-After': '900' });
     await next();
   };
-  app.post('/api/me/account/password', accountLimit('mutation'), async (c) => {
+  app.post('/api/me/account/password', async (c) => {
     const body = await c.req.json<RecordRow>().catch(() => null);
     if (!body || typeof body.currentPassword !== 'string' || body.currentPassword.length > 1024 ||
         typeof body.newPassword !== 'string' || body.newPassword.length < 8 || body.newPassword.length > 1024) {
       return c.json({ error: 'Enter your current password and a new password between 8 and 1024 characters.' }, 400);
     }
-    const userId = c.get('userId');
-    const user = await c.env.DB.prepare('SELECT password_hash FROM users WHERE id=?').bind(userId).first<{ password_hash: string }>();
-    if (!user || !await verifyPassword(body.currentPassword, user.password_hash)) return c.json({ error: 'Current password is incorrect.' }, 403);
-    if (body.currentPassword === body.newPassword) return c.json({ error: 'Choose a different new password.' }, 400);
-    const nextHash = await hashPassword(body.newPassword);
-    const token = getCookie(c, 'ofs') ?? '';
-    const replacement = newToken();
-    const now = Date.now();
-    const expires = new Date(now + 30 * 86400_000).toISOString();
-    // The compare-and-swap prevents two simultaneous changes from overwriting
-    // one another. D1 batch is transactional: session revocation and the hash
-    // change succeed together, and a losing request cannot revoke sessions.
-    const result = await c.env.DB.batch([
-      c.env.DB.prepare(`UPDATE users SET password_hash=? WHERE id=? AND password_hash=?
-        AND EXISTS (SELECT 1 FROM sessions WHERE token=? AND user_id=? AND expires_at>?)`)
-        .bind(nextHash, userId, user.password_hash, token, userId, new Date(now).toISOString()),
-      c.env.DB.prepare(`DELETE FROM sessions WHERE user_id=?
-        AND EXISTS (SELECT 1 FROM users WHERE id=? AND password_hash=?)`)
-        .bind(userId, userId, nextHash),
-      c.env.DB.prepare(`INSERT INTO sessions (token, user_id, expires_at)
-        SELECT ?, id, ? FROM users WHERE id=? AND password_hash=?`)
-        .bind(replacement, expires, userId, nextHash),
-    ]);
-    if (result[0].meta.changes !== 1) return c.json({ error: 'Your account changed during this request. Sign in again and retry.' }, 409);
-    setCookie(c, 'ofs', replacement, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 86400 });
-    return c.json({ ok: true });
+    const release = accountAuthBudget.acquire();
+    if (!release) return c.json({ error: 'Password verification is busy. Please retry shortly.' }, 429, { 'Retry-After': '1' });
+    try {
+      const userId = c.get('userId');
+      const user = await c.env.DB.prepare('SELECT password_hash FROM users WHERE id=?').bind(userId).first<{ password_hash: string }>();
+      if (!user || !await verifyPassword(body.currentPassword, user.password_hash)) return c.json({ error: 'Current password is incorrect.' }, 403);
+      if (body.currentPassword === body.newPassword) return c.json({ error: 'Choose a different new password.' }, 400);
+      const nextHash = await hashPassword(body.newPassword);
+      const token = getCookie(c, 'ofs') ?? '';
+      const replacement = newToken();
+      const now = Date.now();
+      const expires = new Date(now + 30 * 86400_000).toISOString();
+      // The compare-and-swap prevents two simultaneous changes from overwriting
+      // one another. D1 batch is transactional: session revocation and the hash
+      // change succeed together, and a losing request cannot revoke sessions.
+      const result = await c.env.DB.batch([
+        c.env.DB.prepare(`UPDATE users SET password_hash=? WHERE id=? AND password_hash=?
+          AND EXISTS (SELECT 1 FROM sessions WHERE token=? AND user_id=? AND expires_at>?)`)
+          .bind(nextHash, userId, user.password_hash, token, userId, new Date(now).toISOString()),
+        c.env.DB.prepare(`DELETE FROM sessions WHERE user_id=?
+          AND EXISTS (SELECT 1 FROM users WHERE id=? AND password_hash=?)`)
+          .bind(userId, userId, nextHash),
+        c.env.DB.prepare(`INSERT INTO sessions (token, user_id, expires_at)
+          SELECT ?, id, ? FROM users WHERE id=? AND password_hash=?`)
+          .bind(replacement, expires, userId, nextHash),
+      ]);
+      if (result[0].meta.changes !== 1) return c.json({ error: 'Your account changed during this request. Sign in again and retry.' }, 409);
+      setCookie(c, 'ofs', replacement, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 86400 });
+      return c.json({ ok: true });
+    } finally { release(); }
   });
 
   app.get('/api/me/account/export', accountLimit('export'), async (c) => {
