@@ -2,7 +2,39 @@
 
 Updated 2026-09-13. **Release candidate in progress; not production-launch approved.**
 
-## Latest local review corrections
+## Current review policy and correction round
+
+The user's [temporary OpenFon policy](../../.agent/decisions/temporary-pr-agent-only-review-2026-09-13.md)
+suspends hosted GitHub Codex review until reinstated. Genuine latest-head PR-Agent
+security/major clearance and passing required CI remain mandatory. Existing
+findings from every reviewer still require verification and disposition. No new
+Codex review is requested or awaited. Historical dual-review references below
+record earlier requirements; this policy governs the current release.
+
+The published `8bd4204` browser CI failed because three profile tests bypassed
+the existing signup-isolation fixture. Local `ac80e7d` corrects those imports;
+29/29 actual Chrome/workerd cases passed without changing production limits.
+The official Alarm Churn finding is corrected by cleanup-deadline scheduling
+and an atomic CallSession write preserving Telnyx's failure classification.
+Owner 198 focused tests, types, and persisted-workerd ordering checks pass,
+with original-source negatives preserved.
+
+Local `34b274e` includes assistant mutation/refresh separation and explicit
+modern browser-ticket provenance in migration0020. Its 34 account tests, both
+typechecks and migration20 preservation/rollback/re-upgrade rehearsal pass.
+The save/previous editor browser cases passed; publish/pause passed a targeted
+recheck after correcting a test interception pattern. Historical failures remain
+recorded. Account deletion preserves unknown legacy sessions; see the mandatory
+cutover and rollback boundaries in [migration compatibility](../migration-compatibility.md).
+
+Provider activation pins the checked assistant/provider configuration atomically;
+instance speech credentials are rejected or cleared rather than reported as
+runtime credentials. Owner 91 focused API tests and types pass, with the prior
+one-case browser pass retained. Realtime cumulative-output/receipt accounting is
+in bounded owner validation. Combined validation and independent assembled QA
+remain pending; this is not a clean review or production-launch claim.
+
+## Previous correction evidence
 
 The [official d73514e report](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5650010745)
 reported no security concerns but two findings. Exact-source startup probes

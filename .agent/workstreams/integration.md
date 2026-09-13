@@ -2,8 +2,8 @@
 
 ## Kataleptic resumed release — 2026-09-13
 - Owner: replacement openfon-integration, Kataleptic/Astra medium; master01a09c4b-dfb7-7663-8b51-15d3045020d9. Integration alone publishes/merges and grants validation slots.
-- Local HEAD750530a; remote PR16 OPEN8bd42045d79bcecde693e0c64eb605926e45cdc0. Existingac80e7d29/29 Chrome/workerd fixture evidence reused; no fixture rerun.
-- Current sole slot: integration RELEASED after all bounded processes exited. Realtime source-ready and next queued after vacancy check. QA source-only; presets/Telnyx released. No review inference running or authorized before next publication.
+- Local HEADc563160 (policy over34b274e); remote PR16 OPEN8bd42045d79bcecde693e0c64eb605926e45cdc0. Existingac80e7d29/29 Chrome/workerd fixture evidence reused; no fixture rerun.
+- Current sole slot: realtime w1:pG GRANTED bounded serial original negatives/focused fixed/types/actual-workerd checks on8813/9253 after integration release and fresh no-runner/all-ports-free verification. QA source-only; presets/Telnyx released. No review inference running or authorized before next publication.
 - Runner reconciliation uses process command classification plus reserved listeners8810–8824/9250–9256. Original68 processes were Codex/MCP/account helpers, no application/official review runner; each grant followed explicit release and fresh vacancy check. No process killed.
 
 Completed assembly:
@@ -23,18 +23,19 @@ Realtime source contract/security3998401068:
 - Predecode byte/event limits, bounded random post-frame/control receipt window and timeout, strict pairing, bounded browser bytes/nodes, carrier cross-generation500-pair debt/random flush barriers, bounded response ID/socket accounting. Mere receipt is not playback. QA source findings on predictable ACKs, control floods, flush debt, old callback generations and response.done accounting addressed in source; runtime still pending. Matching clients required; missing receipt support fails closed.
 
 Review/release gates:
+- User policyb8828be incorporated asc563160. Read accepted .agent/decisions/temporary-pr-agent-only-review-2026-09-13.md. Main classic protection API404 Branch not protected; effective rules API[]; no hosted Codex required check to remove. No repository setting changed.
 - Exact8bd hosted security5189114132/code5189120001 completed with five findings:3998401068(realtime),3998403962/3971(presets),3998403967/3974(integration). All verified, correction/independent closure underway.
 - Both CI34732689704/34732714063 browser FAILED signup quota; other check/scoring/realtime jobs SUCCESS, deploy SKIPPED. Existing fixture fix only local.
 - Official5650196718 completed unchanged, no security concerns but Alarm Churn/no clean-major verdict. No current clean reviewer clearance; no duplicate inference.
-- Next: finish current bounded slot/release; realtime serial negatives/fixed/types/runtime, integrate exact patch, combined appropriate validation then independent assembled QA. Only then docs-final publish/close-reopen/hosted code+security plus one genuine unchanged QA-owned PR-Agent full review and fresh CI. Resolve/decline every verified finding before squash merge/delete. Root/research/stagingb15/0012/production preserved.
+- Next: finish current bounded slot/release; realtime serial negatives/fixed/types/runtime, integrate exact patch, combined appropriate validation then independent assembled QA. Only then docs-final publish/close-reopen plus one genuine unchanged QA-owned PR-Agent full review and fresh CI. Hosted Codex requirement suspended by explicit user policyb8828be→c563160; do not request or wait for it. Existing hosted findings still require disposition. Resolve/decline every verified finding before squash merge/delete. Root/research/stagingb15/0012/production preserved.
 
 - Status: In progress — resumed correction round; remote 8bd4204 reviewed with findings
 - Owner: openfon-integration, gpt-6-astra / medium
 - Branch/worktree: codex/integrated-release, /Users/cristian/projects/fun/openfon-worktrees/integration
 - Updated: 2026-09-13
-- Application candidate: local750530a plus integration source deltas; realtime/assembled QA pending
+- Application candidate: local34b274e; realtime/assembled QA pending
 - Published PR16 head: 8bd42045d79bcecde693e0c64eb605926e45cdc0 (docs-only over QA-closed1e2869c; frozen for required reviews)
-- Validation slot: integration released; realtime next after vacancy check
+- Validation slot: realtime sole bounded audio validation; others source-only
 - Ports: integration8814/9254, optional real-PBX proxy8824; never8787
 - Read first: root orchestration-rules/current-task/manifest (read-only), this file, docs/launch/readiness.md
 - Earlier detailed milestones and failures remain in this file's history through ccdd85d and the linked original review reports. This checkpoint records current state.
