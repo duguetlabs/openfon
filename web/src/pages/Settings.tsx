@@ -53,6 +53,7 @@ export default function Settings() {
   const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
   const [newProfileName, setNewProfileName] = useState('');
   const profileNameBeforeEdit = useRef(new Map<string, string>());
+  const profileEditVersion = useRef(new Map<string, number>());
   const loaded = useRef<ReturnType<typeof settingsSnapshot> | null>(null);
 
   useEffect(() => {
@@ -107,6 +108,21 @@ export default function Settings() {
         : stage === 'refresh' ? `Business and assistant changes were saved, but refreshing the page data failed: ${detail}`
         : `Business save failed; assistant changes were not submitted: ${detail}`);
     } finally { setSaving(false); }
+  }
+
+  function renameProfile(id: string, name: string) {
+    const previous = profileNameBeforeEdit.current.get(id);
+    if (name.trim() === previous?.trim()) return;
+    const version = profileEditVersion.current.get(id);
+    void api.updateProfile(id, { name }).catch(err => {
+      if (profileEditVersion.current.get(id) !== version) return;
+      setError(err instanceof Error ? err.message : 'Rename failed');
+      if (previous !== undefined) {
+        setProfiles(current => current.map(profile => profile.id === id && profile.name === name
+          ? { ...profile, name: previous } : profile));
+        profileNameBeforeEdit.current.set(id, previous);
+      }
+    });
   }
 
   const profileFields = ['engine', 'realtime_model', 'realtime_voice', 'language', 'voice', 'llm_model'] as const;
@@ -317,8 +333,11 @@ export default function Settings() {
                 value={p.name}
                 readOnly={Boolean(p.preview_only)}
                 onFocus={() => profileNameBeforeEdit.current.set(p.id, p.name)}
-                onChange={(e) => setProfiles(profiles.map((x) => (x.id === p.id ? { ...x, name: e.target.value } : x)))}
-                onBlur={(e) => { if (!p.preview_only && e.target.value.trim() !== profileNameBeforeEdit.current.get(p.id)?.trim()) void api.updateProfile(p.id, { name: e.target.value }).catch(err => setError(err instanceof Error ? err.message : 'Rename failed')); }}
+                onChange={(e) => {
+                  profileEditVersion.current.set(p.id, (profileEditVersion.current.get(p.id) ?? 0) + 1);
+                  setProfiles(profiles.map((x) => (x.id === p.id ? { ...x, name: e.target.value } : x)));
+                }}
+                onBlur={(e) => { if (!p.preview_only) renameProfile(p.id, e.target.value); }}
               />
               <span className="font-mono text-[11px] text-ink-soft">
                 {p.engine === 'realtime' ? `realtime · ${p.realtime_model || 'default'}` : 'pipeline'} · {p.language}
