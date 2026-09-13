@@ -1,3 +1,4 @@
+import { MediaOutputDebt } from './media-output-debt';
 /** Telnyx raw-PCMU streaming bridge. No routes or provider commands here.
  * Wire contract checked 2026-09-12:
  * https://developers.telnyx.com/api-reference/websockets/stream-call-media-over-websocket
@@ -32,6 +33,10 @@ interface Packet { payload: string; timestamp: number; sequence: number; bytes: 
  * messages; errors fail closed through onEnd exactly once, with no raw data logged.
  */
 export class TelnyxMediaAdapter {
+  private audioReceipts = false;
+  private controlReceiptPending = false;
+  private transportDebt = new MediaOutputDebt();
+  private lastPcmBytes: number | null = null;
   private up = new Pcmu8ToPcm24();
   private down = new Pcm24ToPcmu8();
   private connected = false;
@@ -55,7 +60,6 @@ export class TelnyxMediaAdapter {
   private preReadyBytes = 0;
   private queue: string[] = [];
   private generation = 0;
-  private markCounter = 0;
   private pendingMarks = new Set<string>();
   constructor(private readonly options: TelnyxMediaOptions) {
     if (!options.expected.authToken || options.expected.authToken.length > 4000 || !options.expected.callControlId) {
@@ -115,6 +119,7 @@ export class TelnyxMediaAdapter {
       } else if (msg.event === 'mark') {
         const name = object(msg.mark).name;
         if (typeof name !== 'string' || name.length > 100) throw new Error('invalid_mark');
+        this.transportDebt.confirm(name);
         this.pendingMarks.delete(name); // marks returned by clear belong to an old generation
         this.maybeEnd();
       } else if (msg.event === 'stop') {
@@ -163,14 +168,30 @@ export class TelnyxMediaAdapter {
     if (this.closed) return;
     try {
       if (raw instanceof ArrayBuffer) {
+        if (this.audioReceipts && (this.lastPcmBytes !== null || this.controlReceiptPending)) throw Error('missing_audio_receipt');
         if (!this.ready || this.drained || !raw.byteLength || raw.byteLength % 2 || raw.byteLength > 480000) throw new Error('invalid_session_audio');
         const pcm = new Uint8Array(raw);
         for (let offset = 0; offset < pcm.length; offset += MAX_PCM24_BYTES) this.enqueue(this.down.push(pcm.subarray(offset, offset + MAX_PCM24_BYTES)));
+        this.lastPcmBytes = raw.byteLength;
         if (this.ending) this.armDrain();
         return;
       }
       const msg = parse(raw, 65536);
-      if (msg.type === 'ready') {
+      if (this.audioReceipts && ((this.lastPcmBytes !== null && msg.type !== 'audio_receipt') ||
+          (this.controlReceiptPending && msg.type !== 'control_receipt'))) throw Error('missing_output_receipt');
+      if (msg.type === 'control_receipt') {
+        if (!this.controlReceiptPending || typeof msg.id !== 'string' || !/^[0-9a-f-]{36}$/.test(msg.id)) throw Error('invalid_control_receipt');
+        this.controlReceiptPending = false;
+        this.options.sessionSend(JSON.stringify({ type: 'audio_received', id: msg.id }));
+      } else if (msg.type === 'audio_receipt') {
+        if (this.lastPcmBytes === null || msg.bytes !== this.lastPcmBytes ||
+            typeof msg.id !== 'string' || !/^[0-9a-f-]{36}$/.test(msg.id)) throw Error('invalid_audio_receipt');
+        // The PCM was accepted into the existing bounded queue/mark system.
+        // This receipt is internal; no token or transcript reaches the carrier.
+        this.lastPcmBytes = null;
+        this.options.sessionSend(JSON.stringify({ type: 'audio_received', id: msg.id }));
+      } else if (msg.type === 'ready') {
+        this.audioReceipts = msg.audioReceipts === true;
         if (!this.streamId || this.starting || this.ready || msg.mode !== 'realtime' ||
             (msg.ttsMode === 'browser' && Boolean(msg.greeting))) throw new Error('unsupported_session');
         this.ready = true;
@@ -178,11 +199,18 @@ export class TelnyxMediaAdapter {
         for (const pcm of this.preReady) this.options.sessionSend(pcm.buffer as ArrayBuffer);
         this.preReady = []; this.preReadyBytes = 0;
       } else if (msg.type === 'flush') {
+        this.controlReceiptPending = this.audioReceipts;
         this.queue = []; this.down.reset(); this.drained = false; this.generation++; this.pendingMarks.clear();
         if (this.tick) clearTimeout(this.tick);
         this.tick = undefined;
-        if (this.streamId) this.send({ event: 'clear' });
+        if (this.streamId) {
+          const barrier = this.transportDebt.sent(true, `g${this.generation}:`);
+          this.send({ event: 'clear' });
+          this.send({ event: 'mark', mark: { name: barrier } });
+        }
         if (this.ending) this.armDrain();
+      } else if (msg.type === 'speaking') {
+        this.controlReceiptPending = this.audioReceipts;
       } else if (msg.type === 'ending') {
         if (!this.ready) throw new Error('not_ready');
         if (!this.ending) {
@@ -214,7 +242,7 @@ export class TelnyxMediaAdapter {
       const payload = this.queue.shift();
       if (payload) {
         if (this.pendingMarks.size >= 500) throw new Error('unacknowledged_playback');
-        const name = `g${this.generation}:${++this.markCounter}`;
+        const name = this.transportDebt.sent(false, `g${this.generation}:`);
         this.pendingMarks.add(name);
         this.send({ event: 'media', media: { payload } });
         this.send({ event: 'mark', mark: { name } });

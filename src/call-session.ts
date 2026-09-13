@@ -1,4 +1,5 @@
 import { normalizeCallerPhone } from './contact';
+import { RealtimeOutputBudget, RealtimeOutputError, RealtimeAudioReceipts, MAX_UNRECEIVED_AUDIO_BYTES } from './realtime-output';
 // CallSession Durable Object: one instance per live call.
 // Owns the WebSocket to the caller's browser and runs the voice loop:
 //   caller audio -> STT -> LLM -> TTS -> caller.
@@ -46,6 +47,8 @@ function b64encode(buf: ArrayBuffer): string {
 interface UpstreamMessage {
   type: string;
   delta?: string;
+  response_id?: unknown;
+  response?: { id?: unknown };
   item_id?: string;
   content_index?: number;
   transcript?: string;
@@ -439,8 +442,14 @@ export class CallSession implements DurableObject {
       }
       return;
     }
-    const msg = JSON.parse(ev.data) as { type: string; text?: string; contentType?: string };
+    const msg = JSON.parse(ev.data) as { type: string; text?: string; contentType?: string; id?: unknown };
     switch (msg.type) {
+      case 'audio_received':
+        try {
+          this.audioReceipts.acknowledge(msg.id, Date.now());
+          this.armAudioReceiptDeadline();
+        } catch { this.failRealtimeOutput(); }
+        break;
       case 'start':
         await this.handleStart();
         break;
@@ -495,7 +504,7 @@ export class CallSession implements DurableObject {
     // would file a call that ran perfectly well as failed — and a working call
     // disappearing from the owner's counts gives them nothing to notice.
     this.failure = null;
-    this.send({ type: 'ready', ...payload });
+    this.send({ type: 'ready', ...payload, ...(payload.mode === 'realtime' ? { audioReceipts: true } : {}) });
   }
 
   private async runStart(): Promise<void> {
@@ -580,7 +589,8 @@ export class CallSession implements DurableObject {
             // The carrier releases buffered input on ready. Queue the first
             // PCM immediately afterward, with no await or event-loop gap.
             this.sendReady({ mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
-            for (const audio of pending.frames) { try { this.ws?.send(audio); } catch { /* caller gone */ } }
+            try { for (const audio of pending.frames) this.sendRealtimeAudio(audio); }
+            catch { this.failRealtimeOutput(); }
           } else {
             this.sendReady({ mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
           }
@@ -624,9 +634,9 @@ export class CallSession implements DurableObject {
           // noise-triggered barge-in flushes for its playback duration.
           this.greetingGuardUntil = Date.now() + (audio.byteLength / 48000) * 1000 + 500;
           try {
-            this.ws.send(audio);
+            this.sendRealtimeAudio(audio);
           } catch {
-            /* caller gone */
+            this.failRealtimeOutput();
           }
         }
         return;
@@ -712,6 +722,9 @@ export class CallSession implements DurableObject {
   }
 
   private closeUpstream(): void {
+    if (this.audioReceiptTimer !== undefined) clearTimeout(this.audioReceiptTimer);
+    this.audioReceiptTimer = undefined;
+    this.audioReceipts.clear();
     this.nativeGreeting?.resolve(false);
     this.nativeGreeting = null;
     for (const ws of this.readableUpstreams) {
@@ -734,6 +747,9 @@ export class CallSession implements DurableObject {
   private recovering: Promise<void> | null = null;
   private static readonly MAX_TOTAL_RECONNECTS = 5;
   private greetingGuardUntil = 0; // ignore barge-in flushes while our greeting plays
+  private realtimeOutputBudget = new RealtimeOutputBudget(Date.now());
+  private audioReceipts = new RealtimeAudioReceipts();
+  private audioReceiptTimer: ReturnType<typeof setTimeout> | undefined;
   private cancelRequests = new WeakMap<WebSocket, Map<string, number>>();
   private endPending = false; // caller said farewell; hang up after the agent's sign-off
 
@@ -1310,38 +1326,110 @@ export class CallSession implements DurableObject {
     }
   }
 
+  private failRealtimeOutput(): void {
+    // finalize() gates the call immediately but defers its body to claim its
+    // single-flight slot. Stop provider ingress now, before another queued
+    // event can even parse, while preserving that finalizer's D1 ordering.
+    this.failInternally(new RealtimeOutputError());
+    this.closeUpstream();
+  }
+
+  private armAudioReceiptDeadline(): void {
+    if (this.audioReceiptTimer !== undefined) clearTimeout(this.audioReceiptTimer);
+    this.audioReceiptTimer = undefined;
+    const deadline = this.audioReceipts.deadline;
+    if (deadline === undefined || this.ended) return;
+    this.audioReceiptTimer = setTimeout(() => {
+      this.audioReceiptTimer = undefined;
+      if (!this.ended) this.failRealtimeOutput();
+    }, Math.max(0, deadline - Date.now()));
+  }
+
+  private checkAudioReceiver(bytes: number, additionalFrames = 0): void {
+    if (!this.ws || this.ws.readyState !== WS_OPEN) throw new RealtimeOutputError();
+    // Useful on runtimes exposing it, but never our Workers safety boundary:
+    // the unacknowledged byte/frame window is enforced even when absent.
+    const buffered = (this.ws as WebSocket & { bufferedAmount?: number }).bufferedAmount;
+    if (buffered !== undefined && (!Number.isFinite(buffered) || buffered < 0 ||
+        buffered + bytes > MAX_UNRECEIVED_AUDIO_BYTES)) throw new RealtimeOutputError();
+    this.audioReceipts.check(bytes, additionalFrames);
+  }
+
+  private sendRealtimeAudio(audio: ArrayBuffer): void {
+    if (!audio.byteLength) return;
+    this.checkAudioReceiver(audio.byteLength);
+    const id = this.audioReceipts.sent(audio.byteLength, Date.now());
+    // Ordered marker follows exactly one admitted binary frame. A recipient
+    // cannot know this unpredictable ID until it consumes the preceding bytes.
+    this.ws!.send(audio);
+    this.ws!.send(JSON.stringify({ type: 'audio_receipt', id, bytes: audio.byteLength }));
+    this.armAudioReceiptDeadline();
+  }
+
+  private sendRealtimeControl(value: unknown): boolean {
+    if (this.ended) return false;
+    try {
+      this.realtimeOutputBudget.control(Date.now());
+      const wire = JSON.stringify(value);
+      const bytes = new TextEncoder().encode(wire).byteLength;
+      this.checkAudioReceiver(bytes);
+      const id = this.audioReceipts.sent(bytes, Date.now());
+      this.ws!.send(wire);
+      this.ws!.send(JSON.stringify({ type: 'control_receipt', id }));
+      this.armAudioReceiptDeadline();
+      return true;
+    } catch {
+      this.failRealtimeOutput();
+      return false;
+    }
+  }
+
+  private receiveRealtimeAudio(msg: UpstreamMessage, from: WebSocket): void {
+    if (this.ended || !this.ws) return;
+    try {
+      // Admission is synchronous and precedes atob/PCM allocation. Do not let
+      // an async rejection microtask leave the rest of a same-turn burst live.
+      const bytes = this.realtimeOutputBudget.reserve(msg.delta ?? '', Date.now(), from, msg.response_id);
+      this.checkAudioReceiver(bytes + (this.nativeGreeting?.bytes ?? 0), this.nativeGreeting?.frames.length ?? 0);
+      if (!msg.delta) return;
+      const audio = decodeRealtimeAudio(msg.delta);
+      if (this.realtimeConfig?.protocol === 'openai' && msg.item_id) {
+        if (this.outputAudio?.itemId !== msg.item_id || this.outputAudio.socket !== from) {
+          this.outputAudio = { socket: from, itemId: msg.item_id, contentIndex: msg.content_index ?? 0, startedAt: Date.now(), bytes: 0 };
+        }
+        this.outputAudio.bytes += audio.byteLength;
+      }
+      const pending = this.nativeGreeting;
+      if (pending) {
+        if (!audio.byteLength || audio.byteLength % 2) return;
+        if (pending.bytes + audio.byteLength > MAX_REALTIME_AUDIO_BYTES) {
+          pending.failed = true; pending.resolve(false); return;
+        }
+        pending.frames.push(audio); pending.bytes += audio.byteLength;
+        pending.resolve(true);
+      } else this.sendRealtimeAudio(audio);
+    } catch {
+      // Never reflect socket/provider exception text. This closes every readable
+      // upstream and the caller synchronously through the existing finalizer.
+      this.failRealtimeOutput();
+    }
+  }
+
   private async onUpstreamMessage(msg: UpstreamMessage, from: WebSocket): Promise<void> {
+    if (this.ended) return;
     switch (msg.type) {
       case 'response.output_audio.delta':
-        if (msg.delta && this.ws) {
-          const audio = decodeRealtimeAudio(msg.delta);
-          try {
-            if (this.realtimeConfig?.protocol === 'openai' && msg.item_id) {
-              if (this.outputAudio?.itemId !== msg.item_id || this.outputAudio.socket !== from) {
-                this.outputAudio = { socket: from, itemId: msg.item_id, contentIndex: msg.content_index ?? 0, startedAt: Date.now(), bytes: 0 };
-              }
-              this.outputAudio.bytes += audio.byteLength;
-            }
-            const pending = this.nativeGreeting;
-            if (pending) {
-              if (!audio.byteLength || audio.byteLength % 2) break;
-              if (pending.bytes + audio.byteLength > 480000) {
-                pending.failed = true; pending.resolve(false); break;
-              }
-              pending.frames.push(audio); pending.bytes += audio.byteLength;
-              pending.resolve(true);
-            } else this.ws.send(audio);
-          } catch {
-            /* caller gone */
-          }
-        }
+        this.receiveRealtimeAudio(msg, from);
+        break;
+      case 'response.done':
+        this.realtimeOutputBudget.responseDone(from, msg.response?.id);
         break;
       case 'input_audio_buffer.speech_started':
         // Barge-in: the server cancels its in-flight response; we flush caller
         // playback — except while our own greeting is playing, where a noise
         // blip would cut off the agent's opening line for nothing.
         if (this.nativeGreeting || Date.now() < this.greetingGuardUntil) break;
-        this.send({ type: 'flush' });
+        if (!this.sendRealtimeControl({ type: 'flush' })) break;
         if (this.realtimeConfig?.protocol === 'openai' && this.outputAudio?.socket === from) {
           const output = this.outputAudio;
           // The media contract has no per-item playback acknowledgements. Use
@@ -1352,7 +1440,7 @@ export class CallSession implements DurableObject {
             content_index: output.contentIndex, audio_end_ms: audioEndMs }, from);
           this.outputAudio = null;
         }
-        this.send({ type: 'speaking', who: 'caller' });
+        this.sendRealtimeControl({ type: 'speaking', who: 'caller' });
         break;
       case 'conversation.item.input_audio_transcription.completed':
         if (msg.transcript?.trim()) {
@@ -1363,7 +1451,7 @@ export class CallSession implements DurableObject {
           if (vocab && isVocabEcho(text, vocab)) {
             console.log(`call ${this.callId}: dropped vocab-echo transcript: ${text.slice(0, 80)}`);
             this.cancelResponse(from);
-            this.send({ type: 'flush' });
+            if (!this.sendRealtimeControl({ type: 'flush' })) break;
             break;
           }
           this.reserveTranscript(text);

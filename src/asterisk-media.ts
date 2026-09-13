@@ -1,9 +1,14 @@
+import { MediaOutputDebt } from './media-output-debt';
 /** chan_websocket JSON control, ulaw/8000/mono. Asterisk owns 20ms pacing.
  * https://docs.asterisk.org/Configuration/Channel-Drivers/WebSocket/
  */
 import { Pcmu8ToPcm24, Pcm24ToPcmu8, MAX_PCM24_BYTES } from './telephony-audio';
 
 export class AsteriskMediaAdapter {
+  private audioReceipts = false;
+  private controlReceiptPending = false;
+  private transportDebt = new MediaOutputDebt();
+  private lastPcmBytes: number | null = null;
   private up = new Pcmu8ToPcm24();
   private down = new Pcm24ToPcmu8();
   private started = false;
@@ -14,7 +19,6 @@ export class AsteriskMediaAdapter {
   private drained = false;
   private drainPending = false;
   private generation = 0;
-  private counter = 0;
   private marks = new Set<string>();
   private queue: string[] = [];
   private startup = setTimeout(() => this.close('start_timeout'), 20000);
@@ -57,6 +61,7 @@ export class AsteriskMediaAdapter {
         else if (msg.event === 'MEDIA_XON') { this.paused = false; this.schedulePump(); }
         else if (msg.event === 'MEDIA_MARK_PROCESSED') {
           if (typeof msg.correlation_id !== 'string') throw Error();
+          this.transportDebt.confirm(msg.correlation_id);
           this.marks.delete(msg.correlation_id); this.finishDrain(); this.maybeEnd();
         } else if (!['DTMF_END', 'STATUS', 'QUEUE_DRAINED', 'MEDIA_BUFFERING_COMPLETED'].includes(msg.event)) throw Error();
       }
@@ -66,26 +71,47 @@ export class AsteriskMediaAdapter {
     if (this.closed) return;
     try {
       if (raw instanceof ArrayBuffer) {
+        if (this.audioReceipts && (this.lastPcmBytes !== null || this.controlReceiptPending)) throw Error('missing_audio_receipt');
         // Greeting audio may precede ready, but only after MEDIA_START.
         if (!this.started || this.drained || this.drainPending || !raw.byteLength || raw.byteLength % 2 || raw.byteLength > 480000) throw Error();
         const bytes = new Uint8Array(raw);
         for (let offset = 0; offset < bytes.length; offset += MAX_PCM24_BYTES) this.enqueue(this.down.push(bytes.subarray(offset, offset + MAX_PCM24_BYTES)));
+        this.lastPcmBytes = raw.byteLength;
         if (this.ending) this.armDrain();
         return;
       }
       if (typeof raw !== 'string' || raw.length > 65536) throw Error();
       const msg = JSON.parse(raw);
-      if (msg.type === 'ready') {
+      if (this.audioReceipts && ((this.lastPcmBytes !== null && msg.type !== 'audio_receipt') ||
+          (this.controlReceiptPending && msg.type !== 'control_receipt'))) throw Error('missing_output_receipt');
+      if (msg.type === 'control_receipt') {
+        if (!this.controlReceiptPending || typeof msg.id !== 'string' || !/^[0-9a-f-]{36}$/.test(msg.id)) throw Error('invalid_control_receipt');
+        this.controlReceiptPending = false;
+        this.options.sessionSend(JSON.stringify({ type: 'audio_received', id: msg.id }));
+      } else if (msg.type === 'audio_receipt') {
+        if (this.lastPcmBytes === null || msg.bytes !== this.lastPcmBytes ||
+            typeof msg.id !== 'string' || !/^[0-9a-f-]{36}$/.test(msg.id)) throw Error('invalid_audio_receipt');
+        // The PCM was accepted into the existing bounded queue/mark system.
+        // This receipt is internal; no token or transcript reaches the carrier.
+        this.lastPcmBytes = null;
+        this.options.sessionSend(JSON.stringify({ type: 'audio_received', id: msg.id }));
+      } else if (msg.type === 'ready') {
+        this.audioReceipts = msg.audioReceipts === true;
         if (!this.started || this.ready || msg.mode !== 'realtime' || (msg.ttsMode === 'browser' && msg.greeting)) throw Error();
         this.ready = true; clearTimeout(this.startup);
         this.options.onReady?.();
       } else if (msg.type === 'flush') {
+        this.controlReceiptPending = this.audioReceipts;
         this.stopPump();
         this.queue = []; this.marks.clear(); this.down.reset(); this.generation++;
         // FLUSH_MEDIA clears Asterisk's queue, not its queue_full/XOFF state.
         // Its dequeue loop subsequently emits XON; only that event may resume us.
-        this.drained = false; this.drainPending = false; this.command('FLUSH_MEDIA');
+        this.drained = false; this.drainPending = false;
+        const barrier = this.transportDebt.sent(true, `${this.generation}:`);
+        this.command('FLUSH_MEDIA'); this.command('MARK_MEDIA', barrier);
         if (this.ending) this.armDrain();
+      } else if (msg.type === 'speaking') {
+        this.controlReceiptPending = this.audioReceipts;
       } else if (msg.type === 'ending') {
         if (!this.ready) throw Error();
         if (!this.ending) { this.ending = true; this.deadline = setTimeout(() => this.close('drain_timeout'), 12000); }
@@ -116,7 +142,7 @@ export class AsteriskMediaAdapter {
       for (let sent = 0; sent < 5 && !this.closed && !this.paused && this.queue.length; sent++) {
         const payload = atob(this.queue.shift()!);
         const bytes = Uint8Array.from(payload, char => char.charCodeAt(0));
-        const mark = `${this.generation}:${++this.counter}`;
+        const mark = this.transportDebt.sent(false, `${this.generation}:`);
         this.marks.add(mark);
         this.options.carrierSend(bytes.buffer);
         this.command('MARK_MEDIA', mark);

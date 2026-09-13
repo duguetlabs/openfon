@@ -179,3 +179,91 @@ describe('browser goodbye playback failure', () => {
     expect(stop).not.toHaveBeenCalled(); expect(voice.ended).toBe(false); voice.hangup();
   });
 });
+
+describe('bounded realtime browser playback receipts', () => {
+  const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  async function connected() {
+    const { socket } = prepareConnection();
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: async () => { throw Error('no microphone'); } } });
+    const nodes: { onended: (() => void) | null; stop: ReturnType<typeof vi.fn> }[] = [];
+    const createBuffer = vi.fn((_channels: number, samples: number) => {
+      const channel = new Float32Array(samples);
+      return { duration: samples / 24000, getChannelData: () => channel };
+    });
+    const context = { currentTime: 0, destination: {}, resume: async () => {}, close: async () => {}, createBuffer,
+      createBufferSource: () => {
+        const node = { buffer: null, connect: vi.fn(), start: vi.fn(), stop: vi.fn(), onended: null as (() => void) | null };
+        nodes.push(node); return node;
+      } };
+    vi.stubGlobal('AudioContext', vi.fn(function () { return context; }));
+    const voice = new VoiceCall(); await voice.connect('test');
+    socket.onmessage!({ data: JSON.stringify({ type: 'ready', mode: 'realtime', audioReceipts: true }) });
+    const receive = socket.onmessage!;
+    const pcm = (bytes: number) => receive({ data: new ArrayBuffer(bytes) });
+    const marker = (bytes: number, markerId: unknown = id) => receive({ data: JSON.stringify({ type: 'audio_receipt', id: markerId, bytes }) });
+    const acknowledgements = () => socket.send.mock.calls.map(([raw]) => JSON.parse(raw)).filter(msg => msg.type === 'audio_received');
+    return { socket, voice, nodes, createBuffer, pcm, marker, acknowledgements, receive };
+  }
+
+  it('negative control: acknowledges accepted audio only after bounded playback admission', async () => {
+    const f = await connected();
+    f.pcm(480000); f.marker(480000);
+    expect(f.acknowledgements()).toEqual([{ type: 'audio_received', id }]);
+    expect(f.createBuffer).toHaveBeenCalledTimes(1);
+    f.voice.hangup();
+  });
+
+  it('negative control: a suspended player refuses a third maximum frame before allocation or receipt', async () => {
+    const f = await connected();
+    f.pcm(480000); f.marker(480000); f.pcm(480000); f.marker(480000);
+    f.pcm(2); f.marker(2);
+    expect(f.createBuffer).toHaveBeenCalledTimes(2);
+    expect(f.acknowledgements()).toHaveLength(2);
+    expect(f.voice.ended).toBe(true);
+    expect(f.nodes.every(node => node.stop.mock.calls.length === 1)).toBe(true);
+  });
+
+  it('negative control: caps tiny-frame AudioBuffer source objects separately from bytes', async () => {
+    const f = await connected();
+    for (let i = 0; i < 401; i++) { f.pcm(4); f.marker(4); }
+    expect(f.createBuffer).toHaveBeenCalledTimes(400);
+    expect(f.acknowledgements()).toHaveLength(400);
+    expect(f.voice.ended).toBe(true);
+  });
+
+  it.each(['ended', 'flush'])('returns playback capacity on %s without imposing a lifetime speech limit', async how => {
+    const f = await connected();
+    for (let i = 0; i < 20; i++) {
+      f.pcm(480000); f.marker(480000);
+      if (how === 'ended') f.nodes.at(-1)!.onended!();
+      else {
+        f.receive({ data: JSON.stringify({ type: 'flush' }) });
+        f.receive({ data: JSON.stringify({ type: 'control_receipt', id }) });
+      }
+    }
+    expect(f.acknowledgements()).toHaveLength(how === 'flush' ? 40 : 20); expect(f.voice.ended).toBe(false);
+    f.voice.hangup();
+  });
+
+  it.each(['no-frame', 'wrong-size', 'duplicate', 'invalid-id'])('rejects a %s receipt marker', async how => {
+    const f = await connected();
+    if (how !== 'no-frame') f.pcm(4);
+    if (how === 'duplicate') f.marker(4);
+    f.marker(how === 'wrong-size' ? 6 : 4, how === 'invalid-id' ? 'reflected-provider-value' : id);
+    expect(f.voice.ended).toBe(true);
+    expect(f.acknowledgements()).toHaveLength(how === 'duplicate' ? 1 : 0);
+  });
+
+  it.each(['binary', 'flush'])('negative control: refuses intervening %s before the pending audio marker', async kind => {
+    const f = await connected(); f.pcm(4);
+    if (kind === 'binary') f.pcm(4);
+    else f.receive({ data: JSON.stringify({ type: 'flush' }) });
+    f.marker(4);
+    expect(f.voice.ended).toBe(true); expect(f.acknowledgements()).toHaveLength(0);
+  });
+
+  it('ignores a queued receipt after teardown', async () => {
+    const f = await connected(); f.pcm(4); f.voice.hangup(); f.marker(4);
+    expect(f.acknowledgements()).toHaveLength(0);
+  });
+});

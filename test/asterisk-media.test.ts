@@ -33,7 +33,7 @@ describe('Asterisk JSON ulaw transport', () => {
     begin();adapter.sessionMessage(new ArrayBuffer(960));vi.advanceTimersByTime(20);const old=commands().find(x=>x.command==='MARK_MEDIA');
     adapter.sessionMessage(JSON.stringify({type:'flush'}));
     adapter.carrierMessage(JSON.stringify({event:'MEDIA_MARK_PROCESSED',correlation_id:old.correlation_id}));
-    expect(commands().at(-1).command).toBe('FLUSH_MEDIA');expect(end).not.toHaveBeenCalled();
+    expect(commands().slice(-2).map(x=>x.command)).toEqual(['FLUSH_MEDIA','MARK_MEDIA']);expect(end).not.toHaveBeenCalled();
   });
   it('honors XOFF/XON and caps buffered playback',()=>{
     begin();adapter.carrierMessage(JSON.stringify({event:'MEDIA_XOFF'}));adapter.sessionMessage(new ArrayBuffer(960));
@@ -116,7 +116,7 @@ describe('Asterisk JSON ulaw transport', () => {
     adapter.sessionMessage(JSON.stringify({type:'flush'}));adapter.sessionMessage(new ArrayBuffer(960));vi.advanceTimersByTime(300);
     expect(end).not.toHaveBeenCalled();expect(carrier.filter(x=>x instanceof ArrayBuffer)).toHaveLength(0);
     adapter.carrierMessage(JSON.stringify({event:'MEDIA_XON'}));vi.advanceTimersByTime(20);
-    const marks=commands().filter(x=>x.command==='MARK_MEDIA');expect(marks).toHaveLength(2);
+    const marks=commands().filter(x=>x.command==='MARK_MEDIA');expect(marks).toHaveLength(3); // flush barrier + two PCM marks
     for(const mark of marks){expect(mark.correlation_id).toMatch(/^1:/);adapter.carrierMessage(JSON.stringify({event:'MEDIA_MARK_PROCESSED',correlation_id:mark.correlation_id}));}
     expect(end).toHaveBeenCalledExactlyOnceWith('playback_complete');expect(vi.getTimerCount()).toBe(0);
   });
@@ -149,7 +149,7 @@ describe('Asterisk JSON ulaw transport', () => {
     expect(end).not.toHaveBeenCalled();
     adapter.carrierMessage(JSON.stringify({event:'MEDIA_XON'}));vi.advanceTimersByTime(20);
     const current=commands().filter(x=>x.command==='MARK_MEDIA' && x.correlation_id.startsWith('1:'));
-    expect(current).toHaveLength(2);expect(end).not.toHaveBeenCalled();
+    expect(current).toHaveLength(3);expect(end).not.toHaveBeenCalled(); // flush barrier + two PCM marks
     for(const mark of current)adapter.carrierMessage(JSON.stringify({event:'MEDIA_MARK_PROCESSED',correlation_id:mark.correlation_id}));
     expect(end).toHaveBeenCalledExactlyOnceWith('playback_complete');expect(vi.getTimerCount()).toBe(0);
   });
@@ -169,4 +169,73 @@ describe('Asterisk JSON ulaw transport', () => {
     }
   });
 
+});
+
+describe('Asterisk internal audio receipts', () => {
+  const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  function fixture() {
+    const carrier: (string | ArrayBuffer)[] = [], session: (string | ArrayBuffer)[] = [];
+    const end = vi.fn();
+    const adapter = new AsteriskMediaAdapter({ carrierSend: value => carrier.push(value), sessionSend: value => session.push(value), onEnd: end });
+    adapter.carrierMessage(JSON.stringify(start)); adapter.sessionMessage(JSON.stringify(ready));
+    const marker = (bytes: number) => adapter.sessionMessage(JSON.stringify({ type: 'audio_receipt', id, bytes }));
+    const receipts = () => session.filter(x => typeof x === 'string').map(x => JSON.parse(x as string)).filter(x => x.type === 'audio_received');
+    return { adapter, carrier, end, marker, receipts };
+  }
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+  it('negative control: acknowledges admitted PCM privately while retaining carrier marks', () => {
+    const f = fixture(); f.adapter.sessionMessage(new ArrayBuffer(960)); f.marker(960);
+    expect(f.receipts()).toEqual([{ type: 'audio_received', id }]);
+    vi.advanceTimersByTime(20);
+    expect(f.carrier.some(x => typeof x === 'string' && JSON.parse(x).command === 'MARK_MEDIA')).toBe(true);
+    expect(JSON.stringify(f.carrier)).not.toContain(id);
+    expect(f.end).not.toHaveBeenCalled(); f.adapter.close();
+  });
+  it('XOFF cannot turn receipts into unbounded downstream playback', () => {
+    const f = fixture(); f.adapter.carrierMessage(JSON.stringify({ event: 'MEDIA_XOFF' }));
+    f.adapter.sessionMessage(new ArrayBuffer(480000)); f.marker(480000);
+    f.adapter.sessionMessage(new ArrayBuffer(480000)); f.marker(480000);
+    expect(f.receipts()).toHaveLength(1); expect(f.end).toHaveBeenCalledOnce();
+  });
+  it.each(['no-frame', 'wrong-size', 'duplicate'])('rejects a %s receipt', how => {
+    const f = fixture();
+    if (how !== 'no-frame') f.adapter.sessionMessage(new ArrayBuffer(960));
+    if (how === 'duplicate') f.marker(960);
+    f.marker(how === 'wrong-size' ? 2 : 960);
+    expect(f.end).toHaveBeenCalledOnce();
+  });
+});
+
+describe('Asterisk flush transport debt', () => {
+  function fixture() {
+    const carrier: (string | ArrayBuffer)[] = [], end = vi.fn();
+    const adapter = new AsteriskMediaAdapter({ carrierSend: x => carrier.push(x), sessionSend: () => {}, onEnd: end });
+    adapter.carrierMessage(JSON.stringify(start)); adapter.sessionMessage(JSON.stringify(ready));
+    const flush = () => adapter.sessionMessage(JSON.stringify({ type: 'flush' }));
+    const marks = () => carrier.filter(x => typeof x === 'string').map(x => JSON.parse(x as string)).filter(x => x.command === 'MARK_MEDIA');
+    return { adapter, end, flush, marks };
+  }
+  beforeEach(() => vi.useFakeTimers()); afterEach(() => vi.useRealTimers());
+  it('negative control: repeated audio, pump and flush without returned marks stays bounded', () => {
+    const f = fixture();
+    for (let i = 0; i < 510; i++) { f.adapter.sessionMessage(new ArrayBuffer(960)); vi.advanceTimersByTime(20); f.flush(); }
+    expect(f.end).toHaveBeenCalledOnce(); expect(f.marks().length).toBeLessThanOrEqual(500);
+  });
+  it('returned post-flush barriers allow repeated normal interruptions', () => {
+    const f = fixture();
+    for (let i = 0; i < 510; i++) {
+      f.adapter.sessionMessage(new ArrayBuffer(960)); vi.advanceTimersByTime(20); f.flush();
+      f.adapter.carrierMessage(JSON.stringify({ event: 'MEDIA_MARK_PROCESSED', correlation_id: f.marks().at(-1).correlation_id }));
+    }
+    expect(f.end).not.toHaveBeenCalled(); f.adapter.close();
+  });
+  it.each(['binary', 'flush'])('rejects %s between negotiated audio and marker', kind => {
+    const end = vi.fn();
+    const adapter = new AsteriskMediaAdapter({ carrierSend: () => {}, sessionSend: () => {}, onEnd: end });
+    adapter.carrierMessage(JSON.stringify(start)); adapter.sessionMessage(JSON.stringify({ ...ready, audioReceipts: true }));
+    adapter.sessionMessage(new ArrayBuffer(960));
+    adapter.sessionMessage(kind === 'binary' ? new ArrayBuffer(960) : JSON.stringify({ type: 'flush' }));
+    expect(end).toHaveBeenCalledOnce();
+  });
 });

@@ -20,6 +20,7 @@ function jsonStream(value: unknown): ReadableStream<Uint8Array> {
 // ---------- fakes ----------
 
 class FakeSocket {
+  autoAudioReceipts = true;
   readyState = 1; // OPEN
   sent: unknown[] = [];
   closed: { code?: number; reason?: string } | null = null;
@@ -29,6 +30,13 @@ class FakeSocket {
   send(data: unknown): void {
     if (this.readyState !== 1) throw new Error('socket closed');
     this.sent.push(data);
+    if (this.autoAudioReceipts && typeof data === 'string' &&
+        (data.startsWith('{"type":"audio_receipt"') || data.startsWith('{"type":"control_receipt"'))) {
+      const message = JSON.parse(data);
+      if (message.type === 'audio_receipt' || message.type === 'control_receipt') queueMicrotask(() => {
+        if (this.readyState === 1) this.receive({ type: 'audio_received', id: message.id });
+      });
+    }
   }
   close(code?: number, reason?: string): void {
     if (this.readyState === 3) return;
@@ -2033,7 +2041,7 @@ describe('telephone audio capabilities', () => {
     vi.spyOn(socket, 'send').mockImplementation(data => {
       send(data);
       if (typeof data === 'string' && JSON.parse(data).type === 'ready') {
-        queueMicrotask(() => { queuedAtReady = socket.sent.at(-1) === audio; });
+        queueMicrotask(() => { queuedAtReady = socket.sent[socket.sent.findIndex(value => typeof value === 'string' && JSON.parse(value).type === 'ready') + 1] === audio; });
       }
     });
     release(audio);
@@ -2758,7 +2766,7 @@ describe('synthesized carrier greeting size admission', () => {
     vi.spyOn(socket, 'send').mockImplementation(data => {
       send(data); adapter.sessionMessage(data);
       if (typeof data === 'string' && JSON.parse(data).type === 'ready') {
-        queueMicrotask(() => { queuedAtReady = socket.sent.at(-1) === audio; });
+        queueMicrotask(() => { queuedAtReady = socket.sent[socket.sent.findIndex(value => typeof value === 'string' && JSON.parse(value).type === 'ready') + 1] === audio; });
       }
     });
     release(audio); await flush(100);
@@ -2799,5 +2807,207 @@ describe('synthesized carrier greeting size admission', () => {
     expect(socket.countOf('ready')).toBe(1); expect(socket.binaryCount()).toBe(1);
     expect(socket.countOf('error')).toBe(0); expect(socket.sent).toContain(audio);
     socket.receive({ type: 'hangup' }); await flush(100);
+  });
+});
+
+describe('realtime output cumulative and receipt bounds', () => {
+  const large = 'A'.repeat(640000); // exactly 480000 decoded PCM bytes
+  async function connected(protocol: 'openai' | 'gateway' = 'openai', carrier = false) {
+    const sockets = [new FakeSocket(), new FakeSocket()]; let connects = 0;
+    if (protocol === 'openai') globalThis.fetch = vi.fn(async () => ({ status: 101, webSocket: sockets[connects++] })) as unknown as typeof fetch;
+    const backing = newSession('realtime', protocol === 'openai'
+      ? { realtime_provider: 'openai', realtime_api_key: 'synthetic-key', realtime_model: '', realtime_voice: 'marin' } as never
+      : { realtime_model: 'gpt-realtime-2' });
+    backing.ctl.channel = carrier ? 'telnyx' : 'web';
+    await backing.session.fetch(upgradeRequest());
+    const caller = serverSockets[0]; caller.receive({ type: 'start' }); await flush(50);
+    const up = protocol === 'openai' ? sockets[0] : upstreamSockets[0];
+    if (protocol === 'openai') up.receive({ type: 'session.updated', session: up.messages().find(m => m.type === 'session.update')!.session });
+    else up.emit('open', {});
+    await flush(50);
+    return { ...backing, caller, up, replacement: sockets[1] };
+  }
+  function delta(up: FakeSocket, value = large, item = 'output') {
+    up.receive({ type: 'response.output_audio.delta', item_id: item, delta: value });
+  }
+  function receipts(caller: FakeSocket) { return caller.messages().filter(m => m.type === 'audio_receipt'); }
+
+  it.each(['openai', 'gateway'] as const)('negative control: refuses a same-turn %s exact-limit flood before third decode', async protocol => {
+    const { caller, up, callUpdates } = await connected(protocol);
+    const decode = vi.spyOn(globalThis, 'atob');
+    try {
+      delta(up); delta(up); delta(up); delta(up);
+      expect(decode).toHaveBeenCalledTimes(2);
+      expect(caller.binaryCount()).toBe(2);
+      expect(up.closed).not.toBeNull();
+      await flush(100);
+      expect(caller.countOf('error')).toBe(1);
+      expect(callUpdates().some(w => w.args[0] === 'failed')).toBe(true);
+    } finally { decode.mockRestore(); }
+  });
+
+  it('negative control: cannot mint credit with done, flush or changing item IDs', async () => {
+    const { caller, up } = await connected();
+    delta(up, large, 'first'); delta(up, large, 'second');
+    up.receive({ type: 'response.done' });
+    up.receive({ type: 'input_audio_buffer.speech_started' });
+    delta(up, 'AAAAAA==', 'third');
+    expect(caller.binaryCount()).toBe(2);
+    expect(up.closed).not.toBeNull();
+    await flush(100);
+  });
+
+  it('negative control: bounds tiny outstanding frames even without bufferedAmount', async () => {
+    const { caller, up } = await connected();
+    caller.autoAudioReceipts = false;
+    expect('bufferedAmount' in caller).toBe(false);
+    for (let i = 0; i < 130; i++) delta(up, 'AAAAAA==');
+    expect(caller.binaryCount()).toBe(128);
+    expect(up.closed).not.toBeNull();
+    await flush(100);
+  });
+
+  it('negative control: refuses advertised transport backpressure before decoding', async () => {
+    const { caller, up } = await connected();
+    Object.assign(caller, { bufferedAmount: 960000 });
+    const decode = vi.spyOn(globalThis, 'atob');
+    try {
+      delta(up, 'AAAAAA==');
+      expect(decode).not.toHaveBeenCalled(); expect(caller.binaryCount()).toBe(0);
+      expect(up.closed).not.toBeNull(); await flush(100);
+    } finally { decode.mockRestore(); }
+  });
+
+  it('negative control: closes a stalled receiver at the oldest receipt deadline', async () => {
+    vi.useFakeTimers();
+    const { caller, up, callUpdates } = await connected();
+    caller.autoAudioReceipts = false;
+    delta(up, 'AAAAAA=='); await flush(50);
+    await vi.advanceTimersByTimeAsync(10001);
+    expect(up.closed).not.toBeNull();
+    expect(callUpdates().some(w => w.args[0] === 'failed')).toBe(true);
+  });
+
+  it.each(['wrong', 'out-of-order', 'replayed', 'expired'])('rejects %s receipt identity without returning credit', async kind => {
+    vi.useFakeTimers();
+    const { caller, up } = await connected();
+    caller.autoAudioReceipts = false;
+    delta(up, 'AAAAAA=='); delta(up, 'AAAAAA==');
+    const ids = receipts(caller).map(m => m.id);
+    expect(ids).toHaveLength(2);
+    let id = kind === 'out-of-order' ? ids[1] : kind === 'wrong' ? 'private-reflected-value' : ids[0];
+    if (kind === 'replayed') { caller.receive({ type: 'audio_received', id }); await flush(); }
+    if (kind === 'expired') vi.setSystemTime(Date.now() + 10001);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      caller.receive({ type: 'audio_received', id }); await flush(100);
+      expect(up.closed).not.toBeNull();
+      expect(JSON.stringify(log.mock.calls)).not.toContain('private-reflected-value');
+    } finally { log.mockRestore(); }
+  });
+
+  it('negative control: retains admission across pending and successful replacement', async () => {
+    const { caller, up, replacement } = await connected();
+    caller.autoAudioReceipts = false;
+    delta(up);
+    up.receive({ type: 'session.expiring' }); await flush(50);
+    delta(replacement); // still unacknowledged: no decode, output or budget charge
+    expect(caller.binaryCount()).toBe(1); expect(up.closed).toBeNull();
+    delta(up); // old socket remains usable during replacement handshake
+    replacement.receive({ type: 'session.updated', session: replacement.messages().find(m => m.type === 'session.update')!.session });
+    await flush(50);
+    delta(replacement, 'AAAAAA==');
+    expect(caller.binaryCount()).toBe(2); expect(replacement.closed).not.toBeNull();
+    await flush(100);
+  });
+
+  it('admits normal multi-response audio beyond a whole-call cap with timely receipts', async () => {
+    vi.useFakeTimers();
+    const { caller, up } = await connected();
+    for (let i = 0; i < 20; i++) {
+      delta(up); await flush(50);
+      up.receive({ type: 'response.done' });
+      await vi.advanceTimersByTimeAsync(10000);
+    }
+    expect(caller.binaryCount()).toBe(20); expect(caller.countOf('error')).toBe(0);
+    caller.receive({ type: 'hangup' }); await flush(100);
+  });
+
+  it('negative control: bounds one long response despite timely receipt and normal pacing', async () => {
+    vi.useFakeTimers();
+    const { caller, up } = await connected();
+    for (let i = 0; i < 6; i++) {
+      delta(up); await flush(50); await vi.advanceTimersByTimeAsync(10000);
+    }
+    delta(up, 'AAAAAA==');
+    expect(caller.binaryCount()).toBe(6); expect(up.closed).not.toBeNull();
+    await flush(100);
+  });
+
+  it('negative control: closes a control-only stalled caller without unlimited flush writes', async () => {
+    const { caller, up } = await connected(); caller.autoAudioReceipts = false;
+    for (let i = 0; i < 130; i++) up.receive({ type: 'input_audio_buffer.speech_started' });
+    expect(caller.countOf('flush')).toBeLessThanOrEqual(64);
+    expect(caller.countOf('speaking')).toBeLessThanOrEqual(64);
+    expect(up.closed).not.toBeNull(); await flush(100);
+  });
+
+  it.each(['telnyx', 'asterisk'] as const)('pairs actual %s receiver receipts with sender through greeting, flush and ending', async channel => {
+    vi.useFakeTimers();
+    const { caller, up, callUpdates } = await connected('openai', true);
+    caller.autoAudioReceipts = false;
+    const ended = vi.fn();
+    const carrier: (string | ArrayBuffer)[] = [];
+    let adapter: { sessionMessage(raw: unknown): void; carrierMessage(raw: unknown): void | Promise<void>; close(): void };
+    const sessionSend = (raw: string | ArrayBuffer) => {
+      if (typeof raw === 'string') caller.receive(JSON.parse(raw));
+      else caller.emit('message', { data: raw });
+    };
+    const carrierSend = (raw: string | ArrayBuffer) => {
+      carrier.push(raw);
+      if (typeof raw !== 'string') return;
+      const message = JSON.parse(raw);
+      if (message.event === 'mark') queueMicrotask(() => void adapter.carrierMessage(JSON.stringify({ event: 'mark', stream_id: 's', mark: message.mark })));
+      if (message.command === 'MARK_MEDIA') queueMicrotask(() => void adapter.carrierMessage(JSON.stringify({ event: 'MEDIA_MARK_PROCESSED', correlation_id: message.correlation_id })));
+    };
+    if (channel === 'telnyx') {
+      const { TelnyxMediaAdapter } = await import('../src/telnyx-media');
+      adapter = new TelnyxMediaAdapter({ expected: { callControlId: 'c', callSessionId: 's', callLegId: 'l', authToken: 'token' }, sessionSend, carrierSend, onEnd: ended });
+      await adapter.carrierMessage(JSON.stringify({ event: 'connected', version: '1.0.0', connected: { 'x-telnyx-streaming-auth-token': 'token' } }));
+      await adapter.carrierMessage(JSON.stringify({ event: 'start', stream_id: 's', sequence_number: '1', start: { call_control_id: 'c', call_session_id: 's', media_format: { encoding: 'PCMU', sample_rate: 8000, channels: 1 } } }));
+    } else {
+      const { AsteriskMediaAdapter } = await import('../src/asterisk-media');
+      adapter = new AsteriskMediaAdapter({ sessionSend, carrierSend, onEnd: ended });
+      await adapter.carrierMessage(JSON.stringify({ event: 'MEDIA_START', connection_id: 's', channel: 'test', format: 'ulaw', optimal_frame_size: 160, ptime: 20 }));
+    }
+    const send = caller.send.bind(caller);
+    vi.spyOn(caller, 'send').mockImplementation(raw => { send(raw); adapter.sessionMessage(raw); });
+    delta(up, 'A'.repeat(6400)); await flush(100);
+    expect(caller.countOf('ready')).toBe(1); expect(caller.countOf('audio_receipt')).toBe(1);
+    up.receive({ type: 'input_audio_buffer.speech_started' });
+    delta(up, 'A'.repeat(6400)); await flush(100);
+    expect(caller.countOf('control_receipt')).toBe(2);
+    up.receive({ type: 'response.function_call_arguments.done', name: 'end_call' });
+    await vi.advanceTimersByTimeAsync(500); await flush(100);
+    expect(ended).toHaveBeenCalledOnce();
+    expect(caller.countOf('error')).toBe(0);
+    expect(callUpdates().some(w => w.args[0] === 'completed')).toBe(true);
+    expect(JSON.stringify(carrier)).not.toContain('audio_receipt');
+    expect(JSON.stringify(carrier)).not.toContain('control_receipt');
+  });
+
+  it('negative control: counts empty delta floods as bounded event work', async () => {
+    const { caller, up } = await connected();
+    for (let i = 0; i < 401; i++) delta(up, '');
+    expect(caller.binaryCount()).toBe(0); expect(up.closed).not.toBeNull();
+    await flush(100);
+  });
+
+  it('negative control: refuses a tiny-frame native greeting burst before carrier readiness', async () => {
+    const { caller, up } = await connected('openai', true);
+    for (let i = 0; i < 129; i++) delta(up, 'AAAAAA==');
+    await flush(100);
+    expect(caller.binaryCount()).toBe(0); expect(caller.countOf('ready')).toBe(0);
+    expect(up.closed).not.toBeNull();
   });
 });

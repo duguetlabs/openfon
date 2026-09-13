@@ -121,7 +121,7 @@ describe('Telnyx media bridge', () => {
   it('clear discards queued/partial audio and stale marks cannot complete a new generation', async () => {
     const f = fixture(); await f.boot(); f.server(pcm(3)); vi.advanceTimersByTime(20);
     const oldMark = f.carrier[1].mark.name;
-    f.server({ type: 'flush' }); expect(f.carrier.at(-1)).toEqual({ event: 'clear' });
+    f.server({ type: 'flush' }); expect(f.carrier.at(-2)).toEqual({ event: 'clear' }); expect(f.carrier.at(-1)!.event).toBe('mark');
     f.server(pcm()); f.server({ type: 'ending' }); vi.advanceTimersByTime(240);
     await f.receive(mark(oldMark)); expect(f.onEnd).not.toHaveBeenCalled();
     const currentMarks = f.carrier.filter(x => x.event === 'mark' && x.mark.name !== oldMark);
@@ -230,5 +230,59 @@ describe('Telnyx media bridge', () => {
     carrier.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(connected) }));
     vi.advanceTimersByTime(20000);
     expect(onEnded).toHaveBeenCalledTimes(1); expect(session.readyState).toBe(3);
+  });
+});
+
+describe('Telnyx internal audio receipts', () => {
+  const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const receipt = (bytes: number) => ({ type: 'audio_receipt', id, bytes });
+  const acknowledgements = (f: ReturnType<typeof fixture>) => f.session.filter(x => typeof x === 'string').map(x => JSON.parse(x as string)).filter(x => x.type === 'audio_received');
+  it('negative control: acknowledges admitted PCM privately without replacing playback marks', async () => {
+    const f = fixture(); await f.boot();
+    f.server(pcm()); f.server(receipt(960));
+    expect(acknowledgements(f)).toEqual([{ type: 'audio_received', id }]);
+    expect(JSON.stringify(f.carrier)).not.toContain(id);
+    vi.advanceTimersByTime(20);
+    expect(f.carrier.some(m => m.event === 'mark')).toBe(true);
+    expect(f.onEnd).not.toHaveBeenCalled(); f.adapter.close();
+  });
+  it('refuses overflow before acknowledging further audio', async () => {
+    const f = fixture(); await f.boot();
+    f.server(pcm(500)); f.server(receipt(480000));
+    f.server(pcm(500)); f.server(receipt(480000));
+    expect(acknowledgements(f)).toHaveLength(1); expect(f.onEnd).toHaveBeenCalledOnce();
+  });
+  it.each(['no-frame', 'wrong-size', 'duplicate'])('rejects a %s receipt', async how => {
+    const f = fixture(); await f.boot();
+    if (how !== 'no-frame') f.server(pcm());
+    if (how === 'duplicate') f.server(receipt(960));
+    f.server(receipt(how === 'wrong-size' ? 2 : 960));
+    expect(f.onEnd).toHaveBeenCalledOnce();
+  });
+});
+
+describe('Telnyx flush transport debt', () => {
+  it('negative control: repeated audio, pump and flush without returned marks stays bounded', async () => {
+    const f = fixture(); await f.boot();
+    for (let i = 0; i < 510; i++) {
+      f.server(pcm()); vi.advanceTimersByTime(20); f.server({ type: 'flush' });
+    }
+    expect(f.onEnd).toHaveBeenCalledOnce();
+    expect(f.carrier.filter(m => m.event === 'mark').length).toBeLessThanOrEqual(500);
+  });
+  it('returned post-clear barriers allow repeated normal interruptions', async () => {
+    const f = fixture(); await f.boot();
+    for (let i = 0; i < 510; i++) {
+      f.server(pcm()); vi.advanceTimersByTime(20); f.server({ type: 'flush' });
+      const last = f.carrier.filter(m => m.event === 'mark').at(-1)!;
+      await f.receive(mark(last.mark.name));
+    }
+    expect(f.onEnd).not.toHaveBeenCalled(); f.adapter.close();
+  });
+  it.each(['binary', 'flush'])('rejects %s between negotiated audio and marker', async kind => {
+    const f = fixture(); await f.receive(connected); await f.receive(start);
+    f.server({ ...ready, audioReceipts: true }); f.server(pcm());
+    f.server(kind === 'binary' ? pcm() : { type: 'flush' });
+    expect(f.onEnd).toHaveBeenCalledOnce();
   });
 });

@@ -55,6 +55,10 @@ export class VoiceCall {
   private playCtx: AudioContext | null = null;
   private nextPlayTime = 0;
   private liveSources = new Set<AudioBufferSourceNode>();
+  private queuedPcmBytes = 0;
+  private audioReceipts = false;
+  private controlReceiptPending = false;
+  private lastPcmBytes: number | null = null;
   private pcmCarry: Uint8Array | null = null; // odd trailing byte awaiting its other half
   private pingTimer: number | null = null;
   private hangupWhenDone = false; // agent said goodbye: end once playback drains
@@ -130,15 +134,23 @@ export class VoiceCall {
       if (!this.ended) this.teardown('ended');
     };
     ws.onmessage = (ev) => {
-      if (this.ended) return;
+      if (this.ended || this.ws !== ws) return;
       try {
         if (typeof ev.data !== 'string') {
-          if (this.mode === 'realtime') this.playPcm(ev.data as ArrayBuffer);
+          if (this.mode === 'realtime') {
+            if (this.audioReceipts && (this.lastPcmBytes !== null || this.controlReceiptPending)) throw new Error('missing_audio_receipt');
+            if (!(ev.data instanceof ArrayBuffer)) throw new Error('invalid_audio');
+            this.playPcm(ev.data);
+            this.lastPcmBytes = ev.data.byteLength;
+          }
           else this.playAudio(ev.data as ArrayBuffer);
           return;
         }
         const msg = JSON.parse(ev.data) as {
           type: string;
+          audioReceipts?: unknown;
+          id?: unknown;
+          bytes?: unknown;
           text?: string;
           greeting?: string;
           ttsMode?: string;
@@ -147,8 +159,28 @@ export class VoiceCall {
           who?: 'caller' | 'agent' | 'none';
           engine?: string;
         };
+        if (this.audioReceipts && ((this.lastPcmBytes !== null && msg.type !== 'audio_receipt') ||
+            (this.controlReceiptPending && msg.type !== 'control_receipt'))) throw new Error('missing_output_receipt');
         switch (msg.type) {
+          case 'control_receipt':
+            if (!this.controlReceiptPending || typeof msg.id !== 'string' || !/^[0-9a-f-]{36}$/.test(msg.id) || ws.readyState !== WebSocket.OPEN) {
+              throw new Error('invalid_control_receipt');
+            }
+            this.controlReceiptPending = false;
+            ws.send(JSON.stringify({ type: 'audio_received', id: msg.id }));
+            break;
+          case 'audio_receipt':
+            if (this.mode !== 'realtime' || this.lastPcmBytes === null || msg.bytes !== this.lastPcmBytes ||
+                typeof msg.id !== 'string' || !/^[0-9a-f-]{36}$/.test(msg.id) || ws.readyState !== WebSocket.OPEN) {
+              throw new Error('invalid_audio_receipt');
+            }
+            // playPcm has already admitted the frame into a bounded buffer.
+            // This confirms receipt, never physical playback or audibility.
+            this.lastPcmBytes = null;
+            ws.send(JSON.stringify({ type: 'audio_received', id: msg.id }));
+            break;
           case 'ready':
+            this.audioReceipts = msg.audioReceipts === true;
             this.mode = msg.mode === 'realtime' ? 'realtime' : 'pipeline';
             this.ttsMode = msg.ttsMode === 'server' ? 'server' : 'browser';
             this.emit({ type: 'status', status: 'live' });
@@ -164,6 +196,7 @@ export class VoiceCall {
             break;
           case 'flush': // barge-in: stop agent playback immediately
             this.flushPlayback();
+            this.controlReceiptPending = this.audioReceipts;
             break;
           case 'ending': // agent is hanging up: let the goodbye finish, then end
             this.hangupWhenDone = true;
@@ -172,6 +205,7 @@ export class VoiceCall {
             }
             break;
           case 'speaking':
+            this.controlReceiptPending = this.audioReceipts;
             if (msg.who) this.emit({ type: 'speaking', who: msg.who });
             break;
           case 'transcript':
@@ -317,6 +351,12 @@ export class VoiceCall {
   }
 
   private playPcm(buf: ArrayBuffer): void {
+    // Bound retained Float32 playback buffers and source-node bookkeeping before
+    // conversion/allocation, including a suspended/slow AudioContext. Wall clock
+    // advancement or receipt acknowledgements never release this accounting.
+    if (this.queuedPcmBytes + buf.byteLength + (this.pcmCarry?.length ?? 0) > 960000 || this.liveSources.size >= 400) {
+      throw new Error('audio_playback_overflow');
+    }
     // The PCM stream is split into chunks at arbitrary byte offsets; a chunk
     // boundary can land mid-sample. Carry the odd byte into the next chunk —
     // playing misaligned PCM16 sounds like a burst of white noise.
@@ -349,8 +389,11 @@ export class VoiceCall {
     this.nextPlayTime = startAt + audio.duration;
     if (this.liveSources.size === 0) this.emit({ type: 'speaking', who: 'agent' });
     this.liveSources.add(node);
+    this.queuedPcmBytes += bytes.byteLength;
+    const retainedBytes = bytes.byteLength;
     node.onended = () => {
-      this.liveSources.delete(node);
+      if (!this.liveSources.delete(node)) return;
+      this.queuedPcmBytes -= retainedBytes;
       if (this.liveSources.size === 0) {
         this.emit({ type: 'speaking', who: 'none' });
         if (this.hangupWhenDone) setTimeout(() => this.hangup(), 600);
@@ -368,6 +411,7 @@ export class VoiceCall {
       }
     }
     this.liveSources.clear();
+    this.queuedPcmBytes = 0;
     this.nextPlayTime = 0;
     this.pcmCarry = null;
   }
