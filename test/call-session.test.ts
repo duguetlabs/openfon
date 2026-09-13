@@ -2722,3 +2722,82 @@ describe('established realtime provider error policy', () => {
     expect(callUpdates().some(w => w.args[0] === 'failed')).toBe(true);
   });
 });
+
+
+describe('synthesized carrier greeting size admission', () => {
+  it.each(['telnyx', 'asterisk'])('admits exact ten-second %s greeting only after synthesis, with ready then PCM in one turn', async channel => {
+    const { session, ctl } = newSession('realtime', {}, { DEFAULT_TTS_PROVIDER: 'azure', AZURE_SPEECH_KEY: 'synthetic-unit-test-key' });
+    ctl.channel = channel;
+    vi.spyOn(session as never, 'startRealtime').mockResolvedValue(true as never);
+    vi.spyOn(session as never, 'engineGreets').mockReturnValue(false as never);
+    let release!: (audio: ArrayBuffer) => void;
+    const pending = new Promise<ArrayBuffer>(resolve => { release = resolve; });
+    globalThis.fetch = vi.fn(async () => ({ ok: true, arrayBuffer: () => pending })) as unknown as typeof fetch;
+    await session.fetch(upgradeRequest());
+    const socket = serverSockets[0]; socket.receive({ type: 'start' }); await flush(100);
+    expect(socket.countOf('ready')).toBe(0); expect(socket.binaryCount()).toBe(0);
+    vi.useFakeTimers();
+    const ended = vi.fn(); let carrierFrames = 0;
+    const adapter = channel === 'asterisk'
+      ? new (await import('../src/asterisk-media')).AsteriskMediaAdapter({
+        carrierSend: data => { if (data instanceof ArrayBuffer) { expect(data.byteLength).toBe(160); carrierFrames++; } },
+        sessionSend() {}, onEnd: ended,
+      })
+      : new (await import('../src/telnyx-media')).TelnyxMediaAdapter({
+        expected: { callControlId: 'c', callSessionId: 's', callLegId: 'l', authToken: 'token' },
+        carrierSend: data => { const message = JSON.parse(data); if (message.event === 'media') { expect(atob(message.media.payload).length).toBe(160); carrierFrames++; } },
+        sessionSend() {}, onEnd: ended,
+      });
+    if (channel === 'asterisk') await adapter.carrierMessage(JSON.stringify({ event: 'MEDIA_START', connection_id: 's', channel: 'test', format: 'ulaw', optimal_frame_size: 160, ptime: 20 }));
+    else {
+      await adapter.carrierMessage(JSON.stringify({ event: 'connected', version: '1.0.0', connected: { 'x-telnyx-streaming-auth-token': 'token' } }));
+      await adapter.carrierMessage(JSON.stringify({ event: 'start', stream_id: 's', sequence_number: '1', start: { call_control_id: 'c', call_session_id: 's', media_format: { encoding: 'PCMU', sample_rate: 8000, channels: 1 } } }));
+    }
+    const audio = new ArrayBuffer(480000);
+    const send = socket.send.bind(socket); let queuedAtReady = false;
+    vi.spyOn(socket, 'send').mockImplementation(data => {
+      send(data); adapter.sessionMessage(data);
+      if (typeof data === 'string' && JSON.parse(data).type === 'ready') {
+        queueMicrotask(() => { queuedAtReady = socket.sent.at(-1) === audio; });
+      }
+    });
+    release(audio); await flush(100);
+    expect(socket.countOf('ready')).toBe(1); expect(socket.binaryCount()).toBe(1);
+    expect(queuedAtReady).toBe(true); expect(socket.countOf('error')).toBe(0);
+    expect(ended).not.toHaveBeenCalled(); expect(carrierFrames).toBe(0);
+    vi.advanceTimersByTime(20);
+    expect(carrierFrames).toBeGreaterThan(0); expect(carrierFrames).toBeLessThanOrEqual(5);
+    vi.advanceTimersByTime(10000);
+    expect(carrierFrames).toBeGreaterThanOrEqual(499); expect(carrierFrames).toBeLessThanOrEqual(500);
+    expect(ended).not.toHaveBeenCalled(); adapter.close();
+    socket.receive({ type: 'hangup' }); await flush(100);
+  });
+  it.each([
+    ['telnyx', 480002], ['asterisk', 480002],
+    ['telnyx', 479999], ['asterisk', 479999],
+  ])('rejects invalid %s synthesized greeting of %i bytes before ready or any PCM', async (channel, bytes) => {
+    const { session, ctl, callUpdates } = newSession('realtime', {}, { DEFAULT_TTS_PROVIDER: 'azure', AZURE_SPEECH_KEY: 'synthetic-unit-test-key' });
+    ctl.channel = channel as string;
+    vi.spyOn(session as never, 'startRealtime').mockResolvedValue(true as never);
+    vi.spyOn(session as never, 'engineGreets').mockReturnValue(false as never);
+    globalThis.fetch = vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(bytes as number) })) as unknown as typeof fetch;
+    await session.fetch(upgradeRequest()); const socket = serverSockets[0];
+    socket.receive({ type: 'start' }); await flush(100);
+    expect(socket.countOf('ready')).toBe(0); expect(socket.binaryCount()).toBe(0);
+    expect(socket.countOf('error')).toBe(1); expect(socket.countOf('ended')).toBe(1);
+    expect(callUpdates().some(w => w.args.includes('failed'))).toBe(true);
+    expect(callUpdates().some(w => w.args.includes('Telephone greeting audio must be valid PCM and no longer than 10 seconds. Shorten the greeting and retry.'))).toBe(true);
+  });
+  it('preserves browser synthesized audio above the carrier frame limit', async () => {
+    const { session } = newSession('realtime', {}, { DEFAULT_TTS_PROVIDER: 'azure', AZURE_SPEECH_KEY: 'synthetic-unit-test-key' });
+    vi.spyOn(session as never, 'startRealtime').mockResolvedValue(true as never);
+    vi.spyOn(session as never, 'engineGreets').mockReturnValue(false as never);
+    const audio = new ArrayBuffer(480002);
+    globalThis.fetch = vi.fn(async () => ({ ok: true, arrayBuffer: async () => audio })) as unknown as typeof fetch;
+    await session.fetch(upgradeRequest()); const socket = serverSockets[0];
+    socket.receive({ type: 'start' }); await flush(100);
+    expect(socket.countOf('ready')).toBe(1); expect(socket.binaryCount()).toBe(1);
+    expect(socket.countOf('error')).toBe(0); expect(socket.sent).toContain(audio);
+    socket.receive({ type: 'hangup' }); await flush(100);
+  });
+});

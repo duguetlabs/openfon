@@ -19,7 +19,7 @@ import type { RealtimeConfig } from './realtime-providers';
 import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './prompt';
 import type { PromptKnowledgeItem } from './prompt';
 import { loadCallKnowledge } from './call-knowledge';
-import { parseRealtimeMessage, decodeRealtimeAudio, RealtimeInputError, transcriptBytes, MAX_TRANSCRIPT_FIELD_BYTES, MAX_CALL_TRANSCRIPT_BYTES } from './realtime-input';
+import { parseRealtimeMessage, decodeRealtimeAudio, RealtimeInputError, transcriptBytes, MAX_TRANSCRIPT_FIELD_BYTES, MAX_CALL_TRANSCRIPT_BYTES, MAX_REALTIME_AUDIO_BYTES } from './realtime-input';
 import { chatComplete, detectLang, isFarewell, isVocabEcho, LlmConfigError, normalizeLang, piperVoiceFor, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
 
 // WebSocket binary payloads vary by runtime: ArrayBuffer, ArrayBufferView, or Blob.
@@ -603,6 +603,14 @@ export class CallSession implements DurableObject {
         const voice = voiceForReply(this.env, this.lang, this.settings!.language, this.settings!.voice || '');
         const audio = await synthesize(this.env, greeting, voice, 'pcm24');
         if (this.ended) return; // caller hung up while synthesis was pending
+        // Carrier adapters admit one PCM24 frame of at most ten seconds.
+        // Reject before ready instead of releasing input or bursting split
+        // frames into their bounded playback queues. Browser audio is unchanged.
+        if (this.requiresCarrierAudio && audio &&
+          (audio.byteLength > MAX_REALTIME_AUDIO_BYTES || audio.byteLength % 2 !== 0)) {
+          await this.failCarrierAudio('Telephone greeting audio must be valid PCM and no longer than 10 seconds. Shorten the greeting and retry.');
+          return;
+        }
         if (this.requiresCarrierAudio && !audio?.byteLength) {
           await this.failCarrierAudio('Telephone greeting audio could not be generated.');
           return;
