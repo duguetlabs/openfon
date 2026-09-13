@@ -336,11 +336,19 @@ describe('Calm Studio API foundation', () => {
   let db: SqliteD1;
   let env: Env;
 
-  beforeEach(() => {
+  beforeEach(({ task }) => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-10T12:00:00Z'));
     db = new SqliteD1();
-    applyMigrations(db);
+    // These fixtures model old-worker writes before the0016 barrier. Current
+    // post-barrier refusal and new API paths are covered by barrier regressions.
+    const historical = task.name.startsWith('promotes a fresh draft when an old worker') ||
+      task.name.startsWith('self-heals invalid old-worker essentials') ||
+      task.name.startsWith('reconciles legacy workspaces and profiles created') ||
+      task.name.startsWith('reconciles mixed-version settings before direct') ||
+      task.name.startsWith('applies legacy profile engine fields without restoring') ||
+      task.name.startsWith('rejects invalid historical preset and profile languages');
+    if (historical) applyMigrations(db, 1, 15); else applyMigrations(db);
     db.exec(`
       INSERT INTO users (id, email, password_hash) VALUES
         ('user-1', 'one@example.com', 'hash'),

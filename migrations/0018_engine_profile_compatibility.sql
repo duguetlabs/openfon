@@ -1,5 +1,5 @@
--- Run this migration atomically: the consistency check, guards and scrub are
--- one compatibility barrier for Workers that still copy profile credentials.
+-- Compatibility guards for installations with original or guarded0016.
+-- Execute these statements in one atomic transaction.
 -- RAISE is trigger-only in SQLite. Conditional malformed JSON makes this
 -- read-only precondition fail before any DDL, even when there are no profiles.
 -- On failure, reconcile missing/mismatched provider rows explicitly; do not
@@ -10,7 +10,7 @@ SELECT CASE WHEN EXISTS (
   WHERE provider.business_id IS NULL
      OR legacy.llm_base_url IS NOT provider.llm_base_url
      OR legacy.llm_api_key IS NOT provider.llm_api_key
-) THEN json('OPENFON_0016_PROVIDER_CREDENTIAL_MISMATCH') ELSE NULL END;
+) THEN json('OPENFON_0018_PROVIDER_CREDENTIAL_MISMATCH') ELSE NULL END;
 
 -- New handlers update provider_settings first in the same atomic batch.
 -- Old requests may keep credentials, but cannot change them after this barrier.
@@ -26,7 +26,7 @@ BEGIN
   SELECT RAISE(ABORT, 'OPENFON_PROVIDER_CREDENTIAL_WRITE_REQUIRES_CURRENT_WORKER');
 END;
 
--- In-flight old profile writers cannot repopulate snapshots after the scrub.
+-- Reject old profile writers that attempt to store credential snapshots.
 CREATE TRIGGER IF NOT EXISTS engine_profile_credentials_insert_guard
 BEFORE INSERT ON engine_profiles
 WHEN NEW.llm_base_url <> '' OR NEW.llm_api_key <> ''
@@ -42,5 +42,8 @@ BEGIN
 END;
 
 -- Preserve profile IDs, behavioral fields, timestamps and current credentials.
+-- Existing0017 quotas apply: refusal rolls back this entire migration. Temporary
+-- quota exhaustion needs a later window; >400 rows/workspace needs guarded,
+-- bounded recovery first. Never reset quotas or silently skip the migration.
 UPDATE engine_profiles SET llm_api_key = '', llm_base_url = ''
 WHERE llm_api_key <> '' OR llm_base_url <> '';

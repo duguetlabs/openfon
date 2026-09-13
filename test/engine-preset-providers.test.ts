@@ -12,8 +12,11 @@ async function request(path: string, body?: unknown, token = 's1', method = body
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   }), env, { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext);
 }
-beforeEach(() => {
-  db = new SqliteD1(); applyMigrations(db);
+beforeEach(({ task }) => {
+  db = new SqliteD1();
+  // Historical credential seeds must precede the compatibility barrier.
+  const historical = task.name.startsWith('legacy editing scrubs') || task.name.startsWith('0016 removes');
+  if (historical) applyMigrations(db, 1, 15); else applyMigrations(db);
   db.exec(`INSERT INTO users(id,email,password_hash) VALUES ('u1','one@example.test','hash'),('u2','two@example.test','hash');
     INSERT INTO sessions(token,user_id,expires_at) VALUES ('s1','u1','2099-01-01'),('s2','u2','2099-01-01');
     INSERT INTO businesses(id,user_id,slug,name,description) VALUES ('b1','u1','one','One','Workshop'),('b2','u2','two','Two','Workshop');

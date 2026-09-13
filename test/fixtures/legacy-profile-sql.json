@@ -1,0 +1,6 @@
+{
+  "commit": "eb13a19353a4fc9521711443fadada7ffc4588e4",
+  "apply": "UPDATE agent_settings SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_base_url=?, llm_api_key=?, llm_model=? WHERE business_id=?",
+  "insert": "INSERT INTO engine_profiles (id, business_id, name, engine, realtime_model, realtime_voice, language, voice, llm_base_url, llm_api_key, llm_model)\n     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "update": "UPDATE engine_profiles SET name=?, engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_base_url=?, llm_api_key=?, llm_model=? WHERE id=?"
+}
