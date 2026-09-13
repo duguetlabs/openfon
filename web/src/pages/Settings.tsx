@@ -52,8 +52,9 @@ export default function Settings() {
   const [profiles, setProfiles] = useState<EngineProfile[]>([]);
   const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
   const [newProfileName, setNewProfileName] = useState('');
-  const profileNameBeforeEdit = useRef(new Map<string, string>());
+  const profileSavedNames = useRef(new Map<string, string>());
   const profileEditVersion = useRef(new Map<string, number>());
+  const profileRenameRequests = useRef(new Map<string, { queued?: { name: string; version: number | undefined } }>());
   const loaded = useRef<ReturnType<typeof settingsSnapshot> | null>(null);
 
   useEffect(() => {
@@ -71,7 +72,10 @@ export default function Settings() {
       setServices(current => previous && JSON.stringify(current) !== JSON.stringify(previous.services) ? current : incoming.services);
       setFaqs(current => previous && JSON.stringify(current) !== JSON.stringify(previous.faqs) ? current : incoming.faqs);
       setClosures(current => previous && JSON.stringify(current) !== JSON.stringify(previous.closures) ? current : incoming.closures);
-      void api.profiles(business.id).then(setProfiles).catch(() => {});
+      void api.profiles(business.id).then(rows => {
+        for (const profile of rows) profileSavedNames.current.set(profile.id, profile.name);
+        setProfiles(rows);
+      }).catch(() => {});
       void api.voices().then(setVoiceCatalog).catch(() => {});
     }).catch((e) => { if (active) setError(e instanceof Error ? e.message : 'Could not load settings'); });
     return () => { active = false; };
@@ -110,19 +114,32 @@ export default function Settings() {
     } finally { setSaving(false); }
   }
 
-  function renameProfile(id: string, name: string) {
-    const previous = profileNameBeforeEdit.current.get(id);
-    if (name.trim() === previous?.trim()) return;
-    const version = profileEditVersion.current.get(id);
-    void api.updateProfile(id, { name }).catch(err => {
-      if (profileEditVersion.current.get(id) !== version) return;
-      setError(err instanceof Error ? err.message : 'Rename failed');
-      if (previous !== undefined) {
-        setProfiles(current => current.map(profile => profile.id === id && profile.name === name
-          ? { ...profile, name: previous } : profile));
-        profileNameBeforeEdit.current.set(id, previous);
+  async function renameProfile(id: string, name: string) {
+    const edit = { name, version: profileEditVersion.current.get(id) };
+    // Serialize per profile so each queued edit uses the last acknowledged name,
+    // never a draft captured while an earlier request was still pending.
+    const running = profileRenameRequests.current.get(id);
+    if (running) { running.queued = edit; return; }
+    const request: { queued?: typeof edit } = { queued: edit };
+    profileRenameRequests.current.set(id, request);
+    try {
+      while (request.queued) {
+        const next = request.queued;
+        request.queued = undefined;
+        const confirmed = profileSavedNames.current.get(id);
+        const normalized = next.name.trim() || confirmed || '';
+        if (normalized === confirmed) continue;
+        try {
+          await api.updateProfile(id, { name: normalized });
+          profileSavedNames.current.set(id, normalized);
+        } catch (err) {
+          if (profileEditVersion.current.get(id) !== next.version) continue;
+          setError(err instanceof Error ? err.message : 'Rename failed');
+          if (confirmed !== undefined) setProfiles(current => current.map(profile =>
+            profile.id === id && profile.name === next.name ? { ...profile, name: confirmed } : profile));
+        }
       }
-    });
+    } finally { profileRenameRequests.current.delete(id); }
   }
 
   const profileFields = ['engine', 'realtime_model', 'realtime_voice', 'language', 'voice', 'llm_model'] as const;
@@ -332,7 +349,7 @@ export default function Settings() {
                 className="min-w-32 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-ink outline-none hover:border-line-strong focus:border-iris focus:bg-surface focus:ring-[3px] focus:ring-iris/15"
                 value={p.name}
                 readOnly={Boolean(p.preview_only)}
-                onFocus={() => profileNameBeforeEdit.current.set(p.id, p.name)}
+                onFocus={() => { if (!profileSavedNames.current.has(p.id)) profileSavedNames.current.set(p.id, p.name); }}
                 onChange={(e) => {
                   profileEditVersion.current.set(p.id, (profileEditVersion.current.get(p.id) ?? 0) + 1);
                   setProfiles(profiles.map((x) => (x.id === p.id ? { ...x, name: e.target.value } : x)));
