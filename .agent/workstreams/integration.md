@@ -1,12 +1,40 @@
 # Integration checkpoint
 
-- Status: In progress — 8bd4204 published/frozen; fresh exact-head CI and both reviewers pending
+## Kataleptic resumed release — 2026-09-13
+- Owner: replacement openfon-integration, Kataleptic/Astra medium; master01a09c4b-dfb7-7663-8b51-15d3045020d9. Integration alone publishes/merges and grants validation slots.
+- Local HEAD750530a; remote PR16 OPEN8bd42045d79bcecde693e0c64eb605926e45cdc0. Existingac80e7d29/29 Chrome/workerd fixture evidence reused; no fixture rerun.
+- Current sole slot: integration RELEASED after all bounded processes exited. Realtime source-ready and next queued after vacancy check. QA source-only; presets/Telnyx released. No review inference running or authorized before next publication.
+- Runner reconciliation uses process command classification plus reserved listeners8810–8824/9250–9256. Original68 processes were Codex/MCP/account helpers, no application/official review runner; each grant followed explicit release and fresh vacancy check. No process killed.
+
+Completed assembly:
+- Telnyx95bed341→1e6695d clean: cleanup-only terminal alarm; atomic final UPDATE preserves existing Telnyx failure/outcome/code/message while finalizing content. Owner198 focused/types/persisted workerd PASS and original scheduler/finalizer negatives retained. Minimal seeded owner/calls runtime proves write ordering, not live ingress. Integrated Asterisk salvage preserved. No delayed35minute reprojection dependency.
+- Presets9167459→4e673a8 and23dc57f→750530a: activation compatibility plus provider presence/selection and engine/model/voice pinned in conditional UPDATE; instance speech key rejection/clearing and runtime-effective configured flags. Sole activation conflict preserves integrated Unicode essentials and UPDATE RETURNING. Owner91 API/types PASS, six pre-race negatives fail200vs409, prior85 API/one actual Chrome browser PASS and11 old negatives retained. No repeated browser after race-only correction.
+
+Current integration changes:
+- Studio trusts successful mutation response before follow-up GET; separate read retry preserves saved/lifecycle state and newer unsaved fields. Three operation browser regressions; clean saves disabled/guarded.
+- Account deletion permits only explicit modern unconnected web tickets with no saved turns/reservation.0020 adds browser_claim_required NOT NULL DEFAULT0 CHECK0/1; exactly two new live/test issuers write literal1. Historical/old-writer rows never promoted by migration/bootstrap. Connected/non-web/unreleased reservations remain blocked.
+- QA disproved assistant-ID provenance because0008/bootstrap backfills it; that abandoned approach was replaced before validation. docs/migration-compatibility.md requires full cutover from preclaim handlers, forbids gradual mix and preclaim rollback until modern tickets/sessions drained. No inferred deployment authorization.
+- Fixed34 account tests and worker/web types PASS; original unused-ticket regression fails409vs200. Held lookup→delete→claim409/noDO, connect-before-delete refusal, old migration8–20/bootstrap marker0, saved turns and reservations covered. Optimized0006→0020 preservation/restore/rollback/reupgrade PASS; missing0020 rejected by default consecutive-target guard.
+- Original Studio save probe fails missing saved/refresh-specific state. Fixed save plus existing editor case PASS; publish/pause first run missed interception because glob excluded slash suffix. Corrected fixture only; publish/pause two-case recheck2/2PASS. Combined meaningful browser coverage4 cases PASS across original fixed2/recheck2; not a fabricated single4/4run. No timeout/production limit change.
+- Preserved validation failures: missing0020 migrationNames entry initially33fail/1pass (invalid negative); two incomplete-essential race fixture attempts33pass/1fail. Logs /tmp/openfon-resume-*-registry-failure.log and *-fixture-failure*.log. Actual negative/fixed/type/rehearsal logs /tmp/openfon-resume-{account-negative,account-fixed,types,rehearsal20,assistant-negative,assistant-fixed,assistant-recheck}.log. No overwritten failure evidence.
+
+Realtime source contract/security3998401068:
+- Owner output/event handling plus web/src/voice.ts and both media adapters; Telnyx final UPDATE excluded. Source artifact .agent/artifacts/realtime-output-ac80.patch in realtime worktree; exactac80 snapshot/private/tmp/openfon-8bd-audio-8brme6jx authoritative.
+- Predecode byte/event limits, bounded random post-frame/control receipt window and timeout, strict pairing, bounded browser bytes/nodes, carrier cross-generation500-pair debt/random flush barriers, bounded response ID/socket accounting. Mere receipt is not playback. QA source findings on predictable ACKs, control floods, flush debt, old callback generations and response.done accounting addressed in source; runtime still pending. Matching clients required; missing receipt support fails closed.
+
+Review/release gates:
+- Exact8bd hosted security5189114132/code5189120001 completed with five findings:3998401068(realtime),3998403962/3971(presets),3998403967/3974(integration). All verified, correction/independent closure underway.
+- Both CI34732689704/34732714063 browser FAILED signup quota; other check/scoring/realtime jobs SUCCESS, deploy SKIPPED. Existing fixture fix only local.
+- Official5650196718 completed unchanged, no security concerns but Alarm Churn/no clean-major verdict. No current clean reviewer clearance; no duplicate inference.
+- Next: finish current bounded slot/release; realtime serial negatives/fixed/types/runtime, integrate exact patch, combined appropriate validation then independent assembled QA. Only then docs-final publish/close-reopen/hosted code+security plus one genuine unchanged QA-owned PR-Agent full review and fresh CI. Resolve/decline every verified finding before squash merge/delete. Root/research/stagingb15/0012/production preserved.
+
+- Status: In progress — resumed correction round; remote 8bd4204 reviewed with findings
 - Owner: openfon-integration, gpt-6-astra / medium
 - Branch/worktree: codex/integrated-release, /Users/cristian/projects/fun/openfon-worktrees/integration
 - Updated: 2026-09-13
-- Application candidate: QA-closed1e2869c; published8bd4204 docs-only over it
+- Application candidate: local750530a plus integration source deltas; realtime/assembled QA pending
 - Published PR16 head: 8bd42045d79bcecde693e0c64eb605926e45cdc0 (docs-only over QA-closed1e2869c; frozen for required reviews)
-- Validation slot: integration released full29browser; Telnyx granted sole alarm scheduler verification
+- Validation slot: integration released; realtime next after vacancy check
 - Ports: integration8814/9254, optional real-PBX proxy8824; never8787
 - Read first: root orchestration-rules/current-task/manifest (read-only), this file, docs/launch/readiness.md
 - Earlier detailed milestones and failures remain in this file's history through ccdd85d and the linked original review reports. This checkpoint records current state.

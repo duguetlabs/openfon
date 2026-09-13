@@ -13,7 +13,7 @@ import pathlib
 import sqlite3
 import tempfile
 
-RELEASE_MIGRATION_TARGET = 19
+RELEASE_MIGRATION_TARGET = 20
 
 
 def require(condition, message):
@@ -95,6 +95,9 @@ def main():
         before_dump = '\n'.join(db.iterdump())
         for path in migrations[6:]:
             apply_migration(db, path.read_text())
+        if args.through >= 20:
+            require(db.execute('SELECT COUNT(*) FROM calls WHERE browser_claim_required != 0').fetchone()[0] == 0,
+                    'Historical tickets must retain unknown claim provenance')
         require(preserved(db) == upgraded_expected, 'Legacy behavior changed or credential scrub missing')
         require(db.execute(f"SELECT {','.join(old_call_cols)} FROM calls WHERE id='history'").fetchone() == history, 'Rehearsal check failed: db.execute(f"SELECT {\',\'.join(old_call_cols)} FROM calls WHERE id=\'history\'").fetchone() == history')
         require(db.execute('SELECT public_slug FROM assistants ORDER BY public_slug').fetchall() == [('legacy-public-slug',), ('legacy-second-slug',)], "Rehearsal check failed: db.execute('SELECT public_slug FROM assistants ORDER BY public_slug').fetchall() == [('legacy-public-slug',), ('legacy-second-slug',)]")

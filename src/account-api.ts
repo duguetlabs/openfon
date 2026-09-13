@@ -182,12 +182,17 @@ export function registerAccountApi(app: App): void {
     const user = await c.env.DB.prepare('SELECT password_hash FROM users WHERE id=?').bind(userId).first<{ password_hash: string }>();
     if (!user || !await verifyPassword(body.currentPassword, user.password_hash)) return c.json({ error: 'Current password is incorrect.' }, 403);
     // FK cascades remove sessions, workspaces, calls, transcripts, assistants,
-    // presets and knowledge. Refuse atomically if a live or pending call exists;
+    // presets and knowledge. Unclaimed browser tickets have no running owner.
+    // Old workers can own NULL-connected rows before their first saved turn.
+    // Only explicit modern ticket provenance allows the unused-ticket exception;
+    // migration/bootstrap never backfill it from mutable assistant IDs.
+    // Refuse atomically if a session or carrier reservation may exist;
     // deleting its database row cannot stop a running Durable Object safely.
     const deleted = await c.env.DB.prepare(`DELETE FROM users WHERE id=? AND password_hash=?
       AND EXISTS (SELECT 1 FROM sessions WHERE token=? AND user_id=? AND expires_at>?)
       AND NOT EXISTS (SELECT 1 FROM calls JOIN businesses ON businesses.id=calls.business_id
-        WHERE businesses.user_id=? AND (calls.status='active'
+        WHERE businesses.user_id=? AND ((calls.status='active' AND (calls.channel!='web' OR calls.connected_at IS NOT NULL OR calls.browser_claim_required!=1
+            OR EXISTS (SELECT 1 FROM call_turns WHERE call_turns.call_id=calls.id)))
           OR (calls.reserved_at IS NOT NULL AND calls.carrier_released_at IS NULL))) RETURNING id`)
       .bind(userId, user.password_hash, getCookie(c, 'ofs') ?? '', userId, new Date().toISOString(), userId).first<{ id: string }>();
     // D1 meta.changes includes cascades; RETURNING identifies the deleted owner

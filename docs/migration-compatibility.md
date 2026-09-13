@@ -76,3 +76,21 @@ Already-reconstructed historical rows cannot be identified from current data, so
 this is not a complete retrospective classification of earlier activation.
 Existing assistant write quotas remain enforced; a refused migration must wait
 for available quota rather than bypassing its triggers.
+
+## Browser ticket ownership (0020)
+
+Migration 0020 adds `browser_claim_required` with default 0 and never backfills
+existing tickets. New public and private browser-ticket issuers set it to 1.
+Account deletion can cascade an unused modern browser ticket only when it has no
+connection, saved turns, or unreleased carrier reservation. Old or unknown active
+tickets retain the conservative refusal, including before their first turn and
+after assistant-ID repair. The atomic WebSocket claim and account deletion
+serialize: a deleted ticket cannot dispatch a new call session.
+
+Do not gradually mix this issuer with pre-0007 Worker versions whose WebSocket
+handler does not claim `connected_at`. Use a full Worker cutover when upgrading
+those versions; old in-flight sessions keep their default-0 tickets and remain
+protected. Rollbacks to pre-0007 require draining modern tickets/sessions first.
+The column is additive for old writers, but its deletion exception assumes the
+new ticket is served by a claim-capable WebSocket handler. Migration and staging
+validation do not authorize a production deployment.

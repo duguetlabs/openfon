@@ -1217,8 +1217,8 @@ app.post('/api/public/call/start', bodyLimit({
   // when the sweep retires it, not before.
   const callId = newId();
   const claim = await c.env.DB.prepare(
-    `INSERT INTO calls (id, business_id, assistant_id, channel, caller_id, environment, direction)
-     SELECT ?, ?, ?, 'web', ?, 'live', 'inbound'
+    `INSERT INTO calls (id, business_id, assistant_id, channel, caller_id, environment, direction, browser_claim_required)
+     SELECT ?, ?, ?, 'web', ?, 'live', 'inbound', 1
       WHERE (SELECT COUNT(*) FROM calls
               WHERE business_id = ? AND environment = 'live' AND started_at > datetime('now', '-1 day')
                 AND NOT (status = 'abandoned' AND connected_at IS NULL AND reserved_at IS NULL)) < ?`

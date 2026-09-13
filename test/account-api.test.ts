@@ -22,7 +22,8 @@ beforeEach(async ({ task }) => {
   db = new SqliteD1();
   // Export must also exclude credentials from historical, pre-barrier rows.
   // Current installations reject creating these snapshots altogether.
-  if (task.name.startsWith('exports historical owned data')) applyMigrations(db, 1, 15);
+  if (task.name === 'refuses pre-claim live sessions after migration and bootstrap backfill') applyMigrations(db, 1, 7);
+  else if (task.name.startsWith('exports historical owned data')) applyMigrations(db, 1, 15);
   else applyMigrations(db);
   env = { ...fakeEnv(), DB: db as unknown as D1Database };
   oldHash = await hashPassword(password);
@@ -226,9 +227,93 @@ describe('account self service', () => {
   it('requires confirmation and refuses deletion while a call is active', async () => {
     expect((await call('/api/me/account', 'DELETE', { currentPassword: password, confirmation: 'delete' })).status).toBe(400);
     expect((await call('/api/me/account', 'DELETE', { currentPassword: 'wrong', confirmation: 'DELETE' })).status).toBe(403);
-    db.database.prepare('INSERT INTO calls (id,business_id) VALUES (?,?)').run('call-owner', 'biz-owner');
+    db.database.prepare('INSERT INTO calls (id,business_id,connected_at) VALUES (?,?,CURRENT_TIMESTAMP)').run('call-owner', 'biz-owner');
     expect((await call('/api/me/account', 'DELETE', { currentPassword: password, confirmation: 'DELETE' })).status).toBe(409);
     expect(db.database.prepare('SELECT id FROM users WHERE id=?').get('owner')).toEqual({ id: 'owner' });
+  });
+
+  it('deletes unused browser tickets and rejects their later WebSocket claim', async () => {
+    const bootstrap = await (await call('/api/me/bootstrap')).json() as { assistants: { id: string }[] };
+    db.database.prepare("INSERT INTO calls(id,business_id,assistant_id,status,channel,browser_claim_required) VALUES ('unused-ticket','biz-owner',?,'active','web',1)").run(bootstrap.assistants[0].id);
+    expect((await call('/api/me/account', 'DELETE', { currentPassword: password, confirmation: 'DELETE' })).status).toBe(200);
+    expect(db.database.prepare("SELECT id FROM calls WHERE id='unused-ticket'").get()).toBeUndefined();
+    const upgrade = await worker.fetch(new Request('https://openfon.test/ws/call/unused-ticket', { headers: { Upgrade: 'websocket' } }), env, fakeCtx);
+    expect(upgrade.status).toBe(404);
+    expect(db.database.prepare("SELECT id FROM users WHERE id='other'").get()).toEqual({ id: 'other' });
+  });
+
+  it('atomically refuses deletion if a browser ticket connects before the delete', async () => {
+    const bootstrap = await (await call('/api/me/bootstrap')).json() as { assistants: { id: string }[] };
+    db.database.prepare("INSERT INTO calls(id,business_id,assistant_id,status,channel,browser_claim_required) VALUES ('racing-ticket','biz-owner',?,'active','web',1)").run(bootstrap.assistants[0].id);
+    let raced = false;
+    db.hook = sql => {
+      if (raced || !sql.startsWith('DELETE FROM users')) return;
+      raced = true;
+      db.database.prepare("UPDATE calls SET connected_at=datetime('now') WHERE id='racing-ticket'").run();
+    };
+    expect((await call('/api/me/account', 'DELETE', { currentPassword: password, confirmation: 'DELETE' })).status).toBe(409);
+    expect(db.database.prepare("SELECT id FROM users WHERE id='owner'").get()).toEqual({ id: 'owner' });
+  });
+
+  it('rejects a held WebSocket lookup whose ticket is deleted before its claim', async () => {
+    const bootstrap = await (await call('/api/me/bootstrap')).json() as { assistants: { id: string }[] };
+    db.database.prepare("UPDATE assistants SET name='Claim race',persona='Synthetic claim race',language='en',state='active' WHERE id=?").run(bootstrap.assistants[0].id);
+    db.database.prepare("INSERT INTO calls(id,business_id,assistant_id,status,channel,browser_claim_required) VALUES ('held-ticket','biz-owner',?,'active','web',1)").run(bootstrap.assistants[0].id);
+    let lookedUp!: () => void;
+    let release!: () => void;
+    const observed = new Promise<void>(resolve => { lookedUp = resolve; });
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const prepare = db.prepare.bind(db);
+    vi.spyOn(db, 'prepare').mockImplementation(sql => {
+      const statement = prepare(sql);
+      if (sql.includes('SELECT calls.id, calls.business_id, calls.assistant_id')) {
+        const first = statement.first.bind(statement);
+        statement.first = async <T>() => {
+          const row = await first<T>();
+          lookedUp();
+          await held;
+          return row;
+        };
+      }
+      return statement;
+    });
+    const dispatch = vi.spyOn(env.CALL_SESSION, 'get');
+    const upgrade = worker.fetch(new Request('https://openfon.test/ws/call/held-ticket', { headers: { Upgrade: 'websocket' } }), env, fakeCtx);
+    await observed;
+    try {
+      expect((await call('/api/me/account', 'DELETE', { currentPassword: password, confirmation: 'DELETE' })).status).toBe(200);
+    } finally { release(); }
+    expect((await upgrade).status).toBe(409);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(db.database.prepare("SELECT id FROM calls WHERE id='held-ticket'").get()).toBeUndefined();
+  });
+
+  it('refuses pre-claim live sessions after migration and bootstrap backfill', async () => {
+    db.database.prepare("INSERT INTO calls(id,business_id,status,channel) VALUES ('old-live','biz-owner','active','web')").run();
+    applyMigrations(db, 8, 20);
+    expect((await call('/api/me/bootstrap')).status).toBe(200);
+    const row = db.database.prepare("SELECT assistant_id,connected_at,browser_claim_required FROM calls WHERE id='old-live'").get();
+    expect(row?.assistant_id).not.toBeNull();
+    expect(row?.connected_at).toBeNull();
+    expect(row?.browser_claim_required).toBe(0);
+    expect((await call('/api/me/account', 'DELETE', { currentPassword: password, confirmation: 'DELETE' })).status).toBe(409);
+  });
+
+  it('refuses ambiguous legacy sessions before their first turn', async () => {
+    db.database.prepare("INSERT INTO calls(id,business_id,status,channel) VALUES ('legacy-web','biz-owner','active','web')").run();
+    expect((await call('/api/me/account', 'DELETE', { currentPassword: password, confirmation: 'DELETE' })).status).toBe(409);
+  });
+
+  it('refuses NULL-connected calls with saved conversation evidence', async () => {
+    const bootstrap = await (await call('/api/me/bootstrap')).json() as { assistants: { id: string }[] };
+    db.database.prepare("INSERT INTO calls(id,business_id,assistant_id,status,channel,browser_claim_required) VALUES ('saved-turn','biz-owner',?,'active','web',1)").run(bootstrap.assistants[0].id);
+    db.database.prepare("INSERT INTO call_turns(call_id,role,text) VALUES ('saved-turn','caller','Already talking')").run();
+    expect((await call('/api/me/account', 'DELETE', { currentPassword: password, confirmation: 'DELETE' })).status).toBe(409);
+  });
+
+  it('retains the safety refusal for unconnected non-browser calls', async () => {
+    db.database.prepare("INSERT INTO calls(id,business_id,status,channel) VALUES ('legacy-carrier','biz-owner','active','twilio')").run();
+    expect((await call('/api/me/account', 'DELETE', { currentPassword: password, confirmation: 'DELETE' })).status).toBe(409);
   });
 
   it('atomically blocks deletion when a carrier reservation races the account request', async () => {

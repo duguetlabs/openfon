@@ -1243,8 +1243,8 @@ export function registerStudioApi(app: StudioApp): void {
     let inserted: D1Result;
     try {
       inserted = await c.env.DB.prepare(
-        `INSERT INTO calls (id, business_id, assistant_id, channel, caller_id, environment, direction, started_at)
-         SELECT ?, ?, ?, 'web', ?, 'test', 'inbound', datetime(?, 'unixepoch')
+        `INSERT INTO calls (id, business_id, assistant_id, channel, caller_id, environment, direction, started_at, browser_claim_required)
+         SELECT ?, ?, ?, 'web', ?, 'test', 'inbound', datetime(?, 'unixepoch'), 1
           WHERE (SELECT COUNT(*) FROM calls
                   WHERE business_id=? AND environment='test'
                     AND started_at > datetime(?, 'unixepoch', '-1 day')) < ?`
