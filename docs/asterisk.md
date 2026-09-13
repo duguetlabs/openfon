@@ -157,8 +157,17 @@ Before route lookup or PBKDF2, each Worker isolate has one constant-size budget:
 checks. Invalid known-route attempts consume the same budget as valid ones.
 Excess attempts fail authentication without database access, writes, durable
 objects, attacker-indexed keys, or an in-memory wait queue. Database/KDF failures
-release concurrency; they do not refund the attempt. The existing authenticated
-D1 admission limit still runs only after successful verification. The public route is the sole PBKDF2 verifier and consumes one budget start.
+release concurrency; they do not refund the attempt. Public ingress uses a separate constant-size budget with the same burst of 16,
+2 starts/second and 4 in-flight bounds, held through authentication, workspace
+preflight and the owner response. Excess ingress receives 429 without database
+access. It creates no D1 rate counters or per-IP/route entries. After authentication,
+a read-only workspace concurrency/daily-quota preflight rejects known-full
+workspaces before creating/contacting a durable owner. This check is advisory:
+the owner retains atomic reservation quotas and fresh credential-version checks
+for races. A known-full public refusal returns 403, including duplicate attempts;
+when capacity is available the owner still rejects replay with 409. The preflight uses the owner's occupied-call and rolling-day rules;
+released calls still count toward the daily quota, while unreserved/unconnected
+abandoned calls do not. The public route is the sole PBKDF2 verifier and consumes one budget start.
 It constructs a new request through the AsteriskCall binding with a version of
 the verified route assignment and salted credential; it never forwards the
 caller's admission header or password. The owner performs a fresh enabled-route,

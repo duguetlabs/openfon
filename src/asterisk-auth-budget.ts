@@ -15,3 +15,7 @@ export class AsteriskAuthBudget {
   }
 }
 export const asteriskAuthBudget = new AsteriskAuthBudget();
+
+// Separate from KDF starts: hold one scalar slot through the whole ingress
+// request, including read-only policy checks and a pending owner fetch.
+export const asteriskIngressBudget = new AsteriskAuthBudget();

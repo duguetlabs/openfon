@@ -118,7 +118,7 @@ export default {...worker,async fetch(request,env,ctx){
   }
   allowReady=false;
   const response=await upgrade('first');assert.equal(response.status,101);carrier=response.webSocket;carrier.accept();carrier.binaryType='arraybuffer';
-  assert.equal((await upgrade('first')).status,409,'duplicate channel rejected');
+  assert.equal((await upgrade('first')).status,403,'known-full workspace rejects duplicate before owner contact');
   assert.equal((await upgrade('second')).status,403,'concurrent call cap');
   const received=[];
   carrier.addEventListener('message',event=>{

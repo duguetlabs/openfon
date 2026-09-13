@@ -68,7 +68,7 @@ it('public unauthorized handshakes make zero D1 writes and authorized requests s
   const request=(auth:string)=>new Request('https://local.test/ws/asterisk/pbx?call=fixture',{headers:{Upgrade:'websocket',Authorization:auth}});
   expect((await worker.fetch(request('Basic '+btoa('pbx:'+'b'.repeat(32))),env,fakeCtx)).status).toBe(401);
   expect(writes).toEqual([]);expect(fetch).not.toHaveBeenCalled();
-  expect((await worker.fetch(request(authorization),env,fakeCtx)).status).toBe(204);expect(fetch).toHaveBeenCalledTimes(1);expect(writes).toHaveLength(1);
+  expect((await worker.fetch(request(authorization),env,fakeCtx)).status).toBe(204);expect(fetch).toHaveBeenCalledTimes(1);expect(writes).toEqual([]);
 });
 it('stdin provisioning produces helper-compatible salted verifiers without echoing the password',async()=>{
   const provision=()=>execFileSync(process.execPath,['scripts/asterisk-credential.mjs'],{input:password+'\n',encoding:'utf8'}).trim();

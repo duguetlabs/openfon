@@ -1,4 +1,5 @@
-import { asteriskAuthBudget } from './asterisk-auth-budget';
+import { OCCUPIED_CALL_SQL } from './telnyx-admission';
+import { asteriskAuthBudget, asteriskIngressBudget } from './asterisk-auth-budget';
 import { verifyPassword } from './auth';
 import type { Hono } from 'hono';
 import type { Env } from './types';
@@ -47,19 +48,30 @@ export function registerAsteriskRoutes(app: Hono<{ Bindings: Env; Variables: { u
     const route = c.req.param('route');
     const call = c.req.query('call') || '';
     if (!/^[a-zA-Z0-9_-]{1,80}$/.test(route) || !/^[a-zA-Z0-9_.:-]{1,128}$/.test(call)) return c.json({ error: 'Invalid PBX route or call' }, 400);
-    // Rejected public handshakes must not consume the database write budget.
-    const authorization = c.req.header('Authorization') || null;
-    const version = await authorizeAsterisk(c.env, route, authorization);
-    if (!version) return c.json({ error: 'Invalid PBX authorization' }, 401, { 'WWW-Authenticate': 'Basic realm="OpenFon PBX"' });
-    const source = c.req.header('CF-Connecting-IP')?.trim() || 'unknown';
-    const admitted = await c.env.DB.prepare(`INSERT INTO rate_counters(bucket,window_start,count) VALUES(?,?,1)
-      ON CONFLICT(bucket,window_start) DO UPDATE SET count=count+1 WHERE count<120 RETURNING count`)
-      .bind(`asterisk:${source}`, Math.floor(Date.now()/60000)*60).first();
-    if (!admitted) return c.json({ error: 'Too many attempts' }, 429);
-    const id = `ast_${await asteriskDigest(`${route}\0${call}`)}`;
-    const stub = c.env.ASTERISK_CALL.get(c.env.ASTERISK_CALL.idFromName(id));
-    return stub.fetch(new Request(`https://internal/media?call=${id}&route=${encodeURIComponent(route)}`, {
-      headers: { Upgrade: 'websocket', [ASTERISK_ADMISSION_HEADER]: version, 'Sec-WebSocket-Protocol': 'media' },
-    }));
+    // Constant-size, nonpersistent guard; no attacker-supplied IP/route keys.
+    const release = asteriskIngressBudget.acquire();
+    if (!release) return c.json({ error: 'Too many attempts' }, 429);
+    try {
+      const authorization = c.req.header('Authorization') || null;
+      const version = await authorizeAsterisk(c.env, route, authorization);
+      if (!version) return c.json({ error: 'Invalid PBX authorization' }, 401, { 'WWW-Authenticate': 'Basic realm="OpenFon PBX"' });
+      // Advisory read-only rejection before any owner identity/storage or D1 write.
+      // Races still resolve at the owner's atomic reservation and fresh version check.
+      const available = await c.env.DB.prepare(`SELECT r.id FROM asterisk_routes r
+        JOIN businesses b ON b.id=r.business_id
+        WHERE r.id=? AND r.enabled=1
+          AND (SELECT COUNT(*) FROM calls WHERE business_id=r.business_id AND environment='live'
+            AND ${OCCUPIED_CALL_SQL})<b.max_concurrent_calls
+          AND (SELECT COUNT(*) FROM calls WHERE business_id=r.business_id AND environment='live'
+            AND started_at>datetime('now','-1 day')
+            AND NOT(status='abandoned' AND connected_at IS NULL AND reserved_at IS NULL))<b.max_calls_per_day`)
+        .bind(route).first();
+      if (!available) return c.json({ error: 'PBX workspace unavailable' }, 403);
+      const id = `ast_${await asteriskDigest(`${route}\0${call}`)}`;
+      const stub = c.env.ASTERISK_CALL.get(c.env.ASTERISK_CALL.idFromName(id));
+      return await stub.fetch(new Request(`https://internal/media?call=${id}&route=${encodeURIComponent(route)}`, {
+        headers: { Upgrade: 'websocket', [ASTERISK_ADMISSION_HEADER]: version, 'Sec-WebSocket-Protocol': 'media' },
+      }));
+    } finally { release(); }
   });
 }

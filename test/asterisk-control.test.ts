@@ -347,3 +347,18 @@ it('credential rotation after the fresh owner check cannot reserve against the c
   expect((await owner().object.fetch(request())).status).toBe(403);
   expect(await db.prepare('SELECT COUNT(*) n FROM calls').first()).toEqual({n:0});
 });
+
+it.each(['concurrency','daily'])('atomic owner quota still rejects a %s race after public preflight',async quota=>{
+  const live=owner();let forwarded=0;
+  env.ASTERISK_CALL={idFromName:(id:string)=>id,get:()=>({fetch:async(internal:Request)=>{
+    forwarded++;
+    db.exec(quota==='concurrency'
+      ? "INSERT INTO calls(id,business_id,channel,environment,reserved_at) VALUES('racer','biz','telnyx','live',datetime('now'))"
+      : "INSERT INTO calls(id,business_id,status,environment) VALUES('racer1','biz','completed','live'),('racer2','biz','completed','live')");
+    return live.object.fetch(internal);
+  }})} as unknown as DurableObjectNamespace;
+  const response=await worker.fetch(new Request('https://local.test/ws/asterisk/pbx?call=race',{headers:{Upgrade:'websocket',Authorization:auth}}),env,fakeCtx);
+  expect(forwarded).toBe(1);expect(response.status).toBe(403);
+  expect(await db.prepare("SELECT COUNT(*) n FROM calls WHERE channel='asterisk'").first()).toEqual({n:0});
+  expect([...live.storage.data]).toEqual([['retired',true]]);
+});
