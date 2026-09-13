@@ -1,4 +1,5 @@
-import { test, expect, type Route } from '@playwright/test';
+import { test, expect } from './fixtures';
+import type { Route } from '@playwright/test';
 
 for (const newerEdit of [false, true]) {
   test(`failed profile rename preserves retry and newer edits (newer=${newerEdit})`, async ({ page }) => {

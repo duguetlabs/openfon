@@ -1,12 +1,12 @@
 # Integration checkpoint
 
-- Status: In progress — all d735 corrections scoped QA closed; next docs-final publication/review freeze
+- Status: In progress — 8bd4204 published/frozen; fresh exact-head CI and both reviewers pending
 - Owner: openfon-integration, gpt-6-astra / medium
 - Branch/worktree: codex/integrated-release, /Users/cristian/projects/fun/openfon-worktrees/integration
 - Updated: 2026-09-13
-- Application candidate: 1e2869c independently scoped QA closed; next docs-only commit records final closure
-- Published PR16 head: d73514ef01d8f5431b772c1c21c5d4809518c1bd (docs-only over QA-closed653a88e; frozen for required reviews)
-- Validation slot: QA explicitly released all final provider probes/runtimes; no local runner
+- Application candidate: QA-closed1e2869c; published8bd4204 docs-only over it
+- Published PR16 head: 8bd42045d79bcecde693e0c64eb605926e45cdc0 (docs-only over QA-closed1e2869c; frozen for required reviews)
+- Validation slot: integration released full29browser; Telnyx granted sole alarm scheduler verification
 - Ports: integration8814/9254, optional real-PBX proxy8824; never8787
 - Read first: root orchestration-rules/current-task/manifest (read-only), this file, docs/launch/readiness.md
 - Earlier detailed milestones and failures remain in this file's history through ccdd85d and the linked original review reports. This checkpoint records current state.
@@ -24,6 +24,16 @@ Realtimec58b17d→42077ab assembled with application hunks clean. Docs conflict 
 Final42077ab direct/gateway and Telnyx native+synthesized actual-workerd smokes PASS, all processes exited. Logs/tmp/openfon-420-direct.log,/tmp/openfon-420-gateway.log,/tmp/openfon-420-telnyx.log. Prior08cc Asterisk/retirement runtime unchanged by later Telnyx/preset/error-event deltas; full813 covers assembled interfaces. Reporting-only rehearsal9/17 previously passed without behavior change. Integration releases sole slot to QA for bounded independent combined closure, no full-suite duplication or official inference until published freeze. Remote5e0 and stagingb15 remain unchanged.
 
 ## Authorization and ownership
+CIfixture fix validated full29/29 actualChrome/workerdPASS1.2m, /tmp/openfon-8bd-browser-fixed.log. Originalthreefile5PASS/1FAIL and bothCI34732689704/34732714063 initial+retry same sixthsignup failure preserved; secondfailedlog /tmp/openfon-8bd-ci2-failed.log. Onlythreefixtureimports changed, no app/assertion/timeouts/limits. Allintegrationprocessesexited; sole slotreleasedandgrantedTelnyxalarmnegative/focused/types/persistedruntime. Hosted8bdreviewsstillrunning, no publicationyet.
+
+CIfixture diagnosis reproduced locally exact8bd: threeprofilefiles sequential5PASS/1FAIL47.2s atsame sixthsignup, account-rate refusal; /tmp/openfon-8bd-signup-negative.log and CIartifactcontexts preserved. Corrected allthree actualsignup profilefiles to existing./fixtures test/expect (Route remains typeimport); StrictModecomponentmock staysbase/noWorkercalls. No assertion/timeout/productionlimit changes. Integrationsole full29browser running /tmp/openfon-8bd-browser-fixed.log, remote8bd unchanged.
+
+Official8bd5650196718 completedunchanged:4chunks568220tokens, no securityconcerns butAlarmChurn finding/nocleanmajor. Telnyx persist terminalmin(cleanupAt,now+30s) cited; ownerassigned verify/narrowdeadline scheduling preserving inbox/commands/reconciliation/outage retry/replay/retirement. Source-onlywhileintegrationCInegative/fixedbrowser slot, then nextsolegrant. CI34732689704failureseparateharnessbudget; no duplicateofficialinference, remote8bdunchanged.
+
+Exact8bd CI34732689704 FAILED browser103658296875 initial+retry atprofile-rename-recovery63 signupBusinessname wait; artifacterrorcontext saysToo manyaccountscreatedfromthisconnection. Two newprofilefiles importbasePlaywright instead of existingfixtures limiterIsolation, sharing signupbucket; verified source. Logs /tmp/openfon-8bd-ci-failed.log, downloadedbrowser-test-failures /tmp/openfon-8bd-ci-artifacts. Integration owns narrow fixtureimports; no productionlimit/timeoutraise/blindrerun. Remote8bd staysfreeze whileQAofficial completes; code/securityrunning. Localvalidation nextsole (no otherlocalrunner), no duplicateinference.
+
+Published/readbackexact8bd42045d79bcecde693e0c64eb605926e45cdc0 OPEN, normalCLI pushSUCCESS(nonforce). Officiald735disposition5650176572 preservesdecline5650027412 and truthful898beforefinalpredicate/76+QA22 attribution. Hostedreplies3998376854/6884/6920/6957 posted; close/reopencomplete; code5650178934/security5650179009 requested. QA requestedONE unchangedofficialfullrun exactfreeze, no localrunners/inference/sourcechanges. Thischeckpoint stayslocalduringfreeze; CI/reviews pending, stagingproductionunchanged.
+
 QA provider scope CLOSED exact1e2869cd8b11610b13f8dbd7905a2bd759a5930b:22/22 focused includingunchangedLF PASS, actualworkerd fourterminators/quota rollback/private draft/localws optin PASS. NULfullbytes survive actualD1 read/bootstrap/switch; scalar node:sqlite TEXTread truncates whileSQLhexretainsbytes, localizedtestadapterbehavior. Initialunsyncedlegacyfixture changedcompatibilitysnapshotbefore429; failurepreserved, fixturebootstrapreconciledbeforequotasnapshot. No blanketwrite-freebootstrapclaim. QAcheckpoint67f8683/test-results/qa-final-1e2869c, allprocessesexited/runtimesdisposed. Priorpassword/renameQAclosureunchanged. Finalsource1e2869c hasowner76/types+QA22/runtime; combined898full/typesbelongs8ca1810beforepredicatefollowup. Nextdocsfinalpublicationandfreshdualreviewsmandatory.
 
 Presets9a47ef9→1e2869c assembled clean: fixedprefix/firstrealtime SQL aligns JSline terminators;76focused5files inclunchangedQA probe/typesPASS. Original24cases6fail18pass includes exploratoryNUL; firstfixed77/78 failed NULprojection (gpt-4o NUL realtime becamegpt-4o), causeunlocalized/excludedfinalclaim. Preserve ownerlogs; QA nextsole unchangedLF and boundedactualD1 NUL distinction (knownnode:sqlite NUL limitation possible, not assumed). No sourcechange to runtime/quotas/inactives. Allownerrunners exited.

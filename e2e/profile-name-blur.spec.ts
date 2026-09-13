@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('unchanged profile name blurs spend no writes while real rename persists once', async ({ page }) => {
   await page.goto('/auth');

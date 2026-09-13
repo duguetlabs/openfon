@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('profile Apply blocks conflicting drafts and preserves unrelated drafts', async ({ page }) => {
   await page.goto('/auth');
