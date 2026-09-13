@@ -280,7 +280,7 @@ test('provider save refresh preserves sibling drafts while updating untouched as
   const savedAssistant = page.waitForResponse(response => response.url().endsWith(`/api/me/business/${business.id}/agent`) && response.request().method() === 'PUT');
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   expect((await savedAssistant).ok()).toBe(true);
-  await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
   await page.reload();
   await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Unsaved business name');
   await expect(page.getByLabel('Monday opening time', { exact: true })).toHaveValue('10:30');

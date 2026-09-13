@@ -390,6 +390,54 @@ describe('account self service', () => {
     next!();
   });
 
+  it('shares CPU admission across account deletion and password rotation', async () => {
+    let release!: () => void;
+    let observed!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const fourLookups = new Promise<void>(resolve => { observed = resolve; });
+    let lookups = 0;
+    const prepare = db.prepare.bind(db);
+    vi.spyOn(db, 'prepare').mockImplementation(sql => {
+      const statement = prepare(sql);
+      if (sql === 'SELECT password_hash FROM users WHERE id=?') {
+        const first = statement.first.bind(statement);
+        statement.first = async <T>() => {
+          const index = ++lookups;
+          if (index === 4) observed();
+          if (index <= 4) await gate;
+          return first<T>();
+        };
+      }
+      return statement;
+    });
+    const deletion = (token: string) => call('/api/me/account', 'DELETE', { confirmation: 'DELETE', currentPassword: 'wrong' }, token);
+    const rotation = (token: string) => call('/api/me/account/password', 'POST', { currentPassword: 'wrong', newPassword: 'new-correct-horse' }, token);
+    const held = [deletion('owner-session'), rotation('owner-session'), deletion('other-session'), rotation('other-session')];
+    await fourLookups;
+    let refusedDeletion: Response;
+    let refusedRotation: Response;
+    try {
+      refusedDeletion = await deletion('owner-session');
+      refusedRotation = await rotation('other-session');
+    } finally { release(); await Promise.all(held); }
+    expect(refusedDeletion!.status).toBe(429);
+    expect(refusedDeletion!.headers.get('Retry-After')).toBe('1');
+    expect(refusedRotation!.status).toBe(429);
+    expect(lookups).toBe(4);
+    expect((await deletion('owner-session')).status).toBe(403);
+    expect((await rotation('other-session')).status).toBe(403);
+  });
+
+  it.each([200, 403, 409, 500])('releases deletion CPU admission after status %i', async status => {
+    const release = vi.fn();
+    vi.mocked(accountAuthBudget.acquire).mockImplementationOnce(() => release);
+    if (status === 409) db.database.prepare("INSERT INTO calls(id,business_id,connected_at) VALUES ('held','biz-owner',CURRENT_TIMESTAMP)").run();
+    if (status === 500) db.hook = sql => { if (sql === 'SELECT password_hash FROM users WHERE id=?') throw new Error('synthetic deletion lookup failure'); };
+    const response = await call('/api/me/account', 'DELETE', { confirmation: 'DELETE', currentPassword: status === 403 ? 'wrong' : password });
+    expect(response.status).toBe(status);
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
   it('releases password admission after database lookup failures', async () => {
     db.hook = sql => { if (sql === 'SELECT password_hash FROM users WHERE id=?') throw new Error('synthetic lookup failure'); };
     for (let i = 0; i < 4; i++) expect((await call('/api/me/account/password', 'POST', { currentPassword: password, newPassword: 'new-correct-horse' })).status).toBe(500);
