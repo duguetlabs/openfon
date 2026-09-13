@@ -66,6 +66,11 @@ export default function Onboarding() {
         services_json: serializeServiceRows(services),
         faqs_json: serializeFaqRows(faqs),
       };
+      // POST returns this user's canonical workspace even on retries/concurrent
+      // creation (index.ts); a later failed read can leave session business null.
+      // Keep the following PUT: a retry may contain edits made after the original
+      // creation. e2e/onboarding-retry.spec.ts covers interrupted setup with the
+      // same workspace ID, not every refresh-failure/edited-payload combination.
       const biz = business ?? (await api.createBusiness(workspace));
       await api.updateBusiness(biz.id, workspace);
       // Workspace creation provisions a draft primary assistant. Update it through

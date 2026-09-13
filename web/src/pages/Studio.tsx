@@ -278,14 +278,16 @@ export function Knowledge() {
     const [detail, setDetail] = useState<(KnowledgeCollection & {
         items: KnowledgeItem[];
         nextCursor: string | null;
-        assistants: Assistant[];
+        assistants: AssistantListItem[];
     }) | null>(null);
     const [error, setError] = useState('');
     const [assistantReload, setAssistantReload] = useState(0);
     const [message, setMessage] = useState('');
     const [busy, setBusy] = useState(false);
     const [loading, setLoading] = useState(true);
-    const [reload, setReload] = useState(0);
+    const [refreshError, setRefreshError] = useState('');
+    const selection = useRef('');
+    const readGeneration = useRef(0);
     const [name, setName] = useState('');
     const [editing, setEditing] = useState<Partial<KnowledgeItem> | null>(null);
     const originalEditing = useRef<Partial<KnowledgeItem> | null>(null);
@@ -308,44 +310,80 @@ export function Knowledge() {
         } catch (e) { setError(errorText(e)); }
         finally { setBusy(false); }
     }
-    async function loadCollections() { const c = await api.knowledgeCollections(); setCollections(c); setSelected(s => c.some(x => x.id === s) ? s : c[0]?.id || ''); }
-    useEffect(() => { setLoading(true); setError(''); void loadCollections().catch(e => setError(errorText(e))).finally(() => setLoading(false)); }, [reload]);
+    function selectLocal(id: string) { selection.current = id; setSelected(id); }
+    async function refreshKnowledge() {
+        const run = ++readGeneration.current;
+        try {
+            const rows = await api.knowledgeCollections();
+            if (run !== readGeneration.current) return;
+            // A read-only retry must never retarget an unsaved item or remount
+            // collection fields into a different collection after remote deletion.
+            if (selection.current && !rows.some(row => row.id === selection.current)) {
+                setCollections(rows);
+                throw new Error('The selected collection is no longer available. Your draft is retained; choose another collection to discard it.');
+            }
+            const id = selection.current || rows[0]?.id || '';
+            const next = id ? await api.knowledgeCollection(id) : null;
+            if (run !== readGeneration.current) return;
+            setCollections(rows); selectLocal(id); setDetail(next); setRefreshError(''); setError('');
+        } catch (e) { if (run === readGeneration.current) throw e; }
+    }
+    useEffect(() => {
+        void refreshKnowledge().catch(e => setError(errorText(e))).finally(() => setLoading(false));
+        return () => { readGeneration.current++; };
+    }, []);
     const choices = useAssistantChoices(assistantReload);
     const { assistants, assistantError } = choices;
-    useEffect(() => { let current = true; setDetail(null); setEditing(null); if (selected)
-        void api.knowledgeCollection(selected).then(d => { if (current)
-            setDetail(d); }).catch(e => { if (current)
-            setError(errorText(e)); }); return () => { current = false; }; }, [selected, reload]);
-    async function action(fn: () => Promise<unknown>, success: string, reloadDetail = true) { if (busy) return; setBusy(true); setError(''); setMessage(''); try {
-        await fn();
-        await loadCollections();
-        if (selected && reloadDetail)
-            setDetail(await api.knowledgeCollection(selected));
-        setMessage(success);
+    async function refreshAfterSave() {
+        try { await refreshKnowledge(); }
+        catch (e) { setRefreshError(`Your changes were saved, but knowledge could not be refreshed. ${errorText(e)}`); }
     }
-    catch (e) {
-        setError(errorText(e));
-    }
-    finally {
-        setBusy(false);
-    } }
-    return <><PageTitle title="Knowledge" description="Write answers once, share them across assistants, and approve every improvement."/><Notice error={error || assistantError} message={message}/>{assistantError && <Button variant="ghost" onClick={() => setAssistantReload(n => n + 1)}>Retry assistants</Button>}{(loading || (selected && !detail && !error)) && <LoadingStatus />}{error && !detail && <Button variant="ghost" onClick={() => setReload(n => n + 1)}>Retry knowledge</Button>}<form className="studio-create" onSubmit={e => { e.preventDefault(); if (!discardKnowledge()) return; void action(async () => { const c = await api.createKnowledgeCollection({ name: name.trim(), description: '' }); setName(''); setSelected(c.id); }, 'Collection created.', false); }}><Field label="New collection" required value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Services and pricing"/><Button disabled={busy || !name.trim()}>Create collection</Button></form><label>Collection<select disabled={busy} className={inputClass} value={selected} onChange={e => { if (discardKnowledge()) setSelected(e.target.value); }}>{collections.map(c => <option key={c.id} value={c.id}>{c.name} ({c.item_count || 0} {c.item_count === 1 ? 'item' : 'items'})</option>)}</select></label>{detail && <><Card className="mt-5"><div className="studio-between"><h2>{detail.name}</h2>{!detail.is_default && <Button variant="ghost" disabled={busy} onClick={() => { if (discardKnowledge() && window.confirm(`Delete “${detail.name}” and all its knowledge items? This cannot be undone.`)) {
+    async function retryRefresh() {
+        if (busy) return;
         setBusy(true);
-        setError('');
-        void api.deleteKnowledgeCollection(detail.id).then(async () => { setDetail(null); setSelected(''); await loadCollections(); setMessage('Collection deleted.'); }).catch(e => setError(errorText(e))).finally(() => setBusy(false));
-    } }}>Delete collection</Button>}</div><CollectionSettings key={detail.id} collection={detail} busy={busy} onDirtyChange={setCollectionDirty} onSave={(body) => action(() => api.updateKnowledgeCollection(detail.id, body), 'Collection updated.')} /><p className="studio-muted">Active items are eligible for calls by attached assistants. Drafts stay private until approved.</p><details className="studio-muted"><summary>Knowledge limits for calls</summary><p>Calls use active items from attached collections, oldest first (creation time, then ID). Items over 8 KiB of combined UTF-8 fields are omitted. Of the first 32 eligible items, only the whole-item prefix fitting a 32 KiB budget, including formatting allowance, is used. Selection stops at the first item that does not fit. Omitted items stay saved but are unavailable during calls; shorten items or detach collections to make room.</p></details><div className="studio-actions">{assistants.map(a => <label className="studio-check" key={a.id}><input type="checkbox" disabled={busy} checked={detail.assistants.some(x => x.id === a.id)} onChange={e => void action(() => e.target.checked ? api.attachKnowledgeCollection(a.id, selected) : api.detachKnowledgeCollection(a.id, selected), 'Assistant knowledge updated.')}/>{a.name}</label>)}</div><MoreAssistants choices={choices}/></Card><div className="studio-between mt-6"><h2 className="studio-heading">Answers & notes</h2><Button disabled={busy} variant="ghost" onClick={() => replaceEditing({ kind: 'faq', status: 'draft', title: '', question: '', answer: '', content: '' })}>Add knowledge</Button></div>{editing && <Card><form onSubmit={e => { e.preventDefault(); void action(async () => { if (editing.id)
-        await api.updateKnowledgeItem(editing.id, editing);
-    else
-        await api.createKnowledgeItem(selected, editing); setEditing(null); }, 'Knowledge saved.'); }}><fieldset disabled={busy} className="studio-fields"><label>Type<select className={inputClass} value={editing.kind} onChange={e => setEditing({ ...editing, kind: e.target.value as KnowledgeItem['kind'] })}><option value="faq">Question & answer</option><option value="service">Service</option><option value="note">Note</option></select></label><Field label="Title" required={editing.kind === 'service'} value={editing.title || ''} onChange={e => setEditing({ ...editing, title: e.target.value })}/>{editing.kind === 'faq' ? <><TextArea label="Question" required value={editing.question || ''} onChange={e => setEditing({ ...editing, question: e.target.value })}/><TextArea label="Answer" required value={editing.answer || ''} onChange={e => setEditing({ ...editing, answer: e.target.value })}/></> : <TextArea label="Content" required value={editing.content || ''} onChange={e => setEditing({ ...editing, content: e.target.value })}/>}<label className="studio-check"><input type="checkbox" checked={editing.status === 'active'} onChange={e => setEditing({ ...editing, status: e.target.checked ? 'active' : 'draft' })}/>Approved for use in conversations</label><div className="studio-actions"><Button>Save knowledge</Button><Button type="button" variant="ghost" onClick={() => replaceEditing(null)}>Cancel</Button></div></fieldset></form></Card>}<div className="studio-grid mt-5">{detail.items.map(item => <Card key={item.id}><div className="studio-between"><h3>{item.question || item.title || 'Untitled note'}</h3><span className="studio-badge">{item.status === 'active' ? 'Approved' : 'Draft'}</span></div><p className="studio-description">{item.answer || item.content || 'Add an answer before approving this item.'}</p>{item.source_call_id && <Link className="studio-link" to={`/calls/${item.source_call_id}`}>Source conversation ↗</Link>}<div className="studio-actions"><Button variant="ghost" disabled={busy} onClick={() => replaceEditing({ ...item })}>Edit</Button><Button variant="ghost" disabled={busy} onClick={() => void action(() => api.updateKnowledgeItem(item.id, { status: item.status === 'active' ? 'draft' : 'active' }), item.status === 'active' ? 'Moved to draft.' : 'Knowledge approved.')}>{item.status === 'active' ? 'Unpublish' : 'Approve'}</Button><Button variant="ghost" disabled={busy} onClick={() => { if (window.confirm('Delete this knowledge item? This cannot be undone.'))
-        void action(() => api.deleteKnowledgeItem(item.id), 'Knowledge item deleted.'); }}>Delete</Button></div></Card>)}</div>{detail.nextCursor && <Button disabled={busy} variant="ghost" onClick={() => void loadMore()}>Load more knowledge</Button>}{!detail.items.length && !editing && <Card className="mt-5">This collection is empty. Add an answer or save a caller question from a conversation for review.</Card>}</>}</>;
+        try { await refreshKnowledge(); }
+        catch (e) { if (refreshError) setRefreshError(`Your changes were saved, but knowledge could not be refreshed. ${errorText(e)}`); else setError(errorText(e)); }
+        finally { setBusy(false); }
+    }
+    function adjustCounts(collectionId: string, items: number, active: number) {
+        setCollections(rows => rows.map(row => row.id === collectionId ? { ...row, item_count: Math.max(0, (row.item_count || 0) + items), active_item_count: Math.max(0, (row.active_item_count || 0) + active) } : row));
+    }
+    function acceptItem(item: KnowledgeItem, created = false) {
+        readGeneration.current++;
+        const previous = detail?.items.find(old => old.id === item.id) ?? (originalEditing.current?.id === item.id ? originalEditing.current : undefined);
+        adjustCounts(item.collection_id, created ? 1 : 0, Number(item.status === 'active') - Number(!created && previous?.status === 'active'));
+        setDetail(current => current ? { ...current, items: current.items.some(old => old.id === item.id) ? current.items.map(old => old.id === item.id ? item : old) : [...current.items, item] } : current);
+    }
+    async function action(fn: () => Promise<unknown>, success: string) {
+        if (busy) return;
+        readGeneration.current++; setBusy(true); setError(''); setMessage('');
+        try {
+            await fn();
+            // Fence reads that began before or during the accepted mutation.
+            readGeneration.current++; setMessage(success);
+            await refreshAfterSave();
+        } catch (e) { setError(errorText(e)); }
+        finally { setBusy(false); }
+    }
+    return <><PageTitle title="Knowledge" description="Write answers once, share them across assistants, and approve every improvement."/><Notice error={error || assistantError} message={message}/>{assistantError && <Button variant="ghost" onClick={() => setAssistantReload(n => n + 1)}>Retry assistants</Button>}{(loading || (selected && !detail && !error)) && <LoadingStatus />}{refreshError && <><Notice error={refreshError}/><Button variant="ghost" disabled={busy} onClick={() => void retryRefresh()}>Retry knowledge refresh</Button></>}{error && !detail && <Button variant="ghost" disabled={busy} onClick={() => void retryRefresh()}>Retry knowledge</Button>}<form className="studio-create" onSubmit={e => { e.preventDefault(); if (!discardKnowledge()) return; void action(async () => { const submittedName = name.trim(); const c = await api.createKnowledgeCollection({ name: submittedName, description: '' }); readGeneration.current++; setName(current => current.trim() === submittedName ? '' : current); selectLocal(c.id); setCollections(rows => [...rows, c]); setDetail({ ...c, items: [], nextCursor: null, assistants: [] }); originalEditing.current = null; setEditing(null); }, 'Collection created.'); }}><Field label="New collection" required value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Services and pricing"/><Button disabled={busy || !name.trim()}>Create collection</Button></form><label>Collection<select disabled={busy} className={inputClass} value={selected} onChange={e => { if (discardKnowledge()) { selectLocal(e.target.value); setDetail(null); originalEditing.current = null; setEditing(null); void retryRefresh(); } }}>{selected && !collections.some(c => c.id === selected) && <option value={selected}>Unavailable collection — draft retained</option>}{collections.map(c => <option key={c.id} value={c.id}>{c.name} ({c.item_count || 0} {c.item_count === 1 ? 'item' : 'items'})</option>)}</select></label>{detail && <><Card className="mt-5"><div className="studio-between"><h2>{detail.name}</h2>{!detail.is_default && <Button variant="ghost" disabled={busy} onClick={() => { if (discardKnowledge() && window.confirm(`Delete “${detail.name}” and all its knowledge items? This cannot be undone.`)) {
+        void action(async () => { await api.deleteKnowledgeCollection(detail.id); readGeneration.current++; setCollections(rows => rows.filter(row => row.id !== detail.id)); setDetail(null); selectLocal(''); originalEditing.current = null; setEditing(null); }, 'Collection deleted.');
+    } }}>Delete collection</Button>}</div><CollectionSettings key={detail.id} collection={detail} busy={busy} onDirtyChange={setCollectionDirty} onSave={(body) => action(async () => { await api.updateKnowledgeCollection(detail.id, body); readGeneration.current++; setDetail(current => current ? { ...current, ...body } : current); setCollections(rows => rows.map(row => row.id === detail.id ? { ...row, ...body } : row)); }, 'Collection updated.')} /><p className="studio-muted">Active items are eligible for calls by attached assistants. Drafts stay private until approved.</p><details className="studio-muted"><summary>Knowledge limits for calls</summary><p>Calls use active items from attached collections, oldest first (creation time, then ID). Items over 8 KiB of combined UTF-8 fields are omitted. Of the first 32 eligible items, only the whole-item prefix fitting a 32 KiB budget, including formatting allowance, is used. Selection stops at the first item that does not fit. Omitted items stay saved but are unavailable during calls; shorten items or detach collections to make room.</p></details><div className="studio-actions">{assistants.map(a => <label className="studio-check" key={a.id}><input type="checkbox" disabled={busy} checked={detail.assistants.some(x => x.id === a.id)} onChange={e => { const attached = e.target.checked; void action(async () => { await (attached ? api.attachKnowledgeCollection(a.id, selected) : api.detachKnowledgeCollection(a.id, selected)); readGeneration.current++; setDetail(current => current ? { ...current, assistants: attached ? [...current.assistants.filter(old => old.id !== a.id), a] : current.assistants.filter(old => old.id !== a.id) } : current); }, 'Assistant knowledge updated.'); }}/>{a.name}</label>)}</div><MoreAssistants choices={choices}/></Card><div className="studio-between mt-6"><h2 className="studio-heading">Answers & notes</h2><Button disabled={busy} variant="ghost" onClick={() => replaceEditing({ kind: 'faq', status: 'draft', title: '', question: '', answer: '', content: '' })}>Add knowledge</Button></div>{editing && <Card><form onSubmit={e => { e.preventDefault(); void action(async () => { const item = editing.id ? await api.updateKnowledgeItem(editing.id, editing) : await api.createKnowledgeItem(selected, editing); acceptItem(item, !editing.id); originalEditing.current = null; setEditing(null); }, 'Knowledge saved.'); }}><fieldset disabled={busy} className="studio-fields"><label>Type<select className={inputClass} value={editing.kind} onChange={e => setEditing({ ...editing, kind: e.target.value as KnowledgeItem['kind'] })}><option value="faq">Question & answer</option><option value="service">Service</option><option value="note">Note</option></select></label><Field label="Title" required={editing.kind === 'service'} value={editing.title || ''} onChange={e => setEditing({ ...editing, title: e.target.value })}/>{editing.kind === 'faq' ? <><TextArea label="Question" required value={editing.question || ''} onChange={e => setEditing({ ...editing, question: e.target.value })}/><TextArea label="Answer" required value={editing.answer || ''} onChange={e => setEditing({ ...editing, answer: e.target.value })}/></> : <TextArea label="Content" required value={editing.content || ''} onChange={e => setEditing({ ...editing, content: e.target.value })}/>}<label className="studio-check"><input type="checkbox" checked={editing.status === 'active'} onChange={e => setEditing({ ...editing, status: e.target.checked ? 'active' : 'draft' })}/>Approved for use in conversations</label><div className="studio-actions"><Button>Save knowledge</Button><Button type="button" variant="ghost" onClick={() => replaceEditing(null)}>Cancel</Button></div></fieldset></form></Card>}<div className="studio-grid mt-5">{detail.items.map(item => <Card key={item.id}><div className="studio-between"><h3>{item.question || item.title || 'Untitled note'}</h3><span className="studio-badge">{item.status === 'active' ? 'Approved' : 'Draft'}</span></div><p className="studio-description">{item.answer || item.content || 'Add an answer before approving this item.'}</p>{item.source_call_id && <Link className="studio-link" to={`/calls/${item.source_call_id}`}>Source conversation ↗</Link>}<div className="studio-actions"><Button variant="ghost" disabled={busy} onClick={() => replaceEditing({ ...item })}>Edit</Button><Button variant="ghost" disabled={busy} onClick={() => void action(async () => { acceptItem(await api.updateKnowledgeItem(item.id, { status: item.status === 'active' ? 'draft' : 'active' })); }, item.status === 'active' ? 'Moved to draft.' : 'Knowledge approved.')}>{item.status === 'active' ? 'Unpublish' : 'Approve'}</Button><Button variant="ghost" disabled={busy} onClick={() => { if (window.confirm('Delete this knowledge item? This cannot be undone.'))
+        void action(async () => { await api.deleteKnowledgeItem(item.id); readGeneration.current++; adjustCounts(item.collection_id, -1, -Number(item.status === 'active')); setDetail(current => current ? { ...current, items: current.items.filter(old => old.id !== item.id) } : current); if (editing?.id === item.id) { originalEditing.current = null; setEditing(null); } }, 'Knowledge item deleted.'); }}>Delete</Button></div></Card>)}</div>{detail.nextCursor && <Button disabled={busy} variant="ghost" onClick={() => void loadMore()}>Load more knowledge</Button>}{!detail.items.length && !editing && <Card className="mt-5">This collection is empty. Add an answer or save a caller question from a conversation for review.</Card>}</>}</>;
 }
 
 function CollectionSettings({ collection, busy, onSave, onDirtyChange }: { collection: KnowledgeCollection; busy: boolean; onDirtyChange: (dirty: boolean) => void; onSave: (body: { name: string; description: string }) => Promise<void> }) {
   const [name, setName] = useState(collection.name);
   const [description, setDescription] = useState(collection.description);
+  const baseline = useRef({ name: collection.name, description: collection.description });
+  useEffect(() => {
+    const previous = baseline.current;
+    setName(current => current.trim() === previous.name ? collection.name : current);
+    setDescription(current => current === previous.description ? collection.description : current);
+    baseline.current = { name: collection.name, description: collection.description };
+  }, [collection.name, collection.description]);
   useEffect(() => { onDirtyChange(name.trim() !== collection.name || description !== collection.description); }, [name, description, collection.name, collection.description, onDirtyChange]);
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
-  return <form className="studio-fields my-5" onSubmit={e => { e.preventDefault(); void onSave({ name: name.trim(), description }); }}><Field label="Collection name" required value={name} onChange={e => setName(e.target.value)} /><TextArea label="Description" value={description} onChange={e => setDescription(e.target.value)} /><div><Button variant="ghost" disabled={busy || !name.trim()}>Save collection details</Button></div></form>;
+  return <form className="studio-fields my-5" onSubmit={e => { e.preventDefault(); void onSave({ name: name.trim(), description }); }}><Field label="Collection name" required value={name} onChange={e => setName(e.target.value)} /><TextArea label="Description" value={description} onChange={e => setDescription(e.target.value)} /><div><Button variant="ghost" disabled={busy || !name.trim() || (name.trim() === collection.name && description === collection.description)}>Save collection details</Button></div></form>;
 }
 
 function LoadingStatus() {

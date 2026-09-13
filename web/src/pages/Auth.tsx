@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { api } from '../api';
+import { api, ApiError } from '../api';
 import { useSession } from '../App';
 import { authSubmissionBlocked, SIGN_OUT_PENDING_MESSAGE } from '../session-load';
 import { Button, Field, Logo } from '../ui';
@@ -12,6 +12,7 @@ export default function AuthPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [authConfirmed, setAuthConfirmed] = useState(false);
   const { refresh, signOut, signOutPending, signOutWarning } = useSession();
   const nav = useNavigate();
   const authLocked = authSubmissionBlocked(signOutPending, Boolean(signOutWarning));
@@ -23,12 +24,23 @@ export default function AuthPage() {
     if (busy || authSubmissionBlocked(signOutPending, Boolean(signOutWarning))) return;
     setBusy(true);
     setError('');
+    let confirmed = authConfirmed;
     try {
-      await (mode === 'signup' ? api.signup(email, password) : api.login(email, password));
+      if (!confirmed) {
+        await (mode === 'signup' ? api.signup(email, password) : api.login(email, password));
+        confirmed = true;
+        setAuthConfirmed(true);
+        setPassword('');
+      }
       await refresh();
       nav('/overview');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      if (confirmed && err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        setAuthConfirmed(false); setMode('login');
+        setError('Your session is no longer available. Sign in to continue.');
+      } else setError(confirmed
+        ? 'Your account request succeeded, but the session could not be refreshed. Retry the account refresh; you do not need to submit your credentials again.'
+        : err instanceof Error ? err.message : 'Something went wrong');
     } finally {
       setBusy(false);
     }
@@ -117,7 +129,7 @@ export default function AuthPage() {
             </p>
           )}
           <fieldset
-            disabled={authLocked || busy}
+            disabled={authLocked || busy || authConfirmed}
             aria-busy={signOutPending || busy}
             aria-describedby={signOutPending ? 'sign-out-pending-status' : undefined}
             className="m-0 min-w-0 border-0 p-0 transition-opacity disabled:cursor-wait disabled:opacity-60"
@@ -163,12 +175,13 @@ export default function AuthPage() {
               </div>
             </div>
           </fieldset>
+          {authConfirmed && <Button type="submit" disabled={busy || authLocked} className="mt-4 w-full">Retry account refresh</Button>}
           <p className="mt-5 text-center text-sm text-ink-soft">
             {mode === 'signup' ? 'Already have an account?' : 'New here?'}{' '}
             <button
               type="button"
               className="font-semibold text-iris underline decoration-iris/30 underline-offset-2 hover:decoration-iris disabled:cursor-wait disabled:opacity-60"
-              disabled={authLocked || busy}
+              disabled={authLocked || busy || authConfirmed}
               aria-describedby={signOutPending ? 'sign-out-pending-status' : undefined}
               onClick={() => { setError(''); setMode(mode === 'signup' ? 'login' : 'signup'); }}
             >

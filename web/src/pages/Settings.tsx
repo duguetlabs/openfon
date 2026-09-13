@@ -67,6 +67,8 @@ export default function Settings() {
   const [error, setError] = useState('');
   const [refreshFailed, setRefreshFailed] = useState(false);
   const [profiles, setProfiles] = useState<EngineProfile[]>([]);
+  const [profileRefreshPending, setProfileRefreshPending] = useState(false);
+  const profileListGeneration = useRef(0);
   const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
   const [newProfileName, setNewProfileName] = useState('');
   const profileSavedNames = useRef(new Map<string, string>());
@@ -78,7 +80,7 @@ export default function Settings() {
   useEffect(() => {
     let active = true;
     const generation = mutationGeneration.current;
-    if (business) void api.business().then((business) => {
+    if (business && !profileRefreshPending) void api.business().then((business) => {
       if (!active || !business || generation !== mutationGeneration.current) return;
       const incoming = settingsSnapshot(business);
       const previous = loaded.current?.business.id === business.id ? loaded.current : null;
@@ -91,10 +93,7 @@ export default function Settings() {
       setServices(current => previous && JSON.stringify(current) !== JSON.stringify(previous.services) ? current : incoming.services);
       setFaqs(current => previous && JSON.stringify(current) !== JSON.stringify(previous.faqs) ? current : incoming.faqs);
       setClosures(current => previous && JSON.stringify(current) !== JSON.stringify(previous.closures) ? current : incoming.closures);
-      void api.profiles(business.id).then(rows => {
-        for (const profile of rows) profileSavedNames.current.set(profile.id, profile.name);
-        setProfiles(rows);
-      }).catch(() => {});
+      void loadProfiles(business.id).catch(() => {});
       void api.voices().then(setVoiceCatalog).catch(() => {});
     }).catch((e) => {
       if (!active || generation !== mutationGeneration.current) return;
@@ -103,6 +102,53 @@ export default function Settings() {
     });
     return () => { active = false; };
   }, [business]);
+
+  function acceptProfiles(rows: EngineProfile[]) {
+    const previousNames = new Map(profileSavedNames.current);
+    setProfiles(current => rows.map(row => {
+      const draft = current.find(old => old.id === row.id);
+      return draft && previousNames.has(row.id) && draft.name !== previousNames.get(row.id) ? { ...row, name: draft.name } : row;
+    }));
+    for (const row of rows) profileSavedNames.current.set(row.id, row.name);
+  }
+  async function loadProfiles(id: string) {
+    const run = ++profileListGeneration.current;
+    const rows = await api.profiles(id);
+    if (run === profileListGeneration.current) acceptProfiles(rows);
+  }
+  async function refreshProfileDisplay() {
+    try {
+      await refresh();
+      const incomingBusiness = await api.business();
+      if (!incomingBusiness) throw new Error('Workspace unavailable');
+      mutationGeneration.current++;
+      const incoming = settingsSnapshot(incomingBusiness);
+      const previous = loaded.current;
+      loaded.current = incoming;
+      setBiz(current => preserveDraftFields(current, previous?.business, incoming.business));
+      setAgent(current => incoming.agent ? preserveDraftFields(current, previous?.agent, incoming.agent) : null);
+      setHours(current => previous && JSON.stringify(current) !== JSON.stringify(previous.hours) ? current : incoming.hours);
+      setServices(current => previous && JSON.stringify(current) !== JSON.stringify(previous.services) ? current : incoming.services);
+      setFaqs(current => previous && JSON.stringify(current) !== JSON.stringify(previous.faqs) ? current : incoming.faqs);
+      setClosures(current => previous && JSON.stringify(current) !== JSON.stringify(previous.closures) ? current : incoming.closures);
+      await loadProfiles(incomingBusiness.id);
+      setProfileRefreshPending(false); setError('');
+    } catch (err) {
+      setError(`The profile change was saved, but its display could not refresh: ${err instanceof Error ? err.message : 'Request failed'}`);
+    }
+  }
+  async function profileAction(action: () => Promise<unknown>, message: string, deletedId?: string) {
+    if (saving || profileRefreshPending) return;
+    setSaving(true); setError(''); mutationGeneration.current++; profileListGeneration.current++;
+    try {
+      await action();
+      mutationGeneration.current++; profileListGeneration.current++;
+      if (deletedId) setProfiles(current => current.filter(row => row.id !== deletedId));
+      setSaved(message); setProfileRefreshPending(true);
+      await refreshProfileDisplay();
+    } catch (err) { setError(err instanceof Error ? err.message : 'Profile change failed'); }
+    finally { setSaving(false); }
+  }
 
   if (!biz || !agent) return <div>
     <p role={error ? 'alert' : 'status'}>{error || 'Loading workspace settings…'}</p>
@@ -130,7 +176,7 @@ export default function Settings() {
   }
 
   async function save() {
-    if (saving || !dirty) return;
+    if (saving || profileRefreshPending || !dirty) return;
     // An effect read started before this mutation cannot supersede an accepted
     // stage, even if its response arrives before the final refresh completes.
     mutationGeneration.current++;
@@ -187,6 +233,7 @@ export default function Settings() {
         if (normalized === confirmed) continue;
         try {
           await api.updateProfile(id, { name: normalized });
+          profileListGeneration.current++;
           profileSavedNames.current.set(id, normalized);
         } catch (err) {
           if (profileEditVersion.current.get(id) !== next.version) continue;
@@ -404,7 +451,7 @@ export default function Settings() {
               <input
                 className="min-w-32 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-ink outline-none hover:border-line-strong focus:border-iris focus:bg-surface focus:ring-[3px] focus:ring-iris/15"
                 value={p.name}
-                readOnly={Boolean(p.preview_only)}
+                readOnly={Boolean(p.preview_only) || saving || profileRefreshPending}
                 onFocus={() => { if (!profileSavedNames.current.has(p.id)) profileSavedNames.current.set(p.id, p.name); }}
                 onChange={(e) => {
                   profileEditVersion.current.set(p.id, (profileEditVersion.current.get(p.id) ?? 0) + 1);
@@ -417,31 +464,18 @@ export default function Settings() {
                 {(p.realtime_voice || p.voice) && ` · ${p.realtime_voice || p.voice}`}
               </span>
               <button
-                disabled={profileDraftDirty || saving}
+                disabled={profileDraftDirty || saving || profileRefreshPending}
                 title={profileDraftDirty ? profileApplyReason : undefined}
                 className="rounded-lg bg-iris px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-iris-deep disabled:cursor-not-allowed disabled:opacity-50"
-                onClick={() =>
-                  void api
-                    .applyProfile(p.id)
-                    .then(async () => {
-                      await refresh();
-                      setError('');
-                      setSaved(`Applied "${p.name}".`);
-                      setTimeout(() => setSaved(''), 2500);
-                    })
-                    .catch((err) => setError(err instanceof Error ? err.message : 'Apply failed'))
-                }
+                onClick={() => void profileAction(() => api.applyProfile(p.id), `Applied "${p.name}".`)}
               >
                 Apply
               </button>
               <button
                 className="px-1 text-ink-faint transition-colors hover:text-rose"
                 aria-label="Delete profile"
-                onClick={() => {
-                  if (!business) return;
-                  const businessId = business.id;
-                  void api.deleteProfile(p.id).then(() => api.profiles(businessId)).then(setProfiles).catch(err => setError(err instanceof Error ? err.message : 'Delete failed'));
-                }}
+                disabled={saving || profileRefreshPending}
+                onClick={() => void profileAction(() => api.deleteProfile(p.id), 'Profile deleted.', p.id)}
               >
                 ✕
               </button>
@@ -456,7 +490,7 @@ export default function Settings() {
             />
             <Button
               variant="ghost"
-              disabled={!newProfileName.trim()}
+              disabled={!newProfileName.trim() || saving || profileRefreshPending}
               onClick={() =>
                 void api
                   .createProfile(biz.id, {
@@ -471,7 +505,8 @@ export default function Settings() {
                     llm_model: agent.llm_model,
                   })
                   .then((p) => {
-                    setProfiles([...profiles, p]);
+                    profileListGeneration.current++;
+                    setProfiles(current => [...current, p]);
                     setNewProfileName('');
                     setError('');
                   })
@@ -573,8 +608,9 @@ export default function Settings() {
         <div className="flex items-center gap-3">
           {saved && <span role="status" className="text-sm font-semibold text-ok">{saved}</span>}
           {error && <span role="alert" className="text-sm text-rose">{error}</span>}
+          {profileRefreshPending && <Button variant="ghost" disabled={saving} onClick={() => { if (saving) return; setSaving(true); void refreshProfileDisplay().finally(() => setSaving(false)); }}>Retry profile refresh</Button>}
           {refreshFailed && <Button variant="ghost" disabled={saving} onClick={() => void retryRefresh()}>Retry settings refresh</Button>}
-          <Button disabled={saving || !dirty} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</Button>
+          <Button disabled={saving || profileRefreshPending || !dirty} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</Button>
         </div>
       </div>
     </div>
