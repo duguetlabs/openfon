@@ -1,10 +1,10 @@
 # Telnyx workstream
 
-- Status: Compaction fix validated — ready for integration and exact-head reviewer rerun
+- Status: Alarm scheduler and atomic failure preservation validated — ready for integration/independent QA
 - Owner: openfon-telnyx
 - Branch: codex/telnyx-inbound
 - Base commit: d616fffb2c561bdb44603c288883144d9ec639d7
-- Last updated: 2026-09-12
+- Last updated: 2026-09-13T20:19:08.808608+00:00
 - Rules: root AGENTS.md, root .agent/orchestration-rules.md, Telnyx handoff
 - Ports: application 8810; inspector 9250; never 8787
 
@@ -253,3 +253,43 @@ Original report/source verified before edits: authenticated GET is_alive=false v
 Contract verification: official team-telnyx/telnyx-node src/resources/calls/calls.ts retrieveStatus GET/calls/{id} response has identity/is_alive/timing but no hangup cause (https://github.com/team-telnyx/telnyx-node/blob/master/src/resources/calls/calls.ts). Extracted private confirmEnded for shared release/token-clear/cleanup; signed consume retains cause logic, status path invokes cause-free helper. No status event can fabricate normalHangup. Four fixtures preserve playback_complete/session_error/carrier_stream_failed/socket_closed through second command+GET, restart/reprojection, later signed unknown, retirement. Taking first granted sole validation slot now.
 
 Validation in sole slot, serial: exact67443bc with4 status cases fails2 (playback_complete/socket_closed reason overwritten),2 established failures pass. Log /tmp/openfon-telnyx-status-negative.log SHA256 37e76fab3eacaafb74e96bafa8ff0368db291edd9e896fb4e31a686443b5edb1. Fixed restored in finally. Focused control/media/prelookup109/109 PASS; worker tsc noEmit PASS; native actual-workerd synthetic smoke PASS completed/error-free/released. Status GET/retry and later signed-unknown semantics established by nodeSQLite owner tests; runtime smoke covers unchanged signed normal lifecycle, not a real provider-status call. All processes exited/disposed; slot released. No broad suite/live/account/push/inference.
+
+## Official8bd alarm churn —5650196718
+Read original report; exact8bd42045 control bytes equal local. persist terminal always caps cleanup at now+30s despite no intermediate work. Narrow one-expression fix schedules cleanupAt directly; existing inbox/command minimums, explicit reconcile now+1 and alarm catch now+60s remain untouched. Added normal/failed/terminal-first cleanup assertions, explicit reconcile/late inbox, failed-D1 recovery and actual SQLite-DO scheduled-alarm equality before retirement. Source-only; integration owns CI browser slot, awaiting next explicit grant.
+
+Source timing consequence disclosed to integration before validation: exact8bd shared CallSession finalization writes failure columns on active rows and has no Telnyx reconcile notification. Idle terminal poll removal leaves repeat failure projection on concrete events/reconcile or final35mincleanup; unchanged explicit handlers remain. No shared change introduced; integration reviewing this timing consequence alongside narrow scheduler disposition.
+
+## Kataleptic ownership resumed — 2026-09-13
+Replacement openfon-telnyx accepted master 01a09c4b-dfb7-7663-8b51-15d3045020d9 release. HEAD cca236c7; original scheduler/control-test/retirement-test/checkpoint delta preserved. No validation runner started. Read root current-task/manifest and original handoffs.
+
+Source ordering verified: Telnyx projectFailure keeps connected rows active while writing fixed carrier failure/outcome; CallSession finalization later unconditionally replaces those fields on active rows, then clears its watchdog without notifying Telnyx. Proposed bounded correction: make the final D1 UPDATE atomically preserve existing Telnyx failure classification while writing summary/duration/end fields. This removes the overwrite rather than adding a notification/retry protocol, and preserves either SQL ordering with Telnyx projection. Shared CallSession narrow ownership coordination requested from integration/realtime before editing. Scheduler cleanupAt change and existing recovery/explicit reconciliation paths remain. Validation awaits integration runner-vacancy confirmation and explicit sole-slot grant; plan original scheduler negative, original finalizer negative, focused lifecycle/control/media checks, worker types and persisted actual-workerd smoke.
+
+Source candidate prepared in five files: original four plus src/call-session.ts. Final UPDATE uses a Telnyx-only existing failure_code/non-null + failed-outcome predicate for status/outcome/code/message, leaving summary/message/duration/end write and active-row guard intact. Real CallSession + Telnyx owner SQLite regressions gate the final UPDATE after its read, cover both writer orders and session failure presence, plus ordinary web/Telnyx/Asterisk completion. Persisted-workerd script now adds real D1 + both source owners, each writer order and full runtime restart. No checks executed yet. Original /tmp/openfon-telnyx-alarm-negative.log still exists and records failing scheduling assertions; will not overwrite it.
+
+
+## Alarm Churn correction validated — 2026-09-13
+Integration w1:pH explicitly confirmed no application/review runner and reserved ports free, granted narrow shared CallSession ownership plus sole bounded validation slot. All validation below ran serially. Final correction preserves existing Telnyx failed classification atomically in the session's final UPDATE; source-order proof and actual SQL tests cover owner-first (including between session SELECT/UPDATE), session-first and session-error precedence. No notification mechanism or new timer. Terminal control sleeps until cleanupAt; inbox/reconcile/command/recovery scheduling retained.
+
+Files: src/call-session.ts; src/telnyx-control.ts; test/telnyx-control.test.ts; test/telnyx-retirement-smoke.mjs; .agent/workstreams/telnyx.md. Original untracked node_modules remains untouched. No changes to provider adapters, migrations, shared integration checkout or account/rollout settings.
+
+Validation:
+- Initial focused three-file run: 195/195 PASS. Added finalizer D1 retry/reconstruction and non-Telnyx isolation coverage; final `node node_modules/vitest/vitest.mjs run test/telnyx-control.test.ts test/telnyx-media.test.ts test/call-session.test.ts --maxWorkers=1`: 198/198 PASS, 3 files, 1.26s.
+- Original HEAD control restored temporarily under try/finally: four selected scheduling/recovery cases FAIL at expected alarm deadlines; 92 unselected. Original pre-takeover negative log preserved separately.
+- Original HEAD CallSession restored temporarily under try/finally: 3 FAIL / 2 PASS / 91 unselected. Owner-first ordinary session becomes completed/message_taken/null failure; owner-first session error replaces specific carrier failure with session_error; rebuilt retry loses carrier classification. Session-first remains correct. Fixed bytes restored in finally.
+- `node node_modules/typescript/bin/tsc --noEmit -p tsconfig.worker.json`: PASS.
+- `node test/telnyx-retirement-smoke.mjs`: PASS actual workerd SQLite DO storage and real D1. Original atomic retirement/restart/late-event/media/reconcile assertions retained; added real source CallSession/Telnyx owner finalization both write orders, restart before late writer, immediate failure/content/end-time preservation and cleanup-only scheduled alarm.
+- Identical persisted-runtime script with original HEAD CallSession: FAIL at carrier-first status (completed vs failed); fixed source restored in finally. No weakening of the harness.
+- `git diff --check`: PASS. All runner processes exited, runtime finally blocks disposed Miniflare, and lsof found no listener on 8810/9250. Sole validation slot RELEASED.
+
+Limits: Synthetic local fixtures only; runtime uses a minimal D1 calls schema and seeded terminal owner state to isolate finalization/storage ordering, not real Telnyx ingress or an AI request. Node-SQLite tests exercise actual admission/event/owner/session classes on local migrations. Local branch predates other integrated CallSession changes; integration must apply the bounded final-UPDATE hunk while preserving its existing Asterisk salvage/provider/transcript work. QA independently closes exact assembled scope; fresh published-head dual reviews/CI remain integration-owned. No live/account/staging/production/publish actions.
+
+Logs (SHA256):
+- /tmp/openfon-telnyx-alarm-negative.log: 8304eb483c1ac460b9b0fdedda2d9da2bff463a322aa2b38704abc129ac9734e
+- /tmp/openfon-telnyx-alarm-fixed-final-20260913.log: 24c6809e97f2d4c6090c4261eb82b5716f6b8e261c1da63fe53df5a7b962459a
+- /tmp/openfon-telnyx-alarm-negative-20260913.log: 31a163e0abf36cfbe223bf663d7f164986a3ba1537b637be91caf0e98646fac9
+- /tmp/openfon-telnyx-finalizer-negative-20260913.log: 2a3e058d54148891f5fac4b1c85e6de388a42431a9c0b4d6574cd37a1baa17d5
+- /tmp/openfon-telnyx-alarm-types-20260913.log: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+- /tmp/openfon-telnyx-alarm-runtime-20260913.log: ad1a66ed4268077f9d9572cdfb49e80f1efd5f9236777f03a56707c71d505e76
+- /tmp/openfon-telnyx-finalizer-runtime-negative-20260913.log: 024b5a07da3d58f7f4f7113012fd470d1d2ff8c4def0529b019eb0dfe2b2e3fb
+
+Next action: integration cherry-picks this five-file correction, preserves existing integrated CallSession behavior, grants QA independent scoped closure, then continues its publication/reviewer/CI sequence. No active Telnyx runner.

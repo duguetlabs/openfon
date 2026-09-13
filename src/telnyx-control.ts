@@ -192,7 +192,7 @@ export class TelnyxCall implements DurableObject {
   private async persist(s: ControlState): Promise<void> {
     // Arm before storing. If a put fails, ingress does not acknowledge the event;
     // the earlier alarm can safely wake an empty object, and delivery retries.
-    const deadlines = s.terminal ? [Math.min(s.cleanupAt ?? Date.now() + 60_000, Date.now() + 30_000)] : s.ending ? [] : [s.hardDeadline];
+    const deadlines = s.terminal ? [s.cleanupAt ?? Date.now() + 60_000] : s.ending ? [] : [s.hardDeadline];
     if (!s.terminal && (!s.ending || !s.initiationSeen) && !s.mediaValidated) deadlines.push(s.setupDeadline);
     if (s.inbox.length) deadlines.push(Date.now() + 1);
     for (const command of Object.values(s.commands)) {

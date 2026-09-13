@@ -1980,9 +1980,17 @@ export class CallSession implements DurableObject {
     // real window. Without the predicate this would overwrite the sweep's
     // status and duration — the salvage path exists to cooperate with the
     // sweep, and unconditionally overriding it is the opposite.
+    // The Telnyx owner can project a carrier failure while this connected row
+    // is still active, including during summarization. Preserve that classification
+    // in this atomic write: terminal owners sleep until cleanup, so correctness
+    // must not depend on a later poll restoring fields overwritten here.
+    const carrierFailure = "channel = 'telnyx' AND failure_code IS NOT NULL AND outcome = 'failed'";
     const res = await this.env.DB.prepare(
-      `UPDATE calls SET status = ?, ended_at = ?, duration_s = ?, summary = ?, intent = ?, message_json = ?,
-        outcome = ?, failure_code = ?, failure_message = ?
+      `UPDATE calls SET status = CASE WHEN ${carrierFailure} THEN 'failed' ELSE ? END,
+        ended_at = ?, duration_s = ?, summary = ?, intent = ?, message_json = ?,
+        outcome = CASE WHEN ${carrierFailure} THEN outcome ELSE ? END,
+        failure_code = CASE WHEN ${carrierFailure} THEN failure_code ELSE ? END,
+        failure_message = CASE WHEN ${carrierFailure} THEN failure_message ELSE ? END
         WHERE id = ? AND status = 'active'`
     )
       .bind(

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import mainWorker from '../src/index';
+import { CallSession } from '../src/call-session';
 import { Hono } from 'hono';
 import { registerTelnyxRoutes } from '../src/telnyx-routes';
 let mediaApp: Hono<{ Bindings: Env; Variables: { userId: string } }>;
@@ -34,6 +35,7 @@ class Storage {
   async put(key: string, value: unknown) { if (this.failPut) throw new Error('storage unavailable'); this.data.set(key, structuredClone(value)); }
   async delete(key: string) { if (this.failDelete) throw new Error('storage unavailable'); return this.data.delete(key); }
   async setAlarm(time: number) { this.alarm = time; }
+  async deleteAll() { this.data.clear(); }
   async deleteAlarm() { if (this.failDeleteAlarm) throw new Error('alarm unavailable'); this.alarm = null; }
   async transaction<T>(callback: (txn: Storage) => Promise<T>): Promise<T> {
     const data = structuredClone(this.data), alarm = this.alarm;
@@ -314,6 +316,128 @@ describe('durable carrier control', () => {
   it('does not resurrect a terminal-first event when initiation arrives later', async () => {
     const o = owner(); await o.event('call.hangup'); await o.drain(); await o.event('call.initiated'); await o.drain();
     expect(requests).toHaveLength(0); expect(await occupied()).toBe(0);
+  });
+
+  it.each([
+    ['carrier-first', null], ['session-first', null],
+    ['carrier-first', 'Session failed'], ['session-first', 'Session failed'],
+  ] as const)('preserves carrier classification across actual session finalization: %s / %s', async (order, sessionFailure) => {
+    const o = owner(); await o.event('call.initiated'); await o.drain();
+    db.database.prepare("UPDATE calls SET connected_at=datetime('now') WHERE id=?").run(callId);
+    const sessionStorage = new Storage();
+    const session = new CallSession({ storage: sessionStorage } as unknown as DurableObjectState, env);
+    // Begin at finalization with a memoized conversation: no external AI request.
+    Object.assign(session, { callId, history: [{ role: 'system', content: '' }], failure: sessionFailure,
+      summarized: { summary: 'Caller requested a callback.', intent: 'question', messageJson: '{"message":"Call back"}' } });
+    const finalize = () => (session as unknown as { finalize(): Promise<void> }).finalize();
+    const failCarrier = async () => { await o.event('streaming.failed'); await o.drain(); await o.event('call.hangup'); await o.drain(); };
+    if (order === 'carrier-first') {
+      // Interleave the owner after the session's active-row SELECT, immediately
+      // before its final UPDATE; stale read/preflight checks cannot pass this.
+      let arrived!: () => void, release!: () => void;
+      const entered = new Promise<void>(resolve => { arrived = resolve; });
+      const gate = new Promise<void>(resolve => { release = resolve; });
+      const sessionEnv = { ...env, DB: { prepare(sql: string) {
+        const statement = db.prepare(sql);
+        return { bind(...args: Parameters<typeof statement.bind>) {
+          const bound = statement.bind(...args);
+          return { first: () => bound.first(), all: () => bound.all(), async run() {
+            if (sql.includes('duration_s = ?')) { arrived(); await gate; }
+            return bound.run();
+          } };
+        } };
+      } } } as unknown as Env;
+      Object.assign(session, { env: sessionEnv });
+      const pending = finalize();
+      await entered;
+      try { await failCarrier(); } finally { release(); }
+      await pending;
+    } else { await finalize(); await failCarrier(); }
+    const row = db.database.prepare('SELECT status,outcome,failure_code,failure_message,summary,message_json,ended_at,carrier_released_at FROM calls WHERE id=?').get(callId);
+    expect(row).toMatchObject({ status: 'failed', outcome: 'failed', failure_code: 'carrier_stream_failed',
+      failure_message: 'The telephone audio connection failed. Please review the call and retry.', message_json: '{"message":"Call back"}' });
+    expect(String(row!.summary)).toContain('Caller requested a callback.');
+    expect(row!.ended_at).not.toBeNull(); expect(row!.carrier_released_at).not.toBeNull();
+    expect(await occupied()).toBe(0);
+    const control = await o.storage.get<{cleanupAt:number}>('control');
+    expect(o.storage.alarm).toBe(control!.cleanupAt);
+    // A reconstructed finalizer and an explicit owner reconcile cannot undo it.
+    const rebuilt = new CallSession({ storage: sessionStorage } as unknown as DurableObjectState, env);
+    Object.assign(rebuilt, { callId });
+    await (rebuilt as unknown as { finalize(): Promise<void> }).finalize();
+    await o.object.fetch(new Request('https://internal/reconcile', { method: 'POST' })); await o.object.alarm();
+    expect(db.database.prepare('SELECT status,outcome,failure_code FROM calls WHERE id=?').get(callId))
+      .toEqual({ status: 'failed', outcome: 'failed', failure_code: 'carrier_stream_failed' });
+  });
+
+  it.each(['telnyx', 'web', 'asterisk'])('keeps normal session finalization semantics for %s', async channel => {
+    await reserveTelnyxCall(env, callId, correlation, '+12025550101', 'caller');
+    db.database.prepare("UPDATE calls SET channel=?, connected_at=datetime('now') WHERE id=?").run(channel, callId);
+    const session = new CallSession({ storage: new Storage() } as unknown as DurableObjectState, env);
+    Object.assign(session, { callId, history: [{role:'system',content:''}],
+      summarized: {summary:'Callback saved',intent:'question',messageJson:'{"message":"Call back"}'} });
+    await (session as unknown as { finalize(): Promise<void> }).finalize();
+    expect(db.database.prepare('SELECT status,outcome,failure_code,failure_message FROM calls WHERE id=?').get(callId))
+      .toEqual({status:'completed',outcome:'message_taken',failure_code:null,failure_message:null});
+  });
+
+  it('preserves carrier failure through a failed final UPDATE and rebuilt session retry', async () => {
+    const o=owner(); await o.event('call.initiated'); await o.drain();
+    db.database.prepare("UPDATE calls SET connected_at=datetime('now') WHERE id=?").run(callId);
+    await o.event('streaming.failed'); await o.drain(); await o.event('call.hangup'); await o.drain();
+    const storage=new Storage();
+    const state={storage} as unknown as DurableObjectState;
+    const session=new CallSession(state,env);
+    Object.assign(session,{callId,history:[{role:'system',content:''}],
+      summarized:{summary:'Retry saved content',intent:'question',messageJson:'{"message":"Call back"}'}});
+    db.hook=sql=>{if(sql.includes('duration_s = ?')) throw new Error('synthetic final update failure');};
+    await expect((session as unknown as {finalize():Promise<void>}).finalize()).rejects.toThrow('synthetic final update failure');
+    db.hook=null;
+    const rebuilt=new CallSession(state,env); Object.assign(rebuilt,{callId,history:[{role:'system',content:''}]});
+    await (rebuilt as unknown as {finalize():Promise<void>}).finalize();
+    expect(db.database.prepare('SELECT status,outcome,failure_code,summary,message_json FROM calls WHERE id=?').get(callId))
+      .toEqual({status:'failed',outcome:'failed',failure_code:'carrier_stream_failed',summary:'Retry saved content',message_json:'{"message":"Call back"}'});
+  });
+
+  it.each(['web','asterisk'])('does not preserve stale carrier-like columns on %s rows', async channel => {
+    await reserveTelnyxCall(env,callId,correlation,'+12025550101','caller');
+    db.database.prepare("UPDATE calls SET channel=?,failure_code='old_failure',failure_message='old',outcome='failed' WHERE id=?").run(channel,callId);
+    const session=new CallSession({storage:new Storage()} as unknown as DurableObjectState,env);
+    Object.assign(session,{callId,history:[{role:'system',content:''}]});
+    await (session as unknown as {finalize():Promise<void>}).finalize();
+    expect(db.database.prepare('SELECT status,outcome,failure_code,failure_message FROM calls WHERE id=?').get(callId))
+      .toEqual({status:'completed',outcome:'answered',failure_code:null,failure_message:null});
+  });
+
+  it.each(['terminal-first', 'normal', 'failed'])('schedules terminal cleanup directly, preserving explicit reconciliation: %s', async kind => {
+    const o=owner();
+    if(kind!=='terminal-first') {await o.event('call.initiated');await o.drain();}
+    if(kind==='failed') {await o.event('streaming.failed');await o.drain();}
+    await o.event('call.hangup');await o.drain();
+    const s=await o.storage.get<{cleanupAt:number}>('control');
+    expect(s!.cleanupAt).toBe(Date.now()+35*60_000);
+    expect(o.storage.alarm).toBe(s!.cleanupAt);
+    vi.setSystemTime(Date.now()+30_000);
+    expect(o.storage.alarm).toBe(s!.cleanupAt); // no periodic 30-second wake
+    expect((await o.object.fetch(new Request('https://internal/reconcile',{method:'POST'}))).status).toBe(204);
+    expect(o.storage.alarm).toBe(Date.now()+1);
+    await o.object.alarm();expect(o.storage.alarm).toBe(s!.cleanupAt);
+    await o.event('call.answered');await o.drain(); // concrete late inbox is consumed
+    expect(await o.storage.get('control')).toMatchObject({inbox:[]});
+    expect(o.storage.alarm).toBe(s!.cleanupAt);
+    vi.setSystemTime(s!.cleanupAt);await o.object.alarm();
+    expect([...o.storage.data]).toEqual([['retired',true]]);expect(o.storage.alarm).toBeNull();
+  });
+
+  it('keeps terminal D1 failure retry earlier than cleanup and returns to cleanup after recovery', async () => {
+    const o=owner();await o.event('call.initiated');await o.drain();
+    await o.event('streaming.failed');await o.drain();await o.event('call.hangup');await o.drain();
+    const s=await o.storage.get<{cleanupAt:number}>('control');
+    db.hook=()=>{throw new Error('synthetic D1 unavailable');};
+    await o.object.alarm();expect(o.storage.alarm).toBe(Date.now()+60_000);
+    db.hook=null;vi.setSystemTime(Date.now()+60_000);await o.object.alarm();
+    expect(o.storage.alarm).toBe(s!.cleanupAt);
+    expect(db.database.prepare('SELECT failure_code FROM calls WHERE id=?').get(callId)).toEqual({failure_code:'carrier_stream_failed'});
   });
 
   it('compacts terminal state only after its cleanup deadline and finalizes the released row', async () => {
