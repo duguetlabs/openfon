@@ -86,6 +86,35 @@ found no remaining concrete issue in the bounded scope and released its slot.
 Clean latest-head PR-Agent/CI remain pending; local evidence is not merge or
 launch approval.
 
+## Account admission and remaining provider guards
+
+The published `bc0799c3` review raised account-deletion KDF admission and the
+remaining legacy profile-apply race. Both were verified and corrected. Deletion
+now shares password rotation's per-isolate four-active/16-start/two-per-second
+budget before credential lookup, releasing in finally. Original0020 deletion,
+password/session CAS and success-only cookie behavior remain. Five original
+regressions fail;39 fixed account cases and both types pass.
+
+The fourth profile-apply path now pins provider state and gates its atomic
+mirrors. A bounded writer inventory additionally found stale partial provider
+PUT could restore OpenAI over an active custom model. Provider writes now pin
+the full captured provider state; a read-only assertion aborts a conflicted
+transaction before mirrors or optional cleanup. Owner150 distinct API cases
+pass across the documented initial/recheck runs. Native D1 conflict markers map
+to409 in the production Node handler; six full persisted snapshots remain
+unchanged, accepted zero-row cleanup continues correctly, and quota/late-error
+failures roll back. Four source-extracted native chains also pass. This is not
+new full-workerd-handler execution. Independent QA verified all28 evidence
+hashes, six snapshots and exact assembly with no concrete remaining issue.
+
+Final `3829795` passes1,074 tests across47 files, both typechecks and11 affected
+actual Chrome/workerd browser cases. Earlier full38/38 passes on `6524a7a` after
+correcting the stale enabled-Save assertion, whose two originalCI37/1 failures
+are retained. The original onboarding, generic-string-validation and frozen-host-
+clock claims were independently disproved and publicly declined with limits.
+Fresh exact-head PR-Agent security/major clearance and CI remain mandatory.
+No staging, production or live-provider changes occurred.
+
 ## Previous correction evidence
 
 The [official d73514e report](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5650010745)
