@@ -57,7 +57,13 @@ export function providerUpdate(env: Env, current: ProviderSettings | null, body:
     if (pinned && url !== pinned) throw new ProviderInputError(`${capability} OpenAI endpoint must be ${pinned}`);
     const oldIdentity = `${current?.[providerField] ?? 'instance'}:${current?.[urlField] ?? ''}`;
     const newIdentity = `${provider}:${url}`;
-    const credential = key(keyField, `${capability}_clear_api_key`, current?.[keyField] ?? '', oldIdentity, newIdentity);
+    // Instance mode uses only operator credentials. Never retain an ignored
+    // workspace secret or resurrect one when later selecting an explicit provider.
+    const oldKey = current?.[providerField] && current[providerField] !== 'instance' ? current[keyField] ?? '' : '';
+    const credential = key(keyField, `${capability}_clear_api_key`, provider === 'instance' ? '' : oldKey, oldIdentity, newIdentity);
+    if (provider === 'instance' && credential) {
+      throw new ProviderInputError(`${capability} instance mode uses the operator key. Select an explicit provider to save a workspace API key.`);
+    }
     if (provider !== 'instance') {
       const localRealtime = capability === 'realtime' && env.ALLOW_INSECURE_LLM_URL === 'true';
       if (capability === 'realtime' && !url.startsWith('wss://') && !(localRealtime && url.startsWith('ws://'))) {

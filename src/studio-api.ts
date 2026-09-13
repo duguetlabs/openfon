@@ -1139,6 +1139,10 @@ export function registerStudioApi(app: StudioApp): void {
     if (!assistant.name.trim() || !assistant.language.trim() || !assistant.persona.trim()) {
       return c.json({ error: 'Complete the assistant essentials before activation' }, 400);
     }
+    const provider = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
+      .bind(assistant.business_id).first<ProviderSettings>();
+    const incompatibility = assistantCompatibilityError(c.env, provider, assistant);
+    if (incompatibility) return c.json({ error: incompatibility }, 400);
     const activated = await c.env.DB.prepare(
       `UPDATE assistants SET state='active', activated_at=COALESCE(activated_at, datetime('now')),
         updated_at=datetime('now')
@@ -1644,11 +1648,15 @@ export function registerStudioApi(app: StudioApp): void {
       presets: TEXT_PRESETS,
       realtime_provider: provider?.realtime_provider ?? 'instance',
       realtime_base_url: provider?.realtime_base_url ?? '',
-      realtime_api_key_configured: Boolean(provider?.realtime_api_key),
+      // Key presence follows runtime selection; it is not a connection check.
+      realtime_api_key_configured: Boolean((provider?.realtime_provider || 'instance') === 'instance'
+        ? c.env.REALTIME_API_KEY || ((c.env.REALTIME_PROVIDER || 'kataleptic') === 'kataleptic' ? c.env.DEFAULT_LLM_API_KEY : '')
+        : provider?.realtime_api_key),
       stt_provider: provider?.stt_provider ?? 'instance',
       stt_base_url: provider?.stt_base_url ?? '',
       stt_model: provider?.stt_model ?? '',
-      stt_api_key_configured: Boolean(provider?.stt_api_key),
+      stt_api_key_configured: Boolean((provider?.stt_provider || 'instance') === 'instance'
+        ? c.env.DEFAULT_STT_API_KEY : provider?.stt_api_key),
       tts_provider: c.env.DEFAULT_TTS_PROVIDER,
       updatedAt: provider?.updated_at ?? null,
     });

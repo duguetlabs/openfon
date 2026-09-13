@@ -31,7 +31,7 @@ async function privatePrimary() {
   expect((await request('/api/public/agent/one', undefined, '')).status).toBe(404);
 }
 async function switchProvider(selection = 'openai') {
-  return request('/api/me/provider', { realtime_provider: selection, realtime_api_key: 'synthetic-key' });
+  return request('/api/me/provider', { realtime_provider: selection, realtime_api_key: selection === 'instance' ? '' : 'synthetic-key' });
 }
 function primary() {
   return db.database.prepare("SELECT state,activated_at,realtime_model,realtime_voice FROM assistants WHERE business_id='b1'").get();

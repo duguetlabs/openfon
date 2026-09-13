@@ -48,7 +48,7 @@ it.each(['openai', 'instance'])('normalizes active custom models on effective Op
     ('upper','b1','upper','active','realtime','GPT-realtime'),
     ('other','b2','other','active','realtime','my-custom-model');
     INSERT INTO engine_profiles(id,business_id,name,engine,realtime_model) VALUES ('saved','b1','Saved','realtime','my-custom-model');`);
-  expect((await request('/api/me/provider', { ...openai, realtime_provider: selection })).status).toBe(200);
+  expect((await request('/api/me/provider', { ...openai, realtime_provider: selection, realtime_api_key: selection === 'instance' ? '' : openai.realtime_api_key })).status).toBe(200);
   const provider = db.database.prepare("SELECT * FROM provider_settings WHERE business_id='b1'").get() as any;
   for (const table of ['assistants', 'agent_settings']) {
     const current = db.database.prepare(`SELECT * FROM ${table} WHERE business_id='b1' ${table === 'assistants' ? "AND public_slug='one'" : ''}`).get() as any;

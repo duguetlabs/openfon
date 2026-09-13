@@ -50,7 +50,7 @@ it('persists separate capabilities and never returns credentials or crosses work
   expect(view).toMatchObject({ model: 'custom/model:route', stt_provider: 'openai', realtime_provider: 'openai', stt_api_key_configured: true, realtime_api_key_configured: true });
   expect(JSON.stringify(view)).not.toContain('private');
   const other = await (await request('/api/me/provider', undefined, 's2')).json() as any;
-  expect(other).toMatchObject({ usesInstanceDefault: true, workspaceApiKeyConfigured: false, realtime_api_key_configured: false });
+  expect(other).toMatchObject({ usesInstanceDefault: true, workspaceApiKeyConfigured: false, realtime_api_key_configured: true });
   expect((await request('/api/me/provider', {}, '')).status).toBe(401);
   const exportResponse = await request('/api/me/account/export');
   expect(exportResponse.status).toBe(200);
