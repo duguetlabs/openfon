@@ -138,7 +138,7 @@ try {
     assert.deepEqual(voices.azure, []);
   }
   const webhook = async (type, id=randomUUID()) => {
-    const body=JSON.stringify({data:{id,record_type:'event',event_type:type,occurred_at:new Date().toISOString(),payload:{...call,from:'+12025550100',to:'+12025550101',direction:'incoming'}}});
+    const body=JSON.stringify({data:{id,record_type:'event',event_type:type,occurred_at:new Date().toISOString(),payload:{...call,...(type==='call.hangup'?{hangup_cause:'normal_clearing'}:{}),from:'+12025550100',to:'+12025550101',direction:'incoming'}}});
     const timestamp=String(Math.floor(Date.now()/1000));
     const signature=sign(null,Buffer.from(timestamp+'|'+body),privateKey).toString('base64');
     const response=await mf.dispatchFetch('https://openfon.smoke.invalid/api/telnyx/webhooks',{method:'POST',headers:{'Content-Type':'application/json','telnyx-timestamp':timestamp,'telnyx-signature-ed25519':signature},body});
@@ -185,9 +185,18 @@ try {
   assert.equal(rows.n,1,'duplicate initiated must not create another call');
   assert.equal(commands.filter(x=>x.action==='answer').length,1);
   assert.equal(telemetry.filter(x=>x.path==='/unexpected').length,0,'all outbound requests matched local mocks');
-  const result = await db.prepare("SELECT summary,status FROM calls WHERE channel='telnyx'").first();
+  const result = await db.prepare("SELECT summary,status,outcome,failure_code,failure_message,connected_at,ended_at,carrier_released_at FROM calls WHERE channel='telnyx'").first();
   if (oversizedUpstream) assert.equal(result.status,'failed','invalid upstream must fail closed');
-  else assert.equal(result.summary, 'Synthetic call completed.');
+  else {
+    assert.equal(result.status, 'completed', 'normal call must complete, not merely produce a summary');
+    assert.equal(result.outcome, 'answered', 'normal fixture must retain a successful outcome');
+    assert.equal(result.failure_code, null, 'normal call must have no failure code');
+    assert.equal(result.failure_message, null, 'normal call must have no failure message');
+    assert.ok(result.connected_at, 'normal call connected');
+    assert.equal(result.summary, 'Synthetic call completed.');
+  }
+  assert.ok(result.ended_at, 'terminal call has an end time');
+  assert.ok(result.carrier_released_at, 'signed terminal confirmation released capacity');
   const turns = await db.prepare("SELECT COUNT(*) AS n FROM call_turns").first();
   assert.equal(turns.n, oversizedUpstream ? 0 : 3, 'only acknowledged valid turns persisted');
   if (oversizedUpstream) console.log(`PASS ${gateway ? 'gateway' : 'direct OpenAI'} oversized-upstream workerd regression: zero carrier PCM, failed call, carrier hangup and D1 release. Synthetic upstreams only; no external requests.`);
