@@ -75,9 +75,17 @@ for (const operation of ['create item', 'approve item', 'delete item', 'collecti
       await page.getByLabel('New collection', { exact: true }).fill('Accepted new collection');
       await page.getByRole('button', { name: 'Create collection', exact: true }).click();
     } else await page.getByRole('button', { name: 'Delete collection', exact: true }).click();
-    if (operation === 'held read') releaseOldRead();
     await expect(page.getByRole('alert').filter({ hasText: 'Your changes were saved, but knowledge could not be refreshed.' })).toBeVisible();
     expect(mutations).toBe(1);
+    if (operation === 'held read') {
+      const acceptedId = await page.getByRole('combobox').first().inputValue();
+      await expect(page.getByLabel('Collection name', { exact: true })).toHaveValue('Accepted new collection');
+      releaseOldRead();
+      // The initial load's finally runs only after the held response is consumed.
+      await expect(page.getByText('Loading workspace data…', { exact: true })).toHaveCount(0);
+      await expect(page.getByRole('combobox').first()).toHaveValue(acceptedId);
+      await expect(page.getByLabel('Collection name', { exact: true })).toHaveValue('Accepted new collection');
+    }
     if (operation === 'create item' || operation === 'missing collection') {
       await expect(page.getByRole('heading', { name: 'New saved question?', exact: true })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Save knowledge', exact: true })).toHaveCount(0);

@@ -76,30 +76,47 @@ export default function Settings() {
   const profileRenameRequests = useRef(new Map<string, { queued?: { name: string; version: number | undefined } }>());
   const loaded = useRef<ReturnType<typeof settingsSnapshot> | null>(null);
   const mutationGeneration = useRef(0);
+  const settingsReadGeneration = useRef(0);
+  const settingsRead = useRef<Promise<void> | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; settingsReadGeneration.current++; }; }, []);
 
+  function readSettings() {
+    const run = ++settingsReadGeneration.current;
+    const generation = mutationGeneration.current;
+    const current = () => mounted.current && run === settingsReadGeneration.current && generation === mutationGeneration.current;
+    const request = (async () => {
+      try {
+        const business = await api.business();
+        if (!current()) return;
+        if (!business) throw new Error('Workspace unavailable');
+        const incoming = settingsSnapshot(business);
+        const previous = loaded.current?.business.id === business.id ? loaded.current : null;
+        loaded.current = incoming;
+        setBiz(draft => preserveDraftFields(draft, previous?.business, incoming.business));
+        setAgent(draft => incoming.agent ? preserveDraftFields(draft, previous?.agent, incoming.agent) : null);
+        setHours(draft => previous && JSON.stringify(draft) !== JSON.stringify(previous.hours) ? draft : incoming.hours);
+        setServices(draft => previous && JSON.stringify(draft) !== JSON.stringify(previous.services) ? draft : incoming.services);
+        setFaqs(draft => previous && JSON.stringify(draft) !== JSON.stringify(previous.faqs) ? draft : incoming.faqs);
+        setClosures(draft => previous && JSON.stringify(draft) !== JSON.stringify(previous.closures) ? draft : incoming.closures);
+      } catch (e) { if (current()) throw e; }
+    })();
+    settingsRead.current = request;
+    return request;
+  }
   useEffect(() => {
     let active = true;
-    const generation = mutationGeneration.current;
-    if (business && !profileRefreshPending) void api.business().then((business) => {
-      if (!active || !business || generation !== mutationGeneration.current) return;
-      const incoming = settingsSnapshot(business);
-      const previous = loaded.current?.business.id === business.id ? loaded.current : null;
-      loaded.current = incoming;
-      setBiz(current => preserveDraftFields(current, previous?.business, incoming.business));
-      setAgent(current => incoming.agent ? preserveDraftFields(current, previous?.agent, incoming.agent) : null);
-      // Row lists are edited as a unit; keep local additions/removals as well
-      // as changed values rather than attempting to merge positional rows.
-      setHours(current => previous && JSON.stringify(current) !== JSON.stringify(previous.hours) ? current : incoming.hours);
-      setServices(current => previous && JSON.stringify(current) !== JSON.stringify(previous.services) ? current : incoming.services);
-      setFaqs(current => previous && JSON.stringify(current) !== JSON.stringify(previous.faqs) ? current : incoming.faqs);
-      setClosures(current => previous && JSON.stringify(current) !== JSON.stringify(previous.closures) ? current : incoming.closures);
-      void loadProfiles(business.id).catch(() => {});
-      void api.voices().then(setVoiceCatalog).catch(() => {});
-    }).catch((e) => {
-      if (!active || generation !== mutationGeneration.current) return;
-      setRefreshFailed(true);
-      setError(e instanceof Error ? e.message : 'Could not load settings');
-    });
+    if (business) {
+      void readSettings().then(() => {
+        if (!active) return;
+        void loadProfiles(business.id).catch(() => {});
+        void api.voices().then(setVoiceCatalog).catch(() => {});
+      }).catch(e => {
+        if (!active) return;
+        setRefreshFailed(true);
+        setError(e instanceof Error ? e.message : 'Could not load settings');
+      });
+    }
     return () => { active = false; };
   }, [business]);
 
@@ -119,19 +136,17 @@ export default function Settings() {
   async function refreshProfileDisplay() {
     try {
       await refresh();
-      const incomingBusiness = await api.business();
-      if (!incomingBusiness) throw new Error('Workspace unavailable');
-      mutationGeneration.current++;
-      const incoming = settingsSnapshot(incomingBusiness);
-      const previous = loaded.current;
-      loaded.current = incoming;
-      setBiz(current => preserveDraftFields(current, previous?.business, incoming.business));
-      setAgent(current => incoming.agent ? preserveDraftFields(current, previous?.agent, incoming.agent) : null);
-      setHours(current => previous && JSON.stringify(current) !== JSON.stringify(previous.hours) ? current : incoming.hours);
-      setServices(current => previous && JSON.stringify(current) !== JSON.stringify(previous.services) ? current : incoming.services);
-      setFaqs(current => previous && JSON.stringify(current) !== JSON.stringify(previous.faqs) ? current : incoming.faqs);
-      setClosures(current => previous && JSON.stringify(current) !== JSON.stringify(previous.closures) ? current : incoming.closures);
-      await loadProfiles(incomingBusiness.id);
+      // Effects and explicit recovery share dispatch order. If an independent
+      // provider refresh starts a newer read, await its result instead of letting
+      // this older snapshot supersede it or declaring recovery prematurely.
+      let pending = readSettings();
+      await pending;
+      while (settingsRead.current && settingsRead.current !== pending) {
+        pending = settingsRead.current;
+        await pending;
+      }
+      if (!loaded.current) throw new Error('Workspace unavailable');
+      await loadProfiles(loaded.current.business.id);
       setProfileRefreshPending(false); setError('');
     } catch (err) {
       setError(`The profile change was saved, but its display could not refresh: ${err instanceof Error ? err.message : 'Request failed'}`);

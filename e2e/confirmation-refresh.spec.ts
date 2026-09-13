@@ -65,7 +65,6 @@ for (const operation of ['apply', 'delete'] as const) {
         return route.fulfill({ response });
       }
       if (failRead && (operation === 'apply' ? new URL(request.url()).pathname === '/api/me' : request.url().includes('/profiles'))) {
-        failRead = false;
         return route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"Synthetic profile refresh failure"}' });
       }
       return route.continue();
@@ -75,6 +74,7 @@ for (const operation of ['apply', 'delete'] as const) {
     if (operation === 'delete') await expect(page.getByRole('button', { name: 'Delete profile', exact: true })).toHaveCount(0);
     else await expect(page.getByRole('button', { name: 'Apply', exact: true })).toBeDisabled();
     await page.getByLabel('Name', { exact: true }).fill('Newer unsaved workspace name');
+    failRead = false;
     await page.getByRole('button', { name: 'Retry profile refresh', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Retry profile refresh', exact: true })).toHaveCount(0);
     await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Newer unsaved workspace name');
@@ -88,3 +88,49 @@ for (const operation of ['apply', 'delete'] as const) {
     }
   });
 }
+
+test('older profile recovery read cannot overwrite a newer provider refresh', async ({ page }) => {
+  await page.goto('/auth');
+  await page.getByLabel('Email').fill(`profile-read-order-${Date.now()}@example.invalid`);
+  await page.getByLabel('Password', { exact: true }).fill('Synthetic-Confirmation-Password-1234');
+  await page.getByRole('button', { name: 'Create account', exact: true }).click();
+  await page.getByLabel('Business name', { exact: true }).fill('Profile read order');
+  await page.getByLabel('What do you do?').fill('Synthetic read ordering');
+  await page.getByRole('button', { name: 'Continue →' }).click();
+  await page.getByRole('button', { name: 'Continue →' }).click();
+  await page.getByRole('button', { name: /Create.*assistant|Save.*assistant|Open.*studio/i }).click();
+  await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
+  const business = await (await page.request.get('/api/me/business')).json();
+  await page.request.post(`/api/me/business/${business.id}/profiles`, { data: { name: 'French pipeline', engine: 'pipeline', language: 'fr', voice: '', llm_model: '' } });
+  await page.goto('/settings');
+  await expect(page.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
+  let reads = 0;
+  let captured = false;
+  let delivered = false;
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/me/business', async route => {
+    if (route.request().method() === 'GET' && ++reads === 2) {
+      const response = await route.fetch();
+      captured = true;
+      await gate;
+      await route.fulfill({ response });
+      delivered = true;
+      return;
+    }
+    return route.continue();
+  });
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect.poll(() => captured).toBe(true);
+  // A separate accepted edit becomes visible through the independent provider refresh.
+  expect((await page.request.put(`/api/me/business/${business.id}/agent`, { data: { agent_name: 'Newer server assistant' } })).ok()).toBe(true);
+  await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
+  await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Newer server assistant');
+  await page.getByLabel('Name', { exact: true }).fill('Newer unsaved workspace draft');
+  release();
+  await expect.poll(() => delivered).toBe(true);
+  await expect(page.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
+  await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Newer server assistant');
+  await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Newer unsaved workspace draft');
+  expect((await (await page.request.get('/api/me/business')).json()).agent.agent_name).toBe('Newer server assistant');
+});
