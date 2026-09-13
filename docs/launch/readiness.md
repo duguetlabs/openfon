@@ -4,35 +4,42 @@ Updated 2026-09-13. **Release candidate in progress; not production-launch appro
 
 ## Latest local review corrections
 
-The [official 67443bc report](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5649819010)
-reported no security concerns but four findings. Hosted reviews also found issues;
-that published head is not approved for merge. Earlier clean reports apply only
-to their recorded commits.
+The [official d73514e report](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5650010745)
+reported no security concerns but two findings. Exact-source startup probes
+independently confirm that realtime-only credentials can connect; invalid custom
+text configuration still rejects intentionally. The failed profile-rename finding
+is corrected locally with serialized writes and a confirmed saved-name baseline.
+QA's additional two-failure case is covered; unsuccessful draft names are not
+promoted to saved state.
 
-The next local candidate preserves private assistants during missing-legacy
-recovery, aligns overview aggregates to connected live conversations, preserves
-Telnyx outcomes during status reconciliation, and ignores obsolete provider-form
-initialization responses. Migration 0019's conservative pause and identification
-limits are described in [migration compatibility](../migration-compatibility.md).
-Unconnected attempts remain visible in call history.
+Hosted security identified a persistent password-rotation lockout. The local
+correction removes rotation from the account mutation bucket and uses a scalar,
+isolate-local CPU guard:16 requests initially, two refills per second and four
+active requests. A successful rotation performs two sequential password KDFs.
+This leaves no account/session/IP-keyed password counter or persistent lockout;
+it does not guarantee availability during global saturation. Export and deletion
+limits remain separate, and credential/session changes stay transactional.
 
-The official-correction batch passed 870 unit tests, both typechecks, optimized
-migration rehearsals through 0019 and 0009, and an actual-workerd concurrent recovery probe.
-The original source failed the same privacy probe. Initial fixture failures are
-retained in the integration checkpoint. The subsequent assembled account, polling, PBX ingress, profile-blur and greeting
-corrections pass 887 unit tests, both typechecks and five affected browser cases.
-Actual-workerd ingress and synthetic Asterisk lifecycle checks also pass.
-Independent scoped QA passes 36 focused tests and actual-workerd checks for
-concurrent private recovery, migration0019 scope, and HEAD-export exhaustion
-followed by password rotation, copied-cookie rejection and transactional rollback.
-Other owner evidence is reused as attributed; no new major/security issue was
-found in this bounded scope.
-No latest-head review clearance is claimed.
+The published d73514e application passed887 unit tests, both typechecks, five
+affected browser cases, actual-workerd ingress and synthetic Asterisk lifecycle.
+The newer password delta passes27 focused account tests and both typechecks;
+the assembled rename correction passes five browser cases and both typechecks.
+Independent scoped QA passes actual-workerd wrong-password/deletion-exhaustion,
+transaction rollback, copied-token revocation and held-work admission/release
+probes, and reviews the rename failure sequences. The active-model switch and insecure-local realtime provider corrections are
+assembled; final combined validation passes898 tests and both typechecks.
+The final predicate follow-up passes76 owner-focused tests and both types.
+Independent QA passes22 focused tests and actual-workerd checks for all four
+JavaScript line terminators, quota rollback, draft privacy and local ws opt-in.
+An exploratory NUL projection failure was localized to node:sqlite text readback;
+actual D1 preserves the full value through read, projection and switching. Fresh exact-head
+CI and official/hosted reviews remain mandatory; no merge clearance is claimed.
 
-Previously validated cookie rotation, Asterisk failed-call content preservation,
-and profile credential migration/recovery barriers remain in place. Fresh
-exact-head official and hosted reviews plus CI are required before merge.
-Staging remains b15/0012, production is unchanged, and no additional live call occurred.
+Migration0019's conservative pause and identification limits are described in
+[migration compatibility](../migration-compatibility.md). Earlier actual-D1
+privacy, concurrent repair, migration barriers, session rollback and carrier
+checks remain recorded with their exact source versions. Staging remainsb15/0012,
+production is unchanged, and no additional live call occurred.
 
 ## Product truth
 
