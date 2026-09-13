@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useNavigationType, useParams, useSearchParams } from 'react-router-dom';
-import { api, type Assistant, type AssistantListItem, type CallRow, type KnowledgeCollection, type KnowledgeItem, type OverviewResponse } from '../api';
+import { api, ApiError, type Assistant, type AssistantListItem, type CallRow, type KnowledgeCollection, type KnowledgeItem, type OverviewResponse } from '../api';
 import { Button, Card, Field, TextArea, Spinner, inputClass, fmtDuration, fmtTime } from '../ui';
 import { VoiceCall } from '../voice';
 import '../studio.css';
@@ -95,14 +95,20 @@ function AssistantEditorForm({ assistantId }: { assistantId: string }) {
 function useAssistantChoices(reload: number, requestedId = '') {
     const [assistants, setAssistants] = useState<AssistantListItem[]>([]);
     const [assistantError, setAssistantError] = useState('');
+    const [requestedMissing, setRequestedMissing] = useState(false);
     const [more, setMore] = useState(false);
     const [loading, setLoading] = useState(false);
     const offset = useRef(0);
     const generation = useRef(0);
     useEffect(() => {
-        const run = ++generation.current; setLoading(true); setAssistantError('');
-        void Promise.all([api.assistants(), requestedId ? api.assistant(requestedId) : Promise.resolve(null)]).then(([page, requested]) => {
+        const run = ++generation.current; setLoading(true); setAssistantError(''); setRequestedMissing(false);
+        const requestedLookup = requestedId ? api.assistant(requestedId).catch(error => {
+            if (error instanceof ApiError && error.status === 404) return null;
+            throw error;
+        }) : Promise.resolve(null);
+        void Promise.all([api.assistants(), requestedLookup]).then(([page, requested]) => {
             if (run !== generation.current) return;
+            setRequestedMissing(Boolean(requestedId && !requested));
             offset.current = page.length; setMore(page.length === 32);
             setAssistants(requested && !page.some(a => a.id === requested.id) ? [requested, ...page] : page);
         }).catch(e => { if (run === generation.current) { setAssistants([]); setAssistantError(errorText(e)); } })
@@ -120,7 +126,7 @@ function useAssistantChoices(reload: number, requestedId = '') {
         } catch (e) { if (run === generation.current) setAssistantError(errorText(e)); }
         finally { if (run === generation.current) setLoading(false); }
     }
-    return { assistants, assistantError, more, loading, loadMore };
+    return { assistants, assistantError, requestedMissing, more, loading, loadMore };
 }
 function MoreAssistants({ choices }: { choices: ReturnType<typeof useAssistantChoices> }) {
     return choices.more ? <Button variant="ghost" disabled={choices.loading} onClick={() => void choices.loadMore()}>Load more assistants</Button> : null;
@@ -201,7 +207,9 @@ export function TestStudio() {
     }
     const choices = useAssistantChoices(assistantReload, params.get('assistant') || '');
     const { assistants, assistantError } = choices;
-    useEffect(() => { setId(selected => selected || assistants[0]?.id || ''); }, [assistants]);
+    useEffect(() => { setId(selected => choices.requestedMissing && selected === params.get('assistant')
+        ? ''
+        : selected || (params.get('assistant') ? '' : assistants[0]?.id || '')); }, [assistants, choices.requestedMissing, params]);
     useEffect(() => () => { attempt.current++; call.current?.hangup(); cancelPending(); }, []);
     const active = phase === 'connecting' || phase === 'live';
     async function start() { if (active) return; const run = ++attempt.current; call.current?.hangup(); cancelPending(); setPhase('connecting'); setError(''); setLines([]); setCallId(''); try {
@@ -240,7 +248,7 @@ export function TestStudio() {
             setPhase('error');
         }
     } }
-    return <><PageTitle title="Test Studio" description="A private rehearsal. Test calls are kept separate from your live activity."/><Notice error={error || assistantError}/>{assistantError && <Button variant="ghost" onClick={() => setAssistantReload(n => n + 1)}>Retry assistants</Button>}<div className="studio-grid"><Card><h2 className="studio-heading">Try the conversation</h2><label>Assistant<select disabled={active} className={inputClass} value={id} onChange={e => setId(e.target.value)}>{assistants.map(a => <option key={a.id} value={a.id}>{a.name} · {a.state}</option>)}</select></label><MoreAssistants choices={choices}/><p className="studio-description">Ask about opening hours, request a service, or leave a message. Use headphones for the clearest audio. You can also type once connected.</p><div className="studio-actions">{active ? <Button variant="danger" onClick={() => { attempt.current++; call.current?.hangup(); cancelPending(); if (phase === 'connecting') setCallId(''); setPhase('ended'); }}>End test call</Button> : <Button disabled={!id || !assistants.some(a => a.id === id) || choices.loading || Boolean(assistantError)} onClick={() => void start()}>Start test call</Button>}<span role="status">{phase === 'connecting' ? 'Connecting…' : phase === 'live' ? hasMic ? 'Microphone on' : 'Text mode — microphone unavailable' : phase === 'ended' ? 'Call ended' : phase === 'error' ? 'Call failed' : 'Ready to test'}</span></div>{id && <Link className="studio-link" to={`/assistants/${id}`}>Edit assistant →</Link>}{callId && !active && <Link className="studio-link" to={`/calls/${callId}`}>Review this call →</Link>}</Card><Card><h2 className="studio-heading">Live transcript</h2><div className="studio-transcript" role="log" aria-live="polite">{!lines.length && <p className="studio-muted">Your conversation will appear here.</p>}{lines.map((l, i) => <div key={i}><strong>{l.who}</strong><p>{l.text}</p></div>)}</div><form className="studio-compose" onSubmit={e => { e.preventDefault(); if (text.trim()) {
+    return <><PageTitle title="Test Studio" description="A private rehearsal. Test calls are kept separate from your live activity."/><Notice error={error || assistantError} message={choices.requestedMissing ? 'The requested assistant is unavailable. Choose another assistant to continue.' : ''}/>{assistantError && <Button variant="ghost" onClick={() => setAssistantReload(n => n + 1)}>Retry assistants</Button>}<div className="studio-grid"><Card><h2 className="studio-heading">Try the conversation</h2><label>Assistant<select disabled={active} className={inputClass} value={id} onChange={e => setId(e.target.value)}>{choices.requestedMissing && <option value="">Choose an assistant</option>}{assistants.map(a => <option key={a.id} value={a.id}>{a.name} · {a.state}</option>)}</select></label><MoreAssistants choices={choices}/><p className="studio-description">Ask about opening hours, request a service, or leave a message. Use headphones for the clearest audio. You can also type once connected.</p><div className="studio-actions">{active ? <Button variant="danger" onClick={() => { attempt.current++; call.current?.hangup(); cancelPending(); if (phase === 'connecting') setCallId(''); setPhase('ended'); }}>End test call</Button> : <Button disabled={!id || !assistants.some(a => a.id === id) || choices.loading || Boolean(assistantError)} onClick={() => void start()}>Start test call</Button>}<span role="status">{phase === 'connecting' ? 'Connecting…' : phase === 'live' ? hasMic ? 'Microphone on' : 'Text mode — microphone unavailable' : phase === 'ended' ? 'Call ended' : phase === 'error' ? 'Call failed' : 'Ready to test'}</span></div>{id && <Link className="studio-link" to={`/assistants/${id}`}>Edit assistant →</Link>}{callId && !active && <Link className="studio-link" to={`/calls/${callId}`}>Review this call →</Link>}</Card><Card><h2 className="studio-heading">Live transcript</h2><div className="studio-transcript" role="log" aria-live="polite">{!lines.length && <p className="studio-muted">Your conversation will appear here.</p>}{lines.map((l, i) => <div key={i}><strong>{l.who}</strong><p>{l.text}</p></div>)}</div><form className="studio-compose" onSubmit={e => { e.preventDefault(); if (text.trim()) {
         call.current?.sendText(text.trim());
         setText('');
     } }}><input aria-label="Message to assistant" className={inputClass} disabled={phase !== 'live'} value={text} onChange={e => setText(e.target.value)} placeholder="Type a test message…"/><Button disabled={phase !== 'live' || !text.trim()}>Send</Button></form></Card></div></>;

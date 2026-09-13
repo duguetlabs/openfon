@@ -263,6 +263,51 @@ test('cancel real pending test reservations on end and navigation', async ({ pag
   }
 });
 
+test('stale requested assistant retains choices and requires explicit replacement', async ({ page }) => {
+  await signup(page);
+  const existing = await (await page.request.get('/api/me/assistants')).json();
+  const createdResponse = await page.request.post('/api/me/assistants', { data: { name: 'Deleted selection' } });
+  expect(createdResponse.status()).toBe(201);
+  const deleted = await createdResponse.json();
+  expect((await page.request.delete(`/api/me/assistants/${deleted.id}`)).status()).toBe(200);
+  // Synthetic list pagination exposes retry after an optional404. Only the
+  // original real assistant is selected; no call is initiated in this probe.
+  const fullPage = [...existing, ...Array.from({ length: 32 - existing.length }, (_, i) => ({
+    ...existing[0], id: `pagination-fixture-${i}`, name: `Pagination fixture ${i}`,
+  }))];
+  await page.route('**/api/me/assistants', route => route.fulfill({ json: fullPage }));
+  await page.route('**/api/me/assistants?offset=32', route => route.fulfill({ status: 503, json: { error: 'Temporary pagination failure' } }));
+  await page.goto(`/test?assistant=${deleted.id}`);
+  await expect(page.getByText('The requested assistant is unavailable. Choose another assistant to continue.')).toBeVisible();
+  const selector = page.getByRole('combobox', { name: 'Assistant', exact: true });
+  await expect(selector.locator(`option[value="${existing[0].id}"]`)).toHaveCount(1);
+  await expect(selector).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Start test call' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Load more assistants' }).click();
+  await expect(page.getByText('Temporary pagination failure')).toBeVisible();
+  await page.getByRole('button', { name: 'Retry assistants' }).click();
+  await expect(page.getByText('Temporary pagination failure')).not.toBeVisible();
+  await expect(page.getByText('The requested assistant is unavailable. Choose another assistant to continue.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Load more assistants' })).toBeEnabled();
+  await expect(selector).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Start test call' })).toBeDisabled();
+  await selector.selectOption(existing[0].id);
+  await expect(page.getByRole('button', { name: 'Start test call' })).toBeEnabled();
+  await expect(page.getByRole('link', { name: 'Edit assistant →' })).toHaveAttribute('href', `/assistants/${existing[0].id}`);
+
+  let fail = true;
+  await page.route(`**/api/me/assistants/${existing[0].id}`, async route => {
+    if (fail) { fail = false; return route.fulfill({ status: 503, json: { error: 'Temporary requested assistant failure' } }); }
+    return route.continue();
+  });
+  await page.goto(`/test?assistant=${existing[0].id}`);
+  await expect(page.getByText('Temporary requested assistant failure')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start test call' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Retry assistants' }).click();
+  await expect(selector).toHaveValue(existing[0].id);
+  await expect(page.getByRole('button', { name: 'Start test call' })).toBeEnabled();
+});
+
 test('assistant-list retries recover Test Studio and preserve Knowledge drafts', async ({ page }) => {
   await signup(page);
   let failNext = true;
