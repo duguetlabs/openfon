@@ -77,7 +77,7 @@ export default function Settings() {
   const loaded = useRef<ReturnType<typeof settingsSnapshot> | null>(null);
   const mutationGeneration = useRef(0);
   const settingsReadGeneration = useRef(0);
-  const settingsRead = useRef<Promise<void> | null>(null);
+  const settingsRead = useRef<Promise<boolean> | null>(null);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; settingsReadGeneration.current++; }; }, []);
 
@@ -88,7 +88,7 @@ export default function Settings() {
     const request = (async () => {
       try {
         const business = await api.business();
-        if (!current()) return;
+        if (!current()) return false;
         if (!business) throw new Error('Workspace unavailable');
         const incoming = settingsSnapshot(business);
         const previous = loaded.current?.business.id === business.id ? loaded.current : null;
@@ -99,7 +99,8 @@ export default function Settings() {
         setServices(draft => previous && JSON.stringify(draft) !== JSON.stringify(previous.services) ? draft : incoming.services);
         setFaqs(draft => previous && JSON.stringify(draft) !== JSON.stringify(previous.faqs) ? draft : incoming.faqs);
         setClosures(draft => previous && JSON.stringify(draft) !== JSON.stringify(previous.closures) ? draft : incoming.closures);
-      } catch (e) { if (current()) throw e; }
+        return true;
+      } catch (e) { if (current()) throw e; return false; }
     })();
     settingsRead.current = request;
     return request;
@@ -107,8 +108,9 @@ export default function Settings() {
   useEffect(() => {
     let active = true;
     if (business) {
-      void readSettings().then(() => {
-        if (!active) return;
+      const request = readSettings();
+      void request.then(applied => {
+        if (!active || !applied || settingsRead.current !== request) return;
         void loadProfiles(business.id).catch(() => {});
         void api.voices().then(setVoiceCatalog).catch(() => {});
       }).catch(e => {
@@ -131,7 +133,9 @@ export default function Settings() {
   async function loadProfiles(id: string) {
     const run = ++profileListGeneration.current;
     const rows = await api.profiles(id);
-    if (run === profileListGeneration.current) acceptProfiles(rows);
+    if (run !== profileListGeneration.current) return false;
+    acceptProfiles(rows);
+    return true;
   }
   async function refreshProfileDisplay() {
     try {
@@ -140,13 +144,14 @@ export default function Settings() {
       // provider refresh starts a newer read, await its result instead of letting
       // this older snapshot supersede it or declaring recovery prematurely.
       let pending = readSettings();
-      await pending;
+      let applied = await pending;
       while (settingsRead.current && settingsRead.current !== pending) {
         pending = settingsRead.current;
-        await pending;
+        applied = await pending;
       }
+      if (!applied) throw new Error('Settings changed during the read. Retry the refresh.');
       if (!loaded.current) throw new Error('Workspace unavailable');
-      await loadProfiles(loaded.current.business.id);
+      if (!await loadProfiles(loaded.current.business.id)) throw new Error('A newer profile read started. Retry the refresh to confirm the latest list.');
       setProfileRefreshPending(false); setError('');
     } catch (err) {
       setError(`The profile change was saved, but its display could not refresh: ${err instanceof Error ? err.message : 'Request failed'}`);

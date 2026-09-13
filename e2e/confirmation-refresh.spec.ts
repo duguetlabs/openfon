@@ -134,3 +134,65 @@ test('older profile recovery read cannot overwrite a newer provider refresh', as
   await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Newer unsaved workspace draft');
   expect((await (await page.request.get('/api/me/business')).json()).agent.agent_name).toBe('Newer server assistant');
 });
+
+test('superseded effect cannot launch a late profile read or hide recovery failure', async ({ page }) => {
+  await page.goto('/auth');
+  await page.getByLabel('Email').fill(`profile-effect-order-${Date.now()}@example.invalid`);
+  await page.getByLabel('Password', { exact: true }).fill('Synthetic-Confirmation-Password-1234');
+  await page.getByRole('button', { name: 'Create account', exact: true }).click();
+  await page.getByLabel('Business name', { exact: true }).fill('Effect order');
+  await page.getByLabel('What do you do?').fill('Synthetic effect ordering');
+  await page.getByRole('button', { name: 'Continue →' }).click();
+  await page.getByRole('button', { name: 'Continue →' }).click();
+  await page.getByRole('button', { name: /Create.*assistant|Save.*assistant|Open.*studio/i }).click();
+  await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
+  const business = await (await page.request.get('/api/me/business')).json();
+  await page.request.post(`/api/me/business/${business.id}/profiles`, { data: { name: 'French pipeline', engine: 'pipeline', language: 'fr', voice: '', llm_model: '' } });
+  await page.goto('/settings');
+  await expect(page.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
+  let failSession = true;
+  await page.route('**/api/me', async route => {
+    if (failSession) { failSession = false; return route.fulfill({ status: 503, json: { error: 'Initial refresh failure' } }); }
+    return route.continue();
+  });
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Retry profile refresh', exact: true })).toBeVisible();
+  let businessReads = 0;
+  let businessDelivered = 0;
+  let oldHeld = false;
+  let oldDelivered = false;
+  let releaseOld!: () => void;
+  let releaseProfiles!: () => void;
+  const oldGate = new Promise<void>(resolve => { releaseOld = resolve; });
+  const profileGate = new Promise<void>(resolve => { releaseProfiles = resolve; });
+  let profileReads = 0;
+  await page.route('**/api/me/business', async route => {
+    const ordinal = ++businessReads;
+    const response = await route.fetch();
+    if (ordinal === 2) { oldHeld = true; await oldGate; }
+    await route.fulfill({ response });
+    businessDelivered++;
+    if (ordinal === 2) oldDelivered = true;
+  });
+  await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
+  await expect.poll(() => oldHeld).toBe(true);
+  await page.route(`**/api/me/business/${business.id}/profiles`, async route => {
+    profileReads++;
+    await profileGate;
+    // Every authoritative list failure must keep the read-only recovery action.
+    return route.fulfill({ status: 503, json: { error: 'Held profile list failure' } });
+  });
+  await page.getByRole('button', { name: 'Retry profile refresh', exact: true }).click();
+  await expect.poll(() => businessDelivered).toBeGreaterThanOrEqual(4);
+  await expect.poll(() => profileReads).toBeGreaterThan(0);
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  const beforeLateEffect = profileReads;
+  releaseOld();
+  await expect.poll(() => oldDelivered).toBe(true);
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  expect(profileReads).toBe(beforeLateEffect);
+  releaseProfiles();
+  await expect(page.getByRole('alert')).toContainText('Held profile list failure');
+  await expect(page.getByRole('button', { name: 'Retry profile refresh', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Apply', exact: true })).toBeDisabled();
+});
