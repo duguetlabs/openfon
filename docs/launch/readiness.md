@@ -43,6 +43,49 @@ combined evidence above is reused with attribution. QA found no remaining
 concrete issue in this bounded scope and released its slot (checkpoint0656837).
 Clean latest-head PR-Agent/CI remain pending; this is not production-launch approval.
 
+## Latest provider-write and settings correction
+
+The published `3d0da345` passed both CI runs. Its original genuine PR-Agent
+report [5656369526](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5656369526)
+reported no security concerns and five recommendations, without clean-major
+clearance. Onboarding retry deadlock was disproved: the creation endpoint
+returns the canonical existing workspace on retry; three existing interrupted
+setup browser cases pass. The public disposition records those evidence limits.
+
+Provider writer races are corrected in all three Studio/preset/legacy paths:
+conditional first writes pin validated provider state, and subsequent mirrored
+writes remain gated in the same atomic transaction. The legacy path additionally
+pins the earlier text credential read. Owner133 focused APIs/types and actual-D1
+batch conflict, trigger/quota and rollback checks pass;22 original failures are
+retained. Exact validated source is assembled in `01d159e`.
+
+Settings now confirms each successful stage before later requests and skips
+accepted unchanged stages. Clean saves are disabled; read failures have a
+refresh-only retry. Reads begun before or during a write cannot replace its
+confirmed baseline, and newer drafts survive recovery. `2d11180` includes the
+QA-driven read-order fences. Six affected actual Chrome/workerd browser cases
+pass across two three-case runs; three original read-order negatives fail on
+`9321adc`. The first fixed read-order log was accidentally named negative;
+it is classified only as fixed evidence. Actual negative logs are separate.
+The assembled `2d11180` suite passes1,052 tests across47 files and both typechecks; the later isolated Piper settlement delta has its own27 focused/type/native passes.
+
+Piper cold/expired catalog work uses scalar admission and immediate fallback,
+sharing completed catalog data only. Final `bfa7d2c` retains reservations until
+lookup/cancel settlement; elapsed time cannot refill unsettled capacity. A lost
+context can strand a slot until isolate recreation, causing static fallback;
+cached catalogs remain available. Owner27 focused tests/types and a tighter
+native nonfinishing-body probe pass: cancellation near1.5s, physical peak32,
+replacement observed after old transport close. This is observed native ordering,
+not forced-DO-destruction or universal remote-teardown proof. Earlier ordinary
+request/DO probes remain attributed to the preceding candidate. Two mocked
+unresolved-I/O negatives fail the expiry-reclamation candidate; no native abort
+failure is claimed. Independent QA on `bfa7d2c` passes all three actual workerd/D1 full-handler
+provider interleavings:409, all batch statements unchanged, full post-switch
+persisted snapshots retained, and fresh incompatible retries400. QA3529c94
+found no remaining concrete issue in the bounded scope and released its slot.
+Clean latest-head PR-Agent/CI remain pending; local evidence is not merge or
+launch approval.
+
 ## Previous correction evidence
 
 The [official d73514e report](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5650010745)
