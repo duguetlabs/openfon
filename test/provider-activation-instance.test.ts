@@ -154,3 +154,75 @@ it('does not report or borrow operator keys for explicit providers without their
   expect(view).toMatchObject({ realtime_api_key_configured: false, stt_api_key_configured: false });
   expect(JSON.stringify(view)).not.toContain('synthetic-operator');
 });
+
+// Hold the final D1 activation write while another request commits. No sleeps,
+// source mutation or relaxed assertion: the real API paths interleave here.
+function holdActivation() {
+  let entered!: () => void;
+  let release!: () => void;
+  const reached = new Promise<void>(resolve => { entered = resolve; });
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const prepare = db.prepare.bind(db);
+  const spy = vi.spyOn(db, 'prepare').mockImplementation(sql => {
+    const statement = prepare(sql);
+    if (sql.includes("UPDATE assistants SET state='active', activated_at=")) {
+      const first = statement.first.bind(statement);
+      statement.first = async <T>() => { entered(); await gate; return first<T>(); };
+    }
+    return statement;
+  });
+  return { reached, release, restore: () => spy.mockRestore() };
+}
+
+it.each(['existing custom', 'missing'])('rejects activation when %s provider changes after compatibility check', async initial => {
+  draft();
+  if (initial === 'missing') db.exec("DELETE FROM provider_settings WHERE business_id='b1'");
+  else db.exec("UPDATE provider_settings SET realtime_provider='custom',realtime_base_url='wss://custom.example/realtime',realtime_api_key='synthetic-custom' WHERE business_id='b1'");
+  const hold = holdActivation();
+  const activation = request('/api/me/assistants/candidate/activate', {}, 's1', 'POST');
+  try {
+    await hold.reached;
+    expect((await request('/api/me/provider', direct)).status).toBe(200);
+    const beforeRelease = snapshot();
+    hold.release();
+    const response = await activation;
+    expect(response.status).toBe(409);
+    expect(await response.text()).toContain('retry activation');
+    expect(snapshot()).toEqual(beforeRelease);
+    expect((await request('/api/public/agent/candidate', undefined, '')).status).toBe(404);
+    expect((await request('/api/me/assistants/candidate/activate', {}, 's1', 'POST')).status).toBe(400);
+  } finally { hold.release(); await activation; hold.restore(); }
+});
+
+it('rejects activation if its checked provider row disappears', async () => {
+  draft('draft', 'gpt-realtime', 'marin');
+  db.exec("UPDATE provider_settings SET realtime_provider='openai' WHERE business_id='b1'");
+  const hold = holdActivation();
+  const activation = request('/api/me/assistants/candidate/activate', {}, 's1', 'POST');
+  try {
+    await hold.reached;
+    db.exec("DELETE FROM provider_settings WHERE business_id='b1'");
+    const beforeRelease = snapshot();
+    hold.release();
+    expect((await activation).status).toBe(409);
+    expect(snapshot()).toEqual(beforeRelease);
+  } finally { hold.release(); await activation; hold.restore(); }
+});
+
+it.each([{ engine: 'pipeline' }, { realtime_model: 'new-custom-model' }, { realtime_voice: 'new-custom-voice' }])
+('rejects an assistant configuration edit after activation precheck (%j)', async edit => {
+  draft();
+  db.exec("UPDATE provider_settings SET realtime_provider='custom' WHERE business_id='b1'");
+  const hold = holdActivation();
+  const activation = request('/api/me/assistants/candidate/activate', {}, 's1', 'POST');
+  try {
+    await hold.reached;
+    expect((await request('/api/me/assistants/candidate', edit)).status).toBe(200);
+    const beforeRelease = snapshot();
+    hold.release();
+    expect((await activation).status).toBe(409);
+    expect(snapshot()).toEqual(beforeRelease);
+    hold.restore();
+    expect((await request('/api/me/assistants/candidate/activate', {}, 's1', 'POST')).status).toBe(200);
+  } finally { hold.release(); await activation; hold.restore(); }
+});

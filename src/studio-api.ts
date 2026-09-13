@@ -1143,18 +1143,24 @@ export function registerStudioApi(app: StudioApp): void {
       .bind(assistant.business_id).first<ProviderSettings>();
     const incompatibility = assistantCompatibilityError(c.env, provider, assistant);
     if (incompatibility) return c.json({ error: incompatibility }, 400);
+    // Pin the checked configuration in the write itself. A concurrent provider
+    // switch preserves draft fields; it must not race this activation check.
     const activated = await c.env.DB.prepare(
       `UPDATE assistants SET state='active', activated_at=COALESCE(activated_at, datetime('now')),
         updated_at=datetime('now')
        WHERE id=?
+         AND engine IS ? AND realtime_model IS ? AND realtime_voice IS ?
+         AND EXISTS(SELECT 1 FROM provider_settings WHERE business_id=assistants.business_id)=?
+         AND (SELECT realtime_provider FROM provider_settings WHERE business_id=assistants.business_id) IS ?
          AND trim(name, char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>''
          AND trim(persona, char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>''
          AND trim(language, char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>'' RETURNING id`
     )
-      .bind(assistant.id)
+      .bind(assistant.id, assistant.engine, assistant.realtime_model, assistant.realtime_voice,
+        provider ? 1 : 0, provider?.realtime_provider ?? null)
       .first<{ id: string }>();
     if (!activated) {
-      return c.json({ error: 'Complete the assistant essentials before activation' }, 409);
+      return c.json({ error: 'Assistant or provider configuration changed. Reload, check the assistant essentials and provider settings, then retry activation.' }, 409);
     }
     return c.json({ ok: true, state: 'active' });
   });
