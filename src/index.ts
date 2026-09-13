@@ -1,5 +1,5 @@
 import { assertPresetWriteBudget, PRESET_LIST_COLUMNS } from './preset-budgets';
-import { OPENAI_REALTIME_VOICES, assistantCompatibilityError, presetCompatibilityError, retainedProviderKey, ProviderInputError } from './provider-settings';
+import { CHECKED_REALTIME_PROVIDER_SQL, checkedRealtimeProvider, OPENAI_REALTIME_VOICES, assistantCompatibilityError, presetCompatibilityError, retainedProviderKey, ProviderInputError } from './provider-settings';
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { bodyLimit } from 'hono/body-limit';
@@ -76,7 +76,7 @@ function slugify(name: string): string {
   return `${base || 'business'}-${newId().replace(/-/g, '').slice(0, 12)}`;
 }
 
-function updateCompatibilitySnapshot(env: Env, businessId: string): D1PreparedStatement {
+function updateCompatibilitySnapshot(env: Env, businessId: string, afterMutation = false): D1PreparedStatement {
   return env.DB.prepare(
     `UPDATE compatibility_sync_state SET agent_snapshot=(
        SELECT json_object(
@@ -87,7 +87,7 @@ function updateCompatibilitySnapshot(env: Env, businessId: string): D1PreparedSt
          'realtime_model', agent_settings.realtime_model, 'realtime_voice', agent_settings.realtime_voice,
          'llm_model', agent_settings.llm_model
        ) FROM agent_settings WHERE business_id=?
-     ), synced_at=datetime('now') WHERE business_id=?`
+     ), synced_at=datetime('now') WHERE business_id=?${afterMutation ? ' AND changes()>0' : ''}`
   ).bind(businessId, businessId);
 }
 
@@ -658,7 +658,7 @@ app.put('/api/me/business/:id/agent', async (c) => {
   let llmKey: string;
   try { llmKey = retainedProviderKey(cur.llm_base_url || c.env.DEFAULT_LLM_BASE_URL,
     s.llm_base_url || (s.llm_base_url === '' ? c.env.DEFAULT_LLM_BASE_URL : cur.llm_base_url) || c.env.DEFAULT_LLM_BASE_URL,
-    cur.llm_api_key, replacementKey || '', Boolean(s.clearApiKey)); }
+    cur.llm_api_key ?? '', replacementKey || '', Boolean(s.clearApiKey)); }
   catch (e) { if (e instanceof ProviderInputError) return c.json({ error: e.message }, 400); throw e; }
   const engine = s.engine === 'realtime' ? 'realtime' : s.engine === 'pipeline' ? 'pipeline' : cur.engine;
   const realtimeModel = s.realtime_model !== undefined ? s.realtime_model : cur.realtime_model;
@@ -668,7 +668,7 @@ app.put('/api/me/business/:id/agent', async (c) => {
   const incompatibility = assistantCompatibilityError(c.env, realtimeProvider,
     { engine, realtime_model: realtimeModel, realtime_voice: realtimeVoice });
   if (incompatibility) return c.json({ error: incompatibility }, 400);
-  const llmBaseUrl = s.llm_base_url ?? cur.llm_base_url;
+  const llmBaseUrl = s.llm_base_url ?? cur.llm_base_url ?? '';
   const effectiveName = s.agent_name ?? cur.agent_name;
   const effectivePersona = s.persona ?? cur.persona;
   const effectiveLanguage = s.language ?? cur.language;
@@ -683,7 +683,9 @@ app.put('/api/me/business/:id/agent', async (c) => {
   const assistantUpdate = c.env.DB.prepare(
     `UPDATE assistants SET name=?, greeting=?, persona=?, language=?, voice=?, take_messages=?, custom_instructions=?,
       engine=?, realtime_model=?, realtime_voice=?, llm_model=?,
-      updated_at=datetime('now') WHERE id=?`
+      updated_at=datetime('now') WHERE id=? AND ${CHECKED_REALTIME_PROVIDER_SQL}
+      AND (SELECT llm_base_url FROM provider_settings WHERE business_id=assistants.business_id) IS ?
+      AND (SELECT llm_api_key FROM provider_settings WHERE business_id=assistants.business_id) IS ?`
   ).bind(
       effectiveName,
       s.greeting ?? cur.greeting,
@@ -696,15 +698,16 @@ app.put('/api/me/business/:id/agent', async (c) => {
       realtimeModel,
       realtimeVoice,
       s.llm_model ?? cur.llm_model,
-      cur.id
+      cur.id,
+      ...checkedRealtimeProvider(realtimeProvider), cur.llm_base_url ?? null, cur.llm_api_key ?? null
     );
   const providerUpdate = c.env.DB.prepare(
-    `INSERT INTO provider_settings (business_id, llm_base_url, llm_api_key) VALUES (?, ?, ?)
+    `INSERT INTO provider_settings (business_id, llm_base_url, llm_api_key) SELECT ?, ?, ? WHERE changes()>0
      ON CONFLICT(business_id) DO UPDATE SET llm_base_url=excluded.llm_base_url,
        llm_api_key=excluded.llm_api_key, updated_at=datetime('now')`
   ).bind(biz.id, llmBaseUrl, llmKey);
   const legacyUpdate = c.env.DB.prepare(
-    `UPDATE agent_settings SET agent_name=?, greeting=?, persona=?, language=?, voice=?, take_messages=?, custom_instructions=?, llm_base_url=?, llm_api_key=?, llm_model=?, engine=?, realtime_model=?, realtime_voice=? WHERE business_id=?`
+    `UPDATE agent_settings SET agent_name=?, greeting=?, persona=?, language=?, voice=?, take_messages=?, custom_instructions=?, llm_base_url=?, llm_api_key=?, llm_model=?, engine=?, realtime_model=?, realtime_voice=? WHERE business_id=? AND changes()>0`
   ).bind(
       effectiveName,
       s.greeting ?? cur.greeting,
@@ -721,7 +724,8 @@ app.put('/api/me/business/:id/agent', async (c) => {
       realtimeVoice,
       biz.id
     );
-  await c.env.DB.batch([assistantUpdate, providerUpdate, legacyUpdate, updateCompatibilitySnapshot(c.env, biz.id)]);
+  const [updated] = await c.env.DB.batch([assistantUpdate, providerUpdate, legacyUpdate, updateCompatibilitySnapshot(c.env, biz.id, true)]);
+  if (!updated.meta.changes) return c.json({ error: 'Assistant or provider configuration changed. Reload and retry.' }, 409);
   return c.json({ ok: true });
 });
 

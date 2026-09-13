@@ -123,3 +123,15 @@ export function assistantCompatibilityError(env: Env, provider: ProviderSettings
   }
   return null;
 }
+
+// A provider switch and its cleanup are atomic. Pin the realtime configuration
+// used by validation so a later batch cannot restore fields that switch removed.
+export const CHECKED_REALTIME_PROVIDER_SQL = `
+  EXISTS(SELECT 1 FROM provider_settings WHERE business_id=assistants.business_id)=?
+  AND (SELECT realtime_provider FROM provider_settings WHERE business_id=assistants.business_id) IS ?
+  AND (SELECT realtime_base_url FROM provider_settings WHERE business_id=assistants.business_id) IS ?
+  AND (SELECT realtime_api_key FROM provider_settings WHERE business_id=assistants.business_id) IS ?`;
+export function checkedRealtimeProvider(provider: ProviderSettings | null) {
+  return [provider ? 1 : 0, provider?.realtime_provider ?? null,
+    provider?.realtime_base_url ?? null, provider?.realtime_api_key ?? null];
+}

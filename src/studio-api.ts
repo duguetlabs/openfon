@@ -1,5 +1,5 @@
 import { PRESET_RECONCILIATION_SQL, PRESET_CHANGED_SQL, assertPresetWriteBudget, PRESET_LIST_COLUMNS, PRESET_ROW_BYTES } from './preset-budgets';
-import { providerUpdate, assistantCompatibilityError, presetCompatibilityError, ProviderInputError, TEXT_PRESETS, OPENAI_REALTIME_VOICES } from './provider-settings';
+import { CHECKED_REALTIME_PROVIDER_SQL, checkedRealtimeProvider, providerUpdate, assistantCompatibilityError, presetCompatibilityError, ProviderInputError, TEXT_PRESETS, OPENAI_REALTIME_VOICES } from './provider-settings';
 import type { Hono } from 'hono';
 import { readWorkspaceBody } from './request-validation';
 import { newId } from './auth';
@@ -72,11 +72,11 @@ const AGENT_SNAPSHOT_SQL = `json_object(
   'llm_model', agent_settings.llm_model
 )`;
 
-function updateAgentSnapshot(env: Env, businessId: string): D1PreparedStatement {
+function updateAgentSnapshot(env: Env, businessId: string, afterMutation = false): D1PreparedStatement {
   return env.DB.prepare(
     `UPDATE compatibility_sync_state SET agent_snapshot=(
        SELECT ${AGENT_SNAPSHOT_SQL} FROM agent_settings WHERE business_id=?
-     ), synced_at=datetime('now') WHERE business_id=?`
+     ), synced_at=datetime('now') WHERE business_id=?${afterMutation ? ' AND changes()>0' : ''}`
   ).bind(businessId, businessId);
 }
 
@@ -1077,7 +1077,7 @@ export function registerStudioApi(app: StudioApp): void {
       c.env.DB.prepare(
       `UPDATE assistants SET name=?, greeting=?, persona=?, language=?, voice=?, take_messages=?,
         custom_instructions=?, engine=?, realtime_model=?, realtime_voice=?, llm_model=?, updated_at=datetime('now')
-       WHERE id=?`
+       WHERE id=? AND ${CHECKED_REALTIME_PROVIDER_SQL}`
       ).bind(
         name,
         greeting,
@@ -1090,14 +1090,15 @@ export function registerStudioApi(app: StudioApp): void {
         realtimeModel,
         realtimeVoice,
         llmModel,
-        assistant.id
+        assistant.id,
+        ...checkedRealtimeProvider(realtimeProvider)
       ),
     ];
     if (await isCompatibilityAssistant(c.env, assistant)) {
       statements.push(
         c.env.DB.prepare(
         `UPDATE agent_settings SET agent_name=?, greeting=?, persona=?, language=?, voice=?, take_messages=?,
-          custom_instructions=?, llm_model=?, engine=?, realtime_model=?, realtime_voice=? WHERE business_id=?`
+          custom_instructions=?, llm_model=?, engine=?, realtime_model=?, realtime_voice=? WHERE business_id=? AND changes()>0`
         ).bind(
           name,
           greeting,
@@ -1113,9 +1114,12 @@ export function registerStudioApi(app: StudioApp): void {
           assistant.business_id
         )
       );
-      statements.push(updateAgentSnapshot(c.env, assistant.business_id));
+      statements.push(updateAgentSnapshot(c.env, assistant.business_id, true));
     }
-    await c.env.DB.batch(statements);
+    const [updated] = await c.env.DB.batch(statements);
+    if (!updated.meta.changes) {
+      return c.json({ error: 'Assistant or provider configuration changed. Reload and retry.' }, 409);
+    }
     const row = await c.env.DB.prepare('SELECT * FROM assistants WHERE id = ?').bind(assistant.id).first<Assistant>();
     return c.json(row);
   });
@@ -1938,7 +1942,7 @@ export function registerStudioApi(app: StudioApp): void {
     const statements = [
       c.env.DB.prepare(
         `UPDATE assistants SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?, updated_at=datetime('now')
-         WHERE id=?`
+         WHERE id=? AND ${CHECKED_REALTIME_PROVIDER_SQL}`
       ).bind(
         preset.engine,
         preset.realtime_model,
@@ -1946,14 +1950,15 @@ export function registerStudioApi(app: StudioApp): void {
         preset.language,
         preset.voice,
         preset.llm_model,
-        assistant.id
+        assistant.id,
+        ...checkedRealtimeProvider(provider)
       ),
     ];
     if (await isCompatibilityAssistant(c.env, assistant)) {
       statements.push(
         c.env.DB.prepare(
           `UPDATE agent_settings SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?
-           WHERE business_id=?`
+           WHERE business_id=? AND changes()>0`
         ).bind(
           preset.engine,
           preset.realtime_model,
@@ -1964,9 +1969,12 @@ export function registerStudioApi(app: StudioApp): void {
           assistant.business_id
         )
       );
-      statements.push(updateAgentSnapshot(c.env, assistant.business_id));
+      statements.push(updateAgentSnapshot(c.env, assistant.business_id, true));
     }
-    await c.env.DB.batch(statements);
+    const [updated] = await c.env.DB.batch(statements);
+    if (!updated.meta.changes) {
+      return c.json({ error: 'Assistant or provider configuration changed. Reload and retry.' }, 409);
+    }
     return c.json({ ok: true });
   });
 
