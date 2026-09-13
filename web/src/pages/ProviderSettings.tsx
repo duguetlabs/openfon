@@ -17,8 +17,9 @@ export default function ProviderSettings({ onSaved }: { onSaved: () => Promise<v
   const dirty = savedDraft !== null && (Object.keys(savedDraft) as (keyof ProviderUpdate)[])
     .some(key => draft[key] !== savedDraft[key]);
   useUnsavedEdits(dirty);
-  async function load() {
+  async function load(isCurrent = () => true) {
     const p = await api.provider();
+    if (!isCurrent()) return;
     setSaved(p);
     const next: ProviderUpdate = { baseUrl: p.usesInstanceDefault ? '' : p.baseUrl, model: p.model,
       realtime_provider: p.realtime_provider, realtime_base_url: p.realtime_base_url,
@@ -29,7 +30,11 @@ export default function ProviderSettings({ onSaved }: { onSaved: () => Promise<v
     setSavedDraft(next);
     setPreset(p.usesInstanceDefault ? 'instance' : p.presets.find(x => x.baseUrl === p.baseUrl)?.id || 'custom');
   }
-  useEffect(() => { void load().catch(e => setError(e.message)); }, []);
+  useEffect(() => {
+    let active = true;
+    void load(() => active).catch(e => { if (active) setError(e.message); });
+    return () => { active = false; };
+  }, []);
   const change = (patch: ProviderUpdate) => { setDraft(p => ({ ...p, ...patch })); setMessage(''); };
   async function run(action: () => Promise<void>) {
     setBusy(true); setError(''); setMessage('');
