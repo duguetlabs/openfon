@@ -19,8 +19,10 @@ run passed858 with one historical-fixture failure; the fixture now seeds obsolet
 credentials before the guard, retaining the export-exclusion assertions. Owner
 actual-D1 checks cover migration/install rollback and quota-respecting401-row
 recovery; Asterisk's persisted-workerd probes cover failure before/during summary
-and retry after eviction. These are local tests with synthetic data. Scoped QA
-and fresh exact-head official/hosted reviews and CI remain required before merge.
+and retry after eviction. These are local tests with synthetic data. Independent
+scoped QA passes172 focused tests, all nine actual-D1 barrier scenarios, and a
+workerd session-rotation/rollback probe; no new major/security issue was found
+in that scope. Fresh exact-head official/hosted reviews and CI remain required before merge.
 Staging remainsb15/0012, production is unchanged, and no additional live call occurred.
 
 ## Product truth

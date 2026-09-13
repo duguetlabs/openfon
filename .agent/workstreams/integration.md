@@ -1,12 +1,12 @@
 # Integration checkpoint
 
-- Status: In progress — official f884e81 and hosted security CLEAN, both CI green; hosted code has three findings, remediation underway
+- Status: In progress — candidate28233d5 scoped QA closed; documentation-final publication and fresh required reviews next
 - Owner: openfon-integration, gpt-6-astra / medium
 - Branch/worktree: codex/integrated-release, /Users/cristian/projects/fun/openfon-worktrees/integration
 - Updated: 2026-09-13
-- Application candidate: 50fdf0b password session rotation (20 focused tests and both typechecks pass); Asterisk finalization and migration compatibility fixes pending assembly
+- Application candidate: 28233d5 assembled password/Asterisk/migration compatibility corrections;859 full/types/browser1/rehearsal18 pass; independent QA172/actualD1/session closure
 - Published PR16 head: f884e81927ff4bb9d75a8eae11504ce5111ecd96 (docs-only over QA-scoped66397c2 harness candidate; application unchanged fromf143; frozen for required reviews)
-- Validation slot: integration combined validation complete; all runners exited; QA next explicit bounded slot after candidate commit
+- Validation slot: QA explicitly released all3 processes and disposed runtimes; no runner/inference active
 - Ports: integration8814/9254, optional real-PBX proxy8824; never8787
 - Read first: root orchestration-rules/current-task/manifest (read-only), this file, docs/launch/readiness.md
 - Earlier detailed milestones and failures remain in this file's history through ccdd85d and the linked original review reports. This checkpoint records current state.
@@ -24,6 +24,8 @@ Realtimec58b17d→42077ab assembled with application hunks clean. Docs conflict 
 Final42077ab direct/gateway and Telnyx native+synthesized actual-workerd smokes PASS, all processes exited. Logs/tmp/openfon-420-direct.log,/tmp/openfon-420-gateway.log,/tmp/openfon-420-telnyx.log. Prior08cc Asterisk/retirement runtime unchanged by later Telnyx/preset/error-event deltas; full813 covers assembled interfaces. Reporting-only rehearsal9/17 previously passed without behavior change. Integration releases sole slot to QA for bounded independent combined closure, no full-suite duplication or official inference until published freeze. Remote5e0 and stagingb15 remain unchanged.
 
 ## Authorization and ownership
+QA closes exact28233d5:172/172focused PASS, exactcommittedbarrier9/9actualD1 PASS includingDDL/DMLlate rollback/401guarded400+1/quota/mismatch/idempotency/oldwriters. Independentactualworkerd sessionprobe validatesreplacementINSERT500rollback/noCookie, alloldtokens401/newcookie200/oldpassword401/new200. Expectedsyntheticfailurelogretained; Asteriskcontent-only source no terminalrevival, ownerpersistedruntime reused. All3processesexit0/runtimesdisposed/slotreleased. Nextdocs-onlypublication, thenhostedcode/security andONE QA-ownedunchangedofficialfullrun; f884cleanreportsretainedaspriorheadprovenance. No remote/staging/livechange beforepublication.
+
 Presets1e1379b→4398b37 assembled; only checkpoint append conflict, retained incoming evidence, no source conflict. Sharedregistry/CI/rehearsaltarget18 and exact recoverySQL included locally. Firstfull858pass/1historicalexportfixturefail: post16 secret seed correctlyrefused. Moved onlythat scenario through15; unchanged exclusionassertions. Final859/85940filesPASS17.38s, bothtypesPASS, actualChrome/workerd account1/1PASS11.2s (copiedcookie401,replacementsecure/HttpOnly, reload/export/delete succeed), optimized9/18rehearsalPASS, explicitlateDML+DDLrollback andmissing18defaultnegativePASS. Logs/tmp/openfon-f884-assembled-{full,full-fixed,types}.log,/tmp/openfon-f884-account-browser.log,/tmp/openfon-f884-rehearsal{9,18,-boundaries}.log. Allprocessesexited. Owner116/types+9actualD1 migration/recovery scenarios reused; exactrecoverySQL SHA28a1f9fcc31a612dc2d71fb58d35dd3694b42a4c5dd4b10bd297e53950327c69. QA next bounded independent closure; no newofficialinference/publishedheadchange untilassemblyclosed.
 
 Asterisk827edfb→f3cfbd3 assembled cleanly from isolatedf884: connected/released failed Asterisk rows remain eligible for content-only finalization, filling missing duration/summary/intent/message while preserving terminal verdict/end. Owner194focused/types+actualworkerd persisted cached-summary retry/during-summary race PASS,3originalnegatives; additionalfinalization-first1PASS. Source reviewed, no integration duplicate run yet. Launch e72c3cc→9747033 corrects stale README pending-voice sentence with recorded-version/corrective limits; artifacts unchanged.
