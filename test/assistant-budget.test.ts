@@ -10,7 +10,8 @@ beforeEach(async () => {
   db = new SqliteD1(); applyMigrations(db);
   db.exec(`INSERT INTO users(id,email,password_hash) VALUES('owner','owner@example.invalid','unused');
     INSERT INTO sessions(token,user_id,expires_at) VALUES('session','owner','2026-09-10T12:00:00Z');
-    INSERT INTO businesses(id,user_id,slug,name) VALUES('biz','owner','biz','Business');`);
+    INSERT INTO businesses(id,user_id,slug,name,description) VALUES('biz','owner','biz','Business','Configured workspace');
+    INSERT INTO agent_settings(business_id,agent_name,persona,language) VALUES('biz','Alex','Helpful','en');`);
   env = { ...fakeEnv(undefined as never), DB: db as unknown as D1Database };
   expect((await request('/api/me/bootstrap')).status).toBe(200);
 });

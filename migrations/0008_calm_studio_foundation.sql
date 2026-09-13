@@ -61,7 +61,7 @@ SELECT
   'asst_' || b.id,
   b.id,
   b.slug,
-  CASE WHEN trim(COALESCE(a.agent_name, 'Alex'), whitespace)<>''
+  CASE WHEN a.business_id IS NOT NULL AND trim(COALESCE(a.agent_name, 'Alex'), whitespace)<>''
     AND trim(COALESCE(a.persona, 'friendly and professional'), whitespace)<>''
     AND trim(COALESCE(a.language, 'en'), whitespace)<>'' THEN 'active' ELSE 'draft' END,
   COALESCE(a.agent_name, 'Alex'),
@@ -77,7 +77,7 @@ SELECT
   COALESCE(a.llm_model, ''),
   b.created_at,
   b.created_at,
-  CASE WHEN trim(COALESCE(a.agent_name, 'Alex'), whitespace)<>''
+  CASE WHEN a.business_id IS NOT NULL AND trim(COALESCE(a.agent_name, 'Alex'), whitespace)<>''
     AND trim(COALESCE(a.persona, 'friendly and professional'), whitespace)<>''
     AND trim(COALESCE(a.language, 'en'), whitespace)<>'' THEN b.created_at ELSE NULL END
 FROM businesses b

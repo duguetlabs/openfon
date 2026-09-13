@@ -60,3 +60,19 @@ or remote migration acceptance. Staging and production are unchanged by local
 rehearsals. Cloudflare documents [D1 migrations](https://developers.cloudflare.com/d1/reference/migrations/)
 and [Worker versions and deployments](https://developers.cloudflare.com/workers/versions-and-deployments/)
 separately; a Worker upload does not roll back an already-applied schema change.
+
+## Missing legacy assistant settings
+
+Migration 0008 activates an imported assistant only when a real, configured
+legacy settings row exists. Runtime repair of a missing settings row preserves
+the assistant's current activation state; a workspace with neither row starts
+with a private, incomplete draft.
+
+Migration 0019 conservatively pauses active canonical primary assistants whose
+legacy settings row is still absent. It preserves their configuration and public
+slug, but requires explicit activation after repair. This can also pause an
+assistant that was legitimately activated before its settings row was lost.
+Already-reconstructed historical rows cannot be identified from current data, so
+this is not a complete retrospective classification of earlier activation.
+Existing assistant write quotas remain enforced; a refused migration must wait
+for available quota rather than bypassing its triggers.

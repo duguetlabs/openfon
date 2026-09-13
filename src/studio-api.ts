@@ -419,7 +419,22 @@ export async function ensureWorkspaceFoundation(
       // New-domain rows are authoritative when only the compatibility adapter
       // was lost. Reconstructing defaults here would silently overwrite a
       // configured assistant and provider on the next reconciliation pass.
-      await env.DB.prepare(
+      await env.DB.batch([
+        // Establish the restored row's baseline in the same transaction. A
+        // reconstructed compatibility row is not a legacy edit or publication.
+        env.DB.prepare(
+          `INSERT INTO compatibility_sync_state (business_id, agent_snapshot)
+           SELECT a.business_id, json_object(
+             'agent_name',a.name,'greeting',a.greeting,'persona',a.persona,
+             'language',a.language,'voice',a.voice,'take_messages',a.take_messages,
+             'custom_instructions',a.custom_instructions,'engine',a.engine,
+             'realtime_model',a.realtime_model,'realtime_voice',a.realtime_voice,
+             'llm_model',a.llm_model)
+           FROM assistants a WHERE a.id=?
+             AND NOT EXISTS (SELECT 1 FROM agent_settings WHERE business_id=a.business_id)
+           ON CONFLICT(business_id) DO UPDATE SET agent_snapshot=excluded.agent_snapshot`
+        ).bind(assistant.id),
+        env.DB.prepare(
         `INSERT OR IGNORE INTO agent_settings (
           business_id, agent_name, greeting, persona, language, voice,
           take_messages, custom_instructions, llm_base_url, llm_api_key,
@@ -434,9 +449,12 @@ export async function ensureWorkspaceFoundation(
           FROM assistants
           LEFT JOIN provider_settings ON provider_settings.business_id=assistants.business_id
          WHERE assistants.id=?`
-      ).bind(assistant.id).run();
+        ).bind(assistant.id),
+      ]);
     } else {
-      await env.DB.prepare('INSERT OR IGNORE INTO agent_settings (business_id) VALUES (?)').bind(workspace.id).run();
+      // With neither source present there is no configured legacy assistant to
+      // publish. Blank essentials also keep concurrent repairs private.
+      await env.DB.prepare("INSERT OR IGNORE INTO agent_settings (business_id,agent_name,persona,language) VALUES (?,'','','')").bind(workspace.id).run();
     }
     legacy = await env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?')
       .bind(workspace.id)
@@ -1340,7 +1358,7 @@ export function registerStudioApi(app: StudioApp): void {
     const [metrics, recent] = await Promise.all([
       c.env.DB.prepare(
         `SELECT
-          COALESCE(SUM(CASE WHEN connected_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS total,
+          COUNT(*) AS total,
           COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed,
           COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed,
           COALESCE(SUM(CASE
@@ -1353,7 +1371,8 @@ export function registerStudioApi(app: StudioApp): void {
           COALESCE(SUM(CASE WHEN intent = 'booking' THEN 1 ELSE 0 END), 0) AS booking_requests,
           COALESCE(SUM(duration_s), 0) AS talk_time_s,
           COALESCE(AVG(CASE WHEN status = 'completed' THEN duration_s END), 0) AS average_duration_s
-         FROM calls WHERE business_id = ? AND environment = 'live' AND started_at >= datetime('now', ?)`
+         FROM calls WHERE business_id = ? AND environment = 'live' AND connected_at IS NOT NULL
+           AND started_at >= datetime('now', ?)`
       )
         .bind(workspace.id, since)
         .first(),

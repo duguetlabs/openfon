@@ -2241,6 +2241,24 @@ describe('Calm Studio API foundation', () => {
     expect(overview.recentCalls.map(c => c.id)).toContain('unused-abandoned');
   });
 
+  it('uses connected live conversations for every overview aggregate', async () => {
+    const workspace = await createWorkspace();
+    const insert = db.database.prepare(`INSERT INTO calls
+      (id,business_id,status,environment,connected_at,duration_s,intent,message_json)
+      VALUES (?,?,?,?,?,?,?,?)`);
+    const message = JSON.stringify({ message: 'A callback request' });
+    insert.run('connected-complete',workspace.id,'completed','live','2026-08-10 12:00:00',30,'booking',message);
+    insert.run('connected-failed',workspace.id,'failed','live','2026-08-10 12:00:00',10,null,null);
+    insert.run('unused-complete',workspace.id,'completed','live',null,999,'booking',message);
+    insert.run('unused-failed',workspace.id,'failed','live',null,999,null,null);
+    insert.run('private-complete',workspace.id,'completed','test','2026-08-10 12:00:00',999,'booking',message);
+    const overview = await data<{ metrics: Record<string, number>; recentCalls: Array<{id:string}> }>(await request(env,'/api/me/overview'));
+    expect(overview.metrics).toEqual({ total:2,completed:1,failed:1,messages:1,booking_requests:1,talk_time_s:40,average_duration_s:30 });
+    expect(overview.recentCalls.map(c=>c.id)).toContain('unused-failed');
+    expect(overview.recentCalls.map(c=>c.id)).toContain('unused-complete');
+    expect(overview.recentCalls.map(c=>c.id)).not.toContain('private-complete');
+  });
+
   it('pages knowledge with stable ties and keeps collection scope on every page', async () => {
     const workspace = await createWorkspace();
     const collections = await data<Array<{id:string}>>(await request(env, '/api/me/knowledge/collections'));
