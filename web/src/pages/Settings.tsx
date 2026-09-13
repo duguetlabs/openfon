@@ -52,6 +52,7 @@ export default function Settings() {
   const [profiles, setProfiles] = useState<EngineProfile[]>([]);
   const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
   const [newProfileName, setNewProfileName] = useState('');
+  const profileNameBeforeEdit = useRef(new Map<string, string>());
   const loaded = useRef<ReturnType<typeof settingsSnapshot> | null>(null);
 
   useEffect(() => {
@@ -315,8 +316,9 @@ export default function Settings() {
                 className="min-w-32 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-ink outline-none hover:border-line-strong focus:border-iris focus:bg-surface focus:ring-[3px] focus:ring-iris/15"
                 value={p.name}
                 readOnly={Boolean(p.preview_only)}
+                onFocus={() => profileNameBeforeEdit.current.set(p.id, p.name)}
                 onChange={(e) => setProfiles(profiles.map((x) => (x.id === p.id ? { ...x, name: e.target.value } : x)))}
-                onBlur={(e) => { if (!p.preview_only) void api.updateProfile(p.id, { name: e.target.value }).catch(err => setError(err instanceof Error ? err.message : 'Rename failed')); }}
+                onBlur={(e) => { if (!p.preview_only && e.target.value.trim() !== profileNameBeforeEdit.current.get(p.id)?.trim()) void api.updateProfile(p.id, { name: e.target.value }).catch(err => setError(err instanceof Error ? err.message : 'Rename failed')); }}
               />
               <span className="font-mono text-[11px] text-ink-soft">
                 {p.engine === 'realtime' ? `realtime · ${p.realtime_model || 'default'}` : 'pipeline'} · {p.language}
