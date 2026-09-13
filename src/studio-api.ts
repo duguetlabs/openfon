@@ -998,13 +998,24 @@ export function registerStudioApi(app: StudioApp): void {
     const incompatibility = assistantCompatibilityError(c.env, realtimeProvider, body);
     if (incompatibility) return c.json({ error: incompatibility }, 400);
     await workspaceForUser(c.env, c.get('userId'));
+    // Foundation may repair a missing provider row. Validate and pin that
+    // resulting snapshot; earlier legitimate repairs are outside this batch.
+    const createProvider = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
+      .bind(workspace.id).first<ProviderSettings>();
+    if (assistantCompatibilityError(c.env, createProvider, body)) {
+      return c.json({ error: 'Provider configuration changed. Reload and retry.' }, 409);
+    }
+    // The shared UPDATE predicate needs an explicit source workspace for INSERT.
+    const createProviderSql = CHECKED_REALTIME_PROVIDER_SQL.replaceAll('assistants.business_id', 'create_workspace.id');
     const id = newId();
     const createAssistant = c.env.DB.prepare(
       `INSERT INTO assistants (
         id, business_id, public_slug, state, name, greeting, persona, language,
         voice, take_messages, custom_instructions, engine, realtime_model,
         realtime_voice, llm_model
-      ) VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) SELECT ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        FROM businesses AS create_workspace
+        WHERE create_workspace.id=? AND ${createProviderSql}`
     )
       .bind(
         id,
@@ -1020,14 +1031,17 @@ export function registerStudioApi(app: StudioApp): void {
         body.engine === 'realtime' ? 'realtime' : 'pipeline',
         body.realtime_model ?? '',
         body.realtime_voice ?? '',
-        body.llm_model ?? ''
+        body.llm_model ?? '',
+        workspace.id,
+        ...checkedRealtimeProvider(createProvider)
       );
     const attachDefault = c.env.DB.prepare(
       `INSERT OR IGNORE INTO assistant_knowledge_collections (assistant_id, collection_id)
-       SELECT ?, id FROM knowledge_collections WHERE business_id = ? AND is_default = 1`
+       SELECT ?, id FROM knowledge_collections WHERE business_id = ? AND is_default = 1 AND changes()>0`
     )
       .bind(id, workspace.id);
-    await c.env.DB.batch([createAssistant, attachDefault]);
+    const [created] = await c.env.DB.batch([createAssistant, attachDefault]);
+    if (!created.meta.changes) return c.json({ error: 'Provider configuration changed. Reload and retry.' }, 409);
     const row = await c.env.DB.prepare('SELECT * FROM assistants WHERE id = ?').bind(id).first<Assistant>();
     return c.json(row, 201);
   });
