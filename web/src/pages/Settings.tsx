@@ -73,11 +73,13 @@ export default function Settings() {
   const profileEditVersion = useRef(new Map<string, number>());
   const profileRenameRequests = useRef(new Map<string, { queued?: { name: string; version: number | undefined } }>());
   const loaded = useRef<ReturnType<typeof settingsSnapshot> | null>(null);
+  const mutationGeneration = useRef(0);
 
   useEffect(() => {
     let active = true;
+    const generation = mutationGeneration.current;
     if (business) void api.business().then((business) => {
-      if (!active || !business) return;
+      if (!active || !business || generation !== mutationGeneration.current) return;
       const incoming = settingsSnapshot(business);
       const previous = loaded.current?.business.id === business.id ? loaded.current : null;
       loaded.current = incoming;
@@ -94,11 +96,18 @@ export default function Settings() {
         setProfiles(rows);
       }).catch(() => {});
       void api.voices().then(setVoiceCatalog).catch(() => {});
-    }).catch((e) => { if (active) setError(e instanceof Error ? e.message : 'Could not load settings'); });
+    }).catch((e) => {
+      if (!active || generation !== mutationGeneration.current) return;
+      setRefreshFailed(true);
+      setError(e instanceof Error ? e.message : 'Could not load settings');
+    });
     return () => { active = false; };
   }, [business]);
 
-  if (!biz || !agent) return <p role={error ? 'alert' : 'status'}>{error || 'Loading workspace settings…'}</p>;
+  if (!biz || !agent) return <div>
+    <p role={error ? 'alert' : 'status'}>{error || 'Loading workspace settings…'}</p>
+    {refreshFailed && <Button disabled={saving} onClick={() => void retryRefresh()}>Retry settings refresh</Button>}
+  </div>;
 
   const workspacePayload = businessPayload(biz, { hours, services, faqs, closures });
   const agentPayload = assistantPayload(agent);
@@ -114,14 +123,17 @@ export default function Settings() {
     try {
       await refresh();
       setRefreshFailed(false);
-      setSaved('Saved.');
+      setSaved('Settings refreshed.');
     } catch (err) {
-      setError(`Changes were saved, but refreshing the page data failed: ${err instanceof Error ? err.message : 'Request failed'}`);
+      setError(`Refreshing settings failed: ${err instanceof Error ? err.message : 'Request failed'}`);
     } finally { setSaving(false); }
   }
 
   async function save() {
     if (saving || !dirty) return;
+    // An effect read started before this mutation cannot supersede an accepted
+    // stage, even if its response arrives before the final refresh completes.
+    mutationGeneration.current++;
     setSaving(true);
     setError('');
     setSaved('');
@@ -129,6 +141,7 @@ export default function Settings() {
     try {
       if (businessDirty) {
         await api.updateBusiness(biz!.id, workspacePayload);
+        mutationGeneration.current++;
         // Confirm each accepted stage before the next request. Later edits are
         // compared with exactly what was submitted, including row-list edits.
         loaded.current = { ...loaded.current!,
@@ -138,6 +151,7 @@ export default function Settings() {
       stage = 'assistant';
       if (assistantDirty) {
         await api.updateAgent(biz!.id, agentPayload);
+        mutationGeneration.current++;
         loaded.current = { ...loaded.current!, agent: { ...agent! } };
       }
       stage = 'refresh';
@@ -559,7 +573,7 @@ export default function Settings() {
         <div className="flex items-center gap-3">
           {saved && <span role="status" className="text-sm font-semibold text-ok">{saved}</span>}
           {error && <span role="alert" className="text-sm text-rose">{error}</span>}
-          <>{refreshFailed && <Button variant="ghost" disabled={saving} onClick={() => void retryRefresh()}>Retry settings refresh</Button>}</>
+          {refreshFailed && <Button variant="ghost" disabled={saving} onClick={() => void retryRefresh()}>Retry settings refresh</Button>}
           <Button disabled={saving || !dirty} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</Button>
         </div>
       </div>
