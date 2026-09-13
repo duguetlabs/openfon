@@ -28,8 +28,8 @@ beforeEach(async () => {
 afterEach(() => { db.close(); vi.unstubAllGlobals(); });
 
 
-type Writer = 'assistant-update' | 'preset-apply' | 'legacy-update';
-const writers: Writer[] = ['assistant-update', 'preset-apply', 'legacy-update'];
+type Writer = 'assistant-update' | 'preset-apply' | 'legacy-update' | 'legacy-apply';
+const writers: Writer[] = ['assistant-update', 'preset-apply', 'legacy-update', 'legacy-apply'];
 const custom = { realtime_provider: 'custom', realtime_base_url: 'wss://custom.example/realtime', realtime_api_key: 'synthetic-custom' };
 const openai = { realtime_provider: 'openai', realtime_base_url: 'wss://api.openai.com/v1/realtime', realtime_api_key: 'synthetic-openai' };
 const fields = { engine: 'realtime', realtime_model: 'my-custom-model', realtime_voice: 'custom-voice', language: 'de' };
@@ -52,6 +52,7 @@ async function setup(target = 'asst_b1', state = 'active') {
   presetId = (await res.json() as { id: string }).id;
 }
 function save(writer: Writer, target = 'asst_b1', token = 's1') {
+  if (writer === 'legacy-apply') return request(`/api/me/profiles/${presetId}/apply`, {}, token, 'POST');
   if (writer === 'legacy-update') return request('/api/me/business/b1/agent', { ...fields, agent_name: 'Updated assistant' }, token);
   return writer === 'assistant-update'
     ? request(`/api/me/assistants/${target}`, { ...fields, name: 'Updated assistant' }, token)
@@ -72,14 +73,14 @@ function holdWrite() {
     return stmt;
   });
   const batchSpy = vi.spyOn(db, 'batch').mockImplementation(async statements => {
-    if (!held && matching.has(statements[0])) { held = true; entered(); await gate; }
+    if (!held && statements.some(statement => matching.has(statement))) { held = true; entered(); await gate; }
     return batch(statements);
   });
   return { reached, release, restore() { prepareSpy.mockRestore(); batchSpy.mockRestore(); } };
 }
 
 for (const writer of writers) {
-  it.each(writer === 'legacy-update' ? [{ target: 'asst_b1', state: 'active' }, { target: 'asst_b1', state: 'draft' }]
+  it.each(writer.startsWith('legacy-') ? [{ target: 'asst_b1', state: 'active' }, { target: 'asst_b1', state: 'draft' }]
     : [{ target: 'asst_b1', state: 'active' }, { target: 'secondary', state: 'active' }, { target: 'secondary', state: 'draft' }])
   (`${writer} refuses a stale provider write without touching quota/mirror/snapshot (%j)`, async ({ target, state }) => {
     await setup(target, state);
@@ -201,4 +202,114 @@ it('legacy writer retains default keys, permits explicit replacement/clear, and 
     expect(db.database.prepare("SELECT llm_base_url,llm_api_key FROM provider_settings WHERE business_id='b1'").get()).toEqual(expected);
     expect(db.database.prepare("SELECT llm_base_url,llm_api_key FROM agent_settings WHERE business_id='b1'").get()).toEqual(expected);
   }
+});
+
+it('legacy profile apply preserves current credentials and profile fields', async () => {
+  await setup();
+  expect((await request('/api/me/provider', { baseUrl: 'https://text.example/v1', apiKey: 'synthetic-current-text' })).status).toBe(200);
+  const beforeProvider = db.database.prepare("SELECT * FROM provider_settings WHERE business_id='b1'").get();
+  const beforeProfile = db.database.prepare('SELECT * FROM engine_profiles WHERE id=?').get(presetId);
+  expect((await save('legacy-apply')).status).toBe(200);
+  expect(db.database.prepare("SELECT * FROM provider_settings WHERE business_id='b1'").get()).toEqual(beforeProvider);
+  expect(db.database.prepare('SELECT * FROM engine_profiles WHERE id=?').get(presetId)).toEqual(beforeProfile);
+  expect(db.database.prepare("SELECT llm_base_url,llm_api_key FROM agent_settings WHERE business_id='b1'").get())
+    .toEqual({ llm_base_url: 'https://text.example/v1', llm_api_key: 'synthetic-current-text' });
+});
+
+it('legacy profile apply refuses a missing primary without changing legacy fields or snapshot', async () => {
+  await setup();
+  db.exec("DELETE FROM assistants WHERE id='asst_b1'");
+  const before = snapshot();
+  expect((await save('legacy-apply')).status).toBe(409);
+  expect(snapshot()).toEqual(before);
+});
+
+function holdProviderPut(missingProvider = false) {
+  let providerReads = 0;
+  let entered!: () => void;
+  let release!: () => void;
+  const reached = new Promise<void>(resolve => { entered = resolve; });
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const matching = new WeakSet<object>();
+  const prepare = db.prepare.bind(db); const batch = db.batch.bind(db);
+  let held = false;
+  const prepareSpy = vi.spyOn(db, 'prepare').mockImplementation(sql => {
+    const statement = prepare(sql);
+    if (missingProvider && sql === 'SELECT * FROM provider_settings WHERE business_id = ?' && ++providerReads === 2) {
+      const first = statement.first.bind(statement);
+      statement.first = async <T>() => { db.exec("DELETE FROM provider_settings WHERE business_id='b1'"); return first<T>(); };
+    }
+    if (sql.includes('INSERT INTO provider_settings (business_id, llm_base_url, llm_api_key, llm_model,')) matching.add(statement);
+    return statement;
+  });
+  const batchSpy = vi.spyOn(db, 'batch').mockImplementation(async statements => {
+    if (!held && matching.has(statements[0])) { held = true; entered(); await gate; }
+    return batch(statements);
+  });
+  return { reached, release, restore() { prepareSpy.mockRestore(); batchSpy.mockRestore(); } };
+}
+
+it('provider PUT refuses stale OpenAI restore after custom switch and active custom edit', async () => {
+  await setup();
+  expect((await request('/api/me/provider', openai)).status).toBe(200);
+  const hold = holdProviderPut(); const pending = request('/api/me/provider', { model: 'stale-partial-text-edit' });
+  try {
+    await hold.reached;
+    expect((await request('/api/me/provider', custom)).status).toBe(200);
+    expect((await request('/api/me/assistants/asst_b1', fields)).status).toBe(200);
+    const expected = snapshot();
+    hold.release();
+    expect((await pending).status).toBe(409);
+    expect(snapshot()).toEqual(expected);
+    hold.restore();
+    expect((await request('/api/me/provider', { model: 'fresh-partial-text-edit' })).status).toBe(200);
+    expect(db.database.prepare("SELECT realtime_provider,llm_model FROM provider_settings WHERE business_id='b1'").get())
+      .toEqual({ realtime_provider: 'custom', llm_model: 'fresh-partial-text-edit' });
+  } finally { hold.release(); await pending; hold.restore(); }
+});
+
+it.each(['same requested next', 'text rotation', 'STT rotation'])('provider PUT pins the captured row (%s)', async change => {
+  await setup();
+  const hold = holdProviderPut();
+  const pending = request('/api/me/provider', change === 'same requested next' ? openai : { model: 'stale-partial' });
+  try {
+    await hold.reached;
+    const edit = change === 'same requested next' ? openai : change === 'text rotation'
+      ? { apiKey: 'synthetic-concurrent-text' }
+      : { stt_provider: 'openai', stt_base_url: 'https://api.openai.com/v1', stt_model: 'whisper-1', stt_api_key: 'synthetic-concurrent-stt' };
+    expect((await request('/api/me/provider', edit)).status).toBe(200);
+    const expected = snapshot();
+    hold.release();
+    expect((await pending).status).toBe(409);
+    expect(snapshot()).toEqual(expected);
+  } finally { hold.release(); await pending; hold.restore(); }
+});
+
+it('provider PUT refuses a concurrent row creation after capturing a missing provider', async () => {
+  await setup();
+  const hold = holdProviderPut(true); const pending = request('/api/me/provider', openai);
+  try {
+    await hold.reached;
+    expect(db.database.prepare("SELECT business_id FROM provider_settings WHERE business_id='b1'").get()).toBeUndefined();
+    expect((await request('/api/me/provider', custom)).status).toBe(200);
+    const expected = snapshot();
+    hold.release();
+    expect((await pending).status).toBe(409);
+    expect(snapshot()).toEqual(expected);
+  } finally { hold.release(); await pending; hold.restore(); }
+});
+
+it('provider PUT continues later cleanup after zero-row model cleanup and avoids unchanged-row quota charges', async () => {
+  await setup();
+  expect((await request('/api/me/assistants/asst_b1', { realtime_model: 'gpt-realtime', realtime_voice: 'custom-voice' })).status).toBe(200);
+  const count = () => (db.database.prepare("SELECT count FROM rate_counters WHERE bucket='assistants:b1'").get() as { count: number }).count;
+  const before = count();
+  expect((await request('/api/me/provider', openai)).status).toBe(200);
+  expect(db.database.prepare("SELECT realtime_model,realtime_voice FROM assistants WHERE id='asst_b1'").get())
+    .toEqual({ realtime_model: 'gpt-realtime', realtime_voice: '' });
+  expect(count()).toBe(before + 1);
+  const synced = db.database.prepare("SELECT agent_snapshot FROM compatibility_sync_state WHERE business_id='b1'").get() as { agent_snapshot: string };
+  expect(JSON.parse(synced.agent_snapshot)).toMatchObject({ realtime_model: 'gpt-realtime', realtime_voice: '' });
+  expect((await request('/api/me/provider', { model: 'unrelated-text-edit' })).status).toBe(200);
+  expect(count()).toBe(before + 1);
 });

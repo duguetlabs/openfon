@@ -910,17 +910,19 @@ app.post('/api/me/profiles/:pid/apply', async (c) => {
   const incompatibility = presetCompatibilityError(c.env, provider, p);
   if (incompatibility) return c.json({ error: incompatibility }, 400);
   const legacySettings = c.env.DB.prepare(
-    `UPDATE agent_settings SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=? WHERE business_id=?`
+    `UPDATE agent_settings SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=? WHERE business_id=? AND changes()>0`
   ).bind(p.engine, p.realtime_model, p.realtime_voice, p.language, p.voice, p.llm_model, p.business_id);
   const assistantUpdate = c.env.DB.prepare(
     `UPDATE assistants SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?, updated_at=datetime('now')
-     WHERE business_id = ? AND public_slug = (SELECT slug FROM businesses WHERE id = ?)`
-  ).bind(p.engine, p.realtime_model, p.realtime_voice, p.language, p.voice, p.llm_model, p.business_id, p.business_id);
-  await c.env.DB.batch([
-    legacySettings,
+     WHERE business_id = ? AND public_slug = (SELECT slug FROM businesses WHERE id = ?)
+       AND ${CHECKED_REALTIME_PROVIDER_SQL}`
+  ).bind(p.engine, p.realtime_model, p.realtime_voice, p.language, p.voice, p.llm_model, p.business_id, p.business_id, ...checkedRealtimeProvider(provider));
+  const [updated] = await c.env.DB.batch([
     assistantUpdate,
-    updateCompatibilitySnapshot(c.env, p.business_id),
+    legacySettings,
+    updateCompatibilitySnapshot(c.env, p.business_id, true),
   ]);
+  if (!updated.meta.changes) return c.json({ error: 'Assistant or provider configuration changed. Reload and retry.' }, 409);
   return c.json({ ok: true });
 });
 

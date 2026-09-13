@@ -22,13 +22,14 @@ const snapshotSql = source.match(/`(UPDATE compatibility_sync_state SET agent_sn
 function routeSql(start, end, text = source) {
   const route = text.slice(text.indexOf(start), text.indexOf(end, text.indexOf(start)));
   const statements = [...route.matchAll(/`(UPDATE (?:assistants|agent_settings) SET[\s\S]*?)`/g)].map(x => x[1].replace('${CHECKED_REALTIME_PROVIDER_SQL}', providerSql));
-  assert.equal(statements.length, 2); assert.ok(statements[1].includes('changes()>0'));
+  assert.equal(statements.length, 2); assert.ok(statements.find(sql => sql.startsWith('UPDATE agent_settings')).includes('changes()>0'));
   return statements;
 }
 const routes = {
   update: routeSql("app.put('/api/me/assistants/:assistantId'", "app.delete('/api/me/assistants/:assistantId'"),
   apply: routeSql("app.post('/api/me/engine-presets/:presetId/apply'", "app.put('/api/me/engine-presets/:presetId'"),
   legacy: routeSql("app.put('/api/me/business/:id/agent'", "app.get('/api/me/business/:id/calls'", indexSource),
+  legacyApply: routeSql("app.post('/api/me/profiles/:pid/apply'", '// ---------- voice catalogs', indexSource).reverse(),
 };
 const legacyProviderSql = indexSource.slice(indexSource.indexOf("app.put('/api/me/business/:id/agent'"))
   .match(/`(INSERT INTO provider_settings[\s\S]*?)`/)[1];
@@ -63,6 +64,7 @@ try {
     const firstValues = writer === 'update'
       ? ['Changed', '', 'Helpful', 'de', '', 1, '', 'realtime', 'custom-model', 'custom-voice', '', 'asst_b1', ...checked]
       : writer === 'legacy' ? ['Changed', '', 'Helpful', 'de', '', 1, '', 'realtime', 'custom-model', 'custom-voice', '', 'asst_b1', ...checked, '', '']
+      : writer === 'legacyApply' ? ['realtime', 'custom-model', 'custom-voice', 'de', '', '', 'b1', 'b1', ...checked]
       : ['realtime', 'custom-model', 'custom-voice', 'de', '', '', 'asst_b1', ...checked];
     const mirrorValues = writer === 'update'
       ? ['Changed', '', 'Helpful', 'de', '', 1, '', '', 'realtime', 'custom-model', 'custom-voice', 'b1']
@@ -70,7 +72,7 @@ try {
       : ['realtime', 'custom-model', 'custom-voice', 'de', '', '', 'b1'];
     const statements = () => [db.prepare(sql[0]).bind(...firstValues),
       ...(writer === 'legacy' ? [db.prepare(legacyProviderSql).bind('b1', '', 'synthetic-text')] : []),
-      db.prepare(sql[1]).bind(...mirrorValues), db.prepare(writer === 'legacy' ? legacySnapshotSql : snapshotSql).bind('b1', 'b1')];
+      db.prepare(sql[1]).bind(...mirrorValues), db.prepare(writer.startsWith('legacy') ? legacySnapshotSql : snapshotSql).bind('b1', 'b1')];
     await exec("UPDATE provider_settings SET realtime_provider='openai' WHERE business_id='b1'; UPDATE rate_counters SET count=10 WHERE bucket='assistants:b1';");
     let before = await snapshot();
     const rejected = await db.batch(statements());

@@ -1684,11 +1684,19 @@ export function registerStudioApi(app: StudioApp): void {
     catch (e) { if (e instanceof ProviderInputError) return c.json({ error: e.message }, 400); throw e; }
     const baseUrl = next.llm_base_url;
     const apiKey = next.llm_api_key;
+    // Partial updates were derived from this whole persisted snapshot. Compare
+    // it at the write boundary, including a concurrently created/missing row.
+    const fields = ['llm_base_url', 'llm_api_key', 'llm_model', 'realtime_provider',
+      'realtime_base_url', 'realtime_api_key', 'stt_provider', 'stt_base_url',
+      'stt_api_key', 'stt_model'] as const;
+    const matches = fields.map(field => `${field} IS ?`).join(' AND ');
     const statements = [
       c.env.DB.prepare(
         `INSERT INTO provider_settings (business_id, llm_base_url, llm_api_key, llm_model,
           realtime_provider, realtime_base_url, realtime_api_key, stt_provider, stt_base_url, stt_api_key, stt_model)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+         WHERE (?=0 AND NOT EXISTS(SELECT 1 FROM provider_settings WHERE business_id=?))
+            OR (?=1 AND EXISTS(SELECT 1 FROM provider_settings WHERE business_id=? AND ${matches}))
          ON CONFLICT(business_id) DO UPDATE SET
            llm_base_url=excluded.llm_base_url, llm_api_key=excluded.llm_api_key, llm_model=excluded.llm_model,
            realtime_provider=excluded.realtime_provider, realtime_base_url=excluded.realtime_base_url,
@@ -1696,7 +1704,13 @@ export function registerStudioApi(app: StudioApp): void {
            stt_base_url=excluded.stt_base_url, stt_api_key=excluded.stt_api_key, stt_model=excluded.stt_model,
            updated_at=datetime('now')`
       ).bind(workspace.id, baseUrl, apiKey, next.llm_model, next.realtime_provider, next.realtime_base_url,
-        next.realtime_api_key, next.stt_provider, next.stt_base_url, next.stt_api_key, next.stt_model),
+        next.realtime_api_key, next.stt_provider, next.stt_base_url, next.stt_api_key, next.stt_model,
+        current ? 1 : 0, workspace.id, current ? 1 : 0, workspace.id, ...fields.map(field => current?.[field] ?? null)),
+      // Abort the entire transaction on a failed first write. Later cleanup
+      // statements can legitimately affect zero rows, so a changes() chain
+      // through those statements would incorrectly suppress subsequent work.
+      c.env.DB.prepare(`SELECT CASE WHEN changes()>0 THEN 1
+        ELSE json_extract('[0]', '$[OPENFON_PROVIDER_WRITE_CONFLICT]') END`),
       c.env.DB.prepare('UPDATE agent_settings SET llm_base_url=?, llm_api_key=? WHERE business_id=?').bind(baseUrl, apiKey, workspace.id),
     ];
     // Model and voice compatibility are independent. Keep inactive custom model IDs,
@@ -1741,7 +1755,20 @@ export function registerStudioApi(app: StudioApp): void {
       // This owner-side cleanup is not an edit from an old worker.
       statements.push(updateAgentSnapshot(c.env, workspace.id));
     }
-    await c.env.DB.batch(statements);
+    try {
+      await c.env.DB.batch(statements);
+    } catch (error) {
+      // D1 can wrap the SQLite cause. Match only our fixed assertion marker;
+      // quota failures and other database errors keep their existing handling.
+      let cause: unknown = error;
+      for (let depth = 0; depth < 5 && cause instanceof Error; depth++) {
+        if (cause.message.includes('[OPENFON_PROVIDER_WRITE_CONFLICT]')) {
+          return c.json({ error: 'Provider configuration changed. Reload and retry.' }, 409);
+        }
+        cause = cause.cause;
+      }
+      throw error;
+    }
     return c.json({
       ok: true,
       apiKeyConfigured: providerConfigured(c.env, {
