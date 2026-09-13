@@ -268,4 +268,30 @@ describe('account self service', () => {
     for (let i = 0; i < 10; i++) expect((await call('/api/me/account/export')).status).toBe(200);
     expect((await call('/api/me/account/export')).status).toBe(429);
   });
+
+  it('allows password rotation to revoke a stolen session after its export budget is exhausted', async () => {
+    for (let i = 0; i < 10; i++) expect((await call('/api/me/account/export')).status).toBe(200);
+    expect((await call('/api/me/account/export')).status).toBe(429);
+    const rotated = await call('/api/me/account/password', 'POST', { currentPassword: password, newPassword: 'new-correct-horse' }, 'owner-second-session');
+    expect(rotated.status).toBe(200);
+    expect((await call('/api/me/account/export')).status).toBe(401);
+    expect(db.database.prepare('SELECT count FROM rate_counters WHERE bucket=?').get('account:export:owner')).toEqual({ count: 10 });
+  });
+
+  it('keeps HEAD exports and unknown routes from consuming the rotation budget', async () => {
+    for (let i = 0; i < 10; i++) expect((await call('/api/me/account/export', 'HEAD')).status).toBe(200);
+    expect((await call('/api/me/account/export', 'HEAD')).status).toBe(429);
+    for (let i = 0; i < 12; i++) {
+      expect((await call('/api/me/account/unknown')).status).toBe(404);
+      expect((await call('/api/me/account/export', 'POST')).status).toBe(404);
+    }
+    expect((await call('/api/me/account/password', 'POST', { currentPassword: password, newPassword: 'new-correct-horse' }, 'owner-second-session')).status).toBe(200);
+    expect((await call('/api/me/account/export', 'HEAD')).status).toBe(401);
+  });
+
+  it('still bounds incorrect password verification independently of export reads', async () => {
+    for (let i = 0; i < 10; i++) expect((await call('/api/me/account/password', 'POST', { currentPassword: 'wrong', newPassword: 'new-correct-horse' })).status).toBe(403);
+    expect((await call('/api/me/account/password', 'POST', { currentPassword: 'wrong', newPassword: 'new-correct-horse' })).status).toBe(429);
+    expect((await call('/api/me/account/export')).status).toBe(200);
+  });
 });

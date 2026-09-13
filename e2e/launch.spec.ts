@@ -462,3 +462,30 @@ test('historical assistant pages preserve the requested test target and expose r
   await expect(page).toHaveURL('/assistants');
   expect((await page.request.get(`/api/me/assistants/${target.id}`)).status()).toBe(404);
 });
+
+test('successful active-call polling preserves a rejected knowledge save until retry', async ({ page }) => {
+  await signup(page);
+  await page.clock.install();
+  let reads = 0;
+  let saves = 0;
+  await page.route('**/api/me/calls/action-error-call', async route => {
+    reads++;
+    await route.fulfill({ json: { id: 'action-error-call', status: 'active', channel: 'web', started_at: '2026-09-13T00:00:00Z', connected_at: '2026-09-13T00:00:00Z', duration_s: null, summary: null, intent: null, message_json: null, turns: [{ id: 1, role: 'caller', text: 'Do you repair bicycles?', ts: '2026-09-13T00:00:01Z' }] } });
+  });
+  await page.route('**/api/me/knowledge/drafts/from-turn', async route => {
+    saves++;
+    await route.fulfill(saves === 1 ? { status: 429, json: { error: 'Knowledge allowance exhausted.' } } : { json: { id: 'saved-draft' } });
+  });
+  await page.goto('/calls/action-error-call');
+  await page.getByRole('button', { name: 'Save question to knowledge' }).click();
+  await expect(page.getByRole('alert').first()).toHaveText('Knowledge allowance exhausted.');
+  const before = reads;
+  await page.clock.runFor(1600);
+  await expect.poll(() => reads).toBeGreaterThan(before);
+  await expect(page.getByRole('alert').first()).toHaveText('Knowledge allowance exhausted.');
+  expect(saves).toBe(1);
+  await page.getByRole('button', { name: 'Save question to knowledge' }).click();
+  await expect(page.getByText('Question saved as a draft.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  expect(saves).toBe(2);
+});

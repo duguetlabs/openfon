@@ -26,21 +26,19 @@ const EXPORT_BYTE_LIMIT = 4 * 1024 * 1024;
 export function registerAccountApi(app: App): void {
   app.use('/api/me/account/*', bodyLimit({ maxSize: 16 * 1024, onError: (c) => c.json({ error: 'Account request is too large.' }, 413) }));
   app.use('/api/me/account', bodyLimit({ maxSize: 16 * 1024, onError: (c) => c.json({ error: 'Account request is too large.' }, 413) }));
-  const accountLimit: MiddlewareHandler<{ Bindings: Env; Variables: { userId: string } }> = async (c, next) => {
-    // Bound export reads and password verification work per account. A full
-    // bucket is refused without growing its counter or running PBKDF2 again.
+  const accountLimit = (action: 'export' | 'mutation'): MiddlewareHandler<{ Bindings: Env; Variables: { userId: string } }> => async (c, next) => {
+    // Export needs only a session cookie. Its read budget must not consume the
+    // password-authenticated mutation budget used to revoke stolen sessions.
+    // Full buckets refuse without growing the counter or repeating PBKDF2.
     const windowStart = Math.floor(Date.now() / 900_000) * 900;
     const reserved = await c.env.DB.prepare(
       `INSERT INTO rate_counters (bucket, window_start, count) VALUES (?, ?, 1)
        ON CONFLICT(bucket, window_start) DO UPDATE SET count=count+1 WHERE count<10 RETURNING count`
-    ).bind(`account:${c.get('userId')}`, windowStart).first();
+    ).bind(`account:${action}:${c.get('userId')}`, windowStart).first();
     if (!reserved) return c.json({ error: 'Too many account actions. Please try again in 15 minutes.' }, 429, { 'Retry-After': '900' });
     await next();
   };
-  app.use('/api/me/account', accountLimit);
-  app.use('/api/me/account/*', accountLimit);
-
-  app.post('/api/me/account/password', async (c) => {
+  app.post('/api/me/account/password', accountLimit('mutation'), async (c) => {
     const body = await c.req.json<RecordRow>().catch(() => null);
     if (!body || typeof body.currentPassword !== 'string' || body.currentPassword.length > 1024 ||
         typeof body.newPassword !== 'string' || body.newPassword.length < 8 || body.newPassword.length > 1024) {
@@ -74,7 +72,7 @@ export function registerAccountApi(app: App): void {
     return c.json({ ok: true });
   });
 
-  app.get('/api/me/account/export', async (c) => {
+  app.get('/api/me/account/export', accountLimit('export'), async (c) => {
     const userId = c.get('userId');
     const data: Record<string, RecordRow[]> = {};
     const tables = { users: ['id', 'email', 'created_at'], ...EXPORT_COLUMNS };
@@ -171,7 +169,7 @@ export function registerAccountApi(app: App): void {
     return c.json({ schemaVersion: 1, exportedAt: new Date().toISOString(), account, data });
   });
 
-  app.delete('/api/me/account', async (c) => {
+  app.delete('/api/me/account', accountLimit('mutation'), async (c) => {
     const body = await c.req.json<RecordRow>().catch(() => null);
     if (!body || body.confirmation !== 'DELETE' || typeof body.currentPassword !== 'string' || body.currentPassword.length > 1024) {
       return c.json({ error: 'Enter your current password and type DELETE to confirm.' }, 400);

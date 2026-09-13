@@ -7,16 +7,18 @@ export default function CallDetailPage() {
   const { callId } = useParams();
   const [call, setCall] = useState<CallDetail | null>(null);
   const [error, setError] = useState('');
+  const [draftError, setDraftError] = useState('');
   const [reload, setReload] = useState(0);
   const [collections, setCollections] = useState<KnowledgeCollection[]>([]);
   const [collectionId, setCollectionId] = useState('');
   const [drafting, setDrafting] = useState<number | null>(null);
   const [saved, setSaved] = useState('');
   useEffect(() => { void api.knowledgeCollections().then(c => { setCollections(c); setCollectionId(c[0]?.id || ''); }).catch(() => {}); }, []);
+  useEffect(() => { setDraftError(''); setSaved(''); }, [callId]);
 
   useEffect(() => {
     let active = true;
-    setCall(null); setError(''); setSaved('');
+    setCall(null); setError('');
     let timer: ReturnType<typeof setTimeout> | undefined;
     let failures = 0;
     async function refreshCall() {
@@ -93,7 +95,7 @@ export default function CallDetailPage() {
       )}
 
       {call.failure_message && <Card className="mb-5"><p>Call issue: {call.failure_message}</p></Card>}
-      <div className="mb-6"><p className="text-sm text-ink-soft">Save a caller’s question as a knowledge draft, then write and approve the answer in Knowledge.</p>{collections.length > 0 && <label className="mt-3 block text-sm">Save drafts to <select className="ml-3 rounded border border-line p-2" value={collectionId} onChange={e=>setCollectionId(e.target.value)}>{collections.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}{error && <p role="alert" className="mt-3 text-rose">{error}</p>}{saved && <p role="status" className="mt-3 text-sm">{saved} <Link to="/knowledge" className="text-iris underline">Review knowledge →</Link></p>}</div>
+      <div className="mb-6"><p className="text-sm text-ink-soft">Save a caller’s question as a knowledge draft, then write and approve the answer in Knowledge.</p>{collections.length > 0 && <label className="mt-3 block text-sm">Save drafts to <select className="ml-3 rounded border border-line p-2" value={collectionId} onChange={e=>setCollectionId(e.target.value)}>{collections.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}{draftError && <p role="alert" className="mt-3 text-rose">{draftError}</p>}{saved && <p role="status" className="mt-3 text-sm">{saved} <Link to="/knowledge" className="text-iris underline">Review knowledge →</Link></p>}</div>
       <div className="rise rise-2 space-y-3">
         {call.turns.map((t, i) => (
           <div key={i} className={`flex ${t.role === 'agent' ? 'justify-start' : 'justify-end'}`}>
@@ -112,7 +114,7 @@ export default function CallDetailPage() {
                 {t.role === 'agent' ? 'agent' : 'caller'}
               </p>
               <p className="whitespace-pre-wrap">{t.text}</p>
-              {t.role === 'caller' && <button disabled={drafting !== null} className="mt-3 block text-xs text-iris underline disabled:opacity-50" onClick={async()=>{setDrafting(t.id);setError('');setSaved('');try{await api.draftKnowledgeFromTurn({callId:call.id,turnId:t.id,...(collectionId?{collectionId}:{})});setSaved('Question saved as a draft.');}catch(e){setError(e instanceof Error?e.message:'Could not save draft.');}finally{setDrafting(null);}}}>{drafting===t.id?'Saving…':'Save question to knowledge'}</button>}
+              {t.role === 'caller' && <button disabled={drafting !== null} className="mt-3 block text-xs text-iris underline disabled:opacity-50" onClick={async()=>{setDrafting(t.id);setDraftError('');setSaved('');try{await api.draftKnowledgeFromTurn({callId:call.id,turnId:t.id,...(collectionId?{collectionId}:{})});setSaved('Question saved as a draft.');}catch(e){setDraftError(e instanceof Error?e.message:'Could not save draft.');}finally{setDrafting(null);}}}>{drafting===t.id?'Saving…':'Save question to knowledge'}</button>}
             </div>
           </div>
         ))}
