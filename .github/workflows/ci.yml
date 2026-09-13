@@ -38,7 +38,7 @@ jobs:
           node scripts/asterisk-smoke.mjs
           node scripts/realtime-smoke.mjs
           node scripts/realtime-smoke.mjs --gateway
-      - run: python3 -O scripts/migration-rehearsal.py . --through 17
+      - run: python3 -O scripts/migration-rehearsal.py . --through 18
 
   # The benchmark scoring code is Python and computes the numbers in
   # docs/research/. A wrong normaliser or a slot matcher that fails closed would
@@ -130,8 +130,10 @@ jobs:
       # `npm run deploy` applies D1 migrations before uploading the worker.
       # The worker queries columns and tables the migrations create, so shipping
       # it against an unmigrated database takes every route that touches them
-      # down. Migrations here are additive, so the running worker keeps serving
-      # while they apply.
+      # down. Some migrations revoke obsolete credentials or scrub snapshots;
+      # they are not all additive. The 0016 compatibility barrier refuses an
+      # inconsistent legacy/provider pair and blocks unsafe old-worker writes
+      # after scrubbing. See docs/migration-compatibility.md before dispatch.
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

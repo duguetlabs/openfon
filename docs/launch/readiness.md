@@ -1,6 +1,27 @@
 # OpenFon release readiness
 
-Updated 2026-09-12. **Release candidate in progress; not production-launch approved.**
+Updated 2026-09-13. **Release candidate in progress; not production-launch approved.**
+
+## Latest local review corrections
+
+The [official f884e81 report](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5649635380)
+reported no security concerns and no major issues; hosted security and both CI
+runs also passed. Hosted code review then found three issues, so that head was
+not merged. The next candidate rotates the current cookie atomically on password
+change, preserves conversation details when Asterisk projects a terminal failure,
+and protects the profile credential scrub with a [database compatibility barrier](../migration-compatibility.md).
+Migration0018 repairs installations that already applied the earlier0016.
+
+The assembled corrections pass859 unit tests, both typechecks, a Chrome/workerd
+account scenario proving copied-cookie rejection and replacement-cookie continuity,
+and optimized0006→0018 preservation/restore/rollback rehearsal. The first combined
+run passed858 with one historical-fixture failure; the fixture now seeds obsolete
+credentials before the guard, retaining the export-exclusion assertions. Owner
+actual-D1 checks cover migration/install rollback and quota-respecting401-row
+recovery; Asterisk's persisted-workerd probes cover failure before/during summary
+and retry after eviction. These are local tests with synthetic data. Scoped QA
+and fresh exact-head official/hosted reviews and CI remain required before merge.
+Staging remainsb15/0012, production is unchanged, and no additional live call occurred.
 
 ## Product truth
 

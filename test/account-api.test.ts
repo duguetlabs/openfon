@@ -13,11 +13,14 @@ let oldHash: string;
 const call = (path: string, method = 'GET', body?: unknown, token = 'owner-session') => worker.fetch(
   new Request(`https://openfon.test${path}`, { method, headers: { Cookie: `ofs=${token}`, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }), env, fakeCtx,
 );
-beforeEach(async () => {
+beforeEach(async ({ task }) => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-09-11T12:00:00Z'));
   db = new SqliteD1();
-  applyMigrations(db);
+  // Export must also exclude credentials from historical, pre-barrier rows.
+  // Current installations reject creating these snapshots altogether.
+  if (task.name.startsWith('exports historical owned data')) applyMigrations(db, 1, 15);
+  else applyMigrations(db);
   env = { ...fakeEnv(), DB: db as unknown as D1Database };
   oldHash = await hashPassword(password);
   for (const id of ['owner', 'other']) {
@@ -85,7 +88,7 @@ describe('account self service', () => {
     expect(db.database.prepare('SELECT COUNT(*) AS n FROM sessions WHERE user_id=?').get('owner')).toEqual({ n: 2 });
   });
 
-  it('exports only owned data and excludes credentials and session tokens', async () => {
+  it('exports historical owned data and excludes credentials and session tokens', async () => {
     db.database.prepare('INSERT INTO agent_settings (business_id,llm_api_key) VALUES (?,?)').run('biz-owner', 'provider-secret');
     db.database.prepare('INSERT INTO engine_profiles (id,business_id,name,llm_api_key) VALUES (?,?,?,?)').run('profile', 'biz-owner', 'Profile', 'profile-secret');
     db.database.prepare('INSERT INTO calls (id,business_id,status) VALUES (?,?,?)').run('call-owner', 'biz-owner', 'completed');

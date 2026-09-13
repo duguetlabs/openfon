@@ -13,12 +13,22 @@ import pathlib
 import sqlite3
 import tempfile
 
-RELEASE_MIGRATION_TARGET = 17
+RELEASE_MIGRATION_TARGET = 18
 
 
 def require(condition, message):
     if not condition:
         raise RuntimeError(message)
+
+
+def apply_migration(db, sql):
+    # D1 migration execution batches each file transactionally. executescript
+    # alone commits statements separately, so explicitly model that boundary.
+    try:
+        db.executescript('BEGIN IMMEDIATE;\n' + sql + '\nCOMMIT;')
+    except BaseException:
+        db.rollback()
+        raise
 
 
 def main():
@@ -43,7 +53,7 @@ def main():
         db = sqlite3.connect(temp / 'legacy.sqlite')
         db.execute('PRAGMA foreign_keys=ON')
         for path in migrations[:6]:
-            db.executescript(path.read_text())
+            apply_migration(db, path.read_text())
         db.executescript('''
           INSERT INTO users(id,email,password_hash) VALUES('owner','owner@example.invalid','synthetic-only');
           INSERT INTO businesses(id,user_id,slug,name,services_json,faqs_json) VALUES
@@ -84,7 +94,7 @@ def main():
             db.backup(backup)
         before_dump = '\n'.join(db.iterdump())
         for path in migrations[6:]:
-            db.executescript(path.read_text())
+            apply_migration(db, path.read_text())
         require(preserved(db) == upgraded_expected, 'Legacy behavior changed or credential scrub missing')
         require(db.execute(f"SELECT {','.join(old_call_cols)} FROM calls WHERE id='history'").fetchone() == history, 'Rehearsal check failed: db.execute(f"SELECT {\',\'.join(old_call_cols)} FROM calls WHERE id=\'history\'").fetchone() == history')
         require(db.execute('SELECT public_slug FROM assistants ORDER BY public_slug').fetchall() == [('legacy-public-slug',), ('legacy-second-slug',)], "Rehearsal check failed: db.execute('SELECT public_slug FROM assistants ORDER BY public_slug').fetchall() == [('legacy-public-slug',), ('legacy-second-slug',)]")
@@ -122,7 +132,7 @@ def main():
         require('\n'.join(db.iterdump()) == before_dump, "Rehearsal check failed: '\\n'.join(db.iterdump()) == before_dump")
         require(preserved(db) == original, 'Pre-upgrade rollback changed legacy rows')
         for path in migrations[6:]:
-            db.executescript(path.read_text())
+            apply_migration(db, path.read_text())
         require(preserved(db) == upgraded_expected, 'Legacy behavior changed or credential scrub missing')
         require(db.execute('PRAGMA foreign_key_check').fetchall() == [], "Rehearsal check failed: db.execute('PRAGMA foreign_key_check').fetchall() == []")
         db.close()
