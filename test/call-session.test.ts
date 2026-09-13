@@ -131,6 +131,7 @@ function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline', settings: Partial<
                 if (ctl.failCallReads && sql.includes('SELECT id, business_id')) throw new Error('D1 unavailable');
                 if (ctl.failFinalizeReads && sql.includes('SELECT started_at')) throw new Error('D1 unavailable');
                 // finalize selects `... AND status = 'active'`; a swept row misses.
+                if (sql.includes("failure_code GLOB 'asterisk_*'")) return null; // no carrier failure in this generic fake
                 if (!ctl.callRowActive && sql.includes("status = ?")) return null;
                 return { ...CALL_ROW, channel: ctl.channel };
               }
@@ -2479,6 +2480,70 @@ describe('finalization duration on SQLite', () => {
     vi.setSystemTime(new Date('2026-09-12T12:11:00Z'));
     await evictAndRebuild().alarm();
     expect(row()).toMatchObject({ status: 'completed', duration_s: 20, ended_at: '2026-09-12 12:01:00' });
+  });
+  function carrierFailure() {
+    db.database.exec("UPDATE calls SET status='failed',outcome='failed',ended_at='2026-09-12 12:00:55',carrier_released_at='2026-09-12 12:00:55',failure_code='asterisk_socket_error',failure_message='Socket failed' WHERE id='call-1'");
+  }
+  function conversation(session: CallSession) {
+    Object.assign(session, { history: [{ role: 'system', content: 'Receptionist' }, { role: 'user', content: 'Please call tomorrow' }, { role: 'assistant', content: 'Certainly' }] });
+    globalThis.fetch = vi.fn(async () => ({ ok: true, status: 200, headers: new Headers(), body: jsonStream({ choices: [{ message: { content: JSON.stringify({ summary: 'Callback requested', intent: 'message', message: 'Please call tomorrow' }) } }] }) }) as never);
+  }
+  const details = () => db.database.prepare('SELECT * FROM calls WHERE id=?').get('call-1');
+  const failedDetails = { status: 'failed', outcome: 'failed', ended_at: '2026-09-12 12:00:55', failure_code: 'asterisk_socket_error', failure_message: 'Socket failed', duration_s: 15, summary: 'Callback requested', intent: 'message' };
+  it.each(['before lookup', 'during summary'])('recovers failed Asterisk conversation %s without changing its verdict', async when => {
+    const { session } = seed('asterisk', '2026-09-12 12:00:40');
+    conversation(session);
+    if (when === 'before lookup') carrierFailure();
+    else {
+      const summarize = globalThis.fetch;
+      globalThis.fetch = vi.fn(async (...args) => { carrierFailure(); return summarize(...args); });
+    }
+    await session.alarm();
+    expect(details()).toMatchObject(failedDetails);
+    expect(JSON.parse(details()!.message_json as string).message).toBe('Please call tomorrow');
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    await session.alarm();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+  it('retries failed Asterisk content projection after eviction without resummarizing or adding retry delay', async () => {
+    const { session, evictAndRebuild } = seed('asterisk', '2026-09-12 12:00:40');
+    conversation(session); carrierFailure();
+    db.hook = sql => { if (sql.includes('UPDATE calls SET duration_s')) throw Error('content write unavailable'); };
+    await session.alarm();
+    expect(details()).toMatchObject({ status: 'failed', duration_s: null });
+    db.hook = null;
+    vi.setSystemTime(new Date('2026-09-12T12:11:00Z'));
+    await evictAndRebuild().alarm();
+    expect(details()).toMatchObject(failedDetails);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+  it('preserves completed conversation content when carrier failure arrives after finalization', async () => {
+    const { session, evictAndRebuild } = seed('asterisk', '2026-09-12 12:00:40');
+    conversation(session);
+    await session.alarm();
+    expect(details()).toMatchObject({ status: 'completed', duration_s: 20, summary: 'Callback requested' });
+    carrierFailure();
+    await evictAndRebuild().alarm();
+    expect(details()).toMatchObject({ ...failedDetails, duration_s: 20 });
+    expect(JSON.parse(details()!.message_json as string).message).toBe('Please call tomorrow');
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+  it('fills only absent failed Asterisk content fields', async () => {
+    const { session } = seed('asterisk', '2026-09-12 12:00:40');
+    conversation(session); carrierFailure();
+    db.database.exec(`UPDATE calls SET duration_s=0,summary='Prior',intent='booking',message_json='{"message":"Prior message"}'`);
+    await session.alarm();
+    expect(details()).toMatchObject({ ...failedDetails, duration_s: 0, summary: 'Prior', intent: 'booking', message_json: '{"message":"Prior message"}' });
+  });
+  it.each(['telnyx', 'unready', 'unreleased', 'other failure', 'abandoned'])('does not generate a fresh summary for %s terminal rows', async kind => {
+    const { session } = seed(kind === 'telnyx' ? 'telnyx' : 'asterisk', kind === 'unready' ? null : '2026-09-12 12:00:40');
+    conversation(session); carrierFailure();
+    if (kind === 'unreleased') db.database.exec('UPDATE calls SET carrier_released_at=NULL');
+    if (kind === 'other failure') db.database.exec("UPDATE calls SET failure_code='session_error'");
+    if (kind === 'abandoned') db.database.exec("UPDATE calls SET status='abandoned'");
+    await session.alarm();
+    expect(details()).toMatchObject({ duration_s: null, summary: null, message_json: null });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
   it('does not overwrite a carrier failure racing the final UPDATE', async () => {
     const { session } = seed('asterisk', '2026-09-12 12:00:40');

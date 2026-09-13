@@ -1839,6 +1839,21 @@ export class CallSession implements DurableObject {
       .run();
   }
 
+  // A connected carrier may project failure before session finalization. That
+  // verdict is terminal, but the conversation still needs its content projection.
+  private static readonly failedAsterisk = `channel = 'asterisk' AND status = 'failed'
+    AND connected_at IS NOT NULL AND carrier_released_at IS NOT NULL
+    AND ended_at IS NOT NULL AND failure_code GLOB 'asterisk_*'`;
+
+  private async salvageAsteriskConversation(summary: string | null, intent: string | null, messageJson: string | null): Promise<boolean> {
+    const result = await this.env.DB.prepare(
+      `UPDATE calls SET duration_s = COALESCE(duration_s, MAX(0, unixepoch(ended_at) - unixepoch(connected_at))),
+        summary = COALESCE(summary, ?), intent = COALESCE(intent, ?), message_json = COALESCE(message_json, ?)
+        WHERE id = ? AND ${CallSession.failedAsterisk}`
+    ).bind(summary, intent, messageJson, this.callId).run();
+    return (result?.meta?.changes ?? 0) > 0;
+  }
+
   private async runFinalize(): Promise<void> {
     this.ended = true;
     this.closeUpstream();
@@ -1852,9 +1867,12 @@ export class CallSession implements DurableObject {
       /* already gone */
     }
     const endedAt = await this.rememberEnding();
-    const call = await this.env.DB.prepare('SELECT started_at, connected_at, business_id, assistant_id FROM calls WHERE id = ? AND status = ?')
+    let call = await this.env.DB.prepare('SELECT started_at, connected_at, business_id, assistant_id FROM calls WHERE id = ? AND status = ?')
       .bind(this.callId, 'active')
       .first<{ started_at: string; connected_at: string | null; business_id: string; assistant_id: string | null }>();
+    call ??= await this.env.DB.prepare(
+      `SELECT started_at, connected_at, business_id, assistant_id FROM calls WHERE id = ? AND ${CallSession.failedAsterisk}`
+    ).bind(this.callId).first<typeof call>();
     if (!call) {
       // The row is no longer active: either something else completed it, or the
       // sweep retired it as 'abandoned' before we got here. The sweep is
@@ -1974,7 +1992,11 @@ export class CallSession implements DurableObject {
       .run();
     // `changes` missing means the driver did not report one, not that nothing
     // matched — only an explicit zero means the sweep got there first.
-    if ((res?.meta?.changes ?? 1) === 0) await this.salvageSummary();
+    if ((res?.meta?.changes ?? 1) === 0) {
+      // This also covers carrier failure while the summary request was in flight.
+      // Read terminal timing in the UPDATE itself; retries must not add talk time.
+      if (!await this.salvageAsteriskConversation(summary, intent, messageJson)) await this.salvageSummary();
+    }
     this.finalized = true;
     await this.clearWatchdog();
   }
