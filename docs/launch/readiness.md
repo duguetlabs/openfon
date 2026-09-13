@@ -4,26 +4,31 @@ Updated 2026-09-13. **Release candidate in progress; not production-launch appro
 
 ## Latest local review corrections
 
-The [official f884e81 report](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5649635380)
-reported no security concerns and no major issues; hosted security and both CI
-runs also passed. Hosted code review then found three issues, so that head was
-not merged. The next candidate rotates the current cookie atomically on password
-change, preserves conversation details when Asterisk projects a terminal failure,
-and protects the profile credential scrub with a [database compatibility barrier](../migration-compatibility.md).
-Migration0018 repairs installations that already applied the earlier0016.
+The [official 67443bc report](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5649819010)
+reported no security concerns but four findings. Hosted reviews also found issues;
+that published head is not approved for merge. Earlier clean reports apply only
+to their recorded commits.
 
-The assembled corrections pass859 unit tests, both typechecks, a Chrome/workerd
-account scenario proving copied-cookie rejection and replacement-cookie continuity,
-and optimized0006→0018 preservation/restore/rollback rehearsal. The first combined
-run passed858 with one historical-fixture failure; the fixture now seeds obsolete
-credentials before the guard, retaining the export-exclusion assertions. Owner
-actual-D1 checks cover migration/install rollback and quota-respecting401-row
-recovery; Asterisk's persisted-workerd probes cover failure before/during summary
-and retry after eviction. These are local tests with synthetic data. Independent
-scoped QA passes172 focused tests, all nine actual-D1 barrier scenarios, and a
-workerd session-rotation/rollback probe; no new major/security issue was found
-in that scope. Fresh exact-head official/hosted reviews and CI remain required before merge.
-Staging remainsb15/0012, production is unchanged, and no additional live call occurred.
+The next local candidate preserves private assistants during missing-legacy
+recovery, aligns overview aggregates to connected live conversations, preserves
+Telnyx outcomes during status reconciliation, and ignores obsolete provider-form
+initialization responses. Migration 0019's conservative pause and identification
+limits are described in [migration compatibility](../migration-compatibility.md).
+Unconnected attempts remain visible in call history.
+
+The official-correction batch passed 870 unit tests, both typechecks, optimized
+migration rehearsals through 0019 and 0009, and an actual-workerd concurrent recovery probe.
+The original source failed the same privacy probe. Initial fixture failures are
+retained in the integration checkpoint. The subsequent assembled account, polling, PBX ingress, profile-blur and greeting
+corrections pass 887 unit tests, both typechecks and five affected browser cases.
+Actual-workerd ingress and synthetic Asterisk lifecycle checks also pass.
+Independent QA remains pending before publication.
+No latest-head review clearance is claimed.
+
+Previously validated cookie rotation, Asterisk failed-call content preservation,
+and profile credential migration/recovery barriers remain in place. Fresh
+exact-head official and hosted reviews plus CI are required before merge.
+Staging remains b15/0012, production is unchanged, and no additional live call occurred.
 
 ## Product truth
 
