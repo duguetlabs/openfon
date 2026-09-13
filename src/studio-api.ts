@@ -1681,13 +1681,28 @@ export function registerStudioApi(app: StudioApp): void {
         next.realtime_api_key, next.stt_provider, next.stt_base_url, next.stt_api_key, next.stt_model),
       c.env.DB.prepare('UPDATE agent_settings SET llm_base_url=?, llm_api_key=? WHERE business_id=?').bind(baseUrl, apiKey, workspace.id),
     ];
-    // Model and voice compatibility are independent. Keep custom model IDs,
+    // Model and voice compatibility are independent. Keep inactive custom model IDs,
     // but clear any voice outside the direct OpenAI catalog, even with a blank
     // or custom model. Blank fields use the adapter defaults.
     const effectiveRealtimeProvider = (selection: string | undefined) =>
       !selection || selection === 'instance' ? c.env.REALTIME_PROVIDER || 'kataleptic' : selection;
     if (effectiveRealtimeProvider(next.realtime_provider) === 'openai' &&
         effectiveRealtimeProvider(current?.realtime_provider) !== 'openai') {
+      // Inactive drafts and saved profiles keep custom model intent. Active
+      // realtime routes must not retain a model the direct adapter rejects.
+      // GLOB is case-sensitive, like the adapter's OpenAI model-prefix check.
+      const incompatibleModel = "realtime_model<>'' AND realtime_model NOT GLOB 'gpt-realtime*' AND realtime_model NOT GLOB 'gpt-4o*realtime*'";
+      statements.push(c.env.DB.prepare(
+        `UPDATE assistants SET realtime_model='' WHERE business_id=?
+         AND state='active' AND engine='realtime' AND ${incompatibleModel}`
+      ).bind(workspace.id));
+      statements.push(c.env.DB.prepare(
+        `UPDATE agent_settings SET realtime_model='' WHERE business_id=?
+         AND engine='realtime' AND ${incompatibleModel}
+         AND EXISTS (SELECT 1 FROM assistants JOIN businesses ON businesses.id=assistants.business_id
+           WHERE assistants.business_id=agent_settings.business_id AND assistants.public_slug=businesses.slug
+             AND assistants.state='active' AND assistants.engine='realtime')`
+      ).bind(workspace.id));
       const voicePlaceholders = OPENAI_REALTIME_VOICES.map(() => '?').join(', ');
       for (const table of ['assistants', 'agent_settings']) {
         statements.push(c.env.DB.prepare(

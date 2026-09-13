@@ -59,8 +59,11 @@ export function providerUpdate(env: Env, current: ProviderSettings | null, body:
     const newIdentity = `${provider}:${url}`;
     const credential = key(keyField, `${capability}_clear_api_key`, current?.[keyField] ?? '', oldIdentity, newIdentity);
     if (provider !== 'instance') {
-      if (capability === 'realtime' && !url.startsWith('wss://')) throw new ProviderInputError('Realtime URL must use wss://');
-      const bad = validateLlmBaseUrl(capability === 'realtime' ? url.replace(/^wss:/, 'https:') : url);
+      const localRealtime = capability === 'realtime' && env.ALLOW_INSECURE_LLM_URL === 'true';
+      if (capability === 'realtime' && !url.startsWith('wss://') && !(localRealtime && url.startsWith('ws://'))) {
+        throw new ProviderInputError('Realtime URL must use wss:// (ws:// requires the operator insecure-local opt-in).');
+      }
+      const bad = validateLlmBaseUrl(capability === 'realtime' ? url.replace(/^ws/, 'http') : url, localRealtime);
       if (bad) throw new ProviderInputError(`${capability} URL ${bad}`);
       if (capability === 'realtime') {
         const endpoint = new URL(url);
