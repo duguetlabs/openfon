@@ -1,12 +1,12 @@
 # Integration checkpoint
 
-- Status: In progress — all hosted351 fixes assembled locally; four targeted browser scenarios pass; combined API/types running before scoped QA
+- Status: In progress — QA closed5a9f185 hosted corrections and prior export/admission scope; preparing exact publication and dual-review retriggers
 - Owner: openfon-integration, gpt-6-astra / medium
 - Branch/worktree: codex/integrated-release, /Users/cristian/projects/fun/openfon-worktrees/integration
 - Updated: 2026-09-13
-- Application candidate: eeec61a export escaped-size preflight and Telnyx12ff85f admission budget;185+4 focused/both types/3 browser probes, independent QA103/actualD1 export PASS
+- Application candidate: 5a9f185 hosted351 corrections plus prior export/admission fixes;146 focused/both types/4browser PASS, independent QA30/workerd plus prior103 export closure
 - Published PR16 head: 351606f2e43ad10beb8112222ec9c635411c0c8b (docs-only over QA-scoped2bcd30b; frozen for required reviews)
-- Validation slot: integration released after146 focused/both types and4browser PASS; QA granted bounded combined scope next
+- Validation slot: QA released after30 focused/actualD1 effective-provider probe; no runner active
 - Ports: integration8814/9254, optional real-PBX proxy8824; never8787
 - Read first: root orchestration-rules/current-task/manifest (read-only), this file, docs/launch/readiness.md
 - Earlier detailed milestones and failures remain in this file's history through ccdd85d and the linked original review reports. This checkpoint records current state.
@@ -24,6 +24,8 @@ Realtimec58b17d→42077ab assembled with application hunks clean. Docs conflict 
 Final42077ab direct/gateway and Telnyx native+synthesized actual-workerd smokes PASS, all processes exited. Logs/tmp/openfon-420-direct.log,/tmp/openfon-420-gateway.log,/tmp/openfon-420-telnyx.log. Prior08cc Asterisk/retirement runtime unchanged by later Telnyx/preset/error-event deltas; full813 covers assembled interfaces. Reporting-only rehearsal9/17 previously passed without behavior change. Integration releases sole slot to QA for bounded independent combined closure, no full-suite duplication or official inference until published freeze. Remote5e0 and stagingb15 remain unchanged.
 
 ## Authorization and ownership
+QA closes exact5a9f185 four bounded hosted corrections:30/30 focused and actual-D1/workerd explicitKataleptic→instanceOpenAI private draft/repeatedbootstrap/429fullrollback/genuinelegacyreconciliation PASS. Source dirtyprofile guard/unrelated merge, separateAzure/gateway caches,404retry explicit selection reviewed; no new major/security issue scoped. Reused4browser/negatives and prior103export/Telnyx closure; no duplicate runs. All processes exited0/Miniflare disposed. Nextdocs-only publication then ONE unchangedofficial and fresh hostedcode/security/CI; no stagedmigration/livechange.
+
 Final combined146/146 focused7files and worker/web types PASS; logs/tmp/openfon-351-assembled-focused.log,/tmp/openfon-351-assembled-types.log. All integration processes exited. Current candidate includes earlier QAclosed export/Telnyx plus hosted profile/effectiveprovider/Azurecatalog/staleassistant fixes. QA nextsole bounded source/browser/route review, reuse owner146/4browser evidence where appropriate; no fullsuite duplication or official inference until publishedfreeze. Remote351/staging unchanged.
 
 Presetsf394c5a→200c1b6 application merged cleanly; realtime5cd7742→3807972 required retaining all integrated provider/budget imports and replacing old earlyreturn catalog block with independent Azure/gateway branches. Owner103API/1browser/types and78focused/types retained respectively; no dependency snapshot adoption.
