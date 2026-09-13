@@ -76,7 +76,7 @@ function written(calls: Bound[]): { status: string | null; summary: string | nul
 }
 
 function finalUpdate(calls: Bound[]): Bound {
-  const update = calls.find((c) => c.sql.includes('outcome = ?'));
+  const update = calls.find((c) => c.sql.startsWith('UPDATE calls SET status =') && c.sql.includes('message_json = ?'));
   if (!update) throw new Error('final call update was not written');
   return update;
 }

@@ -348,7 +348,12 @@ describe('Calm Studio API foundation', () => {
       task.name.startsWith('reconciles mixed-version settings before direct') ||
       task.name.startsWith('applies legacy profile engine fields without restoring') ||
       task.name.startsWith('rejects invalid historical preset and profile languages');
-    if (historical) applyMigrations(db, 1, 15); else applyMigrations(db);
+    if (historical) {
+      applyMigrations(db, 1, 15);
+      // Keep pre-barrier legacy writes possible in these compatibility fixtures,
+      // while supplying the independent ticket-provenance column current issuers use.
+      applyMigrations(db, 20, 20);
+    } else applyMigrations(db);
     db.exec(`
       INSERT INTO users (id, email, password_hash) VALUES
         ('user-1', 'one@example.com', 'hash'),

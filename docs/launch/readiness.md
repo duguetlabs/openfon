@@ -30,9 +30,12 @@ cutover and rollback boundaries in [migration compatibility](../migration-compat
 Provider activation pins the checked assistant/provider configuration atomically;
 instance speech credentials are rejected or cleared rather than reported as
 runtime credentials. Owner 91 focused API tests and types pass, with the prior
-one-case browser pass retained. Realtime cumulative-output/receipt accounting is
-in bounded owner validation. Combined validation and independent assembled QA
-remain pending; this is not a clean review or production-launch claim.
+one-case browser pass retained. Realtime cumulative-output/receipt accounting passes279 owner-focused checks,
+both types, direct/gateway workerd smokes and four stalled/progress carrier probes.
+The assembled application passes1,007 tests across45 files, both typechecks and
+33/33 actual Chrome/workerd browser cases. Initial12 fixture failures and their
+corrections remain recorded. Independent assembled QA and clean latest-head
+PR-Agent/CI remain pending; this is not production-launch approval.
 
 ## Previous correction evidence
 
