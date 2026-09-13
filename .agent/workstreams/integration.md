@@ -1,6 +1,6 @@
 # Integration checkpoint
 
-- Status: In progress — officialf143 harness correction and adjacent native assertions assembled; source QA next, hosted reviews pending
+- Status: In progress — QA closed66397c2 harness-only corrections; publishing next exact review freeze
 - Owner: openfon-integration, gpt-6-astra / medium
 - Branch/worktree: codex/integrated-release, /Users/cristian/projects/fun/openfon-worktrees/integration
 - Updated: 2026-09-13
@@ -24,6 +24,8 @@ Realtimec58b17d→42077ab assembled with application hunks clean. Docs conflict 
 Final42077ab direct/gateway and Telnyx native+synthesized actual-workerd smokes PASS, all processes exited. Logs/tmp/openfon-420-direct.log,/tmp/openfon-420-gateway.log,/tmp/openfon-420-telnyx.log. Prior08cc Asterisk/retirement runtime unchanged by later Telnyx/preset/error-event deltas; full813 covers assembled interfaces. Reporting-only rehearsal9/17 previously passed without behavior change. Integration releases sole slot to QA for bounded independent combined closure, no full-suite duplication or official inference until published freeze. Remote5e0 and stagingb15 remain unchanged.
 
 ## Authorization and ownership
+QA source/evidence closes exact66397c2:src/web/migrations diffpublishedf143 EMPTY,ports unchanged. Verified signednormalcause,completed/answered/nullfailure/end/release assertions,oversizedfailed/zeroPCM/zeroturns retained. QA read and hashchecked realtime2negative+4PASS andTelnyx2failedstate negative logs; native/synthpositive/cleanup reused asowner evidence. No newmajor/security concern scoped, no runner/duplicateinference. Nextpublication docs-onlyover663 withrequiredfreshreviews/CI; no application/live/stagingchange.
+
 Assembleda8755c1→e3e33f4 andefbc98b→d2a296b cleanly, configurableports preserved. Source/web/migrations diff frompublishedf143 EMPTY. Realtime2 missingcause direct/gateway negatives failfailedvscompleted;4 fixed normal/oversized variants PASS. Telnyx native+synth strictnormal PASS; forcedfailed persistedrow negatives each exit1 atfailedvscompleted, restoredfinally; logs/tmp/openfon-telnyx-terminal-negative-native.log and-synthesized.log/hashesownercheckpoint. All runtimes disposed/slotreleased. No duplicate suite/runtime needed for unchangedapplication; sourceQA checks exactharness deltas/ownerprovenance then freshrequiredreview onpublishedhead. Bothf143CIgreen; hostedreviews stillpending, no live/stagingchange.
 
 Realtime explicitrelease: exactf143 archive normaldirect/gateway missingcause negatives failfailedvscompleted; fourfixed direct/gateway normal/oversized workerd variants PASS on8813/9253. Session68434 exit0, allMiniflare disposed/archive removed, no application/live/inference change. Exactharnesscommit pending. Telnyx nextsolegrant now for native/synth normalassertions plus forcedfailed negatives; no competingrunner.
