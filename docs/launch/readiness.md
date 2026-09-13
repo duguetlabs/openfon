@@ -1,6 +1,6 @@
 # OpenFon release readiness
 
-Updated 2026-09-13. **Release candidate in progress; not production-launch approved.**
+Updated 2026-09-14. **Release candidate in progress; not production-launch approved.**
 
 ## Current review policy and correction round
 
@@ -10,6 +10,55 @@ security/major clearance and passing required CI remain mandatory. Existing
 findings from every reviewer still require verification and disposition. No new
 Codex review is requested or awaited. Historical dual-review references below
 record earlier requirements; this policy governs the current release.
+
+## Assistant creation and confirmed frontend recovery
+
+The unchanged official review of `8c6ec553`
+([5656926555](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5656926555))
+reported no security concerns and three recommendations, without clean-major
+clearance. Both CI runs passed. The repeated onboarding uniqueness claim is
+[declined with verified evidence](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5657065414):
+workspace POST returns the canonical existing workspace, and the following PUT
+intentionally applies the current retry draft. A call-site comment documents
+that contract without changing behavior.
+
+Assistant creation now rereads and validates provider state after foundation
+repair, then pins that snapshot in the draft INSERT and gates the default
+attachment in the same batch. Conflicts return409 without the requested draft,
+attachment or insert charge. Earlier legitimate foundation repairs remain outside
+that batch's rollback guarantee. Exact source is assembled in `d2c23fe`;
+owner167 APIs/types and native source-extracted D1 create-batch checks pass,
+with six original201-versus409 failures retained. QA independently verified
+source identity and evidence. These are not full-workerd-handler concurrency
+or live-provider claims.
+
+Knowledge confirms accepted items, statuses, deletions, attachments, collection
+fields and counts before refreshing. Separate read-only recovery preserves new
+drafts and missing-collection identity. A bounded frontend inventory corrected
+the same class in profile Apply/Delete and signup/login: confirmed operations
+have read-only recovery; rejected or ambiguous mutations remain unconfirmed.
+Authentication clears the submitted password after success and preserves the
+existing sign-out guards. Profile recovery blocks repeated writes until reads
+are accepted, while retaining unrelated drafts. Effect and explicit Settings
+reads share ordering and reject superseded responses.
+
+Eleven original browser failures establish the confirmation gaps; the initial
+Knowledge deletion locator failure is retained separately. An additional
+`a81d56c` ordering negative observes a newer server assistant not being adopted
+while an older read is held. Combined `c1ecf8d` passes1,085 tests across48 files,
+both types and25 affected actual Chrome/workerd browser cases. Final frontend
+read-acceptance guards in `609a6fc` pass12 targeted browser cases and both types;
+the earlier combined run is reused with attribution. A held-effect retention
+probe also passes the preceding candidate, so it does not establish the proposed
+late-effect defect: that guard is defensive hardening, not a reproduced failure.
+Original text logs and source snapshots remain. The second original browser run
+reused and overwrote the first run's trace directory; later runs use separate
+output directories. These limits remain explicit in the integration/QA checkpoints.
+
+Fresh exact-published-head PR-Agent security/major clearance and CI remain
+mandatory. No staging, production or live-provider changes occurred.
+
+## Earlier integrated correction evidence
 
 The published `8bd4204` browser CI failed because three profile tests bypassed
 the existing signup-isolation fixture. Local `ac80e7d` corrects those imports;
