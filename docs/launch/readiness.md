@@ -11,6 +11,35 @@ findings from every reviewer still require verification and disposition. No new
 Codex review is requested or awaited. Historical dual-review references below
 record earlier requirements; this policy governs the current release.
 
+## Receipt negotiation and timing disposition
+
+The original `884e43e` [review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5657644440)
+reported no security concerns and two recommendations, without clean-major
+clearance. Both exact-head CI runs passed; deployment was skipped.
+
+The [Timing Overwrite disposition](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5657690535)
+declines the reported producer premise. Connected Telnyx failure projection
+leaves timing to the session; its unconnected end-time assignment also makes
+the row terminal, outside the final active-only UPDATE. Session ending time is
+persisted before summarization and reused on retries. No timing behavior or
+final UPDATE was changed. Using observed carrier release to cap a later first
+finalization would be a separate policy, which this correction does not adopt.
+
+Asterisk accepts legacy PCM before ready. Its receiver must not turn that PCM
+into required receipt debt when the first valid ready enables receipts. The
+bounded correction clears only that prior pairing state; playback queues,
+marks and carrier transport debt remain intact. Pre-ready markers remain
+compatible, and negotiated missing receipts or repeated ready still fail closed.
+Current carrier greeting producers send ready first and pair every realtime
+binary with its receipt; no current normal-greeting production failure is claimed.
+Exact receipt application `14f8dc4` matches the owner-tested two-file delivery.
+Four original transition cases fail with `invalid_session_frame` (nine other
+cases deliberately skipped); fixed45 tests across the transition, Asterisk media
+and transport-debt files pass, as do both typechecks. No source changed during
+validation. Prior full1183 tests belong to `3e950c8`; no duplicate local broad or
+native suite was run for this four-line source change. Independent QA closed exact `14f8dc4` source/evidence/assembly without a
+duplicate runner. Fresh published-head review and CI remain required.
+
 ## Telnyx reservation and parser helper correction
 
 Original `d2b72617` review
