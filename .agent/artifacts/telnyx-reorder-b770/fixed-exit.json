@@ -1,0 +1,40 @@
+{
+  "stage": "fixed",
+  "command": [
+    "npm",
+    "test",
+    "--",
+    "test/telnyx-reorder-boundary.test.ts",
+    "test/telnyx-media.test.ts",
+    "test/telephony-audio.test.ts",
+    "--maxWorkers=1"
+  ],
+  "cwd": "/private/tmp/openfon-reorder-b770-fifekwmx",
+  "started": "2026-09-14T04:28:23.948461+00:00",
+  "source_before": {
+    "src/telnyx-media.ts": "e34f6146cf35e17f3bbc76baec61e2b647f8aa3e668bc8b8146dcd9dc6a59740",
+    "test/telnyx-reorder-boundary.test.ts": "b3d59be54ad62b5370ebf25c9d783746e5969e93fccea92b73b978e79387a37c",
+    "src/call-session.ts": "8c884f8a6f39d7db83b22ff40eb9d0233436eb0391866b0701a7a09c2d18b413",
+    "src/telnyx-control.ts": "213038b7acd1660664014ad2067ca01d770097f6ba02ce8bc638e186658b4f32",
+    "src/telephony-audio.ts": "cb06b9da26edbb1d37a1d601049ddb2eff5e1cf9618abdadcd0f5e6e68aedd4e",
+    "src/media-output-debt.ts": "c64be7586ab4b804fcb7158144e322a95061f0504fe080052475b1fabba8c5a4",
+    "src/asterisk-media.ts": "89b7448be299211ec7a016e96b4cdc0be58b4640f7cf501780c9888f1be2a583",
+    "src/piper-catalog.ts": "55493b66069a9df8613b43cf8acb1804a76f32b18de408cf4fd60d8e35446958",
+    "web/src/voice.ts": "9783d4bc29e2a62048fa543423c6b7da368b596e334403755d3f3a531ea05636",
+    "test/telnyx-media.test.ts": "86fb5958feca308a3765e1d5169742ea6cadc3a87e2972461d4de1ec4fd34c68"
+  },
+  "exit_code": 0,
+  "finished": "2026-09-14T04:28:24.807379+00:00",
+  "source_after": {
+    "src/telnyx-media.ts": "e34f6146cf35e17f3bbc76baec61e2b647f8aa3e668bc8b8146dcd9dc6a59740",
+    "test/telnyx-reorder-boundary.test.ts": "b3d59be54ad62b5370ebf25c9d783746e5969e93fccea92b73b978e79387a37c",
+    "src/call-session.ts": "8c884f8a6f39d7db83b22ff40eb9d0233436eb0391866b0701a7a09c2d18b413",
+    "src/telnyx-control.ts": "213038b7acd1660664014ad2067ca01d770097f6ba02ce8bc638e186658b4f32",
+    "src/telephony-audio.ts": "cb06b9da26edbb1d37a1d601049ddb2eff5e1cf9618abdadcd0f5e6e68aedd4e",
+    "src/media-output-debt.ts": "c64be7586ab4b804fcb7158144e322a95061f0504fe080052475b1fabba8c5a4",
+    "src/asterisk-media.ts": "89b7448be299211ec7a016e96b4cdc0be58b4640f7cf501780c9888f1be2a583",
+    "src/piper-catalog.ts": "55493b66069a9df8613b43cf8acb1804a76f32b18de408cf4fd60d8e35446958",
+    "web/src/voice.ts": "9783d4bc29e2a62048fa543423c6b7da368b596e334403755d3f3a531ea05636",
+    "test/telnyx-media.test.ts": "86fb5958feca308a3765e1d5169742ea6cadc3a87e2972461d4de1ec4fd34c68"
+  }
+}

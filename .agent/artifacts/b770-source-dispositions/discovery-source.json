@@ -1,0 +1,12 @@
+{
+  "head": "b7700fa4ead7ed88c625d146e7e8eaa63d7143cf",
+  "same_as": "aa746756",
+  "sha256": {
+    "vitest.config.ts": "530bd3ae03a17ef1b60d63ca7bbceaa4231acf82ae4876151083c0e9c402e519",
+    "tsconfig.worker.json": "6f1b4cebf4e7ff46b73e2592b01f50d02cb18a2cdfdcb2b0bea413f2199edb05",
+    "web/tsconfig.json": "057b68f3b622b565c8b242b4150178b1c81cb239ca949adc560fa3a8c2b2a365",
+    "playwright.config.ts": "8bf932054f22bcc09fa30fed1f3d03b33b82a37282cd26d7cca117b206bdf0d9",
+    "package.json": "baf608b541ac2f7667ec07e062975ac66d08b4201245412c0207e5951942b233"
+  },
+  "result": "Explicit Vitest/TS/Playwright roots unchanged; both exact b770 CI all four jobs pass; no duplicate application run"
+}

@@ -11,6 +11,16 @@ findings from every reviewer still require verification and disposition. No new
 Codex review is requested or awaited. Historical dual-review references below
 record earlier requirements; this policy governs the current release.
 
+## b7700fa reorder correction and carrier confirmation policy
+
+The [unchanged b7700fa review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658922189) reports no security concerns and four recommendations, without clean-major clearance. Repeated startup/discovery findings and Stalled Calls have [source dispositions](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658976822). The [supported reorder correction](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5659042905) is assembled in `2d173f0`; QA29edb1f independently closed source/evidence/exact identity.
+
+Expected input now drains directly through the existing ordered consumer when ten successors are waiting, without inserting an eleventh map entry. This changes only count-boundary behavior: aggregate waiting-plus-incoming bytes must still be at most8000 before conversion/delivery. Full-byte overflow remains rejected. Frame/distance/duplicate/order/FIR/pre-ready/gap/ending behavior and all output/control paths retain their bounds. Two original count cases fail at the first termination assertion,18 skipped; fixed61 tests/three files and both types pass. Converter-based exact PCM checks prove ordering against the existing converter, not independent DSP correctness or real-carrier acceptance. All eight evidence identities and protected source/suffix hashes match; no unexpected failures or source corrections occurred during runs.
+
+Stalled Calls is a supported lost-confirmation availability limit, not a false sequence: accepted answer without its signed call.answered event can reach the original60-second setup deadline and hangup. Acceptance2xx or is_alive does not prove answered state; no stable-ID webhook-replay or positive-answer query guarantee was established. The selected policy retains signed full-correlation confirmation, existing failed-response retries and conservative timeout, with no new accepted-command resends/polls/deadline extension. No live-provider recovery claim or control/finalizer change was made.
+
+Both exactb770 CI runs34805138483/34805121393 passed all four required jobs; deployment was skipped. Prior combined1,383/types remains attributed tobee7c49 before the isolated reorder correction. Reuse focused61/types plus mandatory fresh published-head CI; no redundant broad/native/browser runtime is justified. Fresh latest-head genuine PR-Agent security/major clearance remains required before merge.
+
 ## aa746756 source dispositions
 
 The [unchanged aa746756 review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658817846) raised a logout security concern and four recommendations. Independent QA and owners verified the exact source; [all findings have qualified public dispositions](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658883874). No application change or duplicate runtime was selected.

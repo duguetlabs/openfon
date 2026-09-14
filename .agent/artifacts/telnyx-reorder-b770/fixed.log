@@ -1,0 +1,13 @@
+
+> openfon@0.1.0 test
+> vitest run test/telnyx-reorder-boundary.test.ts test/telnyx-media.test.ts test/telephony-audio.test.ts --maxWorkers=1
+
+
+ RUN  v5.0.0 /private/tmp/openfon-reorder-b770-fifekwmx
+
+
+ Test Files  3 passed (3)
+      Tests  61 passed (61)
+   Start at  06:28:24
+   Duration  562ms (tests 61%, import 23%, transform 15%, worker 1%)
+

@@ -1,0 +1,13 @@
+{
+  "time": "2026-09-14T04:29:12.261871+00:00",
+  "application_or_review_processes": [],
+  "listeners": "",
+  "lsof_exit": 1,
+  "lsof_stderr": "",
+  "owned_sessions_exited": {
+    "94638": 1,
+    "68014": 0,
+    "84599": 0
+  },
+  "scope": "original expected failures; focused tests; types. No native/browser listeners started."
+}
