@@ -11,6 +11,33 @@ findings from every reviewer still require verification and disposition. No new
 Codex review is requested or awaited. Historical dual-review references below
 record earlier requirements; this policy governs the current release.
 
+## Legacy profile engine validation
+
+Original `8f5b1d59` [review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5657859272)
+reported no security concerns and two recommendations, without clean-major
+clearance. Both exact-head CI runs passed; deployment was skipped.
+The repeated preset Apply claim is [qualified-declined](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5657879347):
+Apply deliberately assigns all six selected preset fields without restoring
+captured assistant fallback values. No assistant-revision/CAS contract is added.
+
+Legacy profile PUT now rejects a supplied engine unless it is exactly `pipeline`
+or `realtime`, before preparing writes or checking their budget. Omission retains
+the current engine, including historical unknown values; this does not migrate
+or normalize existing rows. Shared null/nonstring rejection, language/auth/owner
+precedence, mirrored fields, credential scrub and quota atomicity remain intact.
+The verified defect was invalid-string persistence; no enum CHECK or resulting
+constraint500 was present.
+
+Exact application `87a1c7b` matches the tested two-file delivery. Original twelve
+cases produced four200-versus400 failures and eight passing controls; fixed31
+cases across the new, provider and budget suites pass, as do both typechecks.
+No source changed during validation. Evidence uses Node handlers and the SQLite
+adapter, with synthetic late-mirror rollback; no native/browser/broad suite was
+repeated. Independent QA closed exact `87a1c7b` source/evidence/assembly.
+Original failures stop at the status assertion, so no separate persisted-state
+negative is claimed. Fresh published-head review/CI remain required; earlier
+full-suite receipts retain their original source attribution.
+
 ## Capture cleanup and current review dispositions
 
 Original `7c95e53` [review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5657754590)
