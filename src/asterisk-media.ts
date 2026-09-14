@@ -98,6 +98,10 @@ export class AsteriskMediaAdapter {
       } else if (msg.type === 'ready') {
         this.audioReceipts = msg.audioReceipts === true;
         if (!this.started || this.ready || msg.mode !== 'realtime' || (msg.ttsMode === 'browser' && msg.greeting)) throw Error();
+        // Legacy greeting PCM accepted before negotiation has no required
+        // marker. Do not turn it into receipt debt retroactively. Playback and
+        // carrier transport debt remain intact; subsequent pairs stay strict.
+        if (this.audioReceipts) this.lastPcmBytes = null;
         this.ready = true; clearTimeout(this.startup);
         this.options.onReady?.();
       } else if (msg.type === 'flush') {
