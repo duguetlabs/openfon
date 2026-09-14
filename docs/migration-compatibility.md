@@ -40,12 +40,23 @@ behavior and never returns credential values. Keep the restricted backup and
 account for concurrent writes. Do not reset counters, remove triggers or mark the
 migration applied manually.
 
-Once installed, the barrier rejects credential-changing legacy writes unless
+Once installed, the barrier rejects credential-changing legacy UPDATEs unless
 the new pair matches the provider row. Current provider and Settings handlers
 update that row before the legacy row in one transaction. It also rejects
 nonempty credential snapshots written by old profile create/update handlers.
 These guards apply to in-flight old requests as well as later requests; safety
 does not depend on guessing a request-drain delay.
+
+The inspected pre-Studio onboarding handler inserts a legacy row with only its
+business ID, leaving the schema's blank text URL/key defaults. It may therefore
+create a default-only row without a provider counterpart; the UPDATE guard does
+not prohibit that insertion. It cannot insert caller-supplied credentials through
+that handler, and a later changed-credential UPDATE still encounters the guard.
+An insert between 0016 and 0018 can make 0018's presence check refuse until explicit
+reconciliation. After migration, current foundation repair creates the default
+provider counterpart. Do not infer that all legacy rows always have providers,
+or add a strict provider-present INSERT guard without redesigning the supported
+current issuer/repair ordering.
 
 If Worker upload fails after migration, existing calls and unchanged settings
 retain their credentials. Old profile/configuration mutations that would violate
@@ -66,7 +77,11 @@ separately; a Worker upload does not roll back an already-applied schema change.
 Migration 0008 activates an imported assistant only when a real, configured
 legacy settings row exists. Runtime repair of a missing settings row preserves
 the assistant's current activation state; a workspace with neither row starts
-with a private, incomplete draft.
+with a private, incomplete draft. If a provider row survives loss of both
+assistant rows, repair reads its current text URL/key together at SQL execution
+and preserves that pair. It uses blank defaults only when the provider is absent;
+it does not clear surviving speech or realtime configuration. This is a recovery
+boundary, not a claim that ordinary primary-assistant deletion is supported.
 
 Migration 0019 conservatively pauses active canonical primary assistants whose
 legacy settings row is still absent. It preserves their configuration and public

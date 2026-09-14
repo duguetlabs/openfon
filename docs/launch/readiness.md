@@ -11,6 +11,53 @@ findings from every reviewer still require verification and disposition. No new
 Codex review is requested or awaited. Historical dual-review references below
 record earlier requirements; this policy governs the current release.
 
+## Field layout, profile recovery and foundation repair
+
+Official `b18d60bb` report
+[5657164248](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5657164248)
+is retained unchanged. Its missing account-export cache header premise is
+[declined with source evidence](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5657211054):
+the registered middleware already supplies `Cache-Control: no-store`. Existing
+successful export/attachment and unauthorized cases now assert that header;
+both pass. This is retention coverage, not a production cache-policy change.
+
+Field roots now carry a stable class used by the two affected flex selectors.
+Native filter labels and accessible label/hint associations remain intact.
+Owner original two baseline cases pass with expected flexGrow0; fixed two cases
+pass with flexGrow1 and filled geometry across all six affected rows at desktop
+and mobile widths. Original baseline passes are not failed negatives. QA checked
+assembled source identity, geometry, screenshots and retained provenance.
+
+Both b18 browser CI failures came from profile Delete recovery issuing three
+list reads where the unchanged test expects two. Delete now retries its list
+only; Apply retains business/session recovery. Two affected actual Chrome/workerd
+cases pass, including confirmed deletion followed by a failed read and read-only
+retry. No assertion was relaxed.
+
+The official migration INSERT concern has a qualified decline: inspected old
+onboarding inserts blank defaults, changed-credential UPDATE remains guarded,
+and current foundation repairs a missing counterpart. An insert between0016
+and0018 may require explicit reconciliation before0018 can apply. No applied
+migration or strict INSERT trigger is changed; see
+[migration compatibility](../migration-compatibility.md).
+
+A separate verified recovery defect is corrected: when both assistant rows are
+missing but a provider survives, foundation now copies its text pair at SQL
+execution instead of reconstructing blanks and overwriting the provider.
+Blank essentials/private drafts, absent-provider fallback, winning concurrent
+repair and speech/realtime settings remain intact. Three original API negatives
+and native credential-loss evidence are retained. Owner14 focused cases, both
+types and six production-Node-handler/native-workerd-D1 scenarios pass. This
+is not full-workerd-handler concurrency or ordinary primary-deletion reachability.
+QA verified all19 artifact hashes and exact assembled three-file identity.
+
+Final application `381b3fe` passes1,091 tests across49 files in22.18s and both
+worker/web typechecks. The affected browser and owner native evidence above is
+reused with attribution; no duplicate broad browser/native run was needed.
+Independent bounded source/evidence closure is complete. Publication adds docs
+only; fresh published-head PR-Agent security/major clearance and CI remain
+required before merge. Production and staging are unchanged.
+
 ## Assistant creation and confirmed frontend recovery
 
 The unchanged official review of `8c6ec553`
