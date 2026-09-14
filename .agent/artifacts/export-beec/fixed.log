@@ -1,0 +1,15 @@
+
+> openfon@0.1.0 test
+> vitest run test/account-api.test.ts test/auth-hardening.test.ts --maxWorkers=1
+
+
+ RUN  v5.0.0 /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-export-beec-7nfyy27v/source
+
+(node:25680) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ Test Files  2 passed (2)
+      Tests  69 passed (69)
+   Start at  05:21:04
+   Duration  3.33s (tests 84%, import 10%, transform 7%)
+

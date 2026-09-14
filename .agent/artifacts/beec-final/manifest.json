@@ -1,0 +1,18 @@
+{
+  "source": "d8fa368",
+  "result": "1339/56files24.95s; both typesPASS; session15873 exit0; fresh runner/listener scan empty, sole slot RELEASED",
+  "logs": {
+    "full.log": {
+      "sha256": "712c95b1426faed4aa669f30ddddb8f2bcec10f3999e4b0c967c95c4aa2bb101",
+      "size": 5367
+    },
+    "types.log": {
+      "sha256": "75c97ba8f32dd032ee1e1293129c6bbdd2ff33c240a3223d4b150e23ab19ee29",
+      "size": 104
+    },
+    "exits.json": {
+      "sha256": "23e283615c99eb65e1b55f44aeaebdd11c3677651fdda35d72f43adc28741bdc",
+      "size": 265
+    }
+  }
+}

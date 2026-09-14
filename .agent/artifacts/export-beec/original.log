@@ -1,0 +1,128 @@
+
+> openfon@0.1.0 test
+> vitest run test/account-api.test.ts -t \[export-url\] --maxWorkers=1
+
+
+ RUN  v5.0.0 /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-export-beec-7nfyy27v/source
+
+(node:25661) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ test/account-api.test.ts (56 tests | 8 failed | 39 skipped) 523ms
+   ❯ account self service (56)
+     × exports historical owned data without configured provider URLs in all five locations [export-url] 83ms
+     × exports historical owned data without path-only capabilities in agent_settings.llm_base_url [export-url] 25ms
+     × exports historical owned data without path-only capabilities in engine_profiles.llm_base_url [export-url] 25ms
+     × exports historical owned data without path-only capabilities in provider_settings.llm_base_url [export-url] 24ms
+     × exports historical owned data without path-only capabilities in provider_settings.stt_base_url [export-url] 24ms
+     × exports historical owned data without path-only capabilities in provider_settings.realtime_base_url [export-url] 24ms
+     × exports a currently accepted path-capability text provider without its endpoint credentials [export-url] 60ms
+     × omits ordinary and Unicode endpoints while preserving empty values [export-url] 26ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/account-api.test.ts > account self service > exports historical owned data without configured provider URLs in all five locations [export-url]
+AssertionError: expected 'https://provider.example/path-capabil…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ https://provider.example/path-capability-canary/v1
+
+ ❯ test/account-api.test.ts:153:49
+    151|     const body = await response.text();
+    152|     const { data } = JSON.parse(body);
+    153|     expect(data.agent_settings[0].llm_base_url).toBe('');
+       |                                                 ^
+    154|     expect(data.engine_profiles[0].llm_base_url).toBe('');
+    155|     expect(data.provider_settings[0]).toMatchObject({ llm_base_url: ''…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  test/account-api.test.ts > account self service > exports historical owned data without path-only capabilities in agent_settings.llm_base_url [export-url]
+ FAIL  test/account-api.test.ts > account self service > exports historical owned data without path-only capabilities in engine_profiles.llm_base_url [export-url]
+ FAIL  test/account-api.test.ts > account self service > exports historical owned data without path-only capabilities in provider_settings.llm_base_url [export-url]
+ FAIL  test/account-api.test.ts > account self service > exports historical owned data without path-only capabilities in provider_settings.stt_base_url [export-url]
+AssertionError: expected 'https://provider.example/opaque-path-…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ https://provider.example/opaque-path-canary/v1
+
+ ❯ test/account-api.test.ts:179:55
+    177|       expect(response.status).toBe(200);
+    178|       const body = await response.text();
+    179|       expect(JSON.parse(body).data[table][0][column]).toBe('');
+       |                                                       ^
+    180|       expect(body).not.toContain('opaque-path-canary');
+    181|       expect(snapshotExceptExportCharge()).toEqual(before);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  test/account-api.test.ts > account self service > exports historical owned data without path-only capabilities in provider_settings.realtime_base_url [export-url]
+AssertionError: expected 'wss://provider.example/opaque-path-ca…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ wss://provider.example/opaque-path-canary/v1
+
+ ❯ test/account-api.test.ts:179:55
+    177|       expect(response.status).toBe(200);
+    178|       const body = await response.text();
+    179|       expect(JSON.parse(body).data[table][0][column]).toBe('');
+       |                                                       ^
+    180|       expect(body).not.toContain('opaque-path-canary');
+    181|       expect(snapshotExceptExportCharge()).toEqual(before);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  test/account-api.test.ts > account self service > exports a currently accepted path-capability text provider without its endpoint credentials [export-url]
+AssertionError: expected 'https://text.example/path-capability-…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ https://text.example/path-capability-canary/v1
+
+ ❯ test/account-api.test.ts:196:69
+    194|     expect(response.status).toBe(200);
+    195|     const body = await response.text();
+    196|     expect(JSON.parse(body).data.provider_settings[0].llm_base_url).to…
+       |                                                                     ^
+    197|     expect(body).not.toContain('path-capability-canary');
+    198|     expect(body).not.toContain('query-canary');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  test/account-api.test.ts > account self service > omits ordinary and Unicode endpoints while preserving empty values [export-url]
+AssertionError: expected { business_id: 'biz-owner', …(9) } to match object { llm_base_url: '', …(2) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "llm_base_url": "",
+-   "realtime_base_url": "",
++   "llm_base_url": "https://xn--bcher-kva.example/%E6%97%A5%20%E6%9C%AC",
++   "realtime_base_url": "ws://localhost:8080/v1",
+    "stt_base_url": "",
+  }
+
+ ❯ test/account-api.test.ts:227:22
+    225|     const text = await response.text();
+    226|     const provider = JSON.parse(text).data.provider_settings[0];
+    227|     expect(provider).toMatchObject({ llm_base_url: '', stt_base_url: '…
+       |                      ^
+    228|     expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(…
+    229|     expect(snapshotExceptExportCharge()).toEqual(before);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  8 failed | 9 passed | 39 skipped (56)
+   Start at  05:21:02
+   Duration  1.37s (tests 42%, transform 33%, import 24%, worker 1%)
+

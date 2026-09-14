@@ -1,0 +1,199 @@
+TAP version 13
+# Subtest: numeric child exit 0 is preserved
+ok 1 - numeric child exit 0 is preserved
+  ---
+  duration_ms: 92.330333
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":0,"signal":null},"events":[{"kind":"child-created","pid":34312},{"kind":"child-exit","code":0,"signal":null},{"kind":"provider-close"},{"kind":"state-removed"}],"stderr":""}
+# Subtest: numeric child exit 7 is preserved
+ok 2 - numeric child exit 7 is preserved
+  ---
+  duration_ms: 69.177166
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":7,"signal":null},"events":[{"kind":"child-created","pid":34314},{"kind":"child-exit","code":7,"signal":null},{"kind":"provider-close"},{"kind":"state-removed"}],"stderr":""}
+# Subtest: unexpected direct-child SIGTERM is failure
+not ok 3 - unexpected direct-child SIGTERM is failure
+  ---
+  duration_ms: 71.783208
+  location: '/private/tmp/openfon-wrapper-status-beec-udebnuoa/source/scripts/e2e-server.test.mjs:153:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    check (file:///private/tmp/openfon-wrapper-status-beec-udebnuoa/source/scripts/e2e-server.test.mjs:134:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    async Test.run (node:internal/test_runner/test:980:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":0,"signal":null},"events":[{"kind":"child-created","pid":34316},{"kind":"child-exit","code":null,"signal":"SIGTERM"},{"kind":"provider-close"},{"kind":"state-removed"}],"stderr":""}
+# Subtest: unexpected direct-child SIGKILL is failure
+not ok 4 - unexpected direct-child SIGKILL is failure
+  ---
+  duration_ms: 65.43125
+  location: '/private/tmp/openfon-wrapper-status-beec-udebnuoa/source/scripts/e2e-server.test.mjs:153:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    check (file:///private/tmp/openfon-wrapper-status-beec-udebnuoa/source/scripts/e2e-server.test.mjs:134:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    async Test.run (node:internal/test_runner/test:980:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":0,"signal":null},"events":[{"kind":"child-created","pid":34318},{"kind":"child-exit","code":null,"signal":"SIGKILL"},{"kind":"provider-close"},{"kind":"state-removed"}],"stderr":""}
+# Subtest: accepted wrapper-requested SIGTERM is successful shutdown
+ok 5 - accepted wrapper-requested SIGTERM is successful shutdown
+  ---
+  duration_ms: 59.598292
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":0,"signal":null},"events":[{"kind":"child-created","pid":34320},{"kind":"forwarded","signal":"SIGTERM","sent":true},{"kind":"child-exit","code":null,"signal":"SIGTERM"},{"kind":"provider-close"},{"kind":"state-removed"}],"stderr":""}
+# Subtest: accepted wrapper-requested SIGINT is successful shutdown
+ok 6 - accepted wrapper-requested SIGINT is successful shutdown
+  ---
+  duration_ms: 71.897083
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":0,"signal":null},"events":[{"kind":"child-created","pid":34322},{"kind":"forwarded","signal":"SIGINT","sent":true},{"kind":"child-exit","code":null,"signal":"SIGINT"},{"kind":"provider-close"},{"kind":"state-removed"}],"stderr":""}
+# Subtest: numeric nonzero remains failure after accepted shutdown request
+ok 7 - numeric nonzero remains failure after accepted shutdown request
+  ---
+  duration_ms: 100.630833
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":7,"signal":null},"events":[{"kind":"child-created","pid":34324},{"kind":"forwarded","signal":"SIGTERM","sent":true},{"kind":"child-exit","code":7,"signal":null},{"kind":"provider-close"},{"kind":"state-removed"}],"stderr":""}
+# Subtest: different child signal is failure after accepted request
+not ok 8 - different child signal is failure after accepted request
+  ---
+  duration_ms: 73.062833
+  location: '/private/tmp/openfon-wrapper-status-beec-udebnuoa/source/scripts/e2e-server.test.mjs:163:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    check (file:///private/tmp/openfon-wrapper-status-beec-udebnuoa/source/scripts/e2e-server.test.mjs:134:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    async Test.run (node:internal/test_runner/test:980:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":0,"signal":null},"events":[{"kind":"child-created","pid":34326},{"kind":"forwarded","signal":"SIGTERM","sent":true},{"kind":"child-exit","code":null,"signal":"SIGKILL"},{"kind":"provider-close"},{"kind":"state-removed"}],"stderr":""}
+# Subtest: matching any of multiple accepted requests succeeds
+ok 9 - matching any of multiple accepted requests succeeds
+  ---
+  duration_ms: 71.339666
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":0,"signal":null},"events":[{"kind":"child-created","pid":34328},{"kind":"forwarded","signal":"SIGTERM","sent":true},{"kind":"forwarded","signal":"SIGINT","sent":true},{"kind":"child-exit","code":null,"signal":"SIGTERM"},{"kind":"provider-close"},{"kind":"state-removed"}],"stderr":""}
+# Subtest: real spawn error preserves existing failure and state cleanup
+ok 10 - real spawn error preserves existing failure and state cleanup
+  ---
+  duration_ms: 50.217542
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":1,"signal":null},"events":[{"kind":"child-created"},{"kind":"child-error","code":"ENOENT"},{"kind":"state-removed"}],"stderr":"spawn /var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-wrapper-test-eSfw5Z/missing-executable ENOENT\\n"}
+# Subtest: synthetic false forwarding never authorizes zero
+not ok 11 - synthetic false forwarding never authorizes zero
+  ---
+  duration_ms: 0.328542
+  location: '/private/tmp/openfon-wrapper-status-beec-udebnuoa/source/scripts/e2e-server.test.mjs:181:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/tmp/openfon-wrapper-status-beec-udebnuoa/source/scripts/e2e-server.test.mjs:196:12)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:979:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
+    Test.postRun (node:internal/test_runner/test:1090:19)
+    Test.run (node:internal/test_runner/test:1018:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
+  ...
+# Subtest: synthetic throw forwarding never authorizes zero
+not ok 12 - synthetic throw forwarding never authorizes zero
+  ---
+  duration_ms: 0.272459
+  location: '/private/tmp/openfon-wrapper-status-beec-udebnuoa/source/scripts/e2e-server.test.mjs:181:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/tmp/openfon-wrapper-status-beec-udebnuoa/source/scripts/e2e-server.test.mjs:196:12)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:979:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
+    Test.postRun (node:internal/test_runner/test:1090:19)
+    Test.run (node:internal/test_runner/test:1018:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
+  ...
+# Subtest: synthetic no-request forwarding never authorizes zero
+not ok 13 - synthetic no-request forwarding never authorizes zero
+  ---
+  duration_ms: 0.067542
+  location: '/private/tmp/openfon-wrapper-status-beec-udebnuoa/source/scripts/e2e-server.test.mjs:181:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/tmp/openfon-wrapper-status-beec-udebnuoa/source/scripts/e2e-server.test.mjs:196:12)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:979:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
+    Test.postRun (node:internal/test_runner/test:1090:19)
+    Test.run (node:internal/test_runner/test:1018:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
+  ...
+1..13
+# tests 13
+# suites 0
+# pass 7
+# fail 6
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 761.406625

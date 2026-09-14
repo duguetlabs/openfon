@@ -1,0 +1,227 @@
+diff --git a/src/account-api.ts b/src/account-api.ts
+index 94d5c23..fa0be5d 100644
+--- a/src/account-api.ts
++++ b/src/account-api.ts
+@@ -31,19 +31,9 @@ const EXPORT_URL_COLUMNS: Record<string, readonly string[]> = {
+ const EXPORT_TOO_LARGE = 'This account is too large for browser export. Ask your deployment administrator for a database export.';
+ 
+ function exportedProviderUrl(value: unknown): string | null {
+-  if (value === null || value === '') return value;
+-  if (typeof value !== 'string') return '';
+-  try {
+-    const url = new URL(value);
+-    if (!['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol)) return '';
+-    // Endpoint metadata only: arbitrary query names can carry credentials.
+-    // This intentionally omits query routing and never mutates stored settings.
+-    url.username = '';
+-    url.password = '';
+-    url.search = '';
+-    url.hash = '';
+-    return url.href;
+-  } catch { return ''; }
++  // Any URL component can carry an opaque credential, including host or path.
++  // Preserve archive shape, but require endpoint reconstruction from other records.
++  return value === null ? null : '';
+ }
+ 
+ export function registerAccountApi(app: App): void {
+@@ -193,8 +183,8 @@ export function registerAccountApi(app: App): void {
+       for (const column of EXPORT_URL_COLUMNS[row.table_name] ?? []) {
+         item[column] = exportedProviderUrl(item[column]);
+       }
+-      // URL serialization can expand Unicode/escaping. Keep the original SQL
+-      // preallocation gates and also bound transformed rows before accumulation.
++      // Keep the original SQL preallocation gates and independently bound
++      // serialized rows after export transformations, before accumulation.
+       const rowBytes = encoder.encode(JSON.stringify(item)).byteLength;
+       outputBytes += rowBytes + 1;
+       if (rowBytes > 1_500_000 || outputBytes > EXPORT_BYTE_LIMIT - 4096) {
+diff --git a/test/account-api.test.ts b/test/account-api.test.ts
+index 57f517f..b057acb 100644
+--- a/test/account-api.test.ts
++++ b/test/account-api.test.ts
+@@ -120,8 +120,8 @@ describe('account self service', () => {
+     const text = await response.text();
+     for (const key of ['text-export-secret','speech-export-secret','realtime-export-secret','llm_api_key','stt_api_key','realtime_api_key']) expect(text).not.toContain(key);
+     expect(JSON.parse(text).data.provider_settings[0]).toMatchObject({
+-      llm_model:'custom-text',stt_provider:'custom',stt_base_url:'https://speech.example/v1',stt_model:'custom-stt',
+-      realtime_provider:'openai',realtime_base_url:'wss://api.openai.com/v1/realtime',
++      llm_model:'custom-text',stt_provider:'custom',stt_base_url:'',stt_model:'custom-stt',
++      realtime_provider:'openai',realtime_base_url:'', llm_base_url:'',
+     });
+   });
+ 
+@@ -134,8 +134,8 @@ describe('account self service', () => {
+     ]));
+   }
+ 
+-  it('exports historical owned data with sanitized provider URLs in all five locations [export-url]', async () => {
+-    const url = 'HtTpS://user:encoded%2Dsecret@provider.example/v1?unknown=query-canary&unknown=second#fragment-canary';
++  it('exports historical owned data without configured provider URLs in all five locations [export-url]', async () => {
++    const url = 'HtTpS://user:encoded%2Dsecret@provider.example/path-capability-canary/v1?unknown=query-canary&unknown=second#fragment-canary';
+     db.database.prepare('INSERT INTO agent_settings(business_id,llm_base_url,llm_api_key) VALUES (?,?,?)')
+       .run('biz-owner', url, 'dedicated-canary');
+     db.database.prepare('INSERT INTO engine_profiles(id,business_id,name,llm_base_url) VALUES (?,?,?,?)')
+@@ -150,29 +150,51 @@ describe('account self service', () => {
+     expect(response.headers.get('Content-Disposition')).toContain('attachment');
+     const body = await response.text();
+     const { data } = JSON.parse(body);
+-    expect(data.agent_settings[0].llm_base_url).toBe('https://provider.example/v1');
+-    expect(data.engine_profiles[0].llm_base_url).toBe('https://provider.example/v1');
+-    expect(data.provider_settings[0]).toMatchObject({ llm_base_url: 'https://provider.example/v1',
+-      stt_base_url: 'http://provider.example/v1', realtime_base_url: 'wss://provider.example/v1' });
+-    for (const canary of ['encoded%2Dsecret', 'query-canary', 'fragment-canary', 'dedicated-canary']) expect(body).not.toContain(canary);
++    expect(data.agent_settings[0].llm_base_url).toBe('');
++    expect(data.engine_profiles[0].llm_base_url).toBe('');
++    expect(data.provider_settings[0]).toMatchObject({ llm_base_url: '', stt_base_url: '', realtime_base_url: '' });
++    for (const canary of ['path-capability-canary', 'provider.example', 'encoded%2Dsecret', 'query-canary', 'fragment-canary', 'dedicated-canary']) expect(body).not.toContain(canary);
+     expect(data.engine_profiles[0].name).toBe('Retain name');
+     expect(data.businesses[0].website).toBe('https://site.example/?routing=keep');
+     expect(snapshotExceptExportCharge()).toEqual(before);
+     expect(db.database.prepare('SELECT count FROM rate_counters WHERE bucket=?').get('account:export:owner')).toMatchObject({ count: 1 });
+   });
+ 
+-  it('exports a currently accepted query-bearing text provider without its query credentials [export-url]', async () => {
++  for (const [table, column] of [
++    ['agent_settings', 'llm_base_url'], ['engine_profiles', 'llm_base_url'],
++    ['provider_settings', 'llm_base_url'], ['provider_settings', 'stt_base_url'],
++    ['provider_settings', 'realtime_base_url'],
++  ] as const) {
++    it(`omits path-only capabilities in ${table}.${column} [export-url]`, async () => {
++      const endpoint = 'https://provider.example/opaque-path-canary/v1';
++      db.database.prepare('INSERT INTO agent_settings(business_id,llm_base_url) VALUES (?,?)').run('biz-owner', endpoint);
++      db.database.prepare('INSERT INTO engine_profiles(id,business_id,name,llm_base_url) VALUES (?,?,?,?)')
++        .run('path-profile', 'biz-owner', 'Keep profile', endpoint);
++      db.database.prepare('INSERT INTO provider_settings(business_id,llm_base_url,stt_base_url,realtime_base_url) VALUES (?,?,?,?)')
++        .run('biz-owner', endpoint, endpoint, endpoint.replace('https:', 'wss:'));
++      const before = snapshotExceptExportCharge();
++      const response = await call('/api/me/account/export');
++      expect(response.status).toBe(200);
++      const body = await response.text();
++      expect(JSON.parse(body).data[table][0][column]).toBe('');
++      expect(body).not.toContain('opaque-path-canary');
++      expect(snapshotExceptExportCharge()).toEqual(before);
++    });
++  }
++
++  it('exports a currently accepted path-capability text provider without its endpoint credentials [export-url]', async () => {
+     const saved = await call('/api/me/provider', 'PUT', {
+-      baseUrl: 'https://text.example/v1?arbitrary=query-canary&target=route#fragment-canary', apiKey: 'own-provider-key',
++      baseUrl: 'https://text.example/path-capability-canary/v1?arbitrary=query-canary&target=route#fragment-canary', apiKey: 'own-provider-key',
+     });
+     expect(saved.status).toBe(200);
+     expect(db.database.prepare('SELECT llm_base_url,llm_api_key FROM provider_settings WHERE business_id=?').get('biz-owner'))
+-      .toMatchObject({ llm_base_url: 'https://text.example/v1?arbitrary=query-canary&target=route#fragment-canary', llm_api_key: 'own-provider-key' });
++      .toMatchObject({ llm_base_url: 'https://text.example/path-capability-canary/v1?arbitrary=query-canary&target=route#fragment-canary', llm_api_key: 'own-provider-key' });
+     const before = snapshotExceptExportCharge();
+     const response = await call('/api/me/account/export');
+     expect(response.status).toBe(200);
+     const body = await response.text();
+-    expect(JSON.parse(body).data.provider_settings[0].llm_base_url).toBe('https://text.example/v1');
++    expect(JSON.parse(body).data.provider_settings[0].llm_base_url).toBe('');
++    expect(body).not.toContain('path-capability-canary');
+     expect(body).not.toContain('query-canary');
+     expect(body).not.toContain('fragment-canary');
+     expect(body).not.toContain('own-provider-key');
+@@ -193,7 +215,7 @@ describe('account self service', () => {
+     });
+   }
+ 
+-  it('retains safe endpoint metadata and bounds serialized Unicode growth [export-url]', async () => {
++  it('omits ordinary and Unicode endpoints while preserving empty values [export-url]', async () => {
+     const original = 'HTTPS://bücher.example/日 本';
+     db.database.prepare('INSERT INTO provider_settings(business_id,llm_base_url,stt_base_url,realtime_base_url) VALUES (?,?,?,?)')
+       .run('biz-owner', original, '', 'ws://localhost:8080/v1');
+@@ -202,14 +224,13 @@ describe('account self service', () => {
+     expect(response.status).toBe(200);
+     const text = await response.text();
+     const provider = JSON.parse(text).data.provider_settings[0];
+-    expect(provider).toMatchObject({ llm_base_url: 'https://xn--bcher-kva.example/%E6%97%A5%20%E6%9C%AC', stt_base_url: '', realtime_base_url: 'ws://localhost:8080/v1' });
+-    expect(new TextEncoder().encode(provider.llm_base_url).length).toBeGreaterThan(new TextEncoder().encode(original).length);
++    expect(provider).toMatchObject({ llm_base_url: '', stt_base_url: '', realtime_base_url: '' });
+     expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(4 * 1024 * 1024);
+     expect(snapshotExceptExportCharge()).toEqual(before);
+   });
+ 
+   for (const mode of ['row', 'aggregate'] as const) {
+-    it(`refuses URL serialization growth beyond the ${mode} output budget [export-url]`, async () => {
++    it(`refuses oversized unaffected fields beyond the ${mode} output budget [export-url]`, async () => {
+       // Synthetic SQL-result boundary to exercise the independent post-transform
+       // guard. Existing tests separately prove real raw/SQL preallocation refusal.
+       db.exec("INSERT INTO provider_settings(business_id) VALUES ('biz-owner')");
+@@ -222,7 +243,7 @@ describe('account self service', () => {
+             const result = await all<{ table_name: string; payload: string }>();
+             const row = result.results.find(item => item.table_name === 'provider_settings')!;
+             const item = JSON.parse(row.payload);
+-            item.llm_base_url = `https://provider.example/${'é'.repeat(mode === 'row' ? 260000 : 180000)}`;
++            item.llm_model = 'é'.repeat(mode === 'row' ? 760000 : 550000);
+             row.payload = JSON.stringify(item);
+             if (mode === 'aggregate') for (let i = 0; i < 3; i++) result.results.push({ ...row });
+             return result as unknown as Awaited<ReturnType<typeof statement.all<T>>>;
+@@ -238,29 +259,31 @@ describe('account self service', () => {
+     });
+   }
+ 
+-  it('preserves nullable historical payload metadata [export-url]', async () => {
+-    // Synthetic SQL-result boundary: current provider URL columns are NOT NULL.
+-    // Exercise legacy/null payload tolerance without weakening the schema.
+-    db.exec("INSERT INTO provider_settings(business_id) VALUES ('biz-owner')");
+-    const prepare = db.prepare.bind(db);
+-    vi.spyOn(db, 'prepare').mockImplementation(sql => {
+-      const statement = prepare(sql);
+-      if (sql.startsWith('WITH ')) {
+-        const all = statement.all.bind(statement);
+-        statement.all = async <T>() => {
+-          const result = await all<{ table_name: string; payload: string }>();
+-          for (const row of result.results) if (row.table_name === 'provider_settings') {
+-            const item = JSON.parse(row.payload); item.llm_base_url = null; row.payload = JSON.stringify(item);
+-          }
+-          return result as unknown as Awaited<ReturnType<typeof statement.all<T>>>;
+-        };
+-      }
+-      return statement;
++  for (const value of [null, 42, { endpoint: 'opaque-path-canary' }]) {
++    it(`preserves null or blanks unexpected URL payload type ${typeof value} [export-url]`, async () => {
++      // Synthetic SQL-result boundary: current provider URL columns are NOT NULL.
++      // Exercise legacy/null payload tolerance without weakening the schema.
++      db.exec("INSERT INTO provider_settings(business_id) VALUES ('biz-owner')");
++      const prepare = db.prepare.bind(db);
++      vi.spyOn(db, 'prepare').mockImplementation(sql => {
++        const statement = prepare(sql);
++        if (sql.startsWith('WITH ')) {
++          const all = statement.all.bind(statement);
++          statement.all = async <T>() => {
++            const result = await all<{ table_name: string; payload: string }>();
++            for (const row of result.results) if (row.table_name === 'provider_settings') {
++              const item = JSON.parse(row.payload); item.llm_base_url = value; row.payload = JSON.stringify(item);
++            }
++            return result as unknown as Awaited<ReturnType<typeof statement.all<T>>>;
++          };
++        }
++        return statement;
++      });
++      const response = await call('/api/me/account/export');
++      expect(response.status).toBe(200);
++      expect((await response.json() as any).data.provider_settings[0].llm_base_url).toBe(value === null ? null : '');
+     });
+-    const response = await call('/api/me/account/export');
+-    expect(response.status).toBe(200);
+-    expect((await response.json() as any).data.provider_settings[0].llm_base_url).toBeNull();
+-  });
++  }
+ 
+   it('reads account, calls and turns in one snapshot when finalization happens between operations', async () => {
+     db.exec("INSERT INTO calls(id,business_id,status) VALUES ('snapshot-call','biz-owner','active')");
+diff --git a/web/src/pages/Account.tsx b/web/src/pages/Account.tsx
+index 3c7250f..b82ce47 100644
+--- a/web/src/pages/Account.tsx
++++ b/web/src/pages/Account.tsx
+@@ -41,7 +41,7 @@ export default function Account() {
+           <div><Button>{busy === 'password' ? 'Updating…' : 'Update password'}</Button></div>
+         </fieldset></form>
+       </Card>
+-      <Card><h2 className="studio-heading">Export workspace data</h2><p className="studio-description">Download a JSON copy of your account and workspace data, including assistants, knowledge, and call records. Passwords, API keys, and session tokens are excluded.</p><Button disabled={Boolean(busy)} variant="ghost" onClick={() => void run('export', async () => {
++      <Card><h2 className="studio-heading">Export workspace data</h2><p className="studio-description">Download a JSON copy of your account and workspace data, including assistants, knowledge, and call records. Passwords, API keys, session tokens, and configured provider URLs are excluded. Provider endpoints must be set up again when restoring configuration.</p><Button disabled={Boolean(busy)} variant="ghost" onClick={() => void run('export', async () => {
+         const data = await api.exportAccount();
+         const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+         const link = document.createElement('a'); link.href = url; link.download = `openfon-export-${new Date().toISOString().slice(0,10)}.json`; document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);

@@ -1,0 +1,85 @@
+TAP version 13
+# Subtest: numeric child exit 0 is preserved
+ok 1 - numeric child exit 0 is preserved
+  ---
+  duration_ms: 77.739875
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":0,"signal":null},"events":[{"kind":"child-created","pid":37621},{"kind":"child-exit","code":0,"signal":null},{"kind":"provider-close"},{"kind":"state-removed"}],"stderr":""}
+# Subtest: numeric child exit 7 is preserved
+ok 2 - numeric child exit 7 is preserved
+  ---
+  duration_ms: 67.984875
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":7,"signal":null},"events":[{"kind":"child-created","pid":37623},{"kind":"child-exit","code":7,"signal":null},{"kind":"provider-close"},{"kind":"state-removed"}],"stderr":""}
+# Subtest: unexpected direct-child SIGTERM is failure
+ok 3 - unexpected direct-child SIGTERM is failure
+  ---
+  duration_ms: 47.646
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":1,"signal":null},"events":[{"kind":"child-created","pid":37626},{"kind":"child-exit","code":null,"signal":"SIGTERM"},{"kind":"provider-close"},{"kind":"state-removed"}],"stderr":""}
+# Subtest: unexpected direct-child SIGKILL is failure
+ok 4 - unexpected direct-child SIGKILL is failure
+  ---
+  duration_ms: 64.417375
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":1,"signal":null},"events":[{"kind":"child-created","pid":37637},{"kind":"child-exit","code":null,"signal":"SIGKILL"},{"kind":"provider-close"},{"kind":"state-removed"}],"stderr":""}
+# Subtest: accepted wrapper-requested SIGTERM is successful shutdown
+ok 5 - accepted wrapper-requested SIGTERM is successful shutdown
+  ---
+  duration_ms: 59.932709
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":0,"signal":null},"events":[{"kind":"child-created","pid":37691},{"kind":"forwarded","signal":"SIGTERM","sent":true},{"kind":"child-exit","code":null,"signal":"SIGTERM"},{"kind":"provider-close"},{"kind":"state-removed"}],"stderr":""}
+# Subtest: accepted wrapper-requested SIGINT is successful shutdown
+ok 6 - accepted wrapper-requested SIGINT is successful shutdown
+  ---
+  duration_ms: 56.848167
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":0,"signal":null},"events":[{"kind":"child-created","pid":37761},{"kind":"forwarded","signal":"SIGINT","sent":true},{"kind":"child-exit","code":null,"signal":"SIGINT"},{"kind":"provider-close"},{"kind":"state-removed"}],"stderr":""}
+# Subtest: numeric nonzero remains failure after accepted shutdown request
+ok 7 - numeric nonzero remains failure after accepted shutdown request
+  ---
+  duration_ms: 61.5545
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":7,"signal":null},"events":[{"kind":"child-created","pid":37813},{"kind":"forwarded","signal":"SIGTERM","sent":true},{"kind":"child-exit","code":7,"signal":null},{"kind":"provider-close"},{"kind":"state-removed"}],"stderr":""}
+# Subtest: different child signal is failure after accepted request
+ok 8 - different child signal is failure after accepted request
+  ---
+  duration_ms: 59.02125
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":1,"signal":null},"events":[{"kind":"child-created","pid":37821},{"kind":"forwarded","signal":"SIGTERM","sent":true},{"kind":"child-exit","code":null,"signal":"SIGKILL"},{"kind":"provider-close"},{"kind":"state-removed"}],"stderr":""}
+# Subtest: matching any of multiple accepted requests succeeds
+ok 9 - matching any of multiple accepted requests succeeds
+  ---
+  duration_ms: 62.074042
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":0,"signal":null},"events":[{"kind":"child-created","pid":37854},{"kind":"forwarded","signal":"SIGTERM","sent":true},{"kind":"forwarded","signal":"SIGINT","sent":true},{"kind":"child-exit","code":null,"signal":"SIGTERM"},{"kind":"provider-close"},{"kind":"state-removed"}],"stderr":""}
+# Subtest: real spawn error preserves existing failure and state cleanup
+ok 10 - real spawn error preserves existing failure and state cleanup
+  ---
+  duration_ms: 26.170792
+  ...
+# {"scope":"actual tail; real owned Node wrapper/child; provider stub","result":{"code":1,"signal":null},"events":[{"kind":"child-created"},{"kind":"child-error","code":"ENOENT"},{"kind":"state-removed"}],"stderr":"spawn /var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-wrapper-test-B85oOc/missing-executable ENOENT\\n"}
+# Subtest: synthetic false forwarding never authorizes zero
+ok 11 - synthetic false forwarding never authorizes zero
+  ---
+  duration_ms: 0.264042
+  ...
+# Subtest: synthetic throw forwarding never authorizes zero
+ok 12 - synthetic throw forwarding never authorizes zero
+  ---
+  duration_ms: 0.18525
+  ...
+# Subtest: synthetic no-request forwarding never authorizes zero
+ok 13 - synthetic no-request forwarding never authorizes zero
+  ---
+  duration_ms: 0.031333
+  ...
+1..13
+# tests 13
+# suites 0
+# pass 13
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 613.2165

@@ -1,0 +1,2 @@
+{"command": "node --check scripts/e2e-server.mjs", "exit": 0, "stdout_bytes": 0, "stderr_bytes": 0}
+{"command": "node --check scripts/e2e-server.test.mjs", "exit": 0, "stdout_bytes": 0, "stderr_bytes": 0}

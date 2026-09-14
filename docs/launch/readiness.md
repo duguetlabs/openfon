@@ -11,6 +11,55 @@ findings from every reviewer still require verification and disposition. No new
 Codex review is requested or awaited. Historical dual-review references below
 record earlier requirements; this policy governs the current release.
 
+## beec8b70 review dispositions
+
+The [beec8b70 review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658442231)
+completed once with a security concern and five recommendations. Both exact-head
+CI runs passed; security and major-issue clearance remain pending.
+
+Direct Realtime Blocked is [qualified-declined](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658462937):
+missing default text credentials are allowed; invalid custom text settings still
+fail pickup deliberately. Telnyx Content Loss is [qualified-declined](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658504755):
+connected carrier failure leaves the row active for content finalization, while
+cached-summary salvage remains available. Cleanup/sweep retirement is a separate
+recovery policy. No finalizer or timing change was made.
+
+Process Leak is [qualified-declined](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658504534)
+under the selected failed-signal policy: unsuccessful termination rejects with
+exit unconfirmed, preserves errors and observers, and does not retry or escalate.
+Successful SIGTERM still waits for actual exit. This is not a guarantee that a
+child is dead after failed signal delivery. The launcher signal-status correction passed bounded process validation. The export omission
+correction passed bounded validation; new published-head review and CI are still
+required, and no security or major-issue clearance is claimed here.
+
+Final combined source d8fa368 passes1,339 tests across56 files in24.95s and both
+Worker/web typechecks. Process-only wrapper evidence remains separate. All local
+runners exited and reserved listeners are vacant. Publication adds documentation
+and retained evidence only; fresh CI and official review on that published head
+remain the release gates.
+
+## E2E launcher exit attribution
+
+The beec Masked Failure finding is corrected in d8fa368. The inline wrapper
+records only successfully forwarded SIGINT/SIGTERM requests. Numeric child
+exit codes remain authoritative; null-code termination succeeds only when the
+observed signal matches an accepted request, otherwise it reports failure.
+Multiple accepted requests are retained. No relative import was introduced,
+because capture copies this script into a disposable directory.
+
+Original13 process cases yielded7 passes/6 failures; fixed13 and both syntax
+checks pass. Three original real direct-child signal cases record null exit code
+and wrapper0 before the failed status assertion. All6 originals stop at status;
+later cleanup assertions are not claimed. Fixed cases assert provider-close stub
+and actual disposable-state cleanup, requested/mismatched/multiple signals,
+numeric nonzero after shutdown request, spawn error and3 synthetic controls.
+Tests extract the actual lifecycle tail into owned Node wrapper/child processes.
+No npx/workerd descendant, OOM, CI false-green, browser/provider/full capture or
+native failed-signal claim follows from them. All owned processes were disposed.
+The capture helper's separate failed-delivery uncertainty policy is unchanged.
+Independent QA closed exactd8fa368 combined source/evidence/assembly, retaining
+the export closure and all25 protected capture/configuration Git identities.
+
 ## Asterisk WebSocket protocol negotiation
 
 The second [ce7830cf finding](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658194913)
@@ -52,13 +101,27 @@ passed, but that review has no security or major-issue clearance. The export
 correction is local; independent QA closed exactba72fe3 source, evidence and
 assembly. Public disposition and fresh release gates remain required.
 
-Export now removes userinfo, every query parameter and fragments from exactly
-five provider URL fields. Malformed or unsupported URLs become empty; null and
-empty values remain. Endpoint scheme, host and path remain metadata. Query
-routing is intentionally omitted, so this archive is not a credential-restorable
-configuration image. Stored settings, provider routing and other exported user
-data are unchanged. This is not a generic scrub of secrets written in paths or
-free text. The existing authenticated owner scope and no-store policy remain.
+The ce783 correction removed userinfo, every query parameter and fragments from
+exactly five provider URL fields, preserving endpoint scheme, host and path.
+The newer beec review identified that paths can also contain opaque credentials.
+The replacement policy omits all configured values in those same five fields,
+while retaining their keys and null/empty shape. Provider endpoints must be set
+up again when restoring configuration. Stored settings, routing and other
+exported user data are unchanged; this is not a generic free-text secret scrub.
+Authenticated owner scope and no-store remain intact. The new correction
+f5cc1df passed69 account/auth tests and both typechecks; independent QA closed
+its exact source, evidence and assembly. Original beec source
+failed8 of17 selected cases, with9 controls passing and39 unrelated cases skipped:
+five independently asserted historical path locations, the combined historical
+case, a current HTTP-saved path credential, and ordinary endpoint omission.
+The current raw URL/key pair was asserted in storage before the original export
+mismatch. Failed originals stop at their first URL assertion. Fixed tests preserve
+the database apart from the existing export-rate charge. The5 profile cases use
+historical migrations1–15; QA caught their fixture setup before any execution.
+Unexpected/null payloads and output-budget probes use synthetic SQL results;
+the latter now exercise an unaffected model field and pass on both versions.
+No native handler, browser, live provider or cross-account exposure claim is made.
+The following earlier results remain attributed to ce783.
 
 The original bounded single SQL snapshot and preallocation checks remain, with
 additional transformed-row, aggregate and final response byte checks for URL
