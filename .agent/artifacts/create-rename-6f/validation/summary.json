@@ -1,0 +1,1138 @@
+{
+  "status": "COMPLETE_RELEASED",
+  "base": "6f001779476dcc85f4b6a0ef9cc6d8ae52477a9a",
+  "source_commit": "4c7e80d0c822f4adfc1ead5f2e45d9c7872ceaa1",
+  "patch_sha256": "fd77a73b52432bbb133bc08a02992c50cafdb7e1672f045fadedbf6f3f07c2d2",
+  "source_identity": {
+    "targets": 6,
+    "protected": 90,
+    "fixed_restored": true,
+    "unchanged": true
+  },
+  "original_results": {
+    "api": {
+      "failed": 3,
+      "skipped": 5,
+      "details": {
+        "fault_cases": [
+          {
+            "foundation_repair": false,
+            "failed_status": 500,
+            "retry_status": 201,
+            "response_read_in_batch": false,
+            "failure_snapshot_equals_post_foundation_baseline": false,
+            "inside_failing_read_differs_from_baseline": true,
+            "foundation_changed": false,
+            "drafts_after_failed_request": 1,
+            "drafts_after_explicit_retry": 2,
+            "failed_request_added_charge": 1,
+            "retry_total_added_charges": 2
+          },
+          {
+            "foundation_repair": true,
+            "failed_status": 500,
+            "retry_status": 201,
+            "response_read_in_batch": false,
+            "failure_snapshot_equals_post_foundation_baseline": false,
+            "inside_failing_read_differs_from_baseline": true,
+            "foundation_changed": true,
+            "drafts_after_failed_request": 1,
+            "drafts_after_explicit_retry": 2,
+            "failed_request_added_charge": 1,
+            "retry_total_added_charges": 2
+          }
+        ],
+        "accepted_case": {
+          "status": 201,
+          "outside_response_reads": 1,
+          "response_equals_persisted": true
+        }
+      }
+    },
+    "native": {
+      "outcomes": [
+        {
+          "name": "response-failure",
+          "status": "FAIL"
+        }
+      ],
+      "captures": [
+        {
+          "name": "response-failure",
+          "failed_status": 500,
+          "retry_status": 201,
+          "response_reads_outside_batch": 1,
+          "batch_statements": 2,
+          "execution_error_malformed_json": true,
+          "failure_snapshot_equals_baseline": false,
+          "foundation_changed": false,
+          "drafts_after_failure": 1,
+          "drafts_after_retry": 2,
+          "failure_added_charge": 1,
+          "retry_total_added_charges": 2
+        }
+      ]
+    },
+    "browser": {
+      "stats": {
+        "startTime": "2026-09-14T22:09:17.552Z",
+        "duration": 83775.461,
+        "expected": 0,
+        "skipped": 0,
+        "unexpected": 5,
+        "flaky": 0
+      },
+      "top_level_errors": 0,
+      "cases": [
+        {
+          "title": "normalization no-op reconciles empty without a write",
+          "status": "failed",
+          "report_outcome": "unexpected",
+          "duration_ms": 8663,
+          "attempts": 1,
+          "first_assertion": "displayed value differs from normalized acknowledged value",
+          "diagnostics": [
+            {
+              "label": "empty",
+              "writes": 0,
+              "displayed": "",
+              "persisted": "Original profile"
+            }
+          ],
+          "traces": [
+            {
+              "sha256": "e67d1ad7a20845e93549320199a9dd41461d44e71181f86cf19c0d3d85423454",
+              "bytes": 1377241,
+              "embedded_fixture_exact": false,
+              "embedded_fixture_source": "not present in retained archive; source identity verified by pre/post hashes"
+            }
+          ]
+        },
+        {
+          "title": "normalization no-op reconciles whitespace without a write",
+          "status": "failed",
+          "report_outcome": "unexpected",
+          "duration_ms": 6249,
+          "attempts": 1,
+          "first_assertion": "displayed value differs from normalized acknowledged value",
+          "diagnostics": [
+            {
+              "label": "whitespace",
+              "writes": 0,
+              "displayed": "   ",
+              "persisted": "Original profile"
+            }
+          ],
+          "traces": [
+            {
+              "sha256": "bd3150baad2058160e2e87b88abe41ebef02feb331771bd80110fdb0fb2f9f06",
+              "bytes": 1014971,
+              "embedded_fixture_exact": false,
+              "embedded_fixture_source": "not present in retained archive; source identity verified by pre/post hashes"
+            }
+          ]
+        },
+        {
+          "title": "normalization no-op reconciles padded unchanged without a write",
+          "status": "failed",
+          "report_outcome": "unexpected",
+          "duration_ms": 6105,
+          "attempts": 1,
+          "first_assertion": "displayed value differs from normalized acknowledged value",
+          "diagnostics": [
+            {
+              "label": "padded unchanged",
+              "writes": 0,
+              "displayed": "  Original profile  ",
+              "persisted": "Original profile"
+            }
+          ],
+          "traces": [
+            {
+              "sha256": "35929c79856d7022b66a0a0d23424b769d727ef2fbe7908d0aa8f21fc52ca913",
+              "bytes": 1052695,
+              "embedded_fixture_exact": false,
+              "embedded_fixture_source": "not present in retained archive; source identity verified by pre/post hashes"
+            }
+          ]
+        },
+        {
+          "title": "successful normalized acknowledgement remains clean through a provider refresh",
+          "status": "failed",
+          "report_outcome": "unexpected",
+          "duration_ms": 6259,
+          "attempts": 1,
+          "first_assertion": "displayed value differs from normalized acknowledged value",
+          "diagnostics": [
+            {
+              "writes": 1,
+              "displayed": "  Accepted name  ",
+              "persisted": "Accepted name"
+            }
+          ],
+          "traces": [
+            {
+              "sha256": "f4448285177403797f25ca6e252893e765a70aae1c49d4b9d241e19bc6816556",
+              "bytes": 1235081,
+              "embedded_fixture_exact": false,
+              "embedded_fixture_source": "not present in retained archive; source identity verified by pre/post hashes"
+            }
+          ]
+        },
+        {
+          "title": "queued normalized no-op uses the preceding successful baseline",
+          "status": "failed",
+          "report_outcome": "unexpected",
+          "duration_ms": 6513,
+          "attempts": 1,
+          "first_assertion": "displayed value differs from normalized acknowledged value",
+          "diagnostics": [
+            {
+              "writes": 1,
+              "displayed": " Accepted name ",
+              "persisted": "Accepted name"
+            }
+          ],
+          "traces": [
+            {
+              "sha256": "46318bccc773dcc7facbbb7dddc618570279df6e450ebe5f90939486b04eef64",
+              "bytes": 1103298,
+              "embedded_fixture_exact": false,
+              "embedded_fixture_source": "not present in retained archive; source identity verified by pre/post hashes"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "fixed_results": {
+    "api": {
+      "passed": 8,
+      "details": {
+        "fault_cases": [
+          {
+            "foundation_repair": false,
+            "failed_status": 500,
+            "retry_status": 201,
+            "response_read_in_batch": true,
+            "failure_snapshot_equals_post_foundation_baseline": true,
+            "inside_failing_read_differs_from_baseline": true,
+            "foundation_changed": false,
+            "drafts_after_failed_request": 0,
+            "drafts_after_explicit_retry": 1,
+            "failed_request_added_charge": 0,
+            "retry_total_added_charges": 1
+          },
+          {
+            "foundation_repair": true,
+            "failed_status": 500,
+            "retry_status": 201,
+            "response_read_in_batch": true,
+            "failure_snapshot_equals_post_foundation_baseline": true,
+            "inside_failing_read_differs_from_baseline": true,
+            "foundation_changed": true,
+            "drafts_after_failed_request": 0,
+            "drafts_after_explicit_retry": 1,
+            "failed_request_added_charge": 0,
+            "retry_total_added_charges": 1
+          }
+        ],
+        "accepted_case": {
+          "status": 201,
+          "outside_response_reads": 0,
+          "response_equals_persisted": true
+        }
+      }
+    },
+    "worker_types": "PASS",
+    "web_types": "PASS",
+    "native": {
+      "outcomes": [
+        {
+          "name": "response-failure",
+          "status": "PASS"
+        },
+        {
+          "name": "repair-response-failure",
+          "status": "PASS"
+        },
+        {
+          "name": "accepted-result",
+          "status": "PASS"
+        },
+        {
+          "name": "provider-conflict",
+          "status": "PASS"
+        },
+        {
+          "name": "attachment-rollback",
+          "status": "PASS"
+        }
+      ],
+      "captures": [
+        {
+          "name": "response-failure",
+          "failed_status": 500,
+          "retry_status": 201,
+          "response_reads_outside_batch": 0,
+          "batch_statements": 3,
+          "execution_error_malformed_json": true,
+          "failure_snapshot_equals_baseline": true,
+          "foundation_changed": false,
+          "drafts_after_failure": 0,
+          "drafts_after_retry": 1,
+          "failure_added_charge": 0,
+          "retry_total_added_charges": 1
+        },
+        {
+          "name": "repair-response-failure",
+          "failed_status": 500,
+          "retry_status": 201,
+          "response_reads_outside_batch": 0,
+          "batch_statements": 3,
+          "execution_error_malformed_json": true,
+          "failure_snapshot_equals_baseline": true,
+          "foundation_changed": true,
+          "drafts_after_failure": 0,
+          "drafts_after_retry": 1,
+          "failure_added_charge": 0,
+          "retry_total_added_charges": 1
+        },
+        {
+          "name": "accepted-result",
+          "status": 201,
+          "response_equals_persisted": true,
+          "response_reads_outside_batch": 0,
+          "batch_statements": 3
+        },
+        {
+          "name": "provider-conflict",
+          "status": 409,
+          "snapshot_equals_baseline": true
+        },
+        {
+          "name": "attachment-rollback",
+          "status": 500,
+          "snapshot_equals_baseline": true
+        }
+      ]
+    },
+    "browser": {
+      "stats": {
+        "startTime": "2026-09-14T22:13:26.290Z",
+        "duration": 29268.848,
+        "expected": 8,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "top_level_errors": 0,
+      "cases": [
+        {
+          "title": "normalization no-op reconciles empty without a write",
+          "status": "passed",
+          "report_outcome": "expected",
+          "duration_ms": 1684,
+          "attempts": 1,
+          "first_assertion": null,
+          "diagnostics": [
+            {
+              "label": "empty",
+              "writes": 0,
+              "displayed": "Original profile",
+              "persisted": "Original profile"
+            }
+          ],
+          "traces": []
+        },
+        {
+          "title": "normalization no-op reconciles whitespace without a write",
+          "status": "passed",
+          "report_outcome": "expected",
+          "duration_ms": 1026,
+          "attempts": 1,
+          "first_assertion": null,
+          "diagnostics": [
+            {
+              "label": "whitespace",
+              "writes": 0,
+              "displayed": "Original profile",
+              "persisted": "Original profile"
+            }
+          ],
+          "traces": []
+        },
+        {
+          "title": "normalization no-op reconciles padded unchanged without a write",
+          "status": "passed",
+          "report_outcome": "expected",
+          "duration_ms": 1073,
+          "attempts": 1,
+          "first_assertion": null,
+          "diagnostics": [
+            {
+              "label": "padded unchanged",
+              "writes": 0,
+              "displayed": "Original profile",
+              "persisted": "Original profile"
+            }
+          ],
+          "traces": []
+        },
+        {
+          "title": "successful normalized acknowledgement remains clean through a provider refresh",
+          "status": "passed",
+          "report_outcome": "expected",
+          "duration_ms": 1264,
+          "attempts": 1,
+          "first_assertion": null,
+          "diagnostics": [
+            {
+              "writes": 1,
+              "displayed": "Accepted name",
+              "persisted": "Accepted name"
+            }
+          ],
+          "traces": []
+        },
+        {
+          "title": "acknowledgement preserves newer edit version (away-back=false)",
+          "status": "passed",
+          "report_outcome": "expected",
+          "duration_ms": 1250,
+          "attempts": 1,
+          "first_assertion": null,
+          "diagnostics": [],
+          "traces": []
+        },
+        {
+          "title": "acknowledgement preserves newer edit version (away-back=true)",
+          "status": "passed",
+          "report_outcome": "expected",
+          "duration_ms": 1244,
+          "attempts": 1,
+          "first_assertion": null,
+          "diagnostics": [],
+          "traces": []
+        },
+        {
+          "title": "queued normalized no-op uses the preceding successful baseline",
+          "status": "passed",
+          "report_outcome": "expected",
+          "duration_ms": 1074,
+          "attempts": 1,
+          "first_assertion": null,
+          "diagnostics": [
+            {
+              "writes": 1,
+              "displayed": "Accepted name",
+              "persisted": "Accepted name"
+            }
+          ],
+          "traces": []
+        },
+        {
+          "title": "failed queued rename restores the normalized acknowledged baseline",
+          "status": "passed",
+          "report_outcome": "expected",
+          "duration_ms": 1187,
+          "attempts": 1,
+          "first_assertion": null,
+          "diagnostics": [],
+          "traces": []
+        }
+      ]
+    }
+  },
+  "commands": [
+    {
+      "name": "original-api",
+      "argv": [
+        "npx",
+        "--no-install",
+        "vitest",
+        "run",
+        "test/create-response-atomic.test.ts",
+        "--maxWorkers=1",
+        "--reporter=verbose",
+        "-t",
+        "response failure rolls back|accepted create returns"
+      ],
+      "exit": 1,
+      "elapsed_seconds": 19.45,
+      "log_sha256": "d070f3953580d97188be4dd88072e226b31aeb6f6619e5c5cb9600f40c0ac2ed",
+      "log_bytes": 44072
+    },
+    {
+      "name": "original-native",
+      "argv": [
+        "node",
+        "scripts/create-response-smoke.mjs"
+      ],
+      "exit": 1,
+      "elapsed_seconds": 4.949,
+      "log_sha256": "06b57c75936b04371372c0d3abd862138189f662eaaec82e9385768ef1a57c03",
+      "log_bytes": 3132
+    },
+    {
+      "name": "original-browser",
+      "argv": [
+        "npx",
+        "--no-install",
+        "playwright",
+        "test",
+        "e2e/profile-normalized-ack.spec.ts",
+        "--workers=1",
+        "--retries=0",
+        "--grep",
+        "normalization no-op|successful normalized|queued normalized no-op",
+        "--reporter=line,json",
+        "--output=<private-output>"
+      ],
+      "exit": 1,
+      "elapsed_seconds": 104.205,
+      "log_sha256": "98d7f91f80a69dec5ba71c9416270c69a5a2b30b7748791da566642787b010e5",
+      "log_bytes": 18401
+    },
+    {
+      "name": "fixed-api",
+      "argv": [
+        "npx",
+        "--no-install",
+        "vitest",
+        "run",
+        "test/create-response-atomic.test.ts",
+        "--maxWorkers=1",
+        "--reporter=verbose"
+      ],
+      "exit": 0,
+      "elapsed_seconds": 20.566,
+      "log_sha256": "618fb3e319b9334950c4148ed3888ddded8bef23743cfebbdc58179d65e9a087",
+      "log_bytes": 37393
+    },
+    {
+      "name": "worker-types",
+      "argv": [
+        "npx",
+        "--no-install",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "tsconfig.worker.json"
+      ],
+      "exit": 0,
+      "elapsed_seconds": 19.067,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log_bytes": 0
+    },
+    {
+      "name": "web-types",
+      "argv": [
+        "npx",
+        "--no-install",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "web/tsconfig.json"
+      ],
+      "exit": 0,
+      "elapsed_seconds": 30.36,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log_bytes": 0
+    },
+    {
+      "name": "fixed-native",
+      "argv": [
+        "node",
+        "scripts/create-response-smoke.mjs"
+      ],
+      "exit": 0,
+      "elapsed_seconds": 9.994,
+      "log_sha256": "932144feedea1a2ed57557b74ae19adbc3ca6b4791f2134d3afbc8ff7b7cca94",
+      "log_bytes": 6063
+    },
+    {
+      "name": "fixed-browser",
+      "argv": [
+        "npx",
+        "--no-install",
+        "playwright",
+        "test",
+        "e2e/profile-normalized-ack.spec.ts",
+        "--workers=1",
+        "--retries=0",
+        "--reporter=line,json",
+        "--output=<private-output>"
+      ],
+      "exit": 0,
+      "elapsed_seconds": 48.25,
+      "log_sha256": "705f85e9d44be8747dc9db0f0b8a9526b79bafe0f634ca03496d65d702b5c737",
+      "log_bytes": 3752
+    }
+  ],
+  "unexpected_fixture_or_setup_failures": [],
+  "retries": 0,
+  "cleanup": {
+    "status": "RELEASED",
+    "at": "2026-09-14T22:14:30.492346+00:00",
+    "commands_exited": 8,
+    "sampled_processes": 155,
+    "sampled_processes_absent": true,
+    "sampling_limit": "250ms nonexhaustive process inventory",
+    "native_disposals_completed": 2,
+    "owned_temp_paths_observed": 8,
+    "owned_temp_paths_removed_after_exit": 2,
+    "owned_temp_paths_already_absent": 6,
+    "native_temp_matches": 0,
+    "candidate_dependency_link_removed": true,
+    "existing_owner_dependencies_preserved": true,
+    "application_official_process_matches": 0,
+    "reserved_listeners": 0
+  },
+  "limits": [
+    "Original API first post-failure equality assertions fail before later assertions; explicit retry/full snapshots were captured before assertion and independently parsed. Accepted original response first fails outside-read count after persisted/default checks.",
+    "Original native first failure is persisted-state equality; later failed assertions not inferred. The native execution error and preassertion explicit retry are preserved.",
+    "Original browser five failures are expected negative evidence but remain unexpected in raw Playwright outcome fields; each first fails displayed-value equality. Later refresh/no-op assertions in those failing cases unclaimed.",
+    "Fixed passing browser traces absent under retain-on-failure; original five traces retained, but these archives contain no embedded fixture source; source identity is established by frozen pre/post hashes.",
+    "Original and fixed API use accepted batch-row adapter support; original claims are for original production files, not historical adapter behavior.",
+    "Native is Node-bundled handlers against local workerd/D1 with synthetic execution-time fault SQL, not full Worker concurrency.",
+    "Requested-create rollback preserves prior committed foundation; no network-response-loss or ambiguous-ack idempotency guarantee.",
+    "Browser HTTP holds and finite frame settling are controlled schedules; no broader race/exhaustive process proof.",
+    "No source edit, retry, timeout increase, old/broad/companion suite, migration rehearsal, provider/live/credential/inference or publication."
+  ],
+  "raw_evidence": [
+    {
+      "reference": "evidence-b9156d1a9d0b48d5990408bb0bd64532",
+      "role": "cleanup-private.json",
+      "sha256": "ced68c9193680ce112a5848a9b40930d285d7bbb14738933f34c08036654d6ad",
+      "bytes": 189423,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-26fc3713ab814ada994de92f476f648d",
+      "role": "fixed-api-exit.json",
+      "sha256": "d8371edf34d28a6e3253cedc3b9740dfc952f4ad9f213b29524586b27007f4e8",
+      "bytes": 821,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-df63c78337c8415785275692213048f0",
+      "role": "fixed-api-launch.json",
+      "sha256": "02bc5cc9d9cea0fc9b4b61b3073a1d9ddf75419a5ad8812aded776de008274b0",
+      "bytes": 491,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-ee77fa4a09834adf8d61ad1c8b02fb16",
+      "role": "fixed-api-post-scan.json",
+      "sha256": "c47cf067c5d3663ff6063eabe24218d5e10602c78bb6029a0b98f1fdff5e9a14",
+      "bytes": 197915,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-436ea7d40e0044fabd97555ffc763faf",
+      "role": "fixed-api-pre-scan.json",
+      "sha256": "f1b58209e0803a842cc653ba1561a60eb08e94b05cfe427f52d32592202f5c89",
+      "bytes": 196760,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-f3004564ea764961afc5fc69273806c1",
+      "role": "fixed-api-process-samples.json",
+      "sha256": "03f91f9de6cdf7b3588f25bd50b9d12c84e8b79cce5095a694117ccc67674214",
+      "bytes": 16247,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-062160151d8947239af6cb4129445516",
+      "role": "fixed-api.log",
+      "sha256": "618fb3e319b9334950c4148ed3888ddded8bef23743cfebbdc58179d65e9a087",
+      "bytes": 37393,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-6e7a768050ab46e7af083ce2c4167362",
+      "role": "fixed-browser-exit.json",
+      "sha256": "e0b772eee9112ba007b648dec5f21013076548ddaafbff617dd8895f51f489c0",
+      "bytes": 1681,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-aa7f98961e9943ea8e7c8bf4d34f0bfe",
+      "role": "fixed-browser-launch.json",
+      "sha256": "129b11c295a1f635f64124b33f0d6942fd05c57a29430694952c9da15037d5ca",
+      "bytes": 662,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-deaf226634fe480d996e58e35ba4785f",
+      "role": "fixed-browser-post-scan.json",
+      "sha256": "8d761ccb3eb74eb9922a16f8f4fafa95d829615fa4d389c3f975301ff659390b",
+      "bytes": 195636,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-3b5019b83bcb44869f91cdebaaf37f11",
+      "role": "fixed-browser-pre-scan.json",
+      "sha256": "ef5cebda6bd48de703a4ad1798324251c4304821fe6c9b96f5a208c797fbdd7c",
+      "bytes": 194316,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-430cbc1949b842a5b32281eaafde571c",
+      "role": "fixed-browser-process-samples.json",
+      "sha256": "601387fb8d706267e7baf50dc3274bf38c3a49cc18d8e40f3a088cca3e44e6c6",
+      "bytes": 580049,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-8df0603837af416eb87d58195d11b4b7",
+      "role": "fixed-browser-report.json",
+      "sha256": "ade86f8440b48232ad5c460fb481907cfddfd6c9507e33371761588138a4b97f",
+      "bytes": 12130,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-9230a35fcb064567806a94f557dd09f7",
+      "role": "fixed-browser-results/.last-run.json",
+      "sha256": "91d1c43004802cd49950d78eb11c8fa7d05da8ffffe219a8b13b2f561bc00903",
+      "bytes": 45,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-e9fb7a36d4f844ce932a2f69230b968a",
+      "role": "fixed-browser.log",
+      "sha256": "705f85e9d44be8747dc9db0f0b8a9526b79bafe0f634ca03496d65d702b5c737",
+      "bytes": 3752,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-4df03ddd103a4fec9c58cc08f1c8c60b",
+      "role": "fixed-native-data/native-result.json",
+      "sha256": "ad5d6ac51ffb53201c041e0060239b57c0ac4db1bf9c5df2cbd556c72f1f4a80",
+      "bytes": 73885,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-7d2863d6f48843038aad64913ef21883",
+      "role": "fixed-native-exit.json",
+      "sha256": "d0e2498de733c680b971ae2017acc160ef188bcbc8b9c5e54c9bafb736fa40e1",
+      "bytes": 882,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-ad7b2e3286514f16be9fc465b7ac6d48",
+      "role": "fixed-native-launch.json",
+      "sha256": "463c38c28ca25bac4cd2d58cc37811d1dbeebb4edc94dd13f0217d40a0254c69",
+      "bytes": 565,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-d45faa6a22294c97b85288c26c8c5b1b",
+      "role": "fixed-native-post-scan.json",
+      "sha256": "f695062c15dbca1fc2da153796b07abb557d02ebb8bf1b83852fa934f67601da",
+      "bytes": 194533,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-e49289e902744afca9290ab486b6d94b",
+      "role": "fixed-native-pre-scan.json",
+      "sha256": "4e2178c8360210c8feccf7ee8aaa161513f9f2c0a9a0c5ffda390415b8793301",
+      "bytes": 194751,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-9f0e6980b4b54c88b1e3fd69ade89925",
+      "role": "fixed-native-process-samples.json",
+      "sha256": "21799498abf020f759fb82982617785ff8ff4b51722a9a02fdd42d19ad346f92",
+      "bytes": 11519,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-ce0cc6fca55d489caac3c02b8e78d56c",
+      "role": "fixed-native.log",
+      "sha256": "932144feedea1a2ed57557b74ae19adbc3ca6b4791f2134d3afbc8ff7b7cca94",
+      "bytes": 6063,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-e25990131afd4ecca32e747aa0029544",
+      "role": "fixed-restoration.json",
+      "sha256": "a5ef5f9b28c85303deae3a4152aa3443583147e521a7e2012a5f0641cdd4a905",
+      "bytes": 82,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-5567789793e1474fa6693e08bc0d4edc",
+      "role": "fixed-switch-scan.json",
+      "sha256": "ba11e62934dbe89d836a0138ac171ae59dea77ba479b24703944185b797f7b33",
+      "bytes": 199389,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-b9483dccfbae4cf3907f8ac30a771695",
+      "role": "manifest.json",
+      "sha256": "c49dd3cc9788b9e4d736832987e75be7d314f6ff7598c60311ec525bea12a9ff",
+      "bytes": 17586,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-593f823d0d454c44bd5d2663be2014a3",
+      "role": "manual-scan.json",
+      "sha256": "cd63fca97cc97e53fae5b05dc2738a8f933646a17092c062673362ef72c23fff",
+      "bytes": 199919,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-5d13e06dbf7a4e588a75458efa3da73d",
+      "role": "original-api-exit.json",
+      "sha256": "03794f1fae52af0458784a0eb124e0b921f592bb73ec50d72f16497fc79f998a",
+      "bytes": 738,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-d3a69d281e23461e9670a4b24085df8a",
+      "role": "original-api-launch.json",
+      "sha256": "85405999c51a1ed26f2baf038567f015e81c346a7af7d634ad419f7cb79f1972",
+      "bytes": 486,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-84d51d24cb9a4513b7f17282ee47dd13",
+      "role": "original-api-post-scan.json",
+      "sha256": "b7694af1d905361e43eb5b3b6f7ce9b7aaeccb6f4acf28e9c96f7074084921d3",
+      "bytes": 206029,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-5c8f9ee6ed204f7dad4bdd1516139016",
+      "role": "original-api-pre-scan.json",
+      "sha256": "23afa1312e657cd7f636e1f6e30b9cac137013bc4335fe78fb3293c94ebf8633",
+      "bytes": 207022,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-1b00ccda507845f5bd80108d76ed7316",
+      "role": "original-api-process-samples.json",
+      "sha256": "873a561d886cd5661c1ed42d72c9b7ae63d682fe6be71646ad4df17c891a9bc2",
+      "bytes": 18495,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-2d75157fe4cf4080a93914eadb953866",
+      "role": "original-api.log",
+      "sha256": "d070f3953580d97188be4dd88072e226b31aeb6f6619e5c5cb9600f40c0ac2ed",
+      "bytes": 44072,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-d02e7a806913424c8e04c66e2ae96147",
+      "role": "original-browser-exit.json",
+      "sha256": "540d24de6eae165a3fde1337cafd7547f19a1ab70808e8b9e8c9989d726e0f08",
+      "bytes": 1812,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-bd5488f48e0042d18dafde75c3a3fb29",
+      "role": "original-browser-launch.json",
+      "sha256": "4fe8d0de673d7017c210c5aee00fa46e52e5e724a1e40e1de3bdd0cfda42e4c1",
+      "bytes": 678,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-02e367d8e3d94beeb92e947642bc3895",
+      "role": "original-browser-midprocess.json",
+      "sha256": "bbb71924f9c13aa9ae4876b8338462745e5127b40704b849e2517d8e93fea15a",
+      "bytes": 14664,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-0a3b929ef5c04aceb5e0dbffbf229fb0",
+      "role": "original-browser-post-scan.json",
+      "sha256": "d3c9177d66fd541a629c85632611ead1f396803af09c08634cf361af55cf7787",
+      "bytes": 199400,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-9876731264bc49d491a34449b05001c1",
+      "role": "original-browser-pre-scan.json",
+      "sha256": "c06942a19ae523ca7677cd214bc2224646eacfe4e1b07e97bde931112731a24d",
+      "bytes": 205869,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-13fcc9bf2677406387f9e58085d9ed5f",
+      "role": "original-browser-process-samples.json",
+      "sha256": "246ea9665d75b003cb5ab6c46bd76256485d31c0dc84472aefd2f1ff407cdcfb",
+      "bytes": 1911301,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-3642b4377faf4d56b9dfdc02f43392fe",
+      "role": "original-browser-report.json",
+      "sha256": "b8551105e1c195207ea2b44ebecd00672a1836ef3c1166a5c62df3f71b679b67",
+      "bytes": 41269,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-bfab180a50024e9abd0510ce053713ae",
+      "role": "original-browser-results/.last-run.json",
+      "sha256": "d350f26a5bbd55b95e273ae6e066ca1befcc5752c82140bf63e262d06f2b4ed1",
+      "bytes": 292,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-fdda91ce84874a82ad84398113549cf9",
+      "role": "original-browser-results/profile-normalized-ack-nor-24bf8-ciles-empty-without-a-write/error-context.md",
+      "sha256": "d932f8187bb2dc1cab24479e2f83c6fb0065548e3a02b39d94d75f2adb68bc18",
+      "bytes": 10551,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-d63d77795c2445e18b2046288134eec1",
+      "role": "original-browser-results/profile-normalized-ack-nor-24bf8-ciles-empty-without-a-write/trace.zip",
+      "sha256": "e67d1ad7a20845e93549320199a9dd41461d44e71181f86cf19c0d3d85423454",
+      "bytes": 1377241,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-24f0e44f6bca4cf7a43bab3642f8f7c2",
+      "role": "original-browser-results/profile-normalized-ack-nor-ac9f4-d-unchanged-without-a-write/error-context.md",
+      "sha256": "bc8409a5e970676fa165a77be4a523a2d6e38567278a99b6aa581b74d8fd80f4",
+      "bytes": 10640,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-74f136b9c1044fd6b8dc92c17805bbf9",
+      "role": "original-browser-results/profile-normalized-ack-nor-ac9f4-d-unchanged-without-a-write/trace.zip",
+      "sha256": "35929c79856d7022b66a0a0d23424b769d727ef2fbe7908d0aa8f21fc52ca913",
+      "bytes": 1052695,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-d247c8a500e74461a56b5d49a2413ecd",
+      "role": "original-browser-results/profile-normalized-ack-nor-e0a63--whitespace-without-a-write/error-context.md",
+      "sha256": "9a8c970c75be6ff0a6529729d33598c4005bd495ab4eeaf2b53d5a271f3dc200",
+      "bytes": 10565,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-218694640a2d49f78b0b3c18ddb6b589",
+      "role": "original-browser-results/profile-normalized-ack-nor-e0a63--whitespace-without-a-write/trace.zip",
+      "sha256": "bd3150baad2058160e2e87b88abe41ebef02feb331771bd80110fdb0fb2f9f06",
+      "bytes": 1014971,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-86ab5bbe3f784a6a90ba41085a2fb848",
+      "role": "original-browser-results/profile-normalized-ack-que-0a602-eceding-successful-baseline/error-context.md",
+      "sha256": "f1ff6da43ccfb2de1ce23188fcbf95d5ea767e61331c4ef0f4874d5b2c1f87c0",
+      "bytes": 10618,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-73e0a1dd5194408682de97d1ab9a2b75",
+      "role": "original-browser-results/profile-normalized-ack-que-0a602-eceding-successful-baseline/trace.zip",
+      "sha256": "46318bccc773dcc7facbbb7dddc618570279df6e450ebe5f90939486b04eef64",
+      "bytes": 1103298,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-c8027773f4fa42ec9abad665ad66d0f8",
+      "role": "original-browser-results/profile-normalized-ack-suc-6dcae--through-a-provider-refresh/error-context.md",
+      "sha256": "448b4b016b63b3fa7f3b2c5ab84d50c33473d4e9c0ac5b59db1c6fe2551afa03",
+      "bytes": 10638,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-5cffc6bec6c04eb89e5818c5eb4d4c4b",
+      "role": "original-browser-results/profile-normalized-ack-suc-6dcae--through-a-provider-refresh/trace.zip",
+      "sha256": "f4448285177403797f25ca6e252893e765a70aae1c49d4b9d241e19bc6816556",
+      "bytes": 1235081,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-f77a58075256456e938f29e92ca3599e",
+      "role": "original-browser.log",
+      "sha256": "98d7f91f80a69dec5ba71c9416270c69a5a2b30b7748791da566642787b010e5",
+      "bytes": 18401,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-d5a3cd813c1a4ea8ba0e745aabe5f1d3",
+      "role": "original-native-data/native-result.json",
+      "sha256": "50cf1026c1ee80501c43dcf675c5afc8eb8ef1e3965aabde2650c2a7d9484e39",
+      "bytes": 28102,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-cdbba5645cd842998425007d14b60664",
+      "role": "original-native-exit.json",
+      "sha256": "1eae02f3a1bba40b89ecd40aa4c364ec9794c8941322c71812edc1c92da42947",
+      "bytes": 788,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-393314242b5341028099ea4265441b4b",
+      "role": "original-native-launch.json",
+      "sha256": "f0b73ff9354dad7c4cfa24b533d39ac35f4bb87c774eedf71cb296d86a7ba9fd",
+      "bytes": 548,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-7a3bc32524924631bb64c57e7f1e15b1",
+      "role": "original-native-post-scan.json",
+      "sha256": "56483821280920dbba4ca23af8fa0cd97fc580181bf1804aa4fb9703ccc17166",
+      "bytes": 205929,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-370922033dd4460bafeb4d6ecd256638",
+      "role": "original-native-pre-scan.json",
+      "sha256": "aa252cc09b2e11e542de45d2e58695caa1f868af4e849029dc920838d78955c6",
+      "bytes": 205968,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-fa8a40f929074e9bbc24f2d31c491095",
+      "role": "original-native-process-samples.json",
+      "sha256": "aaef14c37e9aaee344b6a55b54d991896d9646f57bf24f32d47048278855d022",
+      "bytes": 4835,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-9eff774b95644f8ebfe1dc6640639ce4",
+      "role": "original-native.log",
+      "sha256": "06b57c75936b04371372c0d3abd862138189f662eaaec82e9385768ef1a57c03",
+      "bytes": 3132,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-c2742f720d9c44c7b29024b5941b6d73",
+      "role": "original-restoration.json",
+      "sha256": "7267e089575d9117f9592136eb8efbf47248db1097cffad9cc7d7cc00191e784",
+      "bytes": 85,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-e78fb75362e64154920dfb3732896439",
+      "role": "original-switch-scan.json",
+      "sha256": "e4e7326004e7665b34c362f2329084cd0fc367b070080e3050cd5940ead58f88",
+      "bytes": 213464,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-cc974360056b439799435aba81cbf071",
+      "role": "run.py",
+      "sha256": "41d12f08c9d0bb7e44a0fb74852c954b3c1575d1508f448b78b5454421684ee6",
+      "bytes": 6661,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-ce4e13b5886449b195bd4673b4dafddd",
+      "role": "setup.json",
+      "sha256": "4142178355a685c8d84338ceef977497ab1f9ce96e225d29c8d4d821a80c64d3",
+      "bytes": 536,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-f74915c67f0f49b4ba0a50e6c97f2f1b",
+      "role": "variant",
+      "sha256": "992a93455c71fedd36ac9bbc439952c041cf61445958472af479269b8d873513",
+      "bytes": 5,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-a5a8ee4e091c4c43a4596709f322f8a2",
+      "role": "web-types-exit.json",
+      "sha256": "c414c89f03b7202a9519dd09c99a753b2560782a9f94022583c1b09602988735",
+      "bytes": 740,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-4c86c9b49e1a42b8b3ef83063f9a03e1",
+      "role": "web-types-launch.json",
+      "sha256": "5ccc28fe381f10ab8d2891b8303ff3e02274378294122bcce3a8caab9737a4b0",
+      "bytes": 437,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-bc44006419774a258f6ba2c46dea5338",
+      "role": "web-types-post-scan.json",
+      "sha256": "d0784617fa37a44fe07820f7b85a040546558c7bade5c97426d47b2510aab221",
+      "bytes": 196928,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-383a02b8d6fc48d2be633e691a32ee87",
+      "role": "web-types-pre-scan.json",
+      "sha256": "3bc88e19c5fcade9126ee5eacce14c2bd55a38602f505321fe43881ff46717cb",
+      "bytes": 196339,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-fa40d58a3e874727bf0cfdc1d5161fb6",
+      "role": "web-types-process-samples.json",
+      "sha256": "bf1e9d999d5c0212de03fc6d56bcab48d74d9182a122c9f8c7665c25fb0aa147",
+      "bytes": 18339,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-c09ce681dfc34956bf665519da37c367",
+      "role": "web-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-b5b439e35bf8466f88a80505b78efa3c",
+      "role": "worker-types-exit.json",
+      "sha256": "fd93f3a3a562b2fda6990faa3b8b4d7f5abc5d69caf335a7d56c078d03fecac4",
+      "bytes": 747,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-79500820dabb4a8288957d759c373bb2",
+      "role": "worker-types-launch.json",
+      "sha256": "1d01a3b4e928f53edf3d76eaac95c90856ecb541eff9d0ea3ab1a89000f88b62",
+      "bytes": 443,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-3ef0659504e84f0287ddc715d7b78128",
+      "role": "worker-types-post-scan.json",
+      "sha256": "fbbffb386e6d408e9e72a9eb7856d4c8e12e16ef2f85bc68d7f47dc41b22c95b",
+      "bytes": 195094,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-589745564cce46049fc4fbbb01cbe1af",
+      "role": "worker-types-pre-scan.json",
+      "sha256": "b456b5405a428ecb23365bf1427b18b95fb7a17993c9b7fdf50385fe7a850cde",
+      "bytes": 197744,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-a3d4d6bde0dc4787b1b380b08146548c",
+      "role": "worker-types-process-samples.json",
+      "sha256": "e9900beedc51f94cd4258613ff1d5954072635e66141c97cbb2aa1cdc9e1399c",
+      "bytes": 8834,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-f2aacc32ed0d4679883b705dc18a1512",
+      "role": "worker-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "availability": "restricted durable original"
+    },
+    {
+      "reference": "evidence-065e39d34e244a6c921fc144af1716a8",
+      "role": "trace-inspection.json",
+      "sha256": "657457a9851db4a1f9a6e93dfdc13e3409c5b142e0c20fec64cfa3ec4df5d85e",
+      "bytes": 17093,
+      "availability": "restricted durable derived trace inspection"
+    }
+  ],
+  "publication": "Safe derived receipt; raw outputs/full snapshots/traces/locators remain restricted durable originals. Historical prepared manifest is unchanged; actual results here supersede predictions."
+}
