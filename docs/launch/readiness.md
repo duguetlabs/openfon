@@ -11,6 +11,32 @@ findings from every reviewer still require verification and disposition. No new
 Codex review is requested or awaited. Historical dual-review references below
 record earlier requirements; this policy governs the current release.
 
+## Capture helper retained-error hardening
+
+The [77a9eab review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658098092)
+reported no security concerns and two recommendations. Both exact-head CI runs
+passed. Coupled Providers is [qualified-declined](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658115276):
+missing default text credentials are allowed; explicitly invalid custom text
+configuration intentionally fails at pickup. Historical startup evidence stays
+attributed to its original source and was not rerun.
+
+The capture helper now retains an earlier error separately from termination.
+For a spawned live child it attempts one SIGTERM, waits for actual exit and then
+rethrows the first error. Failed signal delivery preserves the earlier and new
+errors without claiming exit or retrying. Terminal or failed-spawn children are
+not signalled. Capture, temporary-state removal and escalation policy are unchanged.
+
+This is defensive helper hardening: no current capture caller was found to
+produce an early error on a live child. A real owned child with explicitly
+injected errors showed zero signals and immediate rejection on the original;
+the fixed helper showed SIGTERM, exit, then rejection retaining the first error.
+Original15 cases yielded11 passes/4 failures; fixed15 passed, and both syntax
+checks passed. Two original failures stop at the kill-count assertion, before
+error-aggregation assertions. Failed-kill controls are synthetic; no full capture,
+browser, provider or app suite was rerun. Prior1,266 tests/types remain attributed
+to01912c2. Independent QA closed exactbb36830 source/evidence/assembly;
+fresh published-head CI and genuine review remain required.
+
 ## Preset concurrency and Docker ownership
 
 Original `a8752a36` [review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5657939149)
