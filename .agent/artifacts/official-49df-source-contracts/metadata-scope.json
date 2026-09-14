@@ -1,0 +1,1391 @@
+{
+  "base": "49df6fc2a5edc0f75a8c922e0178fa6269276f24",
+  "status": "Proposed source-only; no sanitation performed",
+  "artifact_candidates": [
+    {
+      "repository_file": ".agent/artifacts/8436-final/full.log",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "ec323825a6ad4121575f3156aab662847c542257f5a9074897578a91d4c567cf"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "14be7f7fc638984a9169845baa1158e310520ee60e2ee41786d3fa66e5072565"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/cleanup-before-scan.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "985a9cf056fdfb572f8fb69e4df176e9fb1067f47ff0abad07ad7f7ab0a664a2"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/cleanup-before-temp-removal.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "bff44fb4cdc8f4e303222279e63c901125ec3a82a9cdd5dbf3bd2f1b30aaa0f0"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/cleanup-final-scan.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "f9d9c2bb23901d2f20c4c3ec61fb7e7e4b6d609299ebf14f5be9b097e175a48e"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/cleanup-release.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "5941d541401a7ef106e954e2bd39a72e82360ab78e085212dfc1fabe1acf16cf"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/fixed-activation-controls-before-scan.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "1182a56e7811165b2e71c7d2e750397998176258987224589b33cad89cc093a8"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/fixed-activation-controls-exit.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "d411536dd4b2585f0411aeb836092f16260b8e228fc963be7c3f3bc1d379470a"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/fixed-activation-controls-launch.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "d9eb8608980ae88e1cae36a0b26b89af67ee8002d61492658d68fea56ba72ad2"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/fixed-activation-controls.log",
+      "categories": [
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "e0fba351f8f7c23072290b90e5ac7eb03fd5cb92e53845e8a2da38f870d6ab58"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/fixed-api-before-scan.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "4b2e7b165537732c07ca9075ba1ae3a8e86bb66fed809072d2c191cdb7759c3b"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/fixed-api-exit.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "30de5d87eb8248e38ed72f7fbd8b294a016efb9d1f4157b9b9f357e7c7748e62"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/fixed-api-launch.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "e2d5066d4f9df5d70dd094de5a79f72a868449b0ddd1c73743966c1febbdfbe7"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/fixed-api.log",
+      "categories": [
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "4c65e8a1111983702caa0b813ec2b7b4af09bb1da71c1a3107c871cbde7f7bab"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/fixed-browser-before-scan.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "9bbcb650bcbf7f1309e49ad2767da8eb9a2484b5d1be73c07e6f067425505438"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/fixed-browser-exit.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "a87c70406b972aff4390ceaf384a49d6a9945df937e0e2904c913c76cf541c46"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/fixed-browser-launch.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "4725f8e0bec332b6662e62f8d746262a2b2039884fda57ff058b1410424b7302"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/fixed-browser-report.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "114d17b00e66342dc3bb2b508e92a8d8323a851090f55ecf7556afaa6ab473f6"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/fixed-restoration.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "ceb68fb919555574e2478665c396817dc827ba9b5f8388e8577eddaf9c56120c"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/initial-provenance.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "239928055b3395491362752e15f12a067983354c1f5f1fa1a0fed29b2a88593e"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/original-api-before-scan.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "97df58960fd470b5625ee5b5f5f5bf474e323870a557d807e6246af158f7f821"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/original-api-exit.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "70e63a18dbf8404f9c2006787e01be0512296197a6118406c000f8f07149771c"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/original-api-launch.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "1216556c5cf3d7c38bce7101fc92149454e3b1d51b7b41350cb9911acab7cd31"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/original-api.log",
+      "categories": [
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "4c23a86049e9dc529b02156825c9cf6a8a77949797c2710817639cd03b028098"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/original-browser-before-scan.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "c5ff0079ef64110c6a9c6c2dbe4f6ff9347f53066b343422bc578b87fa79c3e9"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/original-browser-exit.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "3c9caf55fd4ecacaef6a2fb33c39e78d116bce54671857bbf7e143c04ccd6658"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/original-browser-launch.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "126617baa9bd5061ae36d6060f59ebff9f0ee2043ade74b58b4ee0142ab384f2"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/original-browser-report.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "dcd125536906cb23c9489c2fcd81768960af08cb441652c61c9bf73f394686f6"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/original-browser.log",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "ada6a5ec5ea8b7b23442cc73f3a6d53cc7140439313d79a2bd294f170d588494"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/original-phase-final-scan.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "cf8c6b761a9abcbc4a5635c8662309d58baea4fb6bddffa74f14132237648f7b"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/prelaunch-scan.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "e04895798f64753fa2798aca2efe4460d9e51b39bb7b91930e89bcffc1e75376"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/validation-finalize.py",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "ab82739360560c471d0fb63cf2729ae4218183a053e3e139bf250b8d0149883b"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/validation-orchestration.py",
+      "categories": [
+        "home_path",
+        "task_temp_path"
+      ],
+      "sha256": "3014f9149492ea5edcb426689aabaadbfcd39ed64510018274262851645692f5"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/validation-summary.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "31ce6c8d2b2773f096c2108ddc5b8720044a93b7489746226b474d7e625a1253"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/web-types-before-scan.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "e99111ba927e41a9d4f339930cb3e567589708ed4ed80c38dc6ed7ec81d78138"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/web-types-exit.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "11e59cfbbd5d44b69346e98a950f348496e2fe57205616f8c3443b64e03957e9"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/web-types-launch.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "7b2e220129a0cec50c95c86b5c28c357ddfcffa3ee0acf15db1c23223ec796c6"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/worker-types-before-scan.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "a231ca36be523241d45f1396d318c082d65d5290e12881b24a8c64795b31ee3c"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/worker-types-exit.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "562b19549ffb051d13f8ae81ad997e2ad8e750fa212367d2b01f4d88a9362ec8"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/evidence/worker-types-launch.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "5eca824e09ea0be6d219aa57c20867ed45f2384bf0ef9a0842a03b39058d9494"
+    },
+    {
+      "repository_file": ".agent/artifacts/activation-settings-1d4/integration-assembly.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "ea658962d424bb43581cab903aef582f3d9df938278bfa8c029040fccce12617"
+    },
+    {
+      "repository_file": ".agent/artifacts/beec-final/full.log",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "712c95b1426faed4aa669f30ddddb8f2bcec10f3999e4b0c967c95c4aa2bb101"
+    },
+    {
+      "repository_file": ".agent/artifacts/capture-deadline-77c/provenance.json",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "b1b2aec957d3a9e5fa1c12873428cff8e6da23cf786a3c300d1355370264222a"
+    },
+    {
+      "repository_file": ".agent/artifacts/capture-deadline-77c/validation/fixed-command.json",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "d8f84afbfda6c8a6c7d2ce145084a742cae48e6b41b5a559b6de6f401c2b841b"
+    },
+    {
+      "repository_file": ".agent/artifacts/capture-deadline-77c/validation/original-command.json",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "1fc6dcb0fa7b490795b4b31161e134ebd60f404ce38f729101a62d30ee565e1a"
+    },
+    {
+      "repository_file": ".agent/artifacts/capture-deadline-77c/validation/original.log",
+      "categories": [
+        "private_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "f324ba3d65888480a5bd553f76a9ab842ee832289536af8c170734218776ec8f"
+    },
+    {
+      "repository_file": ".agent/artifacts/capture-deadline-77c/validation/syntax-helper-command.json",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "c03b13600a8a92b8ed3af72e897e4c7e2c98909492c0061c71c915a4ad6853a6"
+    },
+    {
+      "repository_file": ".agent/artifacts/capture-deadline-77c/validation/syntax-test-command.json",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "0aa2af3b4642007fe66540128a8662218d8f01867737b6d171fbbfb99155316c"
+    },
+    {
+      "repository_file": ".agent/artifacts/ci-1d4-dispatch/provenance.json",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "4957bf3ba7a25e393c6b3f574253a731c624f2802f6f038604b7b940857c0d7d"
+    },
+    {
+      "repository_file": ".agent/artifacts/export-beec/fixed.log",
+      "categories": [
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "24ead584904d1b0c279779921c104854354937a81e7e98cb21476e201bf8f396"
+    },
+    {
+      "repository_file": ".agent/artifacts/export-beec/original.log",
+      "categories": [
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "d87fd725c4fbdcc1f705bf5f5a68f3d4d900172c9fb675a6a5045a017c9cd205"
+    },
+    {
+      "repository_file": ".agent/artifacts/export-beec/provenance.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "cd49c1b56de8e4b4cb07c20397708917b4e171f263bff5d6a7edfd0617041ca7"
+    },
+    {
+      "repository_file": ".agent/artifacts/export-ce783/fixed.log",
+      "categories": [
+        "private_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "256b576eb15a7dd64a27024888050291d162b35f325e1ebe6d9fdd1d96a83d4d"
+    },
+    {
+      "repository_file": ".agent/artifacts/export-ce783/original.log",
+      "categories": [
+        "private_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "0dbc174f935661b26c99351c18197a647698d9a582f131012421107dd6a0de58"
+    },
+    {
+      "repository_file": ".agent/artifacts/knowledge-input-3bb/assembly-identity.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "da45d6a4f79a9ed3bc397f4e736faa6fa3201edbede8fd517ca5c9944c999e7d"
+    },
+    {
+      "repository_file": ".agent/artifacts/knowledge-input-3bb/evidence/cleanup-before-temp-removal.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "e72d32e113538e4fa8dcf68497f6bdfe27745ffb44bb8d435ba7db504763b5ea"
+    },
+    {
+      "repository_file": ".agent/artifacts/knowledge-input-3bb/evidence/cleanup.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "989bc79a88af7b32461ac95eb65b5d985a0e3d164e78bf82827832a6da8346aa"
+    },
+    {
+      "repository_file": ".agent/artifacts/knowledge-input-3bb/evidence/fixed-api.log",
+      "categories": [
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "306d7eb51bec898c093dbe9b32bd73d443424f1b5ad8b31df5b4d852b0709144"
+    },
+    {
+      "repository_file": ".agent/artifacts/knowledge-input-3bb/evidence/fixed-pagination.log",
+      "categories": [
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "bed3c003e3543fdad26f141c33c4ae947c19a6374741226800ac152dbf8966de"
+    },
+    {
+      "repository_file": ".agent/artifacts/knowledge-input-3bb/evidence/initial-provenance.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "ea639d57103f01318a58f5e7ab9cad01b9545685f5c441312587bed48f3a7901"
+    },
+    {
+      "repository_file": ".agent/artifacts/knowledge-input-3bb/evidence/original-api.log",
+      "categories": [
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "649c22b2e526569ef84924e07acbf04e0374a5c0b7a1926e537b1c928a7fd705"
+    },
+    {
+      "repository_file": ".agent/artifacts/knowledge-input-3bb/evidence/original-browser.log",
+      "categories": [
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "a67a3b8eb2d66dad7b4e3d9ade6b10075d1fff071c8699fea633e514f4e43a74"
+    },
+    {
+      "repository_file": ".agent/artifacts/knowledge-input-3bb/evidence/original-owned-processes.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "28ab4cd43662c8ad0632e2851be3df8ec67919fddd3b4fc5fff1ad9ce5413a47"
+    },
+    {
+      "repository_file": ".agent/artifacts/knowledge-input-3bb/manifest.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "292cd3c573a6ffbacd549fa1da0952a5c6f6dc53a57fb312387aed278a353197"
+    },
+    {
+      "repository_file": ".agent/artifacts/knowledge-settings-8436/evidence/cleanup-before-manual-temp-removal.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "549b47260a6a20d88f50cc1f064f09cc821ddbcee911556d95dc5afc26201f02"
+    },
+    {
+      "repository_file": ".agent/artifacts/knowledge-settings-8436/evidence/cleanup.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "4b40e89cd7b437ab3d226ed8b3259e77d1d89d97d073efe4df6c1ee9b1ed4aad"
+    },
+    {
+      "repository_file": ".agent/artifacts/knowledge-settings-8436/evidence/fixed-api.log",
+      "categories": [
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "3e4ee35bd9105534f305e9990a194dc2c40d8adb05f574a1e82e480f50ca6af1"
+    },
+    {
+      "repository_file": ".agent/artifacts/knowledge-settings-8436/evidence/fixed-owned-processes.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "35264b52924c2facdb43931715aa3258dc2bfe68256f7f1ef8f12af56f4bd6a4"
+    },
+    {
+      "repository_file": ".agent/artifacts/knowledge-settings-8436/evidence/original-api.log",
+      "categories": [
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "5686fdb63fb47210ef08279cc08715a469824196bf12fce58fec9a14eca2e298"
+    },
+    {
+      "repository_file": ".agent/artifacts/knowledge-settings-8436/evidence/original-browser.log",
+      "categories": [
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "deb6319e1faa8947b50cf231358d51327d787070cee397c17b742c14243629b2"
+    },
+    {
+      "repository_file": ".agent/artifacts/knowledge-settings-8436/knowledge-settings-8436-before-doc-finalization.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "e6faef59064c1ccd2eb1063dae4a30c6c4868a752374d3a51590cc40bba57173"
+    },
+    {
+      "repository_file": ".agent/artifacts/knowledge-settings-8436/knowledge-settings-8436.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "360b830874580717193017145e060c26c4f39f80d358d3e04670f2f481e9dcde"
+    },
+    {
+      "repository_file": ".agent/artifacts/onboarding-8436/exits.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "8261d5c0b84075b346aff7f8c7a27ab2a5d3662b96aa1865a04eaa1154579352"
+    },
+    {
+      "repository_file": ".agent/artifacts/onboarding-8436/original.log",
+      "categories": [
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "edff77869d1549a422290af589e6a1bd6c1d2ceca496655e13540764d88e311e"
+    },
+    {
+      "repository_file": ".agent/artifacts/onboarding-8436/provenance.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "ba98abf8243e274d9f7da1a0aad82c454ecacffade6c0a46069fb7e13b1fc9dc"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/assembly-identity.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "59567b461918bcb46ab62542b7c385baf98311d3c6ef4dcf9769492ab7384f59"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/initial/cleanup-before-temp-removal.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "process_inventory"
+      ],
+      "sha256": "14a6d50eab9d84b32e8d16ffd7c3b594492091c2a9664ad484778f02e678a5c5"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/initial/cleanup.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "process_inventory"
+      ],
+      "sha256": "a5b93efcc2043d36f92520615db02c6dcb2a69e8bdc947b69062f68f67da1ca2"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/initial/fixed-exit.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "b4d6237e80eb8dff5c9cf9531023edacc2680b06a6582896118392fe8f3f0d5a"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/initial/fixed-launch.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "269553b0c8670d7d0b5c71978142919d70f7ad4cdb8ee16b18e7972231ff7df1"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/initial/fixed-report.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "7424a2453109209c4223d5c123f243c268a3cc1f156beabf0e74681ae7553553"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/initial/fixed.log",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "c32a229579ef99733569b40293da52e874b2518405c664a19c4edaf24fac1ccd"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/initial/original-exit.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "909d42a3d172f4695315226ca711bb3b641446bb1255eaa70f824638aa0edb46"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/initial/original-launch.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "0e04e865e340eee08a4411067d04a41eae161017778a294f2c3151f231b8f344"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/initial/original-report.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "9c415ecc80b40921791fc7213f50f476f430b4d13ea003d053fcc00165817334"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/initial/original.log",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "5f97aef4be4f543b75b6a4f23277efce70d5c23ac6b1e59813a6033be7687c2a"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/initial/types-launch.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "08198c0d5239737bf23c03a77df59c51a3178f6fb14fbae7ee72c785b559a4ef"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/initial/validation-orchestration.py",
+      "categories": [
+        "home_path",
+        "task_temp_path"
+      ],
+      "sha256": "0d773cc0deb5d3a929cc8fc19a19d4630e76861ef617507abad6d642c0092f8b"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/manifest.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "process_inventory"
+      ],
+      "sha256": "07881be5c10451ebda33a7d2da4a4612a9f61cb2d6f566dda69cb0df79c65993"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/source-contract.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "ee5aed77dbac4888869ea56bb2b4d5829291c49d99678a5b6966b2db2f69eb78"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/targeted/cleanup-before-temp-removal.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "process_inventory"
+      ],
+      "sha256": "6bab74bd5254a1fe7db3da65a862fd21ba763aa55160e33312189d4df37b9636"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/targeted/cleanup-release.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "d7982cdc7711876d308cd15ec119c6e3bb5dc80259177ed1b325c2ae40920e4f"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/targeted/fixed-exit.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "66c80c078740d4e7915598c64fed1d94d9507fc59e6979264722c090d4553f26"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/targeted/fixed-launch.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "7bb35e025e89a9632dacab0d0092d1165c0e8890f8a61d119d4a7d1f17c4cc4e"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/targeted/fixed-report.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "b50c280ba7f6f58769f28212f893948c472c927165fbb8faa0dd3124b0881947"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/targeted/original-exit.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "aceff135f860a01edce856a3e3a9b5da5683909ff2615e8829daf108d3993a9f"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/targeted/original-launch.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "b1133f605a06b8a713dabf2f796a43bc5ba64ea961f79725560a0fd73b6524aa"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/targeted/original-report.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "c123bf1363c14b7448cb88afe430f4292c7db94701ed6f121a4c992d01adb449"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/targeted/original.log",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "83b5265addee16c11e1f99d189c014d566ccee5eda547140ee724f04ead47ba6"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/targeted/prelaunch-historical-mcp-attribution.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "1d9a130c8f5435d1f3129941e4be60e41d6392974fc967fbe8132d4b632ba5e4"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/targeted/targeted-orchestration.py",
+      "categories": [
+        "home_path",
+        "task_temp_path"
+      ],
+      "sha256": "adc9bdf4bf1f80280283272e60cfef3c568b8546dbc3fa7a0566f6e222741a6b"
+    },
+    {
+      "repository_file": ".agent/artifacts/profile-create-77c/targeted/targeted-summary.json",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "268c05e9055276541c6f6979eaeb6ede959e49213df42c005f8e683ecaba2c57"
+    },
+    {
+      "repository_file": ".agent/artifacts/public-ticket-ddce/manifest.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "0c12c2358ee6c575e168ec844cbbb30869b8847eda69f68dfef996701d518a4d"
+    },
+    {
+      "repository_file": ".agent/artifacts/public-ticket-ddce/validation/fixed-command.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "49b27b85e92f77d072dc78701f8731015041de082ebda18c864348a5ab9a6e3c"
+    },
+    {
+      "repository_file": ".agent/artifacts/public-ticket-ddce/validation/fixed-report.json",
+      "categories": [
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "952b608630ac7976fdc9eaae282bb0a0e30f2d1c8470c2de06f2ad9ec0c0c4e6"
+    },
+    {
+      "repository_file": ".agent/artifacts/public-ticket-ddce/validation/fixed.log",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "e44bc7a48268eb6a44896eaba3def6c1297ac7b40140ac6d13856a05f1e68540"
+    },
+    {
+      "repository_file": ".agent/artifacts/public-ticket-ddce/validation/original-command.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "53dcae0a288bb37fd581773106a4f8e159e80be8845f27d35c84085c88c18d85"
+    },
+    {
+      "repository_file": ".agent/artifacts/public-ticket-ddce/validation/original-report.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "dd4c758c6999ed64740d4ec935df44b6d90b770482fa544e023a559083c4e454"
+    },
+    {
+      "repository_file": ".agent/artifacts/public-ticket-ddce/validation/original.log",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "2acd5140c2ffcb937e89229181b4c8d1a14dd13f98e3d943e9a6bbab5fdf389b"
+    },
+    {
+      "repository_file": ".agent/artifacts/public-ticket-ddce/validation/studio-command.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "464fd36f318e970e067a954eed51041940869e8565659d9c5764e66152bbdb69"
+    },
+    {
+      "repository_file": ".agent/artifacts/public-ticket-ddce/validation/studio-report.json",
+      "categories": [
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "1191eba9bb5f2326e1036a194c7ca6f476ff0544d296aea954f2da62ad4a209e"
+    },
+    {
+      "repository_file": ".agent/artifacts/public-ticket-ddce/validation/studio.log",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "763ee0dd3ecb1f4186ad50cbbac797f45ffee3351984cb4ae73fef935db24086"
+    },
+    {
+      "repository_file": ".agent/artifacts/public-ticket-ddce/validation/types-command.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "cb98217e0506337d9a04eba44d70f6696501810ab09fa56598d2d94dbd994a19"
+    },
+    {
+      "repository_file": ".agent/artifacts/telnyx-reorder-b770/fixed-exit.json",
+      "categories": [
+        "private_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "da275ed5f60d0271d0aa0f7be0907693f7f26875e1f3675acabb9e65567bd38b"
+    },
+    {
+      "repository_file": ".agent/artifacts/telnyx-reorder-b770/fixed.log",
+      "categories": [
+        "private_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "9e856bd07e4a6e059440bee7ccd7945aa18821b63c36d420afa222c2ad73d8b0"
+    },
+    {
+      "repository_file": ".agent/artifacts/telnyx-reorder-b770/original-exit.json",
+      "categories": [
+        "private_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "451c39d789efba84482ca137c5258ee3b82e4aad894c2cfb1fbf0c87462894fd"
+    },
+    {
+      "repository_file": ".agent/artifacts/telnyx-reorder-b770/original.log",
+      "categories": [
+        "private_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "adbc198ba4e7190ab23cd1b367537a10d9bbd403386b17487bc033a869221fa4"
+    },
+    {
+      "repository_file": ".agent/artifacts/telnyx-reorder-b770/provenance.json",
+      "categories": [
+        "private_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "618107566599298c83d701907bc7c6cbc87d2174cc0bea9695643cdca5ad4be3"
+    },
+    {
+      "repository_file": ".agent/artifacts/telnyx-reorder-b770/types-exit.json",
+      "categories": [
+        "private_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "be393b3453c6bccc3206f348f5ee7d5f29de99e061d99e72f90486d67f31e32b"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-8436/evidence/fixed-unit.log",
+      "categories": [
+        "private_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "468495a5757f2a77cee8717a88bbc77826b1bdf74f64d3fe6ffc3532ffd9d144"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-8436/evidence/original-native.log",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "a8398a53d00962a1355d3cc9f0fde1e6ade57200274854b0fc30c62d7f4f653a"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-8436/evidence/original-unit.log",
+      "categories": [
+        "private_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "121dae1369c3bb8f5496ce20a56fea8623529f4163f5c2818a439fe5335a9dea"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-8436/evidence/release-scan.json",
+      "categories": [
+        "process_inventory"
+      ],
+      "sha256": "5e7203c87d952f28bed917bda330386a6b6cac92debafe83a3e704051904cdd8"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-8436/evidence/run-identity.json",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "73888dbfafbd7a9a34b4f99a54b6dec9e6870f4f632fb07c9616698c64cc1ec1"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-8436/manifest.json",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "995d847e1d2f35664121a1ed61519b9eacb9bb1e2932567c6cd4eda10c4383ec"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-8436/validation-plan.md",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "c76ed85403c17587b4d05464d4b017cade2e1e3ead4a675bd820f62ea939a506"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-fixture-1d4/ci/failed-check.log",
+      "categories": [
+        "linux_home_path"
+      ],
+      "sha256": "e26283b69bd88adf0f2dab7cd8893b821f81b3d3eaae995ed16998df353ea01f"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-fixture-1d4/ci/passed-check.log",
+      "categories": [
+        "linux_home_path"
+      ],
+      "sha256": "548bb4a93be406570391678a9c0630e32e139ceb8c3b343cab7d5298a89dc623"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-fixture-1d4/evidence/inverse-fixed.log",
+      "categories": [
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "3bdd63a2dd1c46500d5e29d0f94fb780bd396de1e82977b22853ba9ed79f4d4e"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-fixture-1d4/evidence/inverse-fixed.run.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "3004a1af0a9d8f4e1dc36aa8a0b861761c38feb265607bc4e8ba63851ed717b2"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-fixture-1d4/evidence/inverse-original.log",
+      "categories": [
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "fc82c8bed6d275b79d2486561e98e37269077cbd20e225b7983e81a187bb4eeb"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-fixture-1d4/evidence/inverse-original.run.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "e91290be7fa267a591ff4f02741bb02fae19e52d329bda19fc6e2af5d9b7159a"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-fixture-1d4/evidence/natural-fixed.log",
+      "categories": [
+        "mac_temp_path",
+        "private_var_path"
+      ],
+      "sha256": "ef2b4d7e3d0a99b1e733d95500bd7ec233fa3e50e0588b459517a2a75c785f8a"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-fixture-1d4/evidence/natural-fixed.run.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "1ca5ca73f886b1f23808a3d03be0dd68d8249628d9ac3222d028f50d6ee03238"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-fixture-1d4/evidence/release-scan.json",
+      "categories": [
+        "mac_temp_path",
+        "process_inventory"
+      ],
+      "sha256": "c2b51f1d757524d01ae6b11bead24a1559916527748e686c5f7c390be1d6be3e"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-fixture-1d4/evidence/run-identity.json",
+      "categories": [
+        "home_path",
+        "mac_temp_path"
+      ],
+      "sha256": "e94ff60abb13324deca3d2f7c2e3de56523f3516a848afe353e8c79aa52228e4"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-fixture-1d4/manifest.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "9ba0475ae446937c2ef5d83d7419a574b96535f8b4b8c96e231cf0d6228e78b7"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-fixture-1d4/snapshot.txt",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "24167a6ae4940d3d25c74f7145374f4e76cd0308026fcbd20ec1acdc18bf3bca"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-leases-ddce/evidence/fixed-unit.log",
+      "categories": [
+        "private_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "1c41d2b198cc0350988d9ec135056a7fcd33265dd89ea409e713ee9dd67def7f"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-leases-ddce/evidence/original-unit.log",
+      "categories": [
+        "private_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "9bdd088622c561fc8a5f30201d1b8ed6d373e9342b45d4e30bc5cf0d70cdf325"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-leases-ddce/evidence/release-scan.json",
+      "categories": [
+        "process_inventory"
+      ],
+      "sha256": "8ebbad0f0984a6f39f9e77c60c6c36fb9d7cad5d33801fcf0b7617a8400ebd1e"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-leases-ddce/evidence/run-identity.json",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "304e71df1e55090d27aaaed254c5d9df563a60ee2f94c8f8aeb5034d58393d12"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-leases-ddce/manifest.json",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "ab66282c745c75911cd94aab1bf98d4257a531425419af1dd8177810ab39f912"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-leases-ddce/pre-review/manifest.json",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "b132b0b9ff5df52c25e25a1804617d176c97573be7db5902a923474282c94c4a"
+    },
+    {
+      "repository_file": ".agent/artifacts/webhook-leases-ddce/validation-plan.md",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "3809ea3c74391e2f15a7ed0d4a4eddebfc3024ded37e9f307ac3479e8175e525"
+    },
+    {
+      "repository_file": ".agent/artifacts/wrapper-shutdown-1d4/provenance.json",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "004c1bb7df0a2b612638f243026ea16f81502605622162719eebe80c6c8a5cee"
+    },
+    {
+      "repository_file": ".agent/artifacts/wrapper-shutdown-1d4/validation/diagnostics.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "f31041ab30f6d46bff2aa0ef243b88dc27d3b13ef1f3b8733d70064aa68913d3"
+    },
+    {
+      "repository_file": ".agent/artifacts/wrapper-shutdown-1d4/validation/fixed-command.json",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "82e5d6fdee5e86a2498b2708bd350ee498070e9db93d839932de4c3056c25241"
+    },
+    {
+      "repository_file": ".agent/artifacts/wrapper-shutdown-1d4/validation/fixed.log",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "a7ba1e3def9ef05f0597f174e5f93b07ca92182f466af6b56f6ed651724aac8d"
+    },
+    {
+      "repository_file": ".agent/artifacts/wrapper-shutdown-1d4/validation/original-command.json",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "22613e2ba89c520b06351c28ab0df0e9c33cdb60e4f69dd19ee8abf7d2fc60c1"
+    },
+    {
+      "repository_file": ".agent/artifacts/wrapper-shutdown-1d4/validation/original.log",
+      "categories": [
+        "private_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "44087075eab9cdd2bd161aafc7fb148fa06db8739ffa735d2af531f79fb27d10"
+    },
+    {
+      "repository_file": ".agent/artifacts/wrapper-shutdown-1d4/validation/syntax-test-command.json",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "24b27320f6bd7144089a823753a629fe7a2607f7c95b05ccbcc82c173f2520f8"
+    },
+    {
+      "repository_file": ".agent/artifacts/wrapper-shutdown-1d4/validation/syntax-wrapper-command.json",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "e20fa29d3f6509302d3ea156b565532b7a3c11bc224d1f002c5ee97cad1d5d5d"
+    },
+    {
+      "repository_file": ".agent/artifacts/wrapper-status-beec/fixed-process.log",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "a176502aaea7b32eea1815af4ba343d9a0145463e0020da293bc15ab6b7e109b"
+    },
+    {
+      "repository_file": ".agent/artifacts/wrapper-status-beec/original-process.log",
+      "categories": [
+        "mac_temp_path",
+        "private_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "5fe1bde44400c900f1206ea0016aae5d96f4465cbc3b210406a9185f070ce9ad"
+    },
+    {
+      "repository_file": ".agent/artifacts/wrapper-status-beec/process-diagnostics.json",
+      "categories": [
+        "mac_temp_path"
+      ],
+      "sha256": "2b268211207a3fc0a0fae85bd2d64bc88aa4464fbcdafb7a4b0ea4821f5af69d"
+    },
+    {
+      "repository_file": ".agent/artifacts/wrapper-status-beec/provenance.json",
+      "categories": [
+        "mac_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "937e606695a94541e6a7167fc4ff37489fef076b687e15f0e5666cc4edc4b440"
+    }
+  ],
+  "outside_artifact_candidates": [
+    {
+      "repository_file": ".agent/archive/current-task-2026-09-06.md",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "aed64653650c7bbdaa72ba930c15049b9059faf5a8433a37a38a4c25ff1396b0"
+    },
+    {
+      "repository_file": ".agent/archive/current-task-2026-09-11.md",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "a5e2b044538c2646116d33dc89909e96e62cbc97ee1ccb6877a73569544b92b5"
+    },
+    {
+      "repository_file": ".agent/archive/current-task-2026-09-12-before-provider-expansion.md",
+      "categories": [
+        "home_path",
+        "task_temp_path"
+      ],
+      "sha256": "36e31fa68c5492a86346f6fbad1045b3d1b63f4ccd8079d81635913881fa9288"
+    },
+    {
+      "repository_file": ".agent/archive/integration-status-before-beec-corrections-2026-09-14.md",
+      "categories": [
+        "mac_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "3bb4a8fccccb222b89a8dfe3d8ad901bd933092a1f2fd27532e540e0d17793cc"
+    },
+    {
+      "repository_file": ".agent/current-task.md",
+      "categories": [
+        "home_path",
+        "private_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "1f67c428832379876f1c9c9dc35e91dbda277b1532e3ffa1aa9d72c8c06d685f"
+    },
+    {
+      "repository_file": ".agent/decisions/open-source-provider-and-launch-strategy.md",
+      "categories": [
+        "process_inventory"
+      ],
+      "sha256": "2ffceeb553155fd850a8683f916a26c0424d4d883b47748d6f363a35396157db"
+    },
+    {
+      "repository_file": ".agent/handoffs/calm-studio-takeover.md",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "047b6cc0762760cf28c0c3cc9e1d696089d8b20feb899fe06c0f408b7c88b8ed"
+    },
+    {
+      "repository_file": ".agent/handoffs/openfon-asterisk-2026-09-12.md",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "a5b1168bfa159a2ac7f84bd70270d77e050494db26ac4564d61b3e4e5f05187c"
+    },
+    {
+      "repository_file": ".agent/handoffs/openfon-integration-2026-09-12.md",
+      "categories": [
+        "home_path",
+        "private_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "d6e2f35558da59f15fcbac7f427f1aee398d8bac0ee2926fd1f53d14511c9120"
+    },
+    {
+      "repository_file": ".agent/handoffs/openfon-launch-2026-09-12.md",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "c90149bc927733092e181e0a44bcfbc7cd5de1507d15901e705a50a9f0e61050"
+    },
+    {
+      "repository_file": ".agent/handoffs/openfon-presets-2026-09-12.md",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "efec15ca14451ae08c7da6f0a80af4c62f322ab8076924d780af6a6ca8308854"
+    },
+    {
+      "repository_file": ".agent/handoffs/openfon-qa-2026-09-12.md",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "61e4634f78f4da510fc08d381f27958479974df46c88a1f3289dece2f64e04cd"
+    },
+    {
+      "repository_file": ".agent/handoffs/openfon-realtime-2026-09-12.md",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "3a66f454856c51bdec4f79a6373a37f8f45776735e044012ec941a35e2bc972c"
+    },
+    {
+      "repository_file": ".agent/handoffs/openfon-telnyx-2026-09-12.md",
+      "categories": [
+        "private_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "def94d9f0406da782d5d79d89f4be2454c1757776a62ea95d28fa8b82f71ab5d"
+    },
+    {
+      "repository_file": ".agent/orchestration-rules.md",
+      "categories": [
+        "home_path"
+      ],
+      "sha256": "24281019b7eb2e2609e70a4eb439ff7bd06ddde3cd7a25f10d2e5b13bd68a755"
+    },
+    {
+      "repository_file": ".agent/orchestration.json",
+      "categories": [
+        "home_path",
+        "private_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "98e54028b65fd58aa596342890e47787ab40020ebb326bc8d7803c98d8cddd7e"
+    },
+    {
+      "repository_file": ".agent/workstreams/asterisk.md",
+      "categories": [
+        "home_path",
+        "task_temp_path"
+      ],
+      "sha256": "3f77a6a6c0efaf90e742d374107554d0fb5f55db695e0c06e73363ac8a5d1518"
+    },
+    {
+      "repository_file": ".agent/workstreams/integration.md",
+      "categories": [
+        "home_path",
+        "mac_temp_path",
+        "private_temp_path",
+        "task_temp_path",
+        "process_inventory"
+      ],
+      "sha256": "a33f4b1ab7e35f3e4cc1e7c560b49cdffee506c68cec4d179c5558febd577873"
+    },
+    {
+      "repository_file": ".agent/workstreams/launch.md",
+      "categories": [
+        "task_temp_path"
+      ],
+      "sha256": "870ad3a904e01bebf91078d63eaae2d341ecfe92fa9dd81d51cb77ab9f3240b5"
+    },
+    {
+      "repository_file": ".agent/workstreams/presets.md",
+      "categories": [
+        "mac_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "4689949d104585e06de8445c16e280cd433a36c812528f22cec947422c67009b"
+    },
+    {
+      "repository_file": ".agent/workstreams/realtime.md",
+      "categories": [
+        "mac_temp_path",
+        "task_temp_path"
+      ],
+      "sha256": "aceec11a9f55f0603b3ea9e0bf037960c55a36a7b237e28d24d6a03789fa011e"
+    },
+    {
+      "repository_file": ".agent/workstreams/telnyx.md",
+      "categories": [
+        "home_path",
+        "task_temp_path"
+      ],
+      "sha256": "40caee23465ef17e33cd1087bb58e9a8ffbdd198adbfcc9153124cc31efd8200"
+    },
+    {
+      "repository_file": "docs/launch/strategy.md",
+      "categories": [
+        "process_inventory"
+      ],
+      "sha256": "3cdfad9b74fae1a167bdb823fb07f78c2fbfe91866eab3a7ac71bacfdb6b0f70"
+    }
+  ],
+  "limits": "Category presence only, with known false positives for product strategy mentioning a service. Not comprehensive secret/privacy inspection. No raw values recorded."
+}
