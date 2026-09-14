@@ -41,7 +41,7 @@ export default function Account() {
           <div><Button>{busy === 'password' ? 'Updating…' : 'Update password'}</Button></div>
         </fieldset></form>
       </Card>
-      <Card><h2 className="studio-heading">Export workspace data</h2><p className="studio-description">Download a JSON copy of your account and workspace data, including assistants, knowledge, and call records. Passwords, API keys, and session tokens are excluded.</p><Button disabled={Boolean(busy)} variant="ghost" onClick={() => void run('export', async () => {
+      <Card><h2 className="studio-heading">Export workspace data</h2><p className="studio-description">Download a JSON copy of your account and workspace data, including assistants, knowledge, and call records. Passwords, API keys, session tokens, and configured provider URLs are excluded. Provider endpoints must be set up again when restoring configuration.</p><Button disabled={Boolean(busy)} variant="ghost" onClick={() => void run('export', async () => {
         const data = await api.exportAccount();
         const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
         const link = document.createElement('a'); link.href = url; link.download = `openfon-export-${new Date().toISOString().slice(0,10)}.json`; document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);

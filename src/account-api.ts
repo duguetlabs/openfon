@@ -31,19 +31,9 @@ const EXPORT_URL_COLUMNS: Record<string, readonly string[]> = {
 const EXPORT_TOO_LARGE = 'This account is too large for browser export. Ask your deployment administrator for a database export.';
 
 function exportedProviderUrl(value: unknown): string | null {
-  if (value === null || value === '') return value;
-  if (typeof value !== 'string') return '';
-  try {
-    const url = new URL(value);
-    if (!['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol)) return '';
-    // Endpoint metadata only: arbitrary query names can carry credentials.
-    // This intentionally omits query routing and never mutates stored settings.
-    url.username = '';
-    url.password = '';
-    url.search = '';
-    url.hash = '';
-    return url.href;
-  } catch { return ''; }
+  // Any URL component can carry an opaque credential, including host or path.
+  // Preserve archive shape, but require endpoint reconstruction from other records.
+  return value === null ? null : '';
 }
 
 export function registerAccountApi(app: App): void {
@@ -193,8 +183,8 @@ export function registerAccountApi(app: App): void {
       for (const column of EXPORT_URL_COLUMNS[row.table_name] ?? []) {
         item[column] = exportedProviderUrl(item[column]);
       }
-      // URL serialization can expand Unicode/escaping. Keep the original SQL
-      // preallocation gates and also bound transformed rows before accumulation.
+      // Keep the original SQL preallocation gates and independently bound
+      // serialized rows after export transformations, before accumulation.
       const rowBytes = encoder.encode(JSON.stringify(item)).byteLength;
       outputBytes += rowBytes + 1;
       if (rowBytes > 1_500_000 || outputBytes > EXPORT_BYTE_LIMIT - 4096) {
