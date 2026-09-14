@@ -1,3 +1,4 @@
+import { checkedPresetWriteSql, checkedPresetWrite, checkedPresetSourceSql, checkedPresetSource } from './preset-write-snapshot';
 import { CHECKED_ASSISTANT_SNAPSHOT_SQL, checkedAssistantSnapshot } from './assistant-write-snapshot';
 import { assertPresetWriteBudget, PRESET_LIST_COLUMNS } from './preset-budgets';
 import { CHECKED_REALTIME_PROVIDER_SQL, checkedRealtimeProvider, OPENAI_REALTIME_VOICES, assistantCompatibilityError, presetCompatibilityError, retainedProviderKey, ProviderInputError } from './provider-settings';
@@ -859,7 +860,7 @@ app.put('/api/me/profiles/:pid', async (c) => {
     return c.json({ error: 'Profile engine must be pipeline or realtime' }, 400);
   }
   const legacyProfileUpdate = c.env.DB.prepare(
-    `UPDATE engine_profiles SET name=?, engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_base_url=?, llm_api_key=?, llm_model=? WHERE id=?`
+    `UPDATE engine_profiles SET name=?, engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_base_url=?, llm_api_key=?, llm_model=? WHERE id=? AND business_id=? AND ${checkedPresetWriteSql('engine_profiles')}`
   ).bind(
       b.name?.trim() || p.name,
       b.engine ?? p.engine,
@@ -870,11 +871,11 @@ app.put('/api/me/profiles/:pid', async (c) => {
       '',
       '',
       b.llm_model ?? p.llm_model,
-      p.id
+      p.id, p.business_id, ...checkedPresetWrite(p)
     );
   const presetUpdate = c.env.DB.prepare(
     `UPDATE engine_presets SET name=?, engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?, updated_at=datetime('now')
-     WHERE id=?`
+     WHERE id=? AND business_id=? AND changes()>0`
   ).bind(
       b.name?.trim() || p.name,
       b.engine ?? p.engine,
@@ -883,14 +884,15 @@ app.put('/api/me/profiles/:pid', async (c) => {
       b.language ?? p.language,
       b.voice ?? p.voice,
       b.llm_model ?? p.llm_model,
-      p.id
+      p.id, p.business_id
     );
   await assertPresetWriteBudget(c.env, p.business_id, {
     ...p, name:b.name?.trim() || p.name, engine:b.engine ?? p.engine,
     realtime_model:b.realtime_model ?? p.realtime_model, realtime_voice:b.realtime_voice ?? p.realtime_voice,
     language:b.language ?? p.language, voice:b.voice ?? p.voice, llm_model:b.llm_model ?? p.llm_model,
   }, false);
-  await c.env.DB.batch([legacyProfileUpdate, presetUpdate]);
+  const [updated] = await c.env.DB.batch([legacyProfileUpdate, presetUpdate]);
+  if (!updated.meta.changes) return c.json({ error: 'Profile changed. Reload and retry.' }, 409);
   return c.json({ ok: true });
 });
 
@@ -920,8 +922,9 @@ app.post('/api/me/profiles/:pid/apply', async (c) => {
   const assistantUpdate = c.env.DB.prepare(
     `UPDATE assistants SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?, updated_at=datetime('now')
      WHERE business_id = ? AND public_slug = (SELECT slug FROM businesses WHERE id = ?)
-       AND ${CHECKED_REALTIME_PROVIDER_SQL}`
-  ).bind(p.engine, p.realtime_model, p.realtime_voice, p.language, p.voice, p.llm_model, p.business_id, p.business_id, ...checkedRealtimeProvider(provider));
+       AND ${CHECKED_REALTIME_PROVIDER_SQL}
+       AND ${checkedPresetSourceSql('engine_profiles')}`
+  ).bind(p.engine, p.realtime_model, p.realtime_voice, p.language, p.voice, p.llm_model, p.business_id, p.business_id, ...checkedRealtimeProvider(provider), ...checkedPresetSource(p));
   const [updated] = await c.env.DB.batch([
     assistantUpdate,
     legacySettings,

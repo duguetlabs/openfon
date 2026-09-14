@@ -1,3 +1,4 @@
+import { checkedPresetWriteSql, checkedPresetWrite, checkedPresetSourceSql, checkedPresetSource } from './preset-write-snapshot';
 import { CHECKED_ASSISTANT_SNAPSHOT_SQL, checkedAssistantSnapshot } from './assistant-write-snapshot';
 import { PRESET_RECONCILIATION_SQL, PRESET_CHANGED_SQL, assertPresetWriteBudget, PRESET_LIST_COLUMNS, PRESET_ROW_BYTES } from './preset-budgets';
 import { CHECKED_REALTIME_PROVIDER_SQL, checkedRealtimeProvider, providerUpdate, assistantCompatibilityError, presetCompatibilityError, ProviderInputError, TEXT_PRESETS, OPENAI_REALTIME_VOICES } from './provider-settings';
@@ -1995,7 +1996,8 @@ export function registerStudioApi(app: StudioApp): void {
     const statements = [
       c.env.DB.prepare(
         `UPDATE assistants SET engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?, updated_at=datetime('now')
-         WHERE id=? AND ${CHECKED_REALTIME_PROVIDER_SQL}`
+         WHERE id=? AND ${CHECKED_REALTIME_PROVIDER_SQL}
+           AND ${checkedPresetSourceSql('engine_presets')}`
       ).bind(
         preset.engine,
         preset.realtime_model,
@@ -2004,7 +2006,8 @@ export function registerStudioApi(app: StudioApp): void {
         preset.voice,
         preset.llm_model,
         assistant.id,
-        ...checkedRealtimeProvider(provider)
+        ...checkedRealtimeProvider(provider),
+        ...checkedPresetSource(preset)
       ),
     ];
     if (await isCompatibilityAssistant(c.env, assistant)) {
@@ -2052,16 +2055,17 @@ export function registerStudioApi(app: StudioApp): void {
     const llmModel = value('llm_model');
     await assertPresetWriteBudget(c.env, preset.business_id as string, { id:preset.id, name, engine,
       realtime_model:realtimeModel, realtime_voice:realtimeVoice, language, voice, llm_model:llmModel }, false);
-    await c.env.DB.batch([
+    const [updated] = await c.env.DB.batch([
       c.env.DB.prepare(
         `UPDATE engine_presets SET name=?, engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?, updated_at=datetime('now')
-         WHERE id=?`
-      ).bind(name, engine, realtimeModel, realtimeVoice, language, voice, llmModel, preset.id),
+         WHERE id=? AND business_id=? AND ${checkedPresetWriteSql('engine_presets')}`
+      ).bind(name, engine, realtimeModel, realtimeVoice, language, voice, llmModel, preset.id, preset.business_id, ...checkedPresetWrite(preset)),
       c.env.DB.prepare(
         `UPDATE engine_profiles SET name=?, engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_model=?
-         WHERE id=?`
-      ).bind(name, engine, realtimeModel, realtimeVoice, language, voice, llmModel, preset.id),
+         WHERE id=? AND business_id=? AND changes()>0`
+      ).bind(name, engine, realtimeModel, realtimeVoice, language, voice, llmModel, preset.id, preset.business_id),
     ]);
+    if (!updated.meta.changes) return c.json({ error: 'Preset changed. Reload and retry.' }, 409);
     return c.json({ ok: true });
   });
 
