@@ -11,6 +11,38 @@ findings from every reviewer still require verification and disposition. No new
 Codex review is requested or awaited. Historical dual-review references below
 record earlier requirements; this policy governs the current release.
 
+## Capture cleanup and current review dispositions
+
+Original `7c95e53` [review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5657754590)
+reported no security concerns and three recommendations, without clean-major
+clearance. Both exact-head CI runs passed; deployment was skipped.
+[Realtime Blocked](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5657789177)
+is declined: default text configuration accepts an empty key, while the
+independent realtime key permits startup. Invalid custom text configuration is
+a separate existing rejection policy; successful summaries need working text
+service. Prior startup evidence retains its original attribution.
+[Broken Workflow](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5657771817)
+is declined against exact YAML indentation and both successful workflow runs;
+production deployment was not exercised.
+
+The capture helper now observes child exit/error immediately after spawn,
+recognizes both terminal fields, and observes completion before sending SIGTERM.
+Nested cleanup attempts child shutdown and temporary removal even if browser
+shutdown fails. Errors are surfaced separately from confirmed exit: failed kill
+can leave a child alive, and no timeout, escalation or process supervisor is
+introduced. A later cleanup error may supersede an earlier error.
+
+Exact helper application `b310154` matches the owner-tested three-file patch.
+Original process cases: four pass and six fail, including the already-signalled
+child hang bounded by a test-only watchdog. Fixed ten cases and three syntax
+checks pass. OS natural/signalled/running/spawn-error cases are distinct from
+synthetic kill-error and event-order controls. Tests extract the cleanup body
+without importing the capture workflow; the original fixture also has an error
+observer, so it does not reproduce original top-level spawn-error behavior.
+No browser/app/provider/capture/media regeneration or broad/type suite ran.
+Independent QA closed exact `b310154` source/evidence/assembly, including the
+unchanged protected Git objects. Fresh published-head review/CI remain required.
+
 ## Receipt negotiation and timing disposition
 
 The original `884e43e` [review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5657644440)
