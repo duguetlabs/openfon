@@ -41,8 +41,51 @@ const worker = spawn(npx, ['wrangler', 'dev', '--local', '--port', process.env.O
   '--var', 'DEFAULT_LLM_API_KEY:local-test-key', '--var', 'DEFAULT_STT_API_KEY:local-test-key',
   '--var', 'AZURE_SPEECH_KEY:local-test-key', '--var', 'REALTIME_API_KEY:local-test-key'], { stdio: 'inherit' });
 const requestedShutdownSignals = new Set();
+let shutdownTimer;
+let shutdownSignal;
+let settled = false;
+const terminal = () => worker.exitCode !== null || worker.signalCode !== null;
+function finish(code, removeState, message) {
+  if (settled) return;
+  settled = true;
+  clearTimeout(shutdownTimer);
+  if (message) console.error(message);
+  // Do not await active provider connections; exiting this wrapper does not
+  // prove that npx descendants have exited or released their D1 state.
+  try { provider.close(); }
+  catch (error) { console.error(error.message); code ||= 1; }
+  try { if (removeState) rmSync(state, { recursive: true, force: true }); }
+  catch (error) { console.error(error.message); code ||= 1; }
+  process.exit(code);
+}
+function incomplete(reason) {
+  finish(1, false, `E2E shutdown incomplete: ${reason}; worker PID ${worker.pid}; exit is unconfirmed; retained state: ${state}`);
+}
+function workerExited(code, signal) {
+  finish(code ?? (signal && requestedShutdownSignals.has(signal) ? 0 : 1), true);
+}
+function workerFailed(error) {
+  // A spawn failure owns no PID. Errors on a spawned, possibly live worker
+  // cannot authorize deleting the directory that worker may still be using.
+  if (worker.pid === undefined || terminal()) finish(1, true, error.message);
+  else incomplete(error.message);
+}
+worker.on('error', workerFailed);
+worker.on('exit', workerExited);
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
-  if (worker.kill(signal) === true) requestedShutdownSignals.add(signal);
+  if (settled) return;
+  // One budget for both explicit signals, installed before forwarding. Never
+  // reset it or send an automatic additional signal when the budget expires.
+  if (shutdownTimer === undefined) {
+    shutdownSignal = signal;
+    shutdownTimer = setTimeout(() => {
+      if (terminal()) workerExited(worker.exitCode, worker.signalCode);
+      else incomplete(`no exit within 5000ms after ${shutdownSignal}`);
+    }, 5000);
+  }
+  try {
+    if (worker.kill(signal) === true) requestedShutdownSignals.add(signal);
+    else if (terminal()) workerExited(worker.exitCode, worker.signalCode);
+    else workerFailed(new Error(`could not forward ${signal}`));
+  } catch (error) { workerFailed(error); }
 });
-worker.on('error', error => { console.error(error.message); rmSync(state, { recursive: true, force: true }); process.exit(1); });
-worker.on('exit', (code, signal) => { provider.close(); rmSync(state, { recursive: true, force: true }); process.exit(code ?? (signal && requestedShutdownSignals.has(signal) ? 0 : 1)); });

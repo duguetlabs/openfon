@@ -1,0 +1,238 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+// Only the exact lifecycle tail executes. No application/capture import,
+// npx/workerd, D1 engine, real provider, browser or migration is started.
+const source = readFileSync(process.env.E2E_SERVER_SOURCE || new URL('./e2e-server.mjs', import.meta.url), 'utf8');
+const marker = 'const requestedShutdownSignals = new Set();';
+assert.equal(source.split(marker).length, 2);
+const tail = source.slice(source.indexOf(marker));
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function bounded(promise, ms = 7500) {
+  let timer;
+  try {
+    return await Promise.race([promise, new Promise(resolve => {
+      timer = setTimeout(() => resolve({ watchdog: true }), ms);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+function alive(pid) {
+  if (!pid) return false;
+  try { process.kill(pid, 0); return true; }
+  catch (error) { if (error.code === 'ESRCH') return false; throw error; }
+}
+async function fixture(mode) {
+  const directory = mkdtempSync(join(tmpdir(), 'openfon-wrapper-shutdown-'));
+  const state = join(directory, 'state'), eventsPath = join(directory, 'events.jsonl');
+  mkdirSync(state);
+  const childSource = `
+process.on('SIGTERM', () => {
+  process.send({ kind: 'received', signal: 'SIGTERM' });
+  ${mode === 'graceful' ? 'setTimeout(() => process.exit(7), 25);' : ''}
+});
+process.send({ kind: 'ready', pid: process.pid });
+setInterval(() => {}, 1000);
+`;
+  const wrapperSource = `
+import { spawn } from 'node:child_process';
+import { appendFileSync, rmSync as remove } from 'node:fs';
+const state = ${JSON.stringify(state)};
+const record = data => appendFileSync(${JSON.stringify(eventsPath)}, JSON.stringify(data) + '\\n');
+const provider = { close() { record({ kind: 'provider-close' }); } };
+const rmSync = (path, options) => {
+  if (path !== state) throw new Error('Unexpected deletion target');
+  remove(path, options); record({ kind: 'state-removed' });
+};
+const worker = ${mode === 'spawn-failure'
+    ? `spawn(${JSON.stringify(join(directory, 'missing-executable'))}, [], { stdio: 'ignore' })`
+    : `spawn(process.execPath, ['-e', ${JSON.stringify(childSource)}], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] })`};
+record({ kind: 'spawned', pid: worker.pid });
+worker.on('error', error => record({ kind: 'worker-error', code: error.code }));
+worker.on('exit', (code, signal) => record({ kind: 'worker-exit', code, signal }));
+worker.on('message', message => record(message));
+const kill = worker.kill.bind(worker);
+worker.kill = signal => { const sent = kill(signal); record({ kind: 'forwarded', signal, sent }); return sent; };
+${tail}
+`;
+  const wrapperPath = join(directory, 'wrapper.mjs'); writeFileSync(wrapperPath, wrapperSource);
+  const wrapper = spawn(process.execPath, [wrapperPath], { stdio: ['ignore', 'ignore', 'pipe'] });
+  let stderr = '';
+  wrapper.stderr.on('data', data => { stderr += data; });
+  const done = new Promise(resolve => {
+    wrapper.once('exit', (code, signal) => resolve({ code, signal }));
+    wrapper.once('error', error => resolve({ error: error.message }));
+  });
+  const events = () => existsSync(eventsPath)
+    ? readFileSync(eventsPath, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line)) : [];
+  const childPid = () => events().find(e => e.kind === 'spawned')?.pid;
+  return { wrapper, state, events, done, childPid, stderr: () => stderr,
+    async ready() {
+      const limit = Date.now() + 2000;
+      while (!events().some(e => e.kind === 'ready') && Date.now() < limit) {
+        assert.equal(wrapper.exitCode, null, 'wrapper must remain live before readiness');
+        await wait(10);
+      }
+      assert.ok(events().some(e => e.kind === 'ready'), 'owned child ready');
+    },
+    async dispose() {
+      // Test-only reap of exactly this fixture's known child, then wrapper.
+      // Retain diagnostics before reaching this function, even on failure.
+      const pid = childPid();
+      try {
+        if (alive(pid)) process.kill(pid, 'SIGKILL');
+        if (wrapper.exitCode === null && wrapper.signalCode === null) {
+          if ((await bounded(done, 2000)).watchdog) {
+            wrapper.kill('SIGKILL');
+            assert.equal((await bounded(done, 2000)).watchdog, undefined, 'wrapper reaped');
+          }
+        }
+        const limit = Date.now() + 2000;
+        while (alive(pid) && Date.now() < limit) await wait(10);
+        assert.equal(alive(pid), false, 'owned worker gone');
+        assert.equal(alive(wrapper.pid), false, 'owned wrapper gone');
+      } finally { rmSync(directory, { recursive: true, force: true }); }
+    },
+  };
+}
+
+test('real owned child accepts SIGTERM without exit: wrapper deadline retains state and reports uncertainty', async t => {
+  const f = await fixture('hold');
+  try {
+    await f.ready();
+    const started = Date.now();
+    assert.equal(f.wrapper.kill('SIGTERM'), true);
+    const result = await bounded(f.done);
+    const events = f.events();
+    t.diagnostic(JSON.stringify({ scope: 'real owned wrapper/child; deliberate SIGTERM hold; provider stub',
+      result, elapsedMs: Date.now() - started, wrapperPid: f.wrapper.pid, childPid: f.childPid(),
+      childAlive: alive(f.childPid()), stateExists: existsSync(f.state), events, stderr: f.stderr() }));
+    assert.equal(result.watchdog, undefined);
+    assert.equal(result.code, 1); assert.equal(result.signal, null);
+    assert.ok(Date.now() - started >= 5000);
+    assert.equal(alive(f.childPid()), true, 'timeout is not child exit');
+    assert.equal(existsSync(f.state), true);
+    assert.deepEqual(events.filter(e => e.kind === 'forwarded'), [{ kind: 'forwarded', signal: 'SIGTERM', sent: true }]);
+    assert.ok(events.some(e => e.kind === 'received'));
+    assert.equal(events.some(e => e.kind === 'worker-exit'), false);
+    assert.equal(events.some(e => e.kind === 'worker-error'), false);
+    assert.equal(events.filter(e => e.kind === 'provider-close').length, 1);
+    assert.equal(events.some(e => e.kind === 'state-removed'), false);
+    assert.match(f.stderr(), /5000ms after SIGTERM/);
+    assert.ok(f.stderr().includes(String(f.childPid())) && f.stderr().includes(f.state));
+    assert.match(f.stderr(), /exit is unconfirmed/);
+  } finally { await f.dispose(); }
+});
+
+test('real graceful numeric7 exit cancels shutdown and removes state', async t => {
+  const f = await fixture('graceful');
+  try {
+    await f.ready(); assert.equal(f.wrapper.kill('SIGTERM'), true);
+    const result = await bounded(f.done);
+    t.diagnostic(JSON.stringify({ scope: 'real graceful owned child; provider stub', result,
+      wrapperPid: f.wrapper.pid, childPid: f.childPid(), events: f.events(), stateExists: existsSync(f.state) }));
+    assert.equal(result.code, 7); assert.equal(result.signal, null);
+    assert.equal(existsSync(f.state), false);
+    const events = f.events();
+    assert.ok(events.findIndex(e => e.kind === 'worker-exit') < events.findIndex(e => e.kind === 'state-removed'));
+  } finally { await f.dispose(); }
+});
+
+test('real no-PID spawn failure removes state and fails wrapper', async t => {
+  const f = await fixture('spawn-failure');
+  try {
+    const result = await bounded(f.done);
+    t.diagnostic(JSON.stringify({ scope: 'real ENOENT; provider stub', result, wrapperPid: f.wrapper.pid,
+      childPid: f.childPid(), events: f.events(), stateExists: existsSync(f.state) }));
+    assert.equal(result.code, 1); assert.equal(f.childPid(), undefined);
+    assert.equal(existsSync(f.state), false);
+    assert.ok(f.events().some(e => e.kind === 'worker-error' && e.code === 'ENOENT'));
+  } finally { await f.dispose(); }
+});
+
+function synthetic(kill = () => true, fields = {}) {
+  // Exact actual tail with lexical timers/events and process-exit stub. No
+  // global clock mutation or claimed OS failed-signal producer.
+  const proc = new EventEmitter(), worker = Object.assign(new EventEmitter(),
+    { pid: 12345, exitCode: null, signalCode: null }, fields);
+  const timers = [], signals = [], statuses = [], errors = [];
+  let closes = 0, removals = 0;
+  worker.kill = signal => { signals.push(signal); return kill.call(worker, signal); };
+  proc.exit = code => statuses.push(code);
+  new Function('process', 'worker', 'provider', 'rmSync', 'state', 'console', 'setTimeout', 'clearTimeout', tail)(
+    proc, worker, { close() { closes++; } }, () => { removals++; }, 'synthetic-D1-state',
+    { error(message) { errors.push(message); } },
+    (callback, ms) => { const timer = { callback, ms, cleared: false }; timers.push(timer); return timer; },
+    timer => { if (timer) timer.cleared = true; },
+  );
+  return { proc, worker, timers, signals, statuses, errors, closes: () => closes, removals: () => removals };
+}
+function retained(h) {
+  assert.deepEqual(h.statuses, [1]); assert.equal(h.closes(), 1); assert.equal(h.removals(), 0);
+  assert.match(h.errors.join('\n'), /exit is unconfirmed/);
+  assert.match(h.errors.join('\n'), /12345.*retained state: synthetic-D1-state/);
+}
+function timer(h) { assert.equal(h.timers.length, 1); assert.equal(h.timers[0].ms, 5000); return h.timers[0]; }
+function diagnostic(t, h, thrown) {
+  t.diagnostic(JSON.stringify({ scope: 'synthetic lexical clock/events/exit stub', statuses: h.statuses,
+    signals: h.signals, closes: h.closes(), removals: h.removals(), errors: h.errors,
+    timers: h.timers.map(({ ms, cleared }) => ({ ms, cleared })), thrown: thrown?.message }));
+}
+
+test('synthetic live worker error before shutdown retains state', t => {
+  const h = synthetic(); h.worker.emit('error', new Error('injected live error'));
+  diagnostic(t, h);
+  retained(h); assert.equal(h.timers.length, 0); assert.deepEqual(h.signals, []);
+});
+for (const failure of ['event', 'throw', 'false']) {
+  test(`synthetic forwarding ${failure} retains possibly-live state and clears deadline`, t => {
+    const h = synthetic(function () {
+      if (failure === 'event') this.emit('error', new Error('injected synchronous kill error'));
+      if (failure === 'throw') throw new Error('injected thrown kill error');
+      return false;
+    });
+    // The old thrown callback propagates; record this original behavior without
+    // pretending it normally continues. Assertions discriminate retained state.
+    let thrown;
+    try { h.proc.emit('SIGTERM'); } catch (error) { thrown = error; }
+    diagnostic(t, h, thrown);
+    assert.equal(thrown, undefined);
+    retained(h); assert.equal(timer(h).cleared, true);
+    h.worker.emit('exit', null, 'SIGTERM');
+    assert.equal(h.removals(), 0, 'late exit cannot change first uncertainty decision');
+    assert.deepEqual(h.signals, ['SIGTERM']);
+  });
+}
+test('synthetic terminal worker error retains failure cleanup', t => {
+  const h = synthetic(undefined, { exitCode: 7 }); h.worker.emit('error', new Error('terminal error'));
+  diagnostic(t, h);
+  assert.deepEqual(h.statuses, [1]); assert.equal(h.removals(), 1); assert.equal(h.timers.length, 0);
+});
+test('synthetic false forwarding with confirmed numeric exit preserves numeric status and cleanup', t => {
+  const h = synthetic(() => false, { exitCode: 7 }); h.proc.emit('SIGTERM');
+  diagnostic(t, h);
+  assert.deepEqual(h.statuses, [7]); assert.equal(h.removals(), 1); assert.equal(timer(h).cleared, true);
+});
+test('synthetic two explicit signals share first budget without automatic third signal', t => {
+  const h = synthetic(); h.proc.emit('SIGTERM'); diagnostic(t, h); const first = timer(h);
+  h.proc.emit('SIGINT'); assert.equal(timer(h), first);
+  first.callback(); retained(h); assert.equal(first.cleared, true);
+  assert.deepEqual(h.signals, ['SIGTERM', 'SIGINT']);
+  assert.match(h.errors.join('\n'), /5000ms after SIGTERM/);
+});
+test('synthetic matching accepted exit wins and stale timer/error cannot change status or repeat cleanup', t => {
+  const h = synthetic(); h.proc.emit('SIGTERM'); diagnostic(t, h); const first = timer(h);
+  h.worker.signalCode = 'SIGTERM'; h.worker.emit('exit', null, 'SIGTERM');
+  first.callback(); h.worker.emit('error', new Error('late synthetic error'));
+  assert.deepEqual(h.statuses, [0]); assert.equal(h.removals(), 1); assert.equal(h.closes(), 1);
+  assert.equal(first.cleared, true);
+});
+test('synthetic deadline first retains state despite later confirmed exit', t => {
+  const h = synthetic(); h.proc.emit('SIGTERM'); diagnostic(t, h); const first = timer(h); first.callback();
+  h.worker.exitCode = 0; h.worker.emit('exit', 0, null); first.callback();
+  retained(h); assert.equal(first.cleared, true); assert.deepEqual(h.signals, ['SIGTERM']);
+});
