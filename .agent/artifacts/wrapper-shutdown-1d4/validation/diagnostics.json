@@ -1,0 +1,457 @@
+{
+  "original": [
+    {
+      "scope": "real owned wrapper/child; deliberate SIGTERM hold; provider stub",
+      "result": {
+        "watchdog": true
+      },
+      "elapsedMs": 7503,
+      "wrapperPid": 19044,
+      "childPid": 19071,
+      "childAlive": true,
+      "stateExists": true,
+      "events": [
+        {
+          "kind": "spawned",
+          "pid": 19071
+        },
+        {
+          "kind": "ready",
+          "pid": 19071
+        },
+        {
+          "kind": "forwarded",
+          "signal": "SIGTERM",
+          "sent": true
+        },
+        {
+          "kind": "received",
+          "signal": "SIGTERM"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "scope": "real graceful owned child; provider stub",
+      "result": {
+        "code": 7,
+        "signal": null
+      },
+      "wrapperPid": 19198,
+      "childPid": 19199,
+      "events": [
+        {
+          "kind": "spawned",
+          "pid": 19199
+        },
+        {
+          "kind": "ready",
+          "pid": 19199
+        },
+        {
+          "kind": "forwarded",
+          "signal": "SIGTERM",
+          "sent": true
+        },
+        {
+          "kind": "received",
+          "signal": "SIGTERM"
+        },
+        {
+          "kind": "worker-exit",
+          "code": 7,
+          "signal": null
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stateExists": false
+    },
+    {
+      "scope": "real ENOENT; provider stub",
+      "result": {
+        "code": 1,
+        "signal": null
+      },
+      "wrapperPid": 19200,
+      "events": [
+        {
+          "kind": "spawned"
+        },
+        {
+          "kind": "worker-error",
+          "code": "ENOENT"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stateExists": false
+    },
+    {
+      "scope": "synthetic lexical clock/events/exit stub",
+      "statuses": [
+        1
+      ],
+      "signals": [],
+      "closes": 0,
+      "removals": 1,
+      "errors": [
+        "injected live error"
+      ],
+      "timers": []
+    },
+    {
+      "scope": "synthetic lexical clock/events/exit stub",
+      "statuses": [
+        1
+      ],
+      "signals": [
+        "SIGTERM"
+      ],
+      "closes": 0,
+      "removals": 1,
+      "errors": [
+        "injected synchronous kill error"
+      ],
+      "timers": []
+    },
+    {
+      "scope": "synthetic lexical clock/events/exit stub",
+      "statuses": [],
+      "signals": [
+        "SIGTERM"
+      ],
+      "closes": 0,
+      "removals": 0,
+      "errors": [],
+      "timers": [],
+      "thrown": "injected thrown kill error"
+    },
+    {
+      "scope": "synthetic lexical clock/events/exit stub",
+      "statuses": [],
+      "signals": [
+        "SIGTERM"
+      ],
+      "closes": 0,
+      "removals": 0,
+      "errors": [],
+      "timers": []
+    },
+    {
+      "scope": "synthetic lexical clock/events/exit stub",
+      "statuses": [
+        1
+      ],
+      "signals": [],
+      "closes": 0,
+      "removals": 1,
+      "errors": [
+        "terminal error"
+      ],
+      "timers": []
+    },
+    {
+      "scope": "synthetic lexical clock/events/exit stub",
+      "statuses": [],
+      "signals": [
+        "SIGTERM"
+      ],
+      "closes": 0,
+      "removals": 0,
+      "errors": [],
+      "timers": []
+    },
+    {
+      "scope": "synthetic lexical clock/events/exit stub",
+      "statuses": [],
+      "signals": [
+        "SIGTERM"
+      ],
+      "closes": 0,
+      "removals": 0,
+      "errors": [],
+      "timers": []
+    },
+    {
+      "scope": "synthetic lexical clock/events/exit stub",
+      "statuses": [],
+      "signals": [
+        "SIGTERM"
+      ],
+      "closes": 0,
+      "removals": 0,
+      "errors": [],
+      "timers": []
+    },
+    {
+      "scope": "synthetic lexical clock/events/exit stub",
+      "statuses": [],
+      "signals": [
+        "SIGTERM"
+      ],
+      "closes": 0,
+      "removals": 0,
+      "errors": [],
+      "timers": []
+    }
+  ],
+  "fixed": [
+    {
+      "scope": "real owned wrapper/child; deliberate SIGTERM hold; provider stub",
+      "result": {
+        "code": 1,
+        "signal": null
+      },
+      "elapsedMs": 5018,
+      "wrapperPid": 20138,
+      "childPid": 20139,
+      "childAlive": true,
+      "stateExists": true,
+      "events": [
+        {
+          "kind": "spawned",
+          "pid": 20139
+        },
+        {
+          "kind": "ready",
+          "pid": 20139
+        },
+        {
+          "kind": "forwarded",
+          "signal": "SIGTERM",
+          "sent": true
+        },
+        {
+          "kind": "received",
+          "signal": "SIGTERM"
+        },
+        {
+          "kind": "provider-close"
+        }
+      ],
+      "stderr": "E2E shutdown incomplete: no exit within 5000ms after SIGTERM; worker PID 20139; exit is unconfirmed; retained state: /var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-wrapper-shutdown-d9cgn9/state\\n"
+    },
+    {
+      "scope": "real graceful owned child; provider stub",
+      "result": {
+        "code": 7,
+        "signal": null
+      },
+      "wrapperPid": 21007,
+      "childPid": 21008,
+      "events": [
+        {
+          "kind": "spawned",
+          "pid": 21008
+        },
+        {
+          "kind": "ready",
+          "pid": 21008
+        },
+        {
+          "kind": "forwarded",
+          "signal": "SIGTERM",
+          "sent": true
+        },
+        {
+          "kind": "received",
+          "signal": "SIGTERM"
+        },
+        {
+          "kind": "worker-exit",
+          "code": 7,
+          "signal": null
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stateExists": false
+    },
+    {
+      "scope": "real ENOENT; provider stub",
+      "result": {
+        "code": 1,
+        "signal": null
+      },
+      "wrapperPid": 21009,
+      "events": [
+        {
+          "kind": "spawned"
+        },
+        {
+          "kind": "worker-error",
+          "code": "ENOENT"
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stateExists": false
+    },
+    {
+      "scope": "synthetic lexical clock/events/exit stub",
+      "statuses": [
+        1
+      ],
+      "signals": [],
+      "closes": 1,
+      "removals": 0,
+      "errors": [
+        "E2E shutdown incomplete: injected live error; worker PID 12345; exit is unconfirmed; retained state: synthetic-D1-state"
+      ],
+      "timers": []
+    },
+    {
+      "scope": "synthetic lexical clock/events/exit stub",
+      "statuses": [
+        1
+      ],
+      "signals": [
+        "SIGTERM"
+      ],
+      "closes": 1,
+      "removals": 0,
+      "errors": [
+        "E2E shutdown incomplete: injected synchronous kill error; worker PID 12345; exit is unconfirmed; retained state: synthetic-D1-state"
+      ],
+      "timers": [
+        {
+          "ms": 5000,
+          "cleared": true
+        }
+      ]
+    },
+    {
+      "scope": "synthetic lexical clock/events/exit stub",
+      "statuses": [
+        1
+      ],
+      "signals": [
+        "SIGTERM"
+      ],
+      "closes": 1,
+      "removals": 0,
+      "errors": [
+        "E2E shutdown incomplete: injected thrown kill error; worker PID 12345; exit is unconfirmed; retained state: synthetic-D1-state"
+      ],
+      "timers": [
+        {
+          "ms": 5000,
+          "cleared": true
+        }
+      ]
+    },
+    {
+      "scope": "synthetic lexical clock/events/exit stub",
+      "statuses": [
+        1
+      ],
+      "signals": [
+        "SIGTERM"
+      ],
+      "closes": 1,
+      "removals": 0,
+      "errors": [
+        "E2E shutdown incomplete: could not forward SIGTERM; worker PID 12345; exit is unconfirmed; retained state: synthetic-D1-state"
+      ],
+      "timers": [
+        {
+          "ms": 5000,
+          "cleared": true
+        }
+      ]
+    },
+    {
+      "scope": "synthetic lexical clock/events/exit stub",
+      "statuses": [
+        1
+      ],
+      "signals": [],
+      "closes": 1,
+      "removals": 1,
+      "errors": [
+        "terminal error"
+      ],
+      "timers": []
+    },
+    {
+      "scope": "synthetic lexical clock/events/exit stub",
+      "statuses": [
+        7
+      ],
+      "signals": [
+        "SIGTERM"
+      ],
+      "closes": 1,
+      "removals": 1,
+      "errors": [],
+      "timers": [
+        {
+          "ms": 5000,
+          "cleared": true
+        }
+      ]
+    },
+    {
+      "scope": "synthetic lexical clock/events/exit stub",
+      "statuses": [],
+      "signals": [
+        "SIGTERM"
+      ],
+      "closes": 0,
+      "removals": 0,
+      "errors": [],
+      "timers": [
+        {
+          "ms": 5000,
+          "cleared": false
+        }
+      ]
+    },
+    {
+      "scope": "synthetic lexical clock/events/exit stub",
+      "statuses": [],
+      "signals": [
+        "SIGTERM"
+      ],
+      "closes": 0,
+      "removals": 0,
+      "errors": [],
+      "timers": [
+        {
+          "ms": 5000,
+          "cleared": false
+        }
+      ]
+    },
+    {
+      "scope": "synthetic lexical clock/events/exit stub",
+      "statuses": [],
+      "signals": [
+        "SIGTERM"
+      ],
+      "closes": 0,
+      "removals": 0,
+      "errors": [],
+      "timers": [
+        {
+          "ms": 5000,
+          "cleared": false
+        }
+      ]
+    }
+  ]
+}

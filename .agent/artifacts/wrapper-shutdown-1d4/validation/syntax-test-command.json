@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "node",
+    "--check",
+    "scripts/e2e-server-shutdown.test.mjs"
+  ],
+  "cwd": "/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source",
+  "pid": 21748,
+  "started": "2026-09-14T18:49:08.342497+00:00",
+  "finished": "2026-09-14T18:49:08.364103+00:00",
+  "exit_code": 0,
+  "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

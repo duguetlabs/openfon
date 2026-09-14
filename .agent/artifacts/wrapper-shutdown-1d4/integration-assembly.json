@@ -1,0 +1,18 @@
+{
+  "assembly": "c4a2a533233e39a745b32a2988eb95ed158a3b56",
+  "parent": "2188f4bb2f2046209f8aa96a476e1a15373bbdf4",
+  "paths": [
+    "scripts/e2e-server-shutdown.test.mjs",
+    "scripts/e2e-server.mjs"
+  ],
+  "committed_working_sha256": {
+    "scripts/e2e-server-shutdown.test.mjs": "a1e30296c8cc6914efce18a1e6aefff9ffa14340d19ee3897fe5fb0f6a24f6c7",
+    "scripts/e2e-server.mjs": "97407ac683a1c259749447125873ef78782484d5f5bdc63ca51c887db9da61da"
+  },
+  "owner_source": "11686c4",
+  "owner_evidence": "f201262",
+  "qa_source_evidence": "72c8566",
+  "copy": "Owner durable directory copied byte-exact; original11 evidence hashes plus summary verified; no runtime repeat",
+  "status": "Exact source/evidence/assembly CLOSED QA92996c0",
+  "earlier_fixture": "698bee0 unchanged; parent2188f4b is38 docs/evidence-only paths over698bee0"
+}

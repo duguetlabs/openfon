@@ -1,0 +1,16 @@
+{
+  "argv": [
+    "node",
+    "--test",
+    "scripts/e2e-server-shutdown.test.mjs"
+  ],
+  "cwd": "/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source",
+  "environment_override": {
+    "E2E_SERVER_SOURCE": "/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/original/scripts/e2e-server.mjs"
+  },
+  "pid": 18991,
+  "started": "2026-09-14T18:48:40.521731+00:00",
+  "finished": "2026-09-14T18:48:48.326526+00:00",
+  "exit_code": 1,
+  "log_sha256": "44087075eab9cdd2bd161aafc7fb148fa06db8739ffa735d2af531f79fb27d10"
+}
