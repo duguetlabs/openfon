@@ -1,0 +1,14 @@
+{
+  "ownedCommandsExited": 2,
+  "ownedCommandProcessesAbsent": 2,
+  "applicationOrReviewProcessMatches": 0,
+  "reservedListenerMatches": 0,
+  "addedDependencySymlinkRemoved": true,
+  "unexpectedSnapshotFiles": 0,
+  "naturalFixedSourceRestored": true,
+  "preparedSnapshotRetainedPrivatelyForQA": true,
+  "rawDirectoryMode": "0700",
+  "rawFileModes": "0600",
+  "scope": "No native server/client/persistence created. Shared dependencies and unrelated processes untouched.",
+  "slot": "RELEASED"
+}

@@ -1,0 +1,21 @@
+{
+  "base": "49df6fc2a5edc0f75a8c922e0178fa6269276f24",
+  "time_utc": "2026-09-14T20:10:15.349909+00:00",
+  "baseline_artifacts_verified": 385,
+  "baseline_agent_and_scoped_documents": 409,
+  "outside_document_scope_verified": 23,
+  "byte_identity": "verified against frozen catalog/Git or surviving QA original",
+  "permissions": "private directories0700/files0600, no symlinks",
+  "lost_temporary_preparation": "Previous archive, mapping, candidate outputs and temporary locator unavailable after reboot; reconstruction is new metadata preparation, not runtime replay",
+  "external_evidence": "Owner-local traces/logs and other referenced originals are not asserted recovered by this archive. Existing hash references remain historical; evidence survival is separately classified by owners/QA.",
+  "runtime": "No application/test/type/native/browser/inference execution",
+  "official_original_count": 7,
+  "official_original_sha256": "07c08079832fc60810a1c189c4138e34c51ad01ae3041aea4d3a4a883137ef98",
+  "bounded_prior_archive_search": {
+    "persistent_evidence_roots_checked": 7,
+    "prior_named_archive_catalog_mapping_files_found": 0,
+    "prior_temp_archive_directories_found": 0,
+    "limit": "Bounded known storage search, not a universal assertion of private evidence loss"
+  },
+  "telnyx_private_originals": "QA c9d9f91 independently verified all seven persistent raw originals, hashes/sizes/modes and derived receipt agreement; no lost-original or replay claim."
+}

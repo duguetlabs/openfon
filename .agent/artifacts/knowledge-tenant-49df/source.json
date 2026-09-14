@@ -1,0 +1,51 @@
+{
+  "status": "Source-only proposed contract; independent QA/integration selection pending; no source/test/migration/runtime grant",
+  "base": "49df6fc2a5edc0f75a8c922e0178fa6269276f24",
+  "owner_head_before_contract": "c78b518ad53bc5a2787caa95980a275731ca99f9",
+  "report": {
+    "url": "https://github.com/duguetlabs/openfon/pull/16#issuecomment-5669260419",
+    "sha256": "07c08079832fc60810a1c189c4138e34c51ad01ae3041aea4d3a4a883137ef98"
+  },
+  "source_sha256": {
+    "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+    "src/index.ts": "7d21900e2bc6ace0af34c9b0b4f745eeb0f3285249f469575fd7eb6b31e5e9d4",
+    "src/call-knowledge.ts": "da86cab7796348304456f6ca63dd6dd792ca849220961c36d4db26d87b388cef",
+    "src/call-session.ts": "8c884f8a6f39d7db83b22ff40eb9d0233436eb0391866b0701a7a09c2d18b413",
+    "src/account-api.ts": "ba040d9af67ba3340f994ab4184dfe67831f999bda1f0dfc20d06cfecfb3ecbe",
+    "src/auth.ts": "92c3260be1980a8af4283e38c49dee68648d2d5ff85cfa0e71687b5b32c5e71d",
+    "test/call-knowledge.test.ts": "26c507f6f09ff8b80ebdb6217297e2b68270f0f42eee6a9598b3f5b85548b237",
+    "test/knowledge-budget.test.ts": "74733ebb0fb46d3cb97391954ab63890a14f2311dde6d4aa24764d18a3c2a4b6",
+    "migrations/0001_init.sql": "14d6ffa48d6f8db76de9aa6f66e3ff92cf5452a9ce0d6e0a439590f988b1d0cd",
+    "migrations/0002_engine.sql": "0ff3a484e2ec808e380f8a071e3fc0f6c7459eb65a9c2d457a0055c273ed82e2",
+    "migrations/0003_realtime_model.sql": "923cc7c5ca28e3006c7a2296e43ca5d3860eb99899b20636a823254f3ca86cf1",
+    "migrations/0004_realtime_voice.sql": "06d1d9eda8a6ba5b0bcae183edcdbe84e4bdebd0c5c601e42237e2c0824d3272",
+    "migrations/0005_closures.sql": "3967db151fc6f8dff49c519d99a9dd39dadb52f8b511de4aff9a0cb4015b14c0",
+    "migrations/0006_engine_profiles.sql": "2a7fe291606d07b5b6c42bdb9df81eff2934ac6d9050a4d1bbf4cd64ed23844b",
+    "migrations/0007_abuse_limits.sql": "ad34c6a80b0549ca7dcd3561b8efdb65a936c9ad2194e8f0d3ec53087f78bf57",
+    "migrations/0008_calm_studio_foundation.sql": "203a7c136fb7508bf383de4f3ae9ca844dbbb1f70a551dd04f508ffdee0d79cb",
+    "migrations/0009_telnyx_inbound.sql": "742632a1ddf10fe1932fcab14542fdff89e3dea9e57ebfe0f3cefbca753375d1",
+    "migrations/0010_provider_capabilities.sql": "6ed6fd7a965e07a185d21cf5dfec4a746646cf7d934781f719d08938eccbe800",
+    "migrations/0011_asterisk_inbound.sql": "b9051d6705d69ff3914c36fa9f0cd67b689087ac3323244fd59f77d9962add62",
+    "migrations/0012_assistant_essentials.sql": "bf09fc6c6607b21a6233d3ca7e0bb74b8a79fd664333d1e30a6fca2788e9ed24",
+    "migrations/0013_knowledge_budgets.sql": "d5ea763f2013707cab473a68fc8495ace1751e50a66c21a3addc94f8a5e1cbb4",
+    "migrations/0014_asterisk_credentials.sql": "7df5b324b629e332cf6d3081aba89e02113e17a6fbd67c014b4dc54b11d209e3",
+    "migrations/0015_assistant_budgets.sql": "5faa7a48d605beccdfdcf0dfae5114ead33da545e23fd7b04ac6e27a6841c6e4",
+    "migrations/0016_engine_profile_credentials.sql": "355c1bac4e0a2aa8471b10d5acc2ccd66733bfb158fbe9d088798a3d7e5611f5",
+    "migrations/0017_preset_budgets.sql": "d894c7360978a4243ff2bc743b164d80be3675455c947c55d03e1c7bbf893c24",
+    "migrations/0018_engine_profile_compatibility.sql": "119e7c88d7228f887ca2ac22ca921f3f01c8b520f8be35228481cfb5d26e4726",
+    "migrations/0019_missing_legacy_activation.sql": "4c4c6d507d2540bdea4eaf3d787c7cce8691f49f779f026fe1331072b0c9c842",
+    "migrations/0020_browser_ticket_claim.sql": "3c205cc454e588d3b87c11e1e51001c5d42a55747c893ee5d86203bfe550b5ee"
+  },
+  "contract_sha256": "47151f4041a4405ddb571140dd593130f3e57f2a27d922eb47375b2a15227a6f",
+  "scope": "Declared item-to-collection and assistant-to-collection workspace invariant, issuer and read-boundary audit",
+  "findings": {
+    "schema": "Missing equal-business constraint supported",
+    "untrusted_producer": "None established in current HTTP/foundation/legacy projection paths",
+    "call_prompt": "Explicit assistant/item/collection/business equality excludes corrupt combinations",
+    "studio_corruption": "Collection pagination and attached-assistant metadata trust stored associations; privileged pre-existing corruption can cause disclosure",
+    "import": "No raw untrusted import endpoint found; account export and operator/test SQL are distinct"
+  },
+  "proposal": "Additive validation-only triggers with atomic pre-DDL refusal for pre-existing mismatch/missing parents, no table rebuild/backfill/deletion/quota change; no migration number reserved",
+  "runtime": "None; only git/source/docs reads and hashing",
+  "previous_closure": "78cbbde preserved"
+}

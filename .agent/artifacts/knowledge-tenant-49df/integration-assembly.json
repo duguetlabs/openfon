@@ -1,0 +1,388 @@
+{
+  "status": "assembled_exact_QA_pending",
+  "commit": "2f92b876d0fafbd92b58348caf3831c656f847d3",
+  "parent": "3505d5f29b65420380003488ad0bbbab9c5a555f",
+  "files": [
+    {
+      "path": "migrations/0021_knowledge_tenant_guards.sql",
+      "sha256": "b1b7aabd2f39b3ea565a30ca939bb8348624cc28580180ea47797c43e290902a",
+      "bytes": 2804,
+      "original_sha256": null
+    },
+    {
+      "path": "test/knowledge-tenant-guards.test.ts",
+      "sha256": "228b65f0d44486b1a6f0b51e26a65c4bddebd72c604e984e4cbd76ba23fded2e",
+      "bytes": 16407,
+      "original_sha256": null
+    },
+    {
+      "path": "scripts/knowledge-tenant-smoke.mjs",
+      "sha256": "39b392d74164da873bb9c99a906da770b5f23dec8f7bac2884079b9f8aa83bc8",
+      "bytes": 14146,
+      "original_sha256": null
+    },
+    {
+      "path": "test/sqlite-d1.ts",
+      "sha256": "eeee5d6dc957fe6280bc5cc6ae9676dd1dafb03e845e6164cae475557cfa87dd",
+      "bytes": 4055,
+      "original_sha256": "b78afce19ff64b75b8b369c1fbe6aa2fbdca6c0ed45e9d88b19ef9fafd037284"
+    },
+    {
+      "path": "scripts/migration-rehearsal.py",
+      "sha256": "ec16474af27995debb860d74a9e154eb7680e51106e8f8016a5b2d8db5426d3a",
+      "bytes": 11902,
+      "original_sha256": "0b5a50a77aec1417db0dc3009f39b133e5110fc3e9ff4e6dd818bfdc7649f0f3"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "3931f9beb7a2034787b0d91a9f97acaa7cd96436d2d716b8bc0d0f4d548dc994",
+      "bytes": 6846,
+      "original_sha256": "ea520be8d01443feea10618547b91b4f111c4af66b5a60dca1c64b298ceb347a"
+    },
+    {
+      "path": "docs/migration-compatibility.md",
+      "sha256": "71eef295255de3bc2c30afbbefd98d4c379e62eebb2cbad6e74ab3be71d81c5f",
+      "bytes": 9769,
+      "original_sha256": "a5963f7ce6d07b649349d2af93c1bf314d9c7248aeaa5cb649e9f4fc5945eccf"
+    }
+  ],
+  "protected_count": 84,
+  "protected_exceptions": [
+    {
+      "path": "src/telnyx-control.ts",
+      "accepted_current_sha256": "00a3ae80f7c3f79e700a58e58548d8e70f4410b0eea175c0e860e12e9fee845c",
+      "reason": "QA454390b closed prior Telnyx correction"
+    }
+  ],
+  "patch_sha256": "d7790b82413de987e3bd90f7bef256b0e790f511973c2750c98147cefec717f9",
+  "copies": [
+    {
+      "path": ".agent/artifacts/knowledge-tenant-49df/README.md",
+      "sha256": "19a5519788427abc2c2da8b43e34fb7151173356ff701f1f977c114a3f2be5a1",
+      "bytes": 6475
+    },
+    {
+      "path": ".agent/artifacts/knowledge-tenant-49df/contract.md",
+      "sha256": "47151f4041a4405ddb571140dd593130f3e57f2a27d922eb47375b2a15227a6f",
+      "bytes": 13040
+    },
+    {
+      "path": ".agent/artifacts/knowledge-tenant-49df/delivery.patch",
+      "sha256": "d7790b82413de987e3bd90f7bef256b0e790f511973c2750c98147cefec717f9",
+      "bytes": 40038
+    },
+    {
+      "path": ".agent/artifacts/knowledge-tenant-49df/original/.github/workflows/ci.yml",
+      "sha256": "ea520be8d01443feea10618547b91b4f111c4af66b5a60dca1c64b298ceb347a",
+      "bytes": 6846
+    },
+    {
+      "path": ".agent/artifacts/knowledge-tenant-49df/original/docs/migration-compatibility.md",
+      "sha256": "a5963f7ce6d07b649349d2af93c1bf314d9c7248aeaa5cb649e9f4fc5945eccf",
+      "bytes": 7238
+    },
+    {
+      "path": ".agent/artifacts/knowledge-tenant-49df/original/scripts/migration-rehearsal.py",
+      "sha256": "0b5a50a77aec1417db0dc3009f39b133e5110fc3e9ff4e6dd818bfdc7649f0f3",
+      "bytes": 11453
+    },
+    {
+      "path": ".agent/artifacts/knowledge-tenant-49df/original/test/sqlite-d1.ts",
+      "sha256": "b78afce19ff64b75b8b369c1fbe6aa2fbdca6c0ed45e9d88b19ef9fafd037284",
+      "bytes": 4022
+    },
+    {
+      "path": ".agent/artifacts/knowledge-tenant-49df/prepared-manifest.json",
+      "sha256": "90a5b21eff619a085121fa486d30b7fc6fe54d3639e35f758d3bd08f2fba85bd",
+      "bytes": 16698
+    },
+    {
+      "path": ".agent/artifacts/knowledge-tenant-49df/prepared/.github/workflows/ci.yml",
+      "sha256": "3931f9beb7a2034787b0d91a9f97acaa7cd96436d2d716b8bc0d0f4d548dc994",
+      "bytes": 6846
+    },
+    {
+      "path": ".agent/artifacts/knowledge-tenant-49df/prepared/docs/migration-compatibility.md",
+      "sha256": "71eef295255de3bc2c30afbbefd98d4c379e62eebb2cbad6e74ab3be71d81c5f",
+      "bytes": 9769
+    },
+    {
+      "path": ".agent/artifacts/knowledge-tenant-49df/prepared/migrations/0021_knowledge_tenant_guards.sql",
+      "sha256": "b1b7aabd2f39b3ea565a30ca939bb8348624cc28580180ea47797c43e290902a",
+      "bytes": 2804
+    },
+    {
+      "path": ".agent/artifacts/knowledge-tenant-49df/prepared/scripts/knowledge-tenant-smoke.mjs",
+      "sha256": "39b392d74164da873bb9c99a906da770b5f23dec8f7bac2884079b9f8aa83bc8",
+      "bytes": 14146
+    },
+    {
+      "path": ".agent/artifacts/knowledge-tenant-49df/prepared/scripts/migration-rehearsal.py",
+      "sha256": "ec16474af27995debb860d74a9e154eb7680e51106e8f8016a5b2d8db5426d3a",
+      "bytes": 11902
+    },
+    {
+      "path": ".agent/artifacts/knowledge-tenant-49df/prepared/test/knowledge-tenant-guards.test.ts",
+      "sha256": "228b65f0d44486b1a6f0b51e26a65c4bddebd72c604e984e4cbd76ba23fded2e",
+      "bytes": 16407
+    },
+    {
+      "path": ".agent/artifacts/knowledge-tenant-49df/prepared/test/sqlite-d1.ts",
+      "sha256": "eeee5d6dc957fe6280bc5cc6ae9676dd1dafb03e845e6164cae475557cfa87dd",
+      "bytes": 4055
+    },
+    {
+      "path": ".agent/artifacts/knowledge-tenant-49df/source.json",
+      "sha256": "4858b53bb5cecdd5721ea137d096e5f8c9314a35139401d64c19679bfddb4d87",
+      "bytes": 4558
+    },
+    {
+      "path": ".agent/artifacts/knowledge-tenant-49df/validation/summary.json",
+      "sha256": "80a7a7e9b6d62502792a227e12cc8e59fe39a0e9f4559a68a66c739dc3cca180",
+      "bytes": 22808
+    }
+  ],
+  "validation_summary_sha256": "80a7a7e9b6d62502792a227e12cc8e59fe39a0e9f4559a68a66c739dc3cca180",
+  "raw_evidence": "42 restricted owner originals independently verified by QA2646abf; not copied into public artifacts",
+  "validation": {
+    "original_sql": {
+      "failed": 7,
+      "skipped": 27,
+      "total": 34,
+      "first_assertion": "empty error lacked tenant guard marker; later failed-case equality assertions unclaimed",
+      "diagnostics": [
+        {
+          "name": "item insert",
+          "original": true,
+          "guard_error": false,
+          "unchanged": false,
+          "changed_tables": [
+            "knowledge_items",
+            "rate_counters"
+          ]
+        },
+        {
+          "name": "item OR IGNORE",
+          "original": true,
+          "guard_error": false,
+          "unchanged": false,
+          "changed_tables": [
+            "knowledge_items",
+            "rate_counters"
+          ]
+        },
+        {
+          "name": "item collection update",
+          "original": true,
+          "guard_error": false,
+          "unchanged": false,
+          "changed_tables": [
+            "knowledge_items",
+            "rate_counters"
+          ]
+        },
+        {
+          "name": "attachment insert",
+          "original": true,
+          "guard_error": false,
+          "unchanged": false,
+          "changed_tables": [
+            "assistant_knowledge_collections"
+          ]
+        },
+        {
+          "name": "attachment OR IGNORE",
+          "original": true,
+          "guard_error": false,
+          "unchanged": false,
+          "changed_tables": [
+            "assistant_knowledge_collections"
+          ]
+        },
+        {
+          "name": "attachment assistant update",
+          "original": true,
+          "guard_error": false,
+          "unchanged": false,
+          "changed_tables": [
+            "assistant_knowledge_collections"
+          ]
+        },
+        {
+          "name": "attachment collection update",
+          "original": true,
+          "guard_error": false,
+          "unchanged": false,
+          "changed_tables": [
+            "assistant_knowledge_collections"
+          ]
+        }
+      ]
+    },
+    "original_native": {
+      "failed_groups": 1,
+      "first_assertion": "empty error lacked tenant guard marker; persisted mismatch captured before assertion",
+      "captured_state_changed": true
+    },
+    "fixed_sql_api": {
+      "passed": 43,
+      "files": 2,
+      "diagnostics": [
+        {
+          "name": "item insert",
+          "original": false,
+          "guard_error": true,
+          "unchanged": true,
+          "changed_tables": []
+        },
+        {
+          "name": "item OR IGNORE",
+          "original": false,
+          "guard_error": true,
+          "unchanged": true,
+          "changed_tables": []
+        },
+        {
+          "name": "item collection update",
+          "original": false,
+          "guard_error": true,
+          "unchanged": true,
+          "changed_tables": []
+        },
+        {
+          "name": "attachment insert",
+          "original": false,
+          "guard_error": true,
+          "unchanged": true,
+          "changed_tables": []
+        },
+        {
+          "name": "attachment OR IGNORE",
+          "original": false,
+          "guard_error": true,
+          "unchanged": true,
+          "changed_tables": []
+        },
+        {
+          "name": "attachment assistant update",
+          "original": false,
+          "guard_error": true,
+          "unchanged": true,
+          "changed_tables": []
+        },
+        {
+          "name": "attachment collection update",
+          "original": false,
+          "guard_error": true,
+          "unchanged": true,
+          "changed_tables": []
+        }
+      ]
+    },
+    "types": {
+      "worker": "PASS",
+      "web": "PASS"
+    },
+    "fixed_native": {
+      "passed_groups": 11,
+      "outcomes": [
+        {
+          "name": "clean-upgrade",
+          "status": "PASS"
+        },
+        {
+          "name": "item-refusal",
+          "status": "PASS"
+        },
+        {
+          "name": "item-update",
+          "status": "PASS"
+        },
+        {
+          "name": "attachment-refusal",
+          "status": "PASS"
+        },
+        {
+          "name": "missing-parents",
+          "status": "PASS"
+        },
+        {
+          "name": "corrupt-upgrade",
+          "status": "PASS"
+        },
+        {
+          "name": "migration-rollback",
+          "status": "PASS"
+        },
+        {
+          "name": "statement-and-batch",
+          "status": "PASS"
+        },
+        {
+          "name": "changes-and-quota",
+          "status": "PASS"
+        },
+        {
+          "name": "source-cleanup",
+          "status": "PASS"
+        },
+        {
+          "name": "production-legacy-foundation",
+          "status": "PASS"
+        }
+      ],
+      "captured_snapshots": 16,
+      "all_captured_before_after_equal": true
+    },
+    "rehearsal": {
+      "result": "PASS",
+      "source_base": "migration 0006",
+      "upgraded_through": "0021",
+      "workspaces": 2,
+      "historical_calls": 3,
+      "transcript_turns": 3,
+      "checks": [
+        "legacy behavior unchanged; obsolete profile credentials scrubbed at0016",
+        "both public slugs preserved",
+        "completed history preserved",
+        "connected history backfilled",
+        "only stale active calls reclassified",
+        "presets and knowledge copied",
+        "carrier tables empty and reservations null",
+        "SQLite integrity and FK checks",
+        "binary snapshot restore after synthetic deletion",
+        "SQL dump restore exact",
+        "pre-upgrade rollback exact",
+        "re-upgrade succeeds",
+        "four knowledge tenant guards installed"
+      ],
+      "temporary_files_removed": true
+    }
+  },
+  "limits": [
+    "Original SQL first marker assertion bounds later failed assertions; preassertion raw full snapshots separately show persisted mismatches.",
+    "SQLite/Node API synthetic fixtures are distinct from native D1 execution.",
+    "Native production handlers run bundled in Node against workerd D1; no full workerd request-concurrency proof.",
+    "Native statement refusal preserves an earlier committed write; explicit open-transaction ABORT proof belongs to SQLite fixture.",
+    "Native corrupt-upgrade tests use mismatches with present parents; dangling historical parents are privileged SQLite fixtures.",
+    "Statement ABORT does not roll back earlier explicit-transaction statements; callers must roll back migrations and batches.",
+    "No untrusted HTTP mismatch producer, remote corruption inventory, production backup/migration, all-read safety or live provider proof.",
+    "No new browser, old native suite, inference, source edit, retry or timeout change."
+  ],
+  "release": {
+    "status": "RELEASED",
+    "at": "2026-09-14T20:18:48.663577+00:00",
+    "all_commands_exited": true,
+    "sampled_processes": 20,
+    "sampled_processes_absent": true,
+    "sampling_limit": "250ms nonexhaustive process inventory",
+    "native_disposals": 2,
+    "native_disposal_status": "completed",
+    "native_temp_matches": 0,
+    "added_dependency_link_removed": true,
+    "existing_owner_dependencies_preserved": true,
+    "application_process_matches": 0,
+    "reserved_listener_matches": 0
+  },
+  "runtime_repeated": false
+}

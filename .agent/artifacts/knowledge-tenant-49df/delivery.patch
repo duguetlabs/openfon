@@ -1,0 +1,554 @@
+diff --git a/migrations/0021_knowledge_tenant_guards.sql b/migrations/0021_knowledge_tenant_guards.sql
+new file mode 100644
+--- /dev/null
++++ b/migrations/0021_knowledge_tenant_guards.sql
+@@ -0,0 +1,66 @@
++-- Apply this entire file as one atomic migration. Refuse inconsistent imports;
++-- never choose an authoritative tenant or delete/reassign historical rows.
++-- The read-only precondition precedes all DDL and includes missing parents.
++-- A migration failure requires transaction rollback by the migration runner.
++SELECT CASE WHEN EXISTS (
++  SELECT 1 FROM knowledge_items AS item
++  WHERE NOT EXISTS (
++    SELECT 1 FROM knowledge_collections AS collection
++    WHERE collection.id=item.collection_id AND collection.business_id=item.business_id
++  )
++) OR EXISTS (
++  SELECT 1 FROM assistant_knowledge_collections AS attachment
++  WHERE NOT EXISTS (
++    SELECT 1 FROM assistants AS assistant
++    JOIN knowledge_collections AS collection ON collection.business_id=assistant.business_id
++    WHERE assistant.id=attachment.assistant_id AND collection.id=attachment.collection_id
++  )
++) THEN json('OPENFON_0021_KNOWLEDGE_TENANT_MISMATCH') ELSE NULL END;
++
++-- Parent business ownership remains immutable under 0013/0015. These guards
++-- validate child identities only; source-call/turn SET NULL updates stay outside
++-- their UPDATE scope, including when the ordinary editing quota is exhausted.
++-- RAISE(ABORT) undoes the failing statement (including its trigger writes), not
++-- preceding statements in an explicit transaction. D1 batch/migration callers
++-- must roll back the whole failed batch; no success-path DML changes changes().
++CREATE TRIGGER knowledge_item_tenant_insert
++BEFORE INSERT ON knowledge_items
++WHEN NOT EXISTS (
++  SELECT 1 FROM knowledge_collections
++  WHERE id=NEW.collection_id AND business_id=NEW.business_id
++)
++BEGIN
++  SELECT RAISE(ABORT, 'OPENFON_KNOWLEDGE_TENANT_MISMATCH');
++END;
++
++CREATE TRIGGER knowledge_item_tenant_update
++BEFORE UPDATE OF business_id,collection_id ON knowledge_items
++WHEN NOT EXISTS (
++  SELECT 1 FROM knowledge_collections
++  WHERE id=NEW.collection_id AND business_id=NEW.business_id
++)
++BEGIN
++  SELECT RAISE(ABORT, 'OPENFON_KNOWLEDGE_TENANT_MISMATCH');
++END;
++
++CREATE TRIGGER knowledge_attachment_tenant_insert
++BEFORE INSERT ON assistant_knowledge_collections
++WHEN NOT EXISTS (
++  SELECT 1 FROM assistants AS assistant
++  JOIN knowledge_collections AS collection ON collection.business_id=assistant.business_id
++  WHERE assistant.id=NEW.assistant_id AND collection.id=NEW.collection_id
++)
++BEGIN
++  SELECT RAISE(ABORT, 'OPENFON_KNOWLEDGE_TENANT_MISMATCH');
++END;
++
++CREATE TRIGGER knowledge_attachment_tenant_update
++BEFORE UPDATE OF assistant_id,collection_id ON assistant_knowledge_collections
++WHEN NOT EXISTS (
++  SELECT 1 FROM assistants AS assistant
++  JOIN knowledge_collections AS collection ON collection.business_id=assistant.business_id
++  WHERE assistant.id=NEW.assistant_id AND collection.id=NEW.collection_id
++)
++BEGIN
++  SELECT RAISE(ABORT, 'OPENFON_KNOWLEDGE_TENANT_MISMATCH');
++END;
+diff --git a/test/knowledge-tenant-guards.test.ts b/test/knowledge-tenant-guards.test.ts
+new file mode 100644
+--- /dev/null
++++ b/test/knowledge-tenant-guards.test.ts
+@@ -0,0 +1,203 @@
++import { readFileSync } from 'node:fs';
++import { afterEach, beforeEach, expect, it } from 'vitest';
++import worker from '../src/index';
++import { syncLegacyKnowledge } from '../src/studio-api';
++import type { Env } from '../src/types';
++import { SqliteD1, applyMigrations } from './sqlite-d1';
++
++const migration = readFileSync(new URL('../migrations/0021_knowledge_tenant_guards.sql', import.meta.url), 'utf8');
++const guards = ['knowledge_item_tenant_insert', 'knowledge_item_tenant_update', 'knowledge_attachment_tenant_insert', 'knowledge_attachment_tenant_update'];
++const original = process.env.OPENFON_TENANT_ORIGINAL === '1';
++let db: SqliteD1;
++let env: Env;
++const sql = (s: string) => db.exec(s);
++function snapshot() {
++  const tables = db.database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all() as { name: string }[];
++  return tables.map(({ name }) => ({ name, rows: db.database.prepare(`SELECT * FROM "${name}" ORDER BY rowid`).all() }));
++}
++const schema = () => db.database.prepare("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name").all();
++const count = (bucket = 'knowledge:b1') => (db.database.prepare('SELECT COALESCE(SUM(count),0) AS n FROM rate_counters WHERE bucket=?').get(bucket) as { n: number }).n;
++function applyAtomic(text = migration) {
++  sql('BEGIN IMMEDIATE');
++  try { sql(text); sql('COMMIT'); } catch (e) { sql('ROLLBACK'); throw e; }
++}
++function dropGuards() { for (const name of guards) sql(`DROP TRIGGER IF EXISTS ${name}`); }
++async function request(path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST', token = 's1') {
++  return worker.fetch(new Request('https://openfon.test' + path, {
++    method, headers: { Cookie: `ofs=${token}`, 'Content-Type': 'application/json' },
++    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
++  }), env, { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext);
++}
++beforeEach(async () => {
++  db = new SqliteD1(); applyMigrations(db, 1, 20);
++  sql(`INSERT INTO users(id,email,password_hash) VALUES('u1','one@example.invalid','unused'),('u2','two@example.invalid','unused');
++    INSERT INTO sessions(token,user_id,expires_at) VALUES('s1','u1','2099-01-01'),('s2','u2','2099-01-01');
++    INSERT INTO businesses(id,user_id,slug,name) VALUES('b1','u1','one','One'),('b2','u2','two','Two');
++    INSERT INTO agent_settings(business_id) VALUES('b1'),('b2');
++    INSERT INTO provider_settings(business_id) VALUES('b1'),('b2');`);
++  env = { DB: db, DEFAULT_LLM_BASE_URL: 'https://instance.example/v1', DEFAULT_LLM_API_KEY: '', DEFAULT_LLM_MODEL: 'instance',
++    DEFAULT_STT_BASE_URL: 'https://instance.example/v1', DEFAULT_STT_API_KEY: '', DEFAULT_STT_MODEL: 'whisper-1', DEFAULT_TTS_PROVIDER: 'browser',
++    REALTIME_BASE_URL: 'wss://instance.example/realtime', REALTIME_MODEL: 'kataleptic-realtime' } as unknown as Env;
++  expect((await request('/api/me/bootstrap')).status).toBe(200);
++  expect((await request('/api/me/bootstrap', undefined, 'GET', 's2')).status).toBe(200);
++  sql(`INSERT INTO assistants(id,business_id,public_slug) VALUES('a1','b1','extra-one'),('a2','b2','extra-two');
++    INSERT INTO knowledge_collections(id,business_id,name) VALUES('c1','b1','One'),('cnext','b1','Next'),('c2','b2','Two');
++    INSERT INTO knowledge_items(id,business_id,collection_id,kind,title) VALUES('i1','b1','c1','note','Original');
++    INSERT INTO assistant_knowledge_collections(assistant_id,collection_id) VALUES('a1','c1');`);
++  if (!original) applyAtomic();
++});
++afterEach(() => db.close());
++
++const mismatches = [
++  ['item insert', "INSERT INTO knowledge_items(id,business_id,collection_id,kind) VALUES('bad','b1','c2','note')"],
++  ['item OR IGNORE', "INSERT OR IGNORE INTO knowledge_items(id,business_id,collection_id,kind) VALUES('bad','b1','c2','note')"],
++  ['item collection update', "UPDATE knowledge_items SET collection_id='c2',title='Lost' WHERE id='i1'"],
++  ['attachment insert', "INSERT INTO assistant_knowledge_collections VALUES('a1','c2',datetime('now'))"],
++  ['attachment OR IGNORE', "INSERT OR IGNORE INTO assistant_knowledge_collections VALUES('a1','c2',datetime('now'))"],
++  ['attachment assistant update', "UPDATE assistant_knowledge_collections SET assistant_id='a2' WHERE assistant_id='a1' AND collection_id='c1'"],
++  ['attachment collection update', "UPDATE assistant_knowledge_collections SET collection_id='c2' WHERE assistant_id='a1' AND collection_id='c1'"],
++] as const;
++it.each(mismatches)('tenant guard refuses %s without persisted side effects', (name, statement) => {
++  const before = snapshot(); let error = '';
++  try { sql(statement); } catch (e) { error = String(e); }
++  const after = snapshot();
++  console.log('tenant-sql-diagnostic', JSON.stringify({ name, original, error, before, after }));
++  expect(error).toContain('OPENFON_KNOWLEDGE_TENANT_MISMATCH');
++  expect(after).toEqual(before);
++});
++
++it.each([
++  "INSERT INTO knowledge_items(id,business_id,collection_id,kind) VALUES('bad','b1','missing','note')",
++  "INSERT INTO assistant_knowledge_collections(assistant_id,collection_id) VALUES('missing','c1')",
++  "INSERT INTO assistant_knowledge_collections(assistant_id,collection_id) VALUES('a1','missing')",
++])('guard explicitly refuses a missing parent: %s', statement => {
++  const before = snapshot(); expect(() => sql(statement)).toThrow('OPENFON_KNOWLEDGE_TENANT_MISMATCH'); expect(snapshot()).toEqual(before);
++});
++
++it.each([
++  ['item mismatch', "INSERT INTO knowledge_items(id,business_id,collection_id,kind) VALUES('corrupt','b1','c2','note')"],
++  ['missing collection for item', "INSERT INTO knowledge_items(id,business_id,collection_id,kind) VALUES('corrupt','b1','missing','note')"],
++  ['attachment mismatch', "INSERT INTO assistant_knowledge_collections(assistant_id,collection_id) VALUES('a1','c2')"],
++  ['missing assistant', "INSERT INTO assistant_knowledge_collections(assistant_id,collection_id) VALUES('missing','c1')"],
++  ['missing collection for attachment', "INSERT INTO assistant_knowledge_collections(assistant_id,collection_id) VALUES('a1','missing')"],
++])('upgrade refuses %s before any DDL or repair', (_name, corrupt) => {
++  dropGuards();
++  // Deliberate privileged-corruption fixture, not an untrusted HTTP producer.
++  sql('PRAGMA foreign_keys=OFF'); sql(corrupt); sql('PRAGMA foreign_keys=ON');
++  const before = snapshot(), beforeSchema = schema();
++  expect(() => applyAtomic()).toThrow(/malformed JSON/);
++  expect(schema()).toEqual(beforeSchema); expect(snapshot()).toEqual(before);
++});
++
++it('clean upgrade preserves all data counters source references and installs four guards', () => {
++  dropGuards();
++  sql("INSERT INTO calls(id,business_id,status) VALUES('call','b1','completed'); INSERT INTO call_turns(id,call_id,role,text) VALUES(1,'call','caller','Question'); UPDATE knowledge_items SET source_call_id='call',source_turn_id=1 WHERE id='i1'");
++  const before = snapshot(); applyAtomic(); expect(snapshot()).toEqual(before);
++  const names = (db.database.prepare("SELECT name FROM sqlite_master WHERE type='trigger'").all() as { name: string }[]).map(x => x.name);
++  expect(guards.filter(x => names.includes(x))).toEqual(guards);
++});
++it('late migration failure rolls back installed DDL through caller transaction rollback', () => {
++  dropGuards(); const before = snapshot(), beforeSchema = schema();
++  expect(() => applyAtomic(migration + "\nSELECT json('SYNTHETIC_LATE_MIGRATION_FAILURE');")).toThrow(/malformed JSON/);
++  expect(schema()).toEqual(beforeSchema); expect(snapshot()).toEqual(before);
++});
++it('ABORT preserves preceding transaction statements until caller explicitly rolls back', () => {
++  const before = snapshot(); sql('BEGIN');
++  try {
++    sql("UPDATE businesses SET name='Earlier transaction write' WHERE id='b1'"); const afterEarlier = snapshot();
++    expect(() => sql(mismatches[0][1])).toThrow('OPENFON_KNOWLEDGE_TENANT_MISMATCH');
++    expect(snapshot()).toEqual(afterEarlier); expect(snapshot()).not.toEqual(before);
++  } finally { sql('ROLLBACK'); }
++  expect(snapshot()).toEqual(before);
++});
++it.each(['existing order', 'budget recreated last'])('statement refusal removes quota effects with %s', ordering => {
++  if (ordering === 'budget recreated last') {
++    const trigger = db.database.prepare("SELECT sql FROM sqlite_master WHERE name='knowledge_insert_budget'").get() as { sql: string };
++    sql('DROP TRIGGER knowledge_insert_budget'); sql(trigger.sql);
++  }
++  const before = snapshot(); expect(() => sql(mismatches[0][1])).toThrow('OPENFON_KNOWLEDGE_TENANT_MISMATCH'); expect(snapshot()).toEqual(before);
++});
++it('valid move charges once and duplicate attachment has no new charge', () => {
++  const spent = count(); sql("UPDATE knowledge_items SET collection_id='cnext' WHERE id='i1'"); expect(count()).toBe(spent + 1);
++  const before = snapshot(); sql("INSERT OR IGNORE INTO assistant_knowledge_collections(assistant_id,collection_id) VALUES('a1','c1')"); expect(snapshot()).toEqual(before);
++});
++it('validation SELECTs preserve immediately gated changes chains for zero and accepted writes', async () => {
++  const before = snapshot();
++  await db.batch([db.prepare("UPDATE assistants SET name='No match' WHERE id='missing'"), db.prepare("INSERT OR IGNORE INTO assistant_knowledge_collections SELECT 'a1','cnext',datetime('now') WHERE changes()>0")]);
++  expect(snapshot()).toEqual(before); const spent = count('assistants:b1');
++  await db.batch([db.prepare("UPDATE assistants SET name='Accepted' WHERE id='a1'"), db.prepare("INSERT OR IGNORE INTO assistant_knowledge_collections SELECT 'a1','cnext',datetime('now') WHERE changes()>0")]);
++  expect(db.database.prepare("SELECT 1 FROM assistant_knowledge_collections WHERE assistant_id='a1' AND collection_id='cnext'").get()).toBeTruthy(); expect(count('assistants:b1')).toBe(spent + 1);
++});
++it('late invalid attachment rolls back earlier batch row and counter writes', async () => {
++  const before = snapshot();
++  await expect(db.batch([db.prepare("UPDATE knowledge_items SET title='Earlier batch write' WHERE id='i1'"), db.prepare(mismatches[3][1])])).rejects.toThrow('OPENFON_KNOWLEDGE_TENANT_MISMATCH');
++  expect(snapshot()).toEqual(before);
++});
++it.each(['call', 'turn'])('source %s deletion keeps SET NULL working at exhausted edit quota', target => {
++  sql("INSERT INTO calls(id,business_id,status) VALUES('call','b1','completed'); INSERT INTO call_turns(id,call_id,role,text) VALUES(1,'call','caller','Question'); UPDATE knowledge_items SET source_call_id='call',source_turn_id=1 WHERE id='i1'; UPDATE rate_counters SET count=500 WHERE bucket='knowledge:b1'");
++  sql(target === 'call' ? "DELETE FROM calls WHERE id='call'" : 'DELETE FROM call_turns WHERE id=1');
++  expect(db.database.prepare("SELECT source_call_id,source_turn_id FROM knowledge_items WHERE id='i1'").get()).toEqual({ source_call_id: target === 'call' ? null : 'call', source_turn_id: null }); expect(count()).toBe(500);
++});
++it('parent ownership remains immutable and legitimate collection cascade deletion succeeds', () => {
++  const before = snapshot();
++  expect(() => sql("UPDATE knowledge_collections SET business_id='b2' WHERE id='c1'")).toThrow();
++  expect(() => sql("UPDATE assistants SET business_id='b2' WHERE id='a1'")).toThrow(); expect(snapshot()).toEqual(before);
++  sql("DELETE FROM knowledge_collections WHERE id='c1'");
++  expect(db.database.prepare("SELECT 1 FROM knowledge_items WHERE id='i1'").get()).toBeUndefined();
++  expect(db.database.prepare("SELECT 1 FROM assistant_knowledge_collections WHERE collection_id='c1'").get()).toBeUndefined();
++});
++
++it('API item creation derives ownership and ignores supplied foreign identities', async () => {
++  const response = await request('/api/me/knowledge/collections/c1/items', { id: 'forged', business_id: 'b2', collection_id: 'c2', source_call_id: 'foreign', kind: 'note', content: 'Owned' });
++  expect(response.status).toBe(201); const item = await response.json() as any;
++  expect(item).toMatchObject({ business_id: 'b1', collection_id: 'c1', source_call_id: null }); expect(item.id).not.toBe('forged');
++});
++it('API rejects foreign item moves attachments and turn sources without writes', async () => {
++  const before = snapshot();
++  expect((await request('/api/me/knowledge/items/i1', { collection_id: 'c2' }, 'PUT')).status).toBe(404);
++  expect((await request('/api/me/assistants/a1/knowledge-collections/c2', {})).status).toBe(404);
++  expect((await request('/api/me/knowledge/collections/c2/items', { kind: 'note' })).status).toBe(404);
++  expect((await request('/api/me/knowledge/drafts/from-turn', { callId: 'foreign', turnId: 999, collectionId: 'c1' })).status).toBe(404);
++  expect(snapshot()).toEqual(before);
++});
++it('API rejects cross-workspace moves and attachments for one historical owner', async () => {
++  // Model a pre0008 duplicate-workspace account without changing API ownership.
++  const trigger = db.database.prepare("SELECT sql FROM sqlite_master WHERE name='businesses_one_workspace_per_user_update'").get() as { sql: string };
++  sql('DROP TRIGGER businesses_one_workspace_per_user_update');
++  sql("UPDATE businesses SET user_id='u1' WHERE id='b2'"); sql(trigger.sql);
++  const before = snapshot();
++  expect((await request('/api/me/knowledge/items/i1', { collection_id: 'c2' }, 'PUT')).status).toBe(404);
++  expect((await request('/api/me/assistants/a1/knowledge-collections/c2', {})).status).toBe(404);
++  expect(snapshot()).toEqual(before);
++});
++it('API item CAS conflict retains committed peer edit without a second charge', async () => {
++  let afterPeer: ReturnType<typeof snapshot> | null = null;
++  db.hook = statement => {
++    if (statement.includes('UPDATE knowledge_items SET collection_id=')) { db.hook = null; sql("UPDATE knowledge_items SET title='Peer' WHERE id='i1'"); afterPeer = snapshot(); }
++  };
++  expect((await request('/api/me/knowledge/items/i1', { content: 'Stale edit' }, 'PUT')).status).toBe(409); expect(afterPeer).not.toBeNull(); expect(snapshot()).toEqual(afterPeer);
++});
++it('API accepted assistant creation and explicit attachment retain atomic default attachment', async () => {
++  const response = await request('/api/me/assistants', { name: 'New draft', engine: 'pipeline' }); expect(response.status).toBe(201);
++  const assistant = await response.json() as any;
++  const attached = db.database.prepare('SELECT collection_id FROM assistant_knowledge_collections WHERE assistant_id=?').all(assistant.id);
++  expect(attached).toEqual([{ collection_id: 'kc_default_b1' }]);
++  expect((await request(`/api/me/assistants/${assistant.id}/knowledge-collections/cnext`, {})).status).toBe(200);
++});
++it('API legacy projection and missing-default repair preserve same-tenant relationships', async () => {
++  expect((await request('/api/me/business/b1', { faqs_json: '[{"q":"Hours?","a":"Weekdays"}]' }, 'PUT')).status).toBe(200);
++  sql("DELETE FROM knowledge_collections WHERE id='kc_default_b1'");
++  expect((await request('/api/me/bootstrap')).status).toBe(200);
++  expect(db.database.prepare("SELECT business_id,collection_id,question FROM knowledge_items WHERE kind='faq'").all()).toEqual([{ business_id: 'b1', collection_id: 'kc_default_b1', question: 'Hours?' }]);
++  expect(db.database.prepare("SELECT 1 FROM assistant_knowledge_collections WHERE assistant_id='asst_b1' AND collection_id='kc_default_b1'").get()).toBeTruthy();
++});
++it('API valid caller-turn draft preserves source identities and private state', async () => {
++  sql("INSERT INTO calls(id,business_id,status) VALUES('call','b1','completed'); INSERT INTO call_turns(id,call_id,role,text) VALUES(1,'call','caller','Question')");
++  const response = await request('/api/me/knowledge/drafts/from-turn', { callId: 'call', turnId: 1, collectionId: 'c1' }); expect(response.status).toBe(201);
++  expect(await response.json()).toMatchObject({ business_id: 'b1', collection_id: 'c1', source_call_id: 'call', source_turn_id: 1, status: 'draft' });
++});
++it('legacy helper invalid destination rolls back earlier source write and snapshot chain', async () => {
++  const before = snapshot();
++  await expect(syncLegacyKnowledge(env, { id: 'b1', services_json: '[]', faqs_json: '[{"q":"Injected","a":"Invalid destination"}]' }, 'c2', { services: false, faqs: true }, [db.prepare("UPDATE businesses SET name='Earlier source write' WHERE id='b1'")])).rejects.toThrow('OPENFON_KNOWLEDGE_TENANT_MISMATCH');
++  expect(snapshot()).toEqual(before);
++});
+diff --git a/scripts/knowledge-tenant-smoke.mjs b/scripts/knowledge-tenant-smoke.mjs
+new file mode 100644
+--- /dev/null
++++ b/scripts/knowledge-tenant-smoke.mjs
+@@ -0,0 +1,164 @@
++// Native local workerd/D1 migration and persistence, with production handlers
++// bundled in Node for the bounded API/helper cases. Not full-Worker concurrency.
++import assert from 'node:assert/strict';
++import { readFile, readdir, mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
++import { tmpdir } from 'node:os';
++import { join, resolve } from 'node:path';
++import { pathToFileURL } from 'node:url';
++import { createHash } from 'node:crypto';
++import { build } from 'esbuild';
++import { unstable_splitSqlQuery } from 'wrangler';
++import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
++
++const root = resolve(import.meta.dirname, '..');
++const original = process.env.OPENFON_TENANT_ORIGINAL === '1';
++const guardNames = ['knowledge_item_tenant_insert', 'knowledge_item_tenant_update', 'knowledge_attachment_tenant_insert', 'knowledge_attachment_tenant_update'];
++const temp = await mkdtemp(join(tmpdir(), 'openfon-tenant-native-'));
++let mf, disposed = false;
++try {
++  const migration = await readFile(join(root, 'migrations/0021_knowledge_tenant_guards.sql'), 'utf8');
++  console.log(JSON.stringify({ schema: original ? 'exact49df-through20' : 'candidate-through21', migration_sha256: createHash('sha256').update(migration).digest('hex') }));
++  await build({ stdin: { contents: "export { default } from './src/index'; export { syncLegacyKnowledge } from './src/studio-api';", resolveDir: root }, bundle: true, platform: 'node', format: 'esm', outfile: join(temp, 'handler.mjs') });
++  const { default: worker, syncLegacyKnowledge } = await import(pathToFileURL(join(temp, 'handler.mjs')).href);
++  mf = new Miniflare(convertV4MiniflareOptions({ defaultPersistRoot: temp, cf: false,
++    port: Number(process.env.OPENFON_TEST_PORT || 8812), inspectorPort: Number(process.env.OPENFON_INSPECTOR_PORT || 9252),
++    workers: [{ name: 'tenant', modules: true, script: 'export default {fetch(){return new Response("local D1")}}', compatibilityDate: '2026-05-01',
++      d1Databases: { DB: 'tenant' }, outboundService: async () => new Response('Network disabled', { status: 502 }) }] }));
++  await mf.ready;
++  const db = await mf.getD1Database('DB', 'tenant');
++  const exec = sql => db.batch(unstable_splitSqlQuery(sql).map(statement => db.prepare(statement)));
++  const migrations = (await readdir(join(root, 'migrations'))).filter(name => /^\d{4}_.*\.sql$/.test(name) && Number(name.slice(0, 4)) <= 20).sort();
++  assert.equal(migrations.length, 20);
++  for (const file of migrations) await exec(await readFile(join(root, 'migrations', file), 'utf8'));
++  const env = { DB: db, DEFAULT_LLM_BASE_URL: 'https://instance.example/v1', DEFAULT_LLM_API_KEY: '', DEFAULT_LLM_MODEL: 'instance',
++    DEFAULT_STT_BASE_URL: 'https://instance.example/v1', DEFAULT_STT_API_KEY: '', DEFAULT_STT_MODEL: 'whisper-1', DEFAULT_TTS_PROVIDER: 'browser',
++    REALTIME_BASE_URL: 'wss://instance.example/realtime', REALTIME_MODEL: 'kataleptic-realtime' };
++  const request = (path, body, method = body === undefined ? 'GET' : 'POST') => worker.fetch(new Request('https://openfon.test' + path, {
++    method, headers: { Cookie: 'ofs=s1', 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
++  }), env, { waitUntil() {}, passThroughOnException() {} });
++  const drop = () => exec(guardNames.map(name => `DROP TRIGGER IF EXISTS ${name};`).join('\n'));
++  const snapshot = async () => {
++    const { results: tables } = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT GLOB '_cf_*' ORDER BY name").all();
++    const rows = [];
++    for (const { name } of tables) rows.push({ name, rows: (await db.prepare(`SELECT * FROM "${name}" ORDER BY rowid`).all()).results });
++    return rows;
++  };
++  const schema = async () => (await db.prepare("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name NOT GLOB '_cf_*' ORDER BY type,name").all()).results;
++  async function reset(install = !original) {
++    await drop(); await exec(`DELETE FROM users; DELETE FROM rate_counters;
++      INSERT INTO users(id,email,password_hash) VALUES('u1','one@example.invalid','unused'),('u2','two@example.invalid','unused');
++      INSERT INTO sessions(token,user_id,expires_at) VALUES('s1','u1','2099-01-01');
++      INSERT INTO businesses(id,user_id,slug,name) VALUES('b1','u1','one','One'),('b2','u2','two','Two');
++      INSERT INTO agent_settings(business_id) VALUES('b1'),('b2');
++      INSERT INTO provider_settings(business_id) VALUES('b1'),('b2');`);
++    assert.equal((await request('/api/me/bootstrap')).status, 200);
++    await exec(`INSERT INTO assistants(id,business_id,public_slug) VALUES('a1','b1','extra-one'),('a2','b2','extra-two');
++      INSERT INTO knowledge_collections(id,business_id,name) VALUES('c1','b1','One'),('cnext','b1','Next'),('c2','b2','Two');
++      INSERT INTO knowledge_items(id,business_id,collection_id,kind,title) VALUES('i1','b1','c1','note','Original');
++      INSERT INTO assistant_knowledge_collections(assistant_id,collection_id) VALUES('a1','c1');`);
++    if (install) await exec(migration);
++  }
++  const captures = [];
++  async function refuses(name, statement) {
++    const before = await snapshot(); let error = '';
++    try { await db.prepare(statement).run(); } catch (e) { error = e.message; }
++    const after = await snapshot(); captures.push({ name, before, after, error });
++    console.log(JSON.stringify({ diagnostic: name, error, unchanged: JSON.stringify(after) === JSON.stringify(before) }));
++    assert.match(error, /OPENFON_KNOWLEDGE_TENANT_MISMATCH/);
++    assert.deepEqual(after, before);
++  }
++  const badItem = "INSERT OR IGNORE INTO knowledge_items(id,business_id,collection_id,kind) VALUES('bad','b1','c2','note')";
++  const badAttachment = "INSERT OR IGNORE INTO assistant_knowledge_collections(assistant_id,collection_id) VALUES('a1','c2')";
++  const cases = {
++    'clean-upgrade': async () => {
++      await reset(false); const before = await snapshot(); await exec(migration); const after = await snapshot();
++      captures.push({ name: 'clean-upgrade', before, after }); assert.deepEqual(after, before);
++      const names = (await schema()).map(row => row.name); assert.deepEqual(guardNames.filter(name => names.includes(name)), guardNames);
++    },
++    'item-refusal': async () => { await reset(); await refuses('item-OR-IGNORE', badItem); },
++    'item-update': async () => { await reset(); await refuses('item-update', "UPDATE knowledge_items SET collection_id='c2',title='Rejected' WHERE id='i1'"); },
++    'attachment-refusal': async () => {
++      await reset(); await refuses('attachment-OR-IGNORE', badAttachment);
++      await refuses('attachment-assistant-update', "UPDATE assistant_knowledge_collections SET assistant_id='a2' WHERE assistant_id='a1' AND collection_id='c1'");
++      await refuses('attachment-collection-update', "UPDATE assistant_knowledge_collections SET collection_id='c2' WHERE assistant_id='a1' AND collection_id='c1'");
++    },
++    'missing-parents': async () => {
++      await reset();
++      await refuses('missing-item-collection', "INSERT INTO knowledge_items(id,business_id,collection_id,kind) VALUES('bad','b1','missing','note')");
++      await refuses('missing-attachment-assistant', "INSERT INTO assistant_knowledge_collections(assistant_id,collection_id) VALUES('missing','c1')");
++      await refuses('missing-attachment-collection', "INSERT INTO assistant_knowledge_collections(assistant_id,collection_id) VALUES('a1','missing')");
++    },
++    'corrupt-upgrade': async () => {
++      for (const [name, corrupt] of [['item', badItem], ['attachment', badAttachment]]) {
++        await reset(false); await exec(corrupt); const before = await snapshot(), beforeSchema = await schema();
++        await assert.rejects(exec(migration), /malformed JSON/);
++        const after = await snapshot(); captures.push({ name: 'corrupt-upgrade-' + name, before, after });
++        assert.deepEqual(after, before); assert.deepEqual(await schema(), beforeSchema);
++      }
++    },
++    'migration-rollback': async () => {
++      await reset(false); const before = await snapshot(), beforeSchema = await schema();
++      await assert.rejects(exec(migration + "\nSELECT json('SYNTHETIC_LATE_FAILURE');"), /malformed JSON/);
++      assert.deepEqual(await schema(), beforeSchema); const after = await snapshot(); captures.push({ name: 'migration-rollback', before, after }); assert.deepEqual(after, before);
++    },
++    'statement-and-batch': async () => {
++      await reset(); await exec("UPDATE businesses SET name='Earlier committed write' WHERE id='b1'");
++      // Earlier commit survives statement ABORT. Explicit open-transaction ABORT
++      // is covered separately in SQLite; D1 exposes batch, not BEGIN/COMMIT here.
++      await refuses('statement-preserves-earlier-commit', badItem);
++      assert.equal((await db.prepare("SELECT name FROM businesses WHERE id='b1'").first()).name, 'Earlier committed write');
++      const before = await snapshot(); await assert.rejects(exec("UPDATE knowledge_items SET title='Earlier batch write' WHERE id='i1';\n" + badAttachment), /OPENFON_KNOWLEDGE_TENANT_MISMATCH/);
++      const after = await snapshot(); captures.push({ name: 'batch-rollback', before, after }); assert.deepEqual(after, before);
++    },
++    'changes-and-quota': async () => {
++      await reset(); const before = await snapshot();
++      const zero = await exec("UPDATE assistants SET name='No match' WHERE id='missing'; INSERT OR IGNORE INTO assistant_knowledge_collections SELECT 'a1','cnext',datetime('now') WHERE changes()>0;");
++      assert.equal(Boolean(zero[0].meta.changes), false); assert.equal(Boolean(zero[1].meta.changes), false); assert.deepEqual(await snapshot(), before);
++      const spent = (await db.prepare("SELECT count FROM rate_counters WHERE bucket='assistants:b1'").first()).count;
++      const accepted = await exec("UPDATE assistants SET name='Accepted' WHERE id='a1'; INSERT OR IGNORE INTO assistant_knowledge_collections SELECT 'a1','cnext',datetime('now') WHERE changes()>0;");
++      assert.equal(Boolean(accepted[0].meta.changes), true); assert.equal(Boolean(accepted[1].meta.changes), true);
++      assert.ok(await db.prepare("SELECT 1 FROM assistant_knowledge_collections WHERE assistant_id='a1' AND collection_id='cnext'").first());
++      assert.equal((await db.prepare("SELECT count FROM rate_counters WHERE bucket='assistants:b1'").first()).count, spent + 1);
++      // Recreate the original budget trigger after the guard to exercise the
++      // alternative registration order without rewriting its implementation.
++      const budget = await db.prepare("SELECT sql FROM sqlite_master WHERE name='knowledge_insert_budget'").first();
++      await exec('DROP TRIGGER knowledge_insert_budget;\n' + budget.sql);
++      await refuses('reordered-budget-no-retained-charge', badItem);
++    },
++    'source-cleanup': async () => {
++      for (const target of ['call', 'turn']) {
++        await reset(); await exec("INSERT INTO calls(id,business_id,status) VALUES('call','b1','completed'); INSERT INTO call_turns(id,call_id,role,text) VALUES(1,'call','caller','Question'); UPDATE knowledge_items SET source_call_id='call',source_turn_id=1 WHERE id='i1'; UPDATE rate_counters SET count=500 WHERE bucket='knowledge:b1';");
++        await exec(target === 'call' ? "DELETE FROM calls WHERE id='call'" : 'DELETE FROM call_turns WHERE id=1');
++        assert.deepEqual(await db.prepare("SELECT source_call_id,source_turn_id FROM knowledge_items WHERE id='i1'").first(), { source_call_id: target === 'call' ? null : 'call', source_turn_id: null });
++        assert.equal((await db.prepare("SELECT count FROM rate_counters WHERE bucket='knowledge:b1'").first()).count, 500);
++      }
++    },
++    'production-legacy-foundation': async () => {
++      await reset(); assert.equal((await request('/api/me/business/b1', { faqs_json: '[{"q":"Hours?","a":"Weekdays"}]' }, 'PUT')).status, 200);
++      await exec("DELETE FROM knowledge_collections WHERE id='kc_default_b1'"); assert.equal((await request('/api/me/bootstrap')).status, 200);
++      assert.deepEqual((await db.prepare("SELECT business_id,collection_id,question FROM knowledge_items WHERE kind='faq'").all()).results, [{ business_id: 'b1', collection_id: 'kc_default_b1', question: 'Hours?' }]);
++      const before = await snapshot();
++      await assert.rejects(syncLegacyKnowledge(env, { id: 'b1', services_json: '[]', faqs_json: '[{"q":"Injected","a":"Invalid destination"}]' }, 'c2', { services: false, faqs: true }, [db.prepare("UPDATE businesses SET name='Earlier source write' WHERE id='b1'")]), /OPENFON_KNOWLEDGE_TENANT_MISMATCH/);
++      const after = await snapshot(); captures.push({ name: 'legacy-batch-rollback', before, after }); assert.deepEqual(after, before);
++    },
++  };
++  const selected = process.env.OPENFON_TENANT_NATIVE_CASE ? [process.env.OPENFON_TENANT_NATIVE_CASE] : Object.keys(cases);
++  if (original) assert.deepEqual(selected, ['item-refusal'], 'Original native scope is exactly one item refusal negative');
++  const outcomes = [];
++  for (const name of selected) {
++    assert.ok(Object.hasOwn(cases, name), 'Unknown native case');
++    try { await cases[name](); outcomes.push({ name, status: 'PASS' }); }
++    catch (e) { outcomes.push({ name, status: 'FAIL', message: e.message }); process.exitCode = 1; }
++    console.log(JSON.stringify(outcomes.at(-1)));
++  }
++  if (process.env.OPENFON_TENANT_EVIDENCE_DIR) {
++    await mkdir(process.env.OPENFON_TENANT_EVIDENCE_DIR, { recursive: true });
++    await writeFile(join(process.env.OPENFON_TENANT_EVIDENCE_DIR, 'native-result.json'), JSON.stringify({ original, outcomes, captures }, null, 2));
++  }
++} catch (e) { console.error(JSON.stringify({ status: 'SETUP_OR_HARNESS_FAILURE', message: e.message })); process.exitCode = 1; }
++finally {
++  try { if (mf) await mf.dispose(); disposed = true; }
++  catch (e) { console.error(JSON.stringify({ status: 'DISPOSAL_FAILURE', message: e.message })); process.exitCode = 1; }
++  if (disposed) await rm(temp, { recursive: true, force: true });
++  console.log(JSON.stringify({ disposal: disposed ? 'completed' : 'unconfirmed; owned temp retained' }));
++}
+diff --git a/test/sqlite-d1.ts b/test/sqlite-d1.ts
+--- a/test/sqlite-d1.ts
++++ b/test/sqlite-d1.ts
+@@ -89,7 +89,7 @@
+   }
+ }
+ 
+-export function applyMigrations(db: SqliteD1, from = 1, through = 20): void {
++export function applyMigrations(db: SqliteD1, from = 1, through = 21): void {
+   for (let number = from; number <= through; number++) {
+     const prefix = String(number).padStart(4, '0');
+     const filename = new URL(`../migrations/${prefix}_${migrationNames[number]}.sql`, import.meta.url);
+@@ -118,4 +118,5 @@
+   18: 'engine_profile_compatibility',
+   19: 'missing_legacy_activation',
+   20: 'browser_ticket_claim',
++  21: 'knowledge_tenant_guards',
+ };
+diff --git a/scripts/migration-rehearsal.py b/scripts/migration-rehearsal.py
+--- a/scripts/migration-rehearsal.py
++++ b/scripts/migration-rehearsal.py
+@@ -13,7 +13,7 @@
+ import sqlite3
+ import tempfile
+ 
+-RELEASE_MIGRATION_TARGET = 20
++RELEASE_MIGRATION_TARGET = 21
+ 
+ 
+ def require(condition, message):
+@@ -95,6 +95,9 @@
+         before_dump = '\n'.join(db.iterdump())
+         for path in migrations[6:]:
+             apply_migration(db, path.read_text())
++        if args.through >= 21:
++            require(db.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name IN ('knowledge_item_tenant_insert','knowledge_item_tenant_update','knowledge_attachment_tenant_insert','knowledge_attachment_tenant_update')").fetchone()[0] == 4,
++                    'Knowledge tenant guards missing after upgrade')
+         if args.through >= 20:
+             require(db.execute('SELECT COUNT(*) FROM calls WHERE browser_claim_required != 0').fetchone()[0] == 0,
+                     'Historical tickets must retain unknown claim provenance')
+@@ -150,6 +153,7 @@
+             'carrier tables empty and reservations null', 'SQLite integrity and FK checks',
+             'binary snapshot restore after synthetic deletion', 'SQL dump restore exact',
+             'pre-upgrade rollback exact', 're-upgrade succeeds',
++            *(['four knowledge tenant guards installed'] if args.through >= 21 else []),
+         ],
+         'temporary_files_removed': True,
+     }))
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -38,7 +38,7 @@
+           node scripts/asterisk-smoke.mjs
+           node scripts/realtime-smoke.mjs
+           node scripts/realtime-smoke.mjs --gateway
+-      - run: python3 -O scripts/migration-rehearsal.py . --through 20
++      - run: python3 -O scripts/migration-rehearsal.py . --through 21
+ 
+   # The benchmark scoring code is Python and computes the numbers in
+   # docs/research/. A wrong normaliser or a slot matcher that fails closed would
+diff --git a/docs/migration-compatibility.md b/docs/migration-compatibility.md
+--- a/docs/migration-compatibility.md
++++ b/docs/migration-compatibility.md
+@@ -109,3 +109,42 @@
+ The column is additive for old writers, but its deletion exception assumes the
+ new ticket is served by a claim-capable WebSocket handler. Migration and staging
+ validation do not authorize a production deployment.
++
++## Knowledge tenant relationships (0021)
++
++Migration 0021 requires an item's collection to belong to the item's business and
++an assistant attachment's two parents to belong to the same business. Its first
++read-only check includes missing parents and refuses any inconsistent historical
++relationship before installing four validation-only triggers. Apply the entire
++file atomically. No rows are backfilled, deleted, detached or assigned a different
++owner. A refusal requires restricted inspection and explicit operator
++reconciliation; neither side of a mismatch is automatically authoritative.
++
++Keep the backup and inspect mismatch counts before exposing row content. Do not
++skip the check, reset quotas, drop guards or manually mark a failed migration
++applied. Earlier successful migration files stay applied when a later one fails.
++The triggers retain existing foreign keys, cascade deletes and source-call/turn
++SET NULL cleanup, including at exhausted editing quota. Valid item writes retain
++their existing charges; attachment validation adds no counter writes.
++
++SQLite RAISE(ABORT) rolls back the failing statement and its trigger effects. It
++does not roll back earlier statements in an explicit transaction. The migration
++runner and D1 batch must provide the whole-transaction rollback on failure.
++Rehearse the exact release through 0021, including corrupt-upgrade refusal,
++statement versus batch rollback, historical data preservation and valid legacy
++projection/foundation repair. Local synthetic evidence is not production backup
++or remote migration acceptance.
++
++Current checked HTTP writers derive or verify these relationships. The call
++knowledge query also compares all participating businesses. No current untrusted
++producer of a mismatch is established. A privileged import or earlier corruption
++can nevertheless expose foreign item content or assistant metadata through old
++Studio reads that trust the relationships. A refused migration does not protect
++those still-running reads or sanitize existing data; use an explicit operator
++recovery window for reconciliation. No defensive read-filter change is included.
++
++If the migration succeeds but Worker upload fails, valid old/current issuers
++continue to satisfy the guards, including legacy JSON projection and foundation
++repair. An invalid direct import now fails. Keep guards installed on code rollback;
++use compatible code or an explicitly coordinated database-and-code recovery that
++accounts for intervening writes. Do not treat a Worker rollback as a schema undo.

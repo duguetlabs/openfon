@@ -1,0 +1,121 @@
+import { readFileSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
+
+type BindValue = string | number | bigint | null | ArrayBuffer | Uint8Array;
+
+class SqliteStatement {
+  private values: BindValue[] = [];
+
+  constructor(
+    private readonly database: DatabaseSync,
+    private readonly sql: string,
+    private readonly beforeExecute: () => void
+  ) {}
+
+  bind(...values: BindValue[]): SqliteStatement {
+    this.values = values;
+    return this;
+  }
+
+  async first<T>(): Promise<T | null> {
+    this.beforeExecute();
+    return (this.database.prepare(this.sql).get(...this.values) as T | undefined) ?? null;
+  }
+
+  async all<T>(): Promise<{ results: T[]; success: true; meta: Record<string, unknown> }> {
+    this.beforeExecute();
+    return {
+      results: this.database.prepare(this.sql).all(...this.values) as T[],
+      success: true,
+      meta: {},
+    };
+  }
+
+  async run(): Promise<{ results: unknown[]; success: true; meta: { changes: number } }> {
+    this.beforeExecute();
+    // D1 reports sqlite3_total_changes(), including FK cascades and triggers,
+    // whereas node:sqlite Statement.run().changes counts only direct writes.
+    const changes = () => (this.database.prepare('SELECT total_changes() AS n').get() as { n: number }).n;
+    const before = changes();
+    this.database.prepare(this.sql).run(...this.values);
+    return { results: [], success: true, meta: { changes: changes() - before } };
+  }
+}
+
+export class SqliteD1 {
+  readonly database = new DatabaseSync(':memory:');
+  private readonly clockDatabase = new DatabaseSync(':memory:');
+  hook: ((sql: string) => void) | null = null;
+
+  constructor() {
+    this.database.exec('PRAGMA foreign_keys = ON;');
+    // SQLite's native wall clock ignores Vitest's fake timers. Delegate date
+    // arithmetic to native SQLite, but resolve 'now' from the application clock
+    // so defaults, expiry checks, and request timestamps share the same instant.
+    this.database.function('datetime', { varargs: true }, (...args) => {
+      const values = (args.length ? args : ['now']).map((value) =>
+        value === 'now' ? new Date(Date.now()).toISOString() : value
+      );
+      const row = this.clockDatabase.prepare(`SELECT datetime(${values.map(() => '?').join(',')}) AS value`)
+        .get(...values) as { value: string | null };
+      return row.value;
+    });
+  }
+
+  prepare(sql: string): SqliteStatement {
+    return new SqliteStatement(this.database, sql, () => this.hook?.(sql));
+  }
+
+  async batch<T = unknown>(statements: SqliteStatement[]): Promise<Array<{ results: T[]; meta: { changes: number } }>> {
+    this.database.exec('BEGIN');
+    try {
+      const results = [];
+      for (const statement of statements) results.push(await statement.run());
+      this.database.exec('COMMIT');
+      return results as Array<{ results: T[]; meta: { changes: number } }>;
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  exec(sql: string): void {
+    this.database.exec(sql);
+  }
+
+  close(): void {
+    this.database.close();
+    this.clockDatabase.close();
+  }
+}
+
+export function applyMigrations(db: SqliteD1, from = 1, through = 20): void {
+  for (let number = from; number <= through; number++) {
+    const prefix = String(number).padStart(4, '0');
+    const filename = new URL(`../migrations/${prefix}_${migrationNames[number]}.sql`, import.meta.url);
+    db.exec(readFileSync(filename, 'utf8'));
+  }
+}
+
+const migrationNames: Record<number, string> = {
+  1: 'init',
+  2: 'engine',
+  3: 'realtime_model',
+  4: 'realtime_voice',
+  5: 'closures',
+  6: 'engine_profiles',
+  7: 'abuse_limits',
+  8: 'calm_studio_foundation',
+  9: 'telnyx_inbound',
+  10: 'provider_capabilities',
+  11: 'asterisk_inbound',
+  12: 'assistant_essentials',
+  13: 'knowledge_budgets',
+  14: 'asterisk_credentials',
+  15: 'assistant_budgets',
+  16: 'engine_profile_credentials',
+  17: 'preset_budgets',
+  18: 'engine_profile_compatibility',
+  19: 'missing_legacy_activation',
+  20: 'browser_ticket_claim',
+};

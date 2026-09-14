@@ -1,0 +1,470 @@
+{
+  "status": "SOURCE_PREPARED_UNEXECUTED_AWAITING_ACTUAL_QA_AND_INTEGRATION_GRANT",
+  "base": "49df6fc2a5edc0f75a8c922e0178fa6269276f24",
+  "report_comment": "5669260419",
+  "report_original_sha256": "07c08079832fc60810a1c189c4138e34c51ad01ae3041aea4d3a4a883137ef98",
+  "delivery": "Apply delivery.patch only; prepared files are exact reconstruction identities, not whole-owner source replacements.",
+  "files": [
+    {
+      "path": "migrations/0021_knowledge_tenant_guards.sql",
+      "sha256": "b1b7aabd2f39b3ea565a30ca939bb8348624cc28580180ea47797c43e290902a",
+      "bytes": 2804,
+      "original_sha256": null
+    },
+    {
+      "path": "test/knowledge-tenant-guards.test.ts",
+      "sha256": "228b65f0d44486b1a6f0b51e26a65c4bddebd72c604e984e4cbd76ba23fded2e",
+      "bytes": 16407,
+      "original_sha256": null
+    },
+    {
+      "path": "scripts/knowledge-tenant-smoke.mjs",
+      "sha256": "39b392d74164da873bb9c99a906da770b5f23dec8f7bac2884079b9f8aa83bc8",
+      "bytes": 14146,
+      "original_sha256": null
+    },
+    {
+      "path": "test/sqlite-d1.ts",
+      "sha256": "eeee5d6dc957fe6280bc5cc6ae9676dd1dafb03e845e6164cae475557cfa87dd",
+      "bytes": 4055,
+      "original_sha256": "b78afce19ff64b75b8b369c1fbe6aa2fbdca6c0ed45e9d88b19ef9fafd037284"
+    },
+    {
+      "path": "scripts/migration-rehearsal.py",
+      "sha256": "ec16474af27995debb860d74a9e154eb7680e51106e8f8016a5b2d8db5426d3a",
+      "bytes": 11902,
+      "original_sha256": "0b5a50a77aec1417db0dc3009f39b133e5110fc3e9ff4e6dd818bfdc7649f0f3"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "3931f9beb7a2034787b0d91a9f97acaa7cd96436d2d716b8bc0d0f4d548dc994",
+      "bytes": 6846,
+      "original_sha256": "ea520be8d01443feea10618547b91b4f111c4af66b5a60dca1c64b298ceb347a"
+    },
+    {
+      "path": "docs/migration-compatibility.md",
+      "sha256": "71eef295255de3bc2c30afbbefd98d4c379e62eebb2cbad6e74ab3be71d81c5f",
+      "bytes": 9769,
+      "original_sha256": "a5963f7ce6d07b649349d2af93c1bf314d9c7248aeaa5cb649e9f4fc5945eccf"
+    }
+  ],
+  "patch_sha256": "d7790b82413de987e3bd90f7bef256b0e790f511973c2750c98147cefec717f9",
+  "protected": [
+    {
+      "path": "migrations/0001_init.sql",
+      "sha256": "14d6ffa48d6f8db76de9aa6f66e3ff92cf5452a9ce0d6e0a439590f988b1d0cd"
+    },
+    {
+      "path": "migrations/0002_engine.sql",
+      "sha256": "0ff3a484e2ec808e380f8a071e3fc0f6c7459eb65a9c2d457a0055c273ed82e2"
+    },
+    {
+      "path": "migrations/0003_realtime_model.sql",
+      "sha256": "923cc7c5ca28e3006c7a2296e43ca5d3860eb99899b20636a823254f3ca86cf1"
+    },
+    {
+      "path": "migrations/0004_realtime_voice.sql",
+      "sha256": "06d1d9eda8a6ba5b0bcae183edcdbe84e4bdebd0c5c601e42237e2c0824d3272"
+    },
+    {
+      "path": "migrations/0005_closures.sql",
+      "sha256": "3967db151fc6f8dff49c519d99a9dd39dadb52f8b511de4aff9a0cb4015b14c0"
+    },
+    {
+      "path": "migrations/0006_engine_profiles.sql",
+      "sha256": "2a7fe291606d07b5b6c42bdb9df81eff2934ac6d9050a4d1bbf4cd64ed23844b"
+    },
+    {
+      "path": "migrations/0007_abuse_limits.sql",
+      "sha256": "ad34c6a80b0549ca7dcd3561b8efdb65a936c9ad2194e8f0d3ec53087f78bf57"
+    },
+    {
+      "path": "migrations/0008_calm_studio_foundation.sql",
+      "sha256": "203a7c136fb7508bf383de4f3ae9ca844dbbb1f70a551dd04f508ffdee0d79cb"
+    },
+    {
+      "path": "migrations/0009_telnyx_inbound.sql",
+      "sha256": "742632a1ddf10fe1932fcab14542fdff89e3dea9e57ebfe0f3cefbca753375d1"
+    },
+    {
+      "path": "migrations/0010_provider_capabilities.sql",
+      "sha256": "6ed6fd7a965e07a185d21cf5dfec4a746646cf7d934781f719d08938eccbe800"
+    },
+    {
+      "path": "migrations/0011_asterisk_inbound.sql",
+      "sha256": "b9051d6705d69ff3914c36fa9f0cd67b689087ac3323244fd59f77d9962add62"
+    },
+    {
+      "path": "migrations/0012_assistant_essentials.sql",
+      "sha256": "bf09fc6c6607b21a6233d3ca7e0bb74b8a79fd664333d1e30a6fca2788e9ed24"
+    },
+    {
+      "path": "migrations/0013_knowledge_budgets.sql",
+      "sha256": "d5ea763f2013707cab473a68fc8495ace1751e50a66c21a3addc94f8a5e1cbb4"
+    },
+    {
+      "path": "migrations/0014_asterisk_credentials.sql",
+      "sha256": "7df5b324b629e332cf6d3081aba89e02113e17a6fbd67c014b4dc54b11d209e3"
+    },
+    {
+      "path": "migrations/0015_assistant_budgets.sql",
+      "sha256": "5faa7a48d605beccdfdcf0dfae5114ead33da545e23fd7b04ac6e27a6841c6e4"
+    },
+    {
+      "path": "migrations/0016_engine_profile_credentials.sql",
+      "sha256": "355c1bac4e0a2aa8471b10d5acc2ccd66733bfb158fbe9d088798a3d7e5611f5"
+    },
+    {
+      "path": "migrations/0017_preset_budgets.sql",
+      "sha256": "d894c7360978a4243ff2bc743b164d80be3675455c947c55d03e1c7bbf893c24"
+    },
+    {
+      "path": "migrations/0018_engine_profile_compatibility.sql",
+      "sha256": "119e7c88d7228f887ca2ac22ca921f3f01c8b520f8be35228481cfb5d26e4726"
+    },
+    {
+      "path": "migrations/0019_missing_legacy_activation.sql",
+      "sha256": "4c4c6d507d2540bdea4eaf3d787c7cce8691f49f779f026fe1331072b0c9c842"
+    },
+    {
+      "path": "migrations/0020_browser_ticket_claim.sql",
+      "sha256": "3c205cc454e588d3b87c11e1e51001c5d42a55747c893ee5d86203bfe550b5ee"
+    },
+    {
+      "path": "src/account-api.ts",
+      "sha256": "ba040d9af67ba3340f994ab4184dfe67831f999bda1f0dfc20d06cfecfb3ecbe"
+    },
+    {
+      "path": "src/account-auth-budget.ts",
+      "sha256": "06155564622254a220dbc4fdd7d1c035639bca36159887e4835e765dd3f603e4"
+    },
+    {
+      "path": "src/assistant-write-snapshot.ts",
+      "sha256": "e37594eed016483b0eb5e40800ccf7df284c1bf00611de7f741a9793147a55aa"
+    },
+    {
+      "path": "src/asterisk-auth-budget.ts",
+      "sha256": "36cae583735064dabfb977e447f01e734e5ae3f93f2ec3d87f67d44f3f10410f"
+    },
+    {
+      "path": "src/asterisk-control.ts",
+      "sha256": "f6e314bf97f70de409a0af56640bc73585a202a785f6377337183a39ac1a24d9"
+    },
+    {
+      "path": "src/asterisk-media.ts",
+      "sha256": "89b7448be299211ec7a016e96b4cdc0be58b4640f7cf501780c9888f1be2a583"
+    },
+    {
+      "path": "src/asterisk-routes.ts",
+      "sha256": "9fa57ea79eb905b63df9b3c0d6e09dce03e0fbca59d44a4c78a55e6a68be2c63"
+    },
+    {
+      "path": "src/asterisk-websocket.ts",
+      "sha256": "8a3c603cdc5808255bd2615429b3b73686b343d9d081b7112739abf8c4878811"
+    },
+    {
+      "path": "src/auth.ts",
+      "sha256": "92c3260be1980a8af4283e38c49dee68648d2d5ff85cfa0e71687b5b32c5e71d"
+    },
+    {
+      "path": "src/call-knowledge.ts",
+      "sha256": "da86cab7796348304456f6ca63dd6dd792ca849220961c36d4db26d87b388cef"
+    },
+    {
+      "path": "src/call-session.ts",
+      "sha256": "8c884f8a6f39d7db83b22ff40eb9d0233436eb0391866b0701a7a09c2d18b413"
+    },
+    {
+      "path": "src/contact.ts",
+      "sha256": "4ccd8822ba2b99252b9a8a94a25c0bd9a5cd6c238c6571dcb881fedcab9e3d84"
+    },
+    {
+      "path": "src/index.ts",
+      "sha256": "7d21900e2bc6ace0af34c9b0b4f745eeb0f3285249f469575fd7eb6b31e5e9d4"
+    },
+    {
+      "path": "src/media-output-debt.ts",
+      "sha256": "c64be7586ab4b804fcb7158144e322a95061f0504fe080052475b1fabba8c5a4"
+    },
+    {
+      "path": "src/piper-catalog.ts",
+      "sha256": "55493b66069a9df8613b43cf8acb1804a76f32b18de408cf4fd60d8e35446958"
+    },
+    {
+      "path": "src/preset-budgets.ts",
+      "sha256": "ce11ac81fae7bc37fe8b69f98aee1229cabced06dea654bd1499660cfff3f252"
+    },
+    {
+      "path": "src/preset-write-snapshot.ts",
+      "sha256": "59a3136f0aa9f82f270937eaf192485008c4bc7faf4dad8ac1e4869e7fe9d54f"
+    },
+    {
+      "path": "src/prompt.ts",
+      "sha256": "5090d3d61ab63b96f4a622738986ba66f2db6d2fde43a03968b03e7ae781a251"
+    },
+    {
+      "path": "src/provider-response.ts",
+      "sha256": "7dba2fa2361876a813580fe1fb4d1b45b1ec42525977a52a2ba469e21db09bad"
+    },
+    {
+      "path": "src/provider-settings.ts",
+      "sha256": "1be5872fa2d85c9ec48194b5d52f3143d36c4a15643b1aa663fde4e9341fa035"
+    },
+    {
+      "path": "src/providers.ts",
+      "sha256": "8a3b941f17d9d7250cde355b46ed10a90e9bdbc63b85ab14fb012fe50edb5fe7"
+    },
+    {
+      "path": "src/realtime-input.ts",
+      "sha256": "a342502b2a975fd384d5aa68de68c4f8e8c43c7eaa4bc23f7bb2c948dea9d98e"
+    },
+    {
+      "path": "src/realtime-output.ts",
+      "sha256": "b0174aa67bbd646915c66136c69d211da6b36b480c065b84d2a3f72a75304c6d"
+    },
+    {
+      "path": "src/realtime-providers.ts",
+      "sha256": "341f5dd8e9e825d36d75aac4fd6afcbbf94190811fa02a20c530fba8529c375e"
+    },
+    {
+      "path": "src/request-validation.ts",
+      "sha256": "cd87621174f39ab3b363422567d88781c21b03e71ffb80373adcbe6cbb44094a"
+    },
+    {
+      "path": "src/studio-api.ts",
+      "sha256": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347"
+    },
+    {
+      "path": "src/telephony-audio.ts",
+      "sha256": "cb06b9da26edbb1d37a1d601049ddb2eff5e1cf9618abdadcd0f5e6e68aedd4e"
+    },
+    {
+      "path": "src/telnyx-admission.ts",
+      "sha256": "259de6b3f8eb3d6787e1d6a7bce2e23fbca461fdcaf90a357ef1486335b2bc63"
+    },
+    {
+      "path": "src/telnyx-control.ts",
+      "sha256": "213038b7acd1660664014ad2067ca01d770097f6ba02ce8bc638e186658b4f32"
+    },
+    {
+      "path": "src/telnyx-media-admission.ts",
+      "sha256": "7bb30b1b06467197dac366e357d9f4687fbdd46b38048fe159663e59a881f265"
+    },
+    {
+      "path": "src/telnyx-media.ts",
+      "sha256": "e34f6146cf35e17f3bbc76baec61e2b647f8aa3e668bc8b8146dcd9dc6a59740"
+    },
+    {
+      "path": "src/telnyx-routes.ts",
+      "sha256": "2351a3bcdca548785d439ae32be2cdfb64be6148e1d1c03a681281b8b2d73c41"
+    },
+    {
+      "path": "src/telnyx-webhook-admission.ts",
+      "sha256": "fc043545b374aa6b6d378faf64a51006df6bfb9ebc752535dcaa62807c777e24"
+    },
+    {
+      "path": "src/telnyx-webhook.ts",
+      "sha256": "fba2355f23073ae5fdaa2ae4f4d056cb4e27dca67c49dad18c7f3c15d66a97e5"
+    },
+    {
+      "path": "src/types.ts",
+      "sha256": "f970c83e843fd07309389027824ee8d3b60dcfadc5c107ad1bb80eea5ec258de"
+    },
+    {
+      "path": "web/index.html",
+      "sha256": "103313bf182aeec6acdc1a7d7eb72a023e5e92b17c3090aef044a5146aa1afbe"
+    },
+    {
+      "path": "web/public/favicon.svg",
+      "sha256": "db9bbcaaf34d0820605db873a32c56a461f35ab28cdb161d234bde24ae5e79d5"
+    },
+    {
+      "path": "web/public/robots.txt",
+      "sha256": "b3aabb5b36d9b48dbe44178e5f665c20916458bd1d41af86067e64178992d9bc"
+    },
+    {
+      "path": "web/public/social-card.png",
+      "sha256": "034a45313ce5168dad1cac1d42061be17a290f48ab5b47af13058271461c63ee"
+    },
+    {
+      "path": "web/public/social-card.svg",
+      "sha256": "7b50f1bb1fc04daf78e2a91d340625f0dfbbe816ef526b771fa78b718b5d4c14"
+    },
+    {
+      "path": "web/src/App.tsx",
+      "sha256": "50c487e550a0c5940e2714d5800e6a9c877ad5e41a3be4a8b01787e11cf8db16"
+    },
+    {
+      "path": "web/src/api.ts",
+      "sha256": "a737158ee2d5fc69a22876555fedf8243480a9b1ea459b14ac3175269a9f5188"
+    },
+    {
+      "path": "web/src/landing.css",
+      "sha256": "271350f9c4a613fe75f74f9ee124ed02ea4f755a28a131f8e646ac35682e481a"
+    },
+    {
+      "path": "web/src/main.tsx",
+      "sha256": "db5f46175c834b54a366525f63ba3dfb1e94c2eb6b79326587140edb5b36e037"
+    },
+    {
+      "path": "web/src/pages/Account.tsx",
+      "sha256": "61ede90a67ffb4c5041c7f600f2f4cda27db52c1d378e1165c1fe7b6a348dfaf"
+    },
+    {
+      "path": "web/src/pages/Auth.tsx",
+      "sha256": "174c8dac5f11e51e6ccf35cfba67a1a25887af2cf09b93daf886ce8fad230d48"
+    },
+    {
+      "path": "web/src/pages/CallDetail.tsx",
+      "sha256": "d60364f9a4536dcb1157cea4a7250ea115609bc9d3d68dd7b148eea099c360a6"
+    },
+    {
+      "path": "web/src/pages/Dashboard.tsx",
+      "sha256": "e19ea958b5aa1559ab43adeb6cccf58b679d01424db16646c88e0b701b1d0257"
+    },
+    {
+      "path": "web/src/pages/Landing.tsx",
+      "sha256": "164e2e3310daf5598519eda2801ac96462f64a19c4b5bce991f9ac90c75e13bf"
+    },
+    {
+      "path": "web/src/pages/Onboarding.tsx",
+      "sha256": "b096119ad9d18e36990d0f4363305f664fd5574afe9df8b5e09005e9eff38916"
+    },
+    {
+      "path": "web/src/pages/ProviderSettings.tsx",
+      "sha256": "58718c5cd48622695d5d5bc9dc85a39fa97a22a0ff446e1837857062c663d718"
+    },
+    {
+      "path": "web/src/pages/Settings.tsx",
+      "sha256": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af"
+    },
+    {
+      "path": "web/src/pages/Studio.tsx",
+      "sha256": "23ebbb9cae00b8640609dd0947f5fdc8f50d0fb5b3a5f75779bacb2982a8be8e"
+    },
+    {
+      "path": "web/src/pages/Widget.tsx",
+      "sha256": "cde3e8eca7c283773160e70c85a391b1ef1ed7a48681c788bed8c2e75bce717a"
+    },
+    {
+      "path": "web/src/row-arrays.ts",
+      "sha256": "0df3c1a2ec590ee9889dbd038d2ce9232ce6ec398361f1a557ac55071bb6c439"
+    },
+    {
+      "path": "web/src/service-rows.ts",
+      "sha256": "19883445744dc1452778072c2de2918bee37ba79529aeb0ee25ec060c710674f"
+    },
+    {
+      "path": "web/src/session-gate.ts",
+      "sha256": "67cdb0d2d8de8ee807d3a2e2c0f434702daac8329032979b0d699cf524e4669d"
+    },
+    {
+      "path": "web/src/session-load.ts",
+      "sha256": "134a9f64968302007ae2a50ac1934afdf9f87d84d99360d66e1e47dae8e4ed53"
+    },
+    {
+      "path": "web/src/studio.css",
+      "sha256": "eece95ca1123654fc979d61f0a3ed68999218dd37f0bc691d62401e5ed44aa96"
+    },
+    {
+      "path": "web/src/styles.css",
+      "sha256": "1f6fd4d606fe1056c8a533ce39c919f9713f84f4666b566a1c1c18c7f0b04687"
+    },
+    {
+      "path": "web/src/ui.tsx",
+      "sha256": "23dd13a278038e0c34f526cc7cc2803e9d38b7ad8e5638139fae589f6e18e2d4"
+    },
+    {
+      "path": "web/src/unsaved-edits.ts",
+      "sha256": "ce43144ea6d1a84a9e42237622432f2f12b234087b461324e399674cc64641cf"
+    },
+    {
+      "path": "web/src/voice.ts",
+      "sha256": "9783d4bc29e2a62048fa543423c6b7da368b596e334403755d3f3a531ea05636"
+    },
+    {
+      "path": "web/tsconfig.json",
+      "sha256": "057b68f3b622b565c8b242b4150178b1c81cb239ca949adc560fa3a8c2b2a365"
+    }
+  ],
+  "static_checks": {
+    "original4_git_identity": true,
+    "patch_apply_check": true,
+    "reconstruction7_identity": true,
+    "all_base_src_web_migrations_unchanged": true
+  },
+  "runtime": "NONE: no parser/import/collection/test/type/SQL/native/rehearsal/browser execution",
+  "counts": {
+    "new_sql_api_expanded": 34,
+    "original_selected_negatives": 7,
+    "original_skipped": 27,
+    "existing_budget_companions": 9,
+    "fixed_sql_api_total": 43,
+    "original_native_groups": 1,
+    "fixed_native_groups": 11,
+    "types": 2,
+    "synthetic_rehearsal": 1
+  },
+  "planned_validation": [
+    {
+      "name": "original-sql",
+      "command": "OPENFON_TENANT_ORIGINAL=1 npx --no-install vitest run test/knowledge-tenant-guards.test.ts -t 'tenant guard refuses' --reporter=verbose",
+      "scope": "7 selected negatives; 27 intentional skips. Predicted 7 FAIL, not observed.",
+      "status": "UNEXECUTED"
+    },
+    {
+      "name": "original-native",
+      "command": "OPENFON_TENANT_ORIGINAL=1 OPENFON_TENANT_NATIVE_CASE=item-refusal OPENFON_TENANT_EVIDENCE_DIR=\"$TENANT_ORIGINAL_EVIDENCE\" node scripts/knowledge-tenant-smoke.mjs",
+      "scope": "One original OR IGNORE mismatch negative, expected first marker assertion failure; not observed.",
+      "status": "UNEXECUTED"
+    },
+    {
+      "name": "fixed-sql-api",
+      "command": "npx --no-install vitest run test/knowledge-tenant-guards.test.ts test/knowledge-budget.test.ts --reporter=verbose",
+      "scope": "34 new + 9 existing = 43 cases, unexecuted.",
+      "status": "UNEXECUTED"
+    },
+    {
+      "name": "worker-types",
+      "command": "npx --no-install tsc --noEmit -p tsconfig.worker.json",
+      "scope": "Unexecuted.",
+      "status": "UNEXECUTED"
+    },
+    {
+      "name": "web-types",
+      "command": "npx --no-install tsc --noEmit -p web/tsconfig.json",
+      "scope": "Unexecuted.",
+      "status": "UNEXECUTED"
+    },
+    {
+      "name": "fixed-native",
+      "command": "OPENFON_TENANT_EVIDENCE_DIR=\"$TENANT_FIXED_EVIDENCE\" node scripts/knowledge-tenant-smoke.mjs",
+      "scope": "11 grouped cases, unexecuted.",
+      "status": "UNEXECUTED"
+    },
+    {
+      "name": "rehearsal",
+      "command": "python3 -O scripts/migration-rehearsal.py . --through 21",
+      "scope": "One synthetic upgrade/restore/rollback/re-upgrade rehearsal, unexecuted.",
+      "status": "UNEXECUTED"
+    }
+  ],
+  "companion": {
+    "path": "test/knowledge-budget.test.ts",
+    "sha256": "74733ebb0fb46d3cb97391954ab63890a14f2311dde6d4aa24764d18a3c2a4b6",
+    "expanded_cases": 9
+  },
+  "native_groups": [
+    "clean-upgrade",
+    "item-refusal",
+    "item-update",
+    "attachment-refusal",
+    "missing-parents",
+    "corrupt-upgrade",
+    "migration-rollback",
+    "statement-and-batch",
+    "changes-and-quota",
+    "source-cleanup",
+    "production-legacy-foundation"
+  ]
+}
