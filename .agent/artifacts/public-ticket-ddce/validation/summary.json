@@ -1,0 +1,35 @@
+{
+  "status": "COMPLETE_RELEASED",
+  "original": {
+    "pass": 7,
+    "fail": 3,
+    "first_assertions": "paused/draft200 and persisted ticket; deletedFK500/no ticket; first404 assertion stops later checks"
+  },
+  "fixed": {
+    "pass": 63,
+    "files": 2,
+    "duration": "7.64s"
+  },
+  "studio": {
+    "pass": 2,
+    "skip": 62
+  },
+  "types": "Worker/web PASS",
+  "no_source_edits_or_retries": true,
+  "evidence": {
+    "cleanup.json": "07015e75b9c245f2a22f573de1406d211b8f603e963c60ed2cd7c416c27ddfd6",
+    "fixed-command.json": "49b27b85e92f77d072dc78701f8731015041de082ebda18c864348a5ab9a6e3c",
+    "fixed-report.json": "952b608630ac7976fdc9eaae282bb0a0e30f2d1c8470c2de06f2ad9ec0c0c4e6",
+    "fixed.log": "e44bc7a48268eb6a44896eaba3def6c1297ac7b40140ac6d13856a05f1e68540",
+    "original-command.json": "53dcae0a288bb37fd581773106a4f8e159e80be8845f27d35c84085c88c18d85",
+    "original-report.json": "dd4c758c6999ed64740d4ec935df44b6d90b770482fa544e023a559083c4e454",
+    "original.log": "2acd5140c2ffcb937e89229181b4c8d1a14dd13f98e3d943e9a6bbab5fdf389b",
+    "source-after.json": "3e1f10122bb052ca6a051f88b0cf6bdf456141da433997d7b8bd28f1ee1f45db",
+    "studio-command.json": "464fd36f318e970e067a954eed51041940869e8565659d9c5764e66152bbdb69",
+    "studio-report.json": "1191eba9bb5f2326e1036a194c7ca6f476ff0544d296aea954f2da62ad4a209e",
+    "studio.log": "763ee0dd3ecb1f4186ad50cbbac797f45ffee3351984cb4ae73fef935db24086",
+    "types-command.json": "cb98217e0506337d9a04eba44d70f6696501810ab09fa56598d2d94dbd994a19",
+    "types.log": "75c97ba8f32dd032ee1e1293129c6bbdd2ff33c240a3223d4b150e23ab19ee29"
+  },
+  "limits": "Node handler/SQLite synchronous pre-INSERT peer mutation; full fixed snapshots after middleware charge. No native D1 or atomic refusal-cause read claim."
+}

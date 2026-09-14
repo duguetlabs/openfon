@@ -1,0 +1,14 @@
+{
+  "time": "2026-09-14T18:06:00.783434+00:00",
+  "observed_command_pids": [
+    41844,
+    41820,
+    43211,
+    43214
+  ],
+  "still_present": [],
+  "matching_runners": [],
+  "reserved_listeners": [],
+  "source_restored_and_protected": true,
+  "scope": "No native/browser listener or runtime temp D1 created; snapshot retained for QA, four command PIDs only, not exhaustive descendants"
+}

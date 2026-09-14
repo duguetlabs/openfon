@@ -1,0 +1,18 @@
+{
+  "name": "studio",
+  "command": [
+    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-ticket-active-ddce-h5q38d_1/node_modules/.bin/vitest",
+    "run",
+    "test/studio-api.test.ts",
+    "-t",
+    "supports independent assistants, lifecycle gates, default knowledge, and cross-user isolation|isolates live and test concurrency pools while still capping simultaneous tests",
+    "--reporter=default",
+    "--reporter=json",
+    "--outputFile=/Users/cristian/projects/fun/openfon-worktrees/integration/.agent/artifacts/public-ticket-ddce/validation/studio-report.json"
+  ],
+  "cwd": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-ticket-active-ddce-h5q38d_1",
+  "pid": 43211,
+  "exit": 0,
+  "started": "2026-09-14T18:05:24.540255+00:00",
+  "elapsed_seconds": 0.75
+}

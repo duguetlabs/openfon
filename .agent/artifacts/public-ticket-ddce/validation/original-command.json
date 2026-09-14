@@ -1,0 +1,16 @@
+{
+  "name": "original",
+  "command": [
+    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-ticket-active-ddce-h5q38d_1/node_modules/.bin/vitest",
+    "run",
+    "test/public-ticket-active-race.test.ts",
+    "--reporter=default",
+    "--reporter=json",
+    "--outputFile=/Users/cristian/projects/fun/openfon-worktrees/integration/.agent/artifacts/public-ticket-ddce/validation/original-report.json"
+  ],
+  "cwd": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-ticket-active-ddce-h5q38d_1",
+  "pid": 41820,
+  "exit": 1,
+  "started": "2026-09-14T18:05:15.033287+00:00",
+  "elapsed_seconds": 1.69
+}

@@ -1,0 +1,13 @@
+{
+  "name": "types",
+  "command": [
+    "npm",
+    "run",
+    "typecheck"
+  ],
+  "cwd": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-ticket-active-ddce-h5q38d_1",
+  "pid": 43214,
+  "exit": 0,
+  "started": "2026-09-14T18:05:25.291350+00:00",
+  "elapsed_seconds": 3.217
+}

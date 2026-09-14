@@ -1,0 +1,24 @@
+{
+  "head": "8e8880046d199cc641acab260902762e96c7e40a",
+  "parent": "ddce0bde6c16633541dc65811fbb833865c7af2a",
+  "paths": [
+    "src/index.ts",
+    "test/fake-d1.ts",
+    "test/public-ticket-active-race.test.ts"
+  ],
+  "files": {
+    "src/index.ts": {
+      "original_sha256": "2497393f1c491097f8d033825a42dd70cdac19b37e7d288e1967c9b210af1629",
+      "fixed_sha256": "7d21900e2bc6ace0af34c9b0b4f745eeb0f3285249f469575fd7eb6b31e5e9d4"
+    },
+    "test/fake-d1.ts": {
+      "original_sha256": "21bf6ba4e33edaaa1ef4e0834a4f5be536c8a776a5e3c014b53cb8d893e8e4b3",
+      "fixed_sha256": "693699e510952cee5add47f52cb97e1f5ee280e830dbcc2592b03b741d10dfe8"
+    },
+    "test/public-ticket-active-race.test.ts": {
+      "original_sha256": null,
+      "fixed_sha256": "955456bc4ed0f97ceef09c9a6c78047be04799ea09ecc70218659f037840a88b"
+    }
+  },
+  "qa": "CLOSED ab0793d source/evidence/exact assembly8e88800"
+}

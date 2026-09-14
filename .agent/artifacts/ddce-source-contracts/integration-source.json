@@ -1,0 +1,19 @@
+{
+  "head": "ddce0bde6c16633541dc65811fbb833865c7af2a",
+  "original_sha256": "375419b1c27e53b37c292b16eb197274ff037cfcd999cbb70415b90b0c0290e2",
+  "hashes": {
+    "src/index.ts": "2497393f1c491097f8d033825a42dd70cdac19b37e7d288e1967c9b210af1629",
+    "src/telnyx-routes.ts": "2719a06b2c1ca1d951943685792cc03b08689304073be6b13c664d5a600c6770",
+    "src/telnyx-webhook.ts": "fba2355f23073ae5fdaa2ae4f4d056cb4e27dca67c49dad18c7f3c15d66a97e5",
+    "test/telnyx-body.test.ts": "b011204d5a0ba4d337a81d60c6af0f45ecf06aa77e1ba3042b9ee8077d16147d",
+    "scripts/telnyx-webhook-body-smoke.mjs": "9f72687219dce66c46c84424984b4c174722b44ef0a804e8945bc1576abdf7cc",
+    "test/asterisk-auth-smoke.mjs": "8d6107ef56f3b648d816337e7f289f8ed79deae212639545f88de8ec6775e6e4",
+    "src/studio-api.ts": "801aa8415afaaad6029c8d9fa74d6131f7a99dc38c15e4dfa05cac56712987ff",
+    "migrations/0008_calm_studio_foundation.sql": "203a7c136fb7508bf383de4f3ae9ca844dbbb1f70a551dd04f508ffdee0d79cb",
+    "test/limits.test.ts": "750241f174e368156f956ef040824cf43a0fa3469c8adaec9ff772309e5a8442",
+    "test/fake-d1.ts": "21bf6ba4e33edaaa1ef4e0834a4f5be536c8a776a5e3c014b53cb8d893e8e4b3",
+    "test/sqlite-d1.ts": "b78afce19ff64b75b8b369c1fbe6aa2fbdca6c0ed45e9d88b19ef9fafd037284"
+  },
+  "webhook_four_shipped_hashes_equal_closed_8436": true,
+  "execution": "read-only; no application/fixture runtime"
+}

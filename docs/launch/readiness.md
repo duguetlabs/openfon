@@ -11,6 +11,16 @@ findings from every reviewer still require verification and disposition. No new
 Codex review is requested or awaited. Historical dual-review references below
 record earlier requirements; this policy governs the current release.
 
+## ddce0bd public-ticket and aggregate webhook review
+
+The [unchanged ddce0bd review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5659759685) raises aggregate Telnyx body-acquisition security concerns and six focus items. Both exact CI runs34811908081/34811940185 pass all four jobs; the independently read application job passes1,444 tests/60files in20.65s, types and build. This precedes the following correction, and does not supply security/major clearance.
+
+[Four qualified source dispositions](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5668432416) preserve existing policies: receipt preflight includes an implicit incoming frame; the prior body deadline is shipped in actual source; the workerd fixture clock does not freeze the host Node deadline; and capture timeout retains explicitly disclosed live-child uncertainty/copied-wrapper removal. No unchanged runtime replay or stronger cleanup/global-timeout claim.
+
+Public-ticket correction `8e88800` pins captured assistant ID/business/active presence in the same quota-guarded INSERT. A failed insert reads current active presence only to choose unavailable404 versus existing daily429, without retry or foundation repair; that later read is not an atomic refusal-reason snapshot. Later pause still relies on WebSocket admission. Original10 yields3failures/7controls: pause/draft200 with ticket persisted, deletion FK500 without ticket; each stops at first expected404 assertion. Fixed63/new-plus-limiter cases, two selected Studio controls (62skipped) and both types pass. Fixed full snapshots follow middleware charge and peer mutation. Evidence uses actual Node handlers/SQLite with a synchronous SQL hook, not native D1 concurrency. Independent QAab0793d closes exact source/evidence/assembly; no source changed during validation.
+
+Aggregate webhook admission is separately selected for exact-artifact preparation:16isolate-local leases before reader/buffer allocation, saturated503; full-route/read/cancellation-fulfilled/lock-release conditions govern replenishment. Timeout alone does not release. Failed cancellation or lock release quarantines capacity;16unresolved owners may deny that isolate indefinitely. This is a bounded admitted-application-work policy, not a deployment-wide memory/TCP or availability guarantee. Actual source review and bounded execution remain pending.
+
 ## 77cde12 capture deadline and profile-creation review
 
 The [unchanged 77cde12 review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5659360760) reports no security concerns and four recommendations, without clean-major clearance. [Provider Coupling and Test Collection](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5659396342) have qualified exact-source dispositions: missing default text keys do not throw or make requests, while invalid custom settings retain the deliberate pickup refusal policy; explicit test/type roots exclude artifact copies. No unchanged fixture rerun or arbitrary invalid-configuration promise is claimed.

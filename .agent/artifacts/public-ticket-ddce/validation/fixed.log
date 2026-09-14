@@ -1,0 +1,41 @@
+
+ RUN  v5.0.0 /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-ticket-active-ddce-h5q38d_1
+
+(node:41847) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+stdout | test/public-ticket-active-race.test.ts > [ticket-race-negative] refuses a target changed before INSERT: paused
+ticket-race-diagnostic {"change":"paused","status":404,"reached":true,"calls":[],"dispatches":0}
+
+stdout | test/public-ticket-active-race.test.ts > [ticket-race-negative] refuses a target changed before INSERT: draft
+ticket-race-diagnostic {"change":"draft","status":404,"reached":true,"calls":[],"dispatches":0}
+
+stdout | test/public-ticket-active-race.test.ts > [ticket-race-negative] refuses a target changed before INSERT: deleted
+ticket-race-diagnostic {"change":"deleted","status":404,"reached":true,"calls":[],"dispatches":0}
+
+stderr | test/limits.test.ts > GET /ws/call/:callId > hands the slot back when the Durable Object cannot be reached at all
+call session unreachable Error: durable object reset
+    at Object.fetch (/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-ticket-active-ddce-h5q38d_1/test/limits.test.ts:375:48)
+    at Array.<anonymous> (/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-ticket-active-ddce-h5q38d_1/src/index.ts:1401:22)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-ticket-active-ddce-h5q38d_1/test/limits.test.ts:381:13
+    at file:///Users/cristian/projects/fun/openfon/node_modules/vitest/dist/chunks/run.CQOUYP-x.js:2783:20
+
+ ✓ test/public-ticket-active-race.test.ts (10 tests) 88ms
+ ✓ test/limits.test.ts (53 tests) 7110ms
+   ✓ POST /api/auth/login (13)
+     ✓ throttles a password-guessing run against one account 1103ms
+     ✓ cannot be used to lock an owner out of their own account 1147ms
+     ✓ lets the owner in even while their email is over its limit 1132ms
+     ✓ slows a wrong password once its email is over the limit 1110ms
+     ✓ does not let a successful login buy back the per-IP guessing budget 358ms
+     ✓ will not let a blocked address mint counter rows with made-up emails 333ms
+     ✓ does not spend an office’s allowance on people who signed in fine 339ms
+     ✓ stops a loop of deliberately correct logins 753ms
+     ✓ stops guessing at the per-IP limit even across many addresses 307ms
+
+ Test Files  2 passed (2)
+      Tests  63 passed (63)
+   Start at  20:05:16
+   Duration  7.64s (tests 89%, transform 5%, import 5%)
+
+JSON report written to /Users/cristian/projects/fun/openfon-worktrees/integration/.agent/artifacts/public-ticket-ddce/validation/fixed-report.json

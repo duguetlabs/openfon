@@ -1,0 +1,13 @@
+
+ RUN  v5.0.0 /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-ticket-active-ddce-h5q38d_1
+
+(node:43213) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ test/studio-api.test.ts (64 tests | 62 skipped) 43ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed | 62 skipped (64)
+   Start at  20:05:24
+   Duration  585ms (import 49%, transform 43%, tests 8%)
+
+JSON report written to /Users/cristian/projects/fun/openfon-worktrees/integration/.agent/artifacts/public-ticket-ddce/validation/studio-report.json
