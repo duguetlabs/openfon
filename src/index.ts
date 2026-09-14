@@ -1235,7 +1235,8 @@ app.post('/api/public/call/start', bodyLimit({
      SELECT ?, ?, ?, 'web', ?, 'live', 'inbound', 1
       WHERE (SELECT COUNT(*) FROM calls
               WHERE business_id = ? AND environment = 'live' AND started_at > datetime('now', '-1 day')
-                AND NOT (status = 'abandoned' AND connected_at IS NULL AND reserved_at IS NULL)) < ?`
+                AND NOT (status = 'abandoned' AND connected_at IS NULL AND reserved_at IS NULL)) < ?
+        AND EXISTS (SELECT 1 FROM assistants WHERE id=? AND business_id=? AND state='active')`
   )
     .bind(
       callId,
@@ -1243,10 +1244,18 @@ app.post('/api/public/call/start', bodyLimit({
       target.assistant_id,
       addr === 'local' ? 'anonymous' : addr,
       target.business_id,
-      target.max_calls_per_day
+      target.max_calls_per_day,
+      target.assistant_id,
+      target.business_id
     )
     .run();
   if ((claim.meta.changes ?? 0) !== 1) {
+    // Classify refusal without retrying the INSERT or repairing the target.
+    // State can change again after the atomic admission check.
+    const active = await c.env.DB.prepare(
+      "SELECT id FROM assistants WHERE id=? AND business_id=? AND state='active'"
+    ).bind(target.assistant_id, target.business_id).first();
+    if (!active) return c.json({ error: 'Unknown or unavailable assistant' }, 404);
     return tooMany(c, 'This agent has reached its daily call limit. Please try again tomorrow.', 3600);
   }
   return c.json({ callId });

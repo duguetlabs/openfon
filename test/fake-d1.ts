@@ -275,6 +275,10 @@ class FakeStatement {
       const assistant = this.db.assistants.find((x) => x.public_slug === a[0]);
       return { rows: assistant ? [{ found: 1 }] : [], changes: 0 };
     }
+    if (q === "SELECT id FROM assistants WHERE id=? AND business_id=? AND state='active'") {
+      const assistant = this.db.assistants.find((x) => x.id === a[0] && x.business_id === a[1] && x.state === 'active');
+      return { rows: assistant ? [{ id: assistant.id }] : [], changes: 0 };
+    }
     if (q.startsWith('SELECT * FROM assistants WHERE business_id')) {
       const assistant = this.db.assistants.find((x) => x.business_id === a[0] && x.public_slug === a[1]);
       return { rows: assistant ? [assistant] : [], changes: 0 };
@@ -334,6 +338,10 @@ class FakeStatement {
           !(c.status === 'abandoned' && c.connected_at === null)
       ).length;
       if (n >= Number(maxArg)) return { rows: [], changes: 0 };
+      if (q.includes("AND EXISTS (SELECT 1 FROM assistants WHERE id=? AND business_id=? AND state='active')") &&
+          !this.db.assistants.some((x) => x.id === a[6] && x.business_id === a[7] && x.state === 'active')) {
+        return { rows: [], changes: 0 };
+      }
       this.db.seedCall({
         id: String(a[0]),
         business_id: String(a[1]),
