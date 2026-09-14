@@ -1,0 +1,37 @@
+[
+  {
+    "pid": 21412,
+    "ppid": 21196,
+    "command": "npm exec playwright test e2e/profile-rename-actions.spec.ts --grep profile action retry guidance stays visible before during and after rename --workers=1 --retries=0 --output=test-results/input-3bb-validation/original-browser-results --reporter=line"
+  },
+  {
+    "pid": 21428,
+    "ppid": 21412,
+    "command": "node /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-input-3bb-1ly77qsf/node_modules/.bin/playwright test e2e/profile-rename-actions.spec.ts --grep profile action retry guidance stays visible before during and after rename --workers=1 --retries=0 --output=test-results/input-3bb-validation/original-browser-results --reporter=line"
+  },
+  {
+    "pid": 21442,
+    "ppid": 21428,
+    "command": "/bin/sh -c npm run build && node scripts/e2e-server.mjs"
+  },
+  {
+    "pid": 21694,
+    "ppid": 21442,
+    "command": "node scripts/e2e-server.mjs"
+  },
+  {
+    "pid": 21721,
+    "ppid": 21694,
+    "command": "npm exec wrangler d1 migrations apply openfon --local --persist-to /var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pY7UGQ"
+  },
+  {
+    "pid": 21748,
+    "ppid": 21721,
+    "command": "node /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-input-3bb-1ly77qsf/node_modules/.bin/wrangler d1 migrations apply openfon --local --persist-to /var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pY7UGQ"
+  },
+  {
+    "pid": 21749,
+    "ppid": 21748,
+    "command": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node --no-warnings /Users/cristian/projects/fun/openfon/node_modules/wrangler/wrangler-dist/cli.js d1 migrations apply openfon --local --persist-to /var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pY7UGQ"
+  }
+]

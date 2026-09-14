@@ -1,0 +1,71 @@
+[WebServer] (node:21470) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:21693) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:21694) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:21721) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:22327) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] ▲ [WARNING] Scheduled Workers are not automatically triggered during local development.
+[WebServer] 
+[WebServer]   To manually trigger a scheduled event, run:
+[WebServer]     curl "http://localhost:8812/cdn-cgi/local/scheduled"
+[WebServer]   For more details, see https://developers.cloudflare.com/workers/configuration/cron-triggers/#test-cron-triggers-locally
+[WebServer] 
+[WebServer] 
+
+
+Running 1 test using 1 worker
+
+(node:22359) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+(node:22359) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/1] e2e/profile-rename-actions.spec.ts:131:1 › profile action retry guidance stays visible before during and after rename
+  1) e2e/profile-rename-actions.spec.ts:131:1 › profile action retry guidance stays visible before during and after rename 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('If you click Apply or Delete profile while a name is saving, click it again after saving finishes.', { exact: true })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByText('If you click Apply or Delete profile while a name is saving, click it again after saving finishes.', { exact: true }) with timeout 5000ms
+      - waiting for getByText('If you click Apply or Delete profile while a name is saving, click it again after saving finishes.', { exact: true })
+
+
+      133 |   const guidance = page.getByText('If you click Apply or Delete profile while a name is saving, click it again after saving finishes.', { exact: true });
+      134 |   try {
+    > 135 |     await expect(guidance).toBeVisible();
+          |                            ^
+      136 |     const input = rows(page).first().locator('input');
+      137 |     await input.fill('Guided rename'); await input.blur();
+      138 |     await expect.poll(() => gate.held.length).toBe(1);
+        at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-input-3bb-1ly77qsf/e2e/profile-rename-actions.spec.ts:135:28
+
+    Error Context: test-results/input-3bb-validation/original-browser-results/profile-rename-actions-pro-d80fc-ore-during-and-after-rename/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/input-3bb-validation/original-browser-results/profile-rename-actions-pro-d80fc-ore-during-and-after-rename/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/input-3bb-validation/original-browser-results/profile-rename-actions-pro-d80fc-ore-during-and-after-rename/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+  1 failed
+    e2e/profile-rename-actions.spec.ts:131:1 › profile action retry guidance stays visible before during and after rename 

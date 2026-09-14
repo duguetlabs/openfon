@@ -1,0 +1,21 @@
+{
+  "app_processes": [],
+  "reserved_listeners": "",
+  "captured_pids": [
+    21412,
+    21428,
+    21442,
+    21694,
+    21721,
+    21748,
+    21749
+  ],
+  "captured_pids_remaining": [],
+  "capture_limit": "Original tree captured during startup only; fixed tree scan occurred after exit. Fresh global executable/app scan and awaited session exits are final cleanup evidence, not exhaustive recorded child-PID inventory.",
+  "new_e2e_temp_paths": [
+    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-DEhdR8",
+    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pY7UGQ"
+  ],
+  "temp_attribution": "Compared with pre-run directory inventory during sole slot; no other app runners active.",
+  "unrelated_processes": "Unrelated browser/MCP processes untouched."
+}

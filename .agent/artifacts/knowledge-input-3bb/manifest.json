@@ -1,0 +1,175 @@
+{
+  "base": "3bb6c299e26f25d189b679c18d043586ee4bab68",
+  "snapshot": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-input-3bb-1ly77qsf",
+  "status": "Owner bounded validation complete; frozen four-file artifact unchanged; all processes/temp disposed and sole8812/9252 slot RELEASED. QA evidence/assembly pending.",
+  "source_patch": ".agent/artifacts/knowledge-input-3bb.patch",
+  "patch_sha256": "9e4b0374037c3fd83e4d97c691e738d55ea34c2e01e8fa500259fc8dbed7e14c",
+  "original_sha256": {
+    "src/studio-api.ts": "bf0fa99b2087a2aaa53b7432bf5ea1cc577e4802608f7c76bf6780980b0f58f9",
+    "web/src/pages/Settings.tsx": "1e12b8e40e8685258cae907ad881861ddde883274c582048a3b923746eff9cef",
+    "e2e/profile-rename-actions.spec.ts": "6175ff4eaf4662e972059a83ebb82eeeabb308bb66596a7603a4e761c105efe4"
+  },
+  "fixed_sha256": {
+    "src/studio-api.ts": "801aa8415afaaad6029c8d9fa74d6131f7a99dc38c15e4dfa05cac56712987ff",
+    "web/src/pages/Settings.tsx": "57c5f03f1035a96cde0ef5c02f159b707ed27086c76ee335c1643fb1d5b048ae",
+    "e2e/profile-rename-actions.spec.ts": "159c93b92c03ff1e5563fb9782b65141a863ffc198e7b3e67ba4485fd0073f2b"
+  },
+  "new_files_sha256": {
+    "test/knowledge-input-boundaries.test.ts": "644b2af7d4cef13752797c2116abf93194a45102c0141ea70b19ceb0605c6651"
+  },
+  "delivery_files": [
+    "src/studio-api.ts",
+    "web/src/pages/Settings.tsx",
+    "e2e/profile-rename-actions.spec.ts",
+    "test/knowledge-input-boundaries.test.ts"
+  ],
+  "source_contract": [
+    "Shared decodeCursor rejects above2048 before normalization/decode; new call-list cap, existing Knowledge cap moved earlier. Route precedence preserved including missing-workspace empty200.",
+    "Three supplied-string enum guards only: POST status after required kind; PUT kind/status after destination lookup. Omitted/current/default/nonstring/readiness/CAS/quota unchanged.",
+    "One persistent Settings guidance sentence exactly selected; no handler/queue/guard/baseline change."
+  ],
+  "prepared_evidence": {
+    "api": {
+      "file": "test/knowledge-input-boundaries.test.ts",
+      "cases": 41,
+      "original_predictions": {
+        "negative": 22,
+        "controls": 19
+      },
+      "coverage": "16cursor cases across3HTTP entrypoints incl6decode negatives,2048boundary,small malformed,empty/pagination,auth/workspace/date precedence;25enum cases incl13invalid-string errors+3quota-precedence negatives,nonstring/omission/readiness/valid lifecycle/ownership/destination/required-kind controls.",
+      "diagnostics": "Cursor negatives emit only route/raw length/status/decode calls/page-query count. Original Knowledge400 alone does not prove early rejection. Enum originals stop at first failed status assertion; no original full-persisted-snapshot proof claimed."
+    },
+    "browser": {
+      "file": "e2e/profile-rename-actions.spec.ts",
+      "new_case": "profile action retry guidance stays visible before during and after rename",
+      "cases_added": 1,
+      "original_prediction": "Fails at initial missing helper text; later checks not reached.",
+      "fixed_proposal": "New persistent-guidance case plus2existing blur/action explicit-later-click cases only, if separately granted. Existing4cases source retained unchanged. No browser grant inferred."
+    },
+    "historical_note": "Pre-grant preparation predictions retained; actual_validation is authoritative for executed outcomes."
+  },
+  "proposed_validation": {
+    "original_api": "npx vitest run test/knowledge-input-boundaries.test.ts --maxWorkers=1",
+    "fixed_api": "New41 plus existing knowledge-concurrency21 and knowledge-budget9 (71cases); two selected existing Studio pagination cases only; both types serial after grant.",
+    "pagination_cases": [
+      "pages knowledge with stable ties and keeps collection scope on every page",
+      "keeps overview totals accurate beyond 100 and cursors stable while excluding tests"
+    ],
+    "browser": "Optional separately granted original1/fixed3actualChrome-workerd, new guidance and two explicit-later-click cases. No broad browser/native.",
+    "native": "None proposed; no concrete new native gap.",
+    "historical_note": "Historical queued scope, subsequently explicitly granted and executed as recorded in actual_validation."
+  },
+  "static_checks": [
+    "Original3files byte-match exact3bb git show.",
+    "Patch applies to fresh exact originals and reproduces saved fixed3files byte-for-byte.",
+    "New API fixture copy matches owner source; existing browser4cases retained byte-for-byte before appended test."
+  ],
+  "limits": [
+    "Bound is query-decoded JS string length, not HTTP transport/URL parsing/global memory/concurrency. Auth/ownership/foundation work may precede cursor helper.",
+    "Call list NEW cap intentionally rejects formerly accepted oversized valid tuple.",
+    "No enum case folding/whitespace trimming/schema/general scalar expansion.",
+    "Pending action policy stays no-autoqueue; persistent guidance is explanation, no deferred action.",
+    "Actual bounded API/types/browser outcomes are recorded below; no native/inference/install/publication or broad run. Historical predictions are labeled.",
+    "Use exact patch+new API file, never whole older owner handlers."
+  ],
+  "tested_companion_sha256": {
+    "test/knowledge-concurrency.test.ts": "911a0449b56c4457b43f0af85736ebd543fc35b073e6b1224a1eed28d06273fb",
+    "test/knowledge-budget.test.ts": "74733ebb0fb46d3cb97391954ab63890a14f2311dde6d4aa24764d18a3c2a4b6",
+    "test/studio-api.test.ts": "190804f0f073eaae9e4448e857058a48134bcfca7fccc863d9942386d4c371ed"
+  },
+  "actual_validation": {
+    "original_api": {
+      "session": 59872,
+      "command": "npx vitest run test/knowledge-input-boundaries.test.ts --maxWorkers=1",
+      "log": "original-api.log",
+      "exit": 1,
+      "negative_failures": 22,
+      "controls_passed": 19,
+      "duration": "1.13s",
+      "limits": "Six cursor preassertion diagnostics preserve actual status/decode/page-query counts: Knowledge oversized400 after1decode, valid oversized call200/1decode/1pageQuery, malformed call400/1decode.13enum success failures (PUT200/POST201),3quota-precedence429vs400; original enum snapshots not reached past first status assertion."
+    },
+    "original_browser": {
+      "session": 17978,
+      "command": [
+        "npx",
+        "playwright",
+        "test",
+        "e2e/profile-rename-actions.spec.ts",
+        "--grep",
+        "profile action retry guidance stays visible before during and after rename",
+        "--workers=1",
+        "--retries=0",
+        "--output=test-results/input-3bb-validation/original-browser-results",
+        "--reporter=line"
+      ],
+      "log": "original-browser.log",
+      "exit": 1,
+      "failed": 1,
+      "limits": "Expected first missing persistent-guidance assertion,5s locator timeout; later pending/settled checks not reached. Trace/context retained; no fixture failure. Finally restored fixed application source after awaited process exit and vacancy."
+    },
+    "fixed_api": {
+      "session": 85788,
+      "command": "npx vitest run test/knowledge-input-boundaries.test.ts test/knowledge-concurrency.test.ts test/knowledge-budget.test.ts --maxWorkers=1",
+      "log": "fixed-api.log",
+      "exit": 0,
+      "passed": 71,
+      "duration": "1.47s",
+      "limits": "All six no-decode/no-page-query assertions and in-memory full snapshot/no-charge refusal checks passed. Passing stdout suppressed by test reporter; no separate fixed diagnostic JSON or native proof claimed."
+    },
+    "pagination": {
+      "session": 1657,
+      "command": "npx vitest run test/studio-api.test.ts --maxWorkers=1 -t 'pages knowledge with stable ties and keeps collection scope on every page|keeps overview totals accurate beyond 100 and cursors stable while excluding tests'",
+      "log": "fixed-pagination.log",
+      "exit": 0,
+      "passed": 2,
+      "skipped": 62,
+      "duration": "860ms"
+    },
+    "types": {
+      "session": 62553,
+      "command": "npm run typecheck",
+      "log": "fixed-types.log",
+      "exit": 0,
+      "scope": "Worker and web serial checks"
+    },
+    "fixed_browser": {
+      "session": 58672,
+      "command": "npx playwright test e2e/profile-rename-actions.spec.ts --grep 'profile action retry guidance stays visible before during and after rename|blur then (Apply|Delete profile) sends no action' --workers=1 --retries=0 --output=test-results/input-3bb-validation/fixed-browser-results --reporter=line",
+      "log": "fixed-browser.log",
+      "exit": 0,
+      "passed": 3,
+      "duration": "15.7s"
+    },
+    "browser_environment": {
+      "OPENFON_E2E_PORT": "8812",
+      "OPENFON_E2E_INSPECTOR_PORT": "9252",
+      "PLAYWRIGHT_CHROMIUM_EXECUTABLE": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "workers": 1,
+      "retries": 0
+    },
+    "unexpected_failures": "None; expected original failures only; no source/fixture edits during runs or retries.",
+    "execution_limits": "Node production handlers+SQLite synthetic API fixtures; actual Chrome/local workerd browser with held rename routes. No native load/concurrency/resource-exhaustion/inference evidence. Length cap does not bound transport parsing.",
+    "cleanup": "All6sessions exited; original startup7PIDs absent, fixed process capture occurred after exit. Fresh global app/workerd and test-Chrome scans/8812+9252 clear. Two owned D1 temps identified against pre-run inventory and manually removed; pre-removal/final receipts retained."
+  },
+  "evidence_directory": "test-results/knowledge-input-3bb/validation",
+  "evidence_sha256": {
+    "cleanup-before-temp-removal.json": "e72d32e113538e4fa8dcf68497f6bdfe27745ffb44bb8d435ba7db504763b5ea",
+    "cleanup.json": "989bc79a88af7b32461ac95eb65b5d985a0e3d164e78bf82827832a6da8346aa",
+    "final-source-provenance.json": "79ff3705b2caf1c06c97096f587b3d3cb16f7ce05cf3df8af40286291e5989ca",
+    "fixed-api.log": "306d7eb51bec898c093dbe9b32bd73d443424f1b5ad8b31df5b4d852b0709144",
+    "fixed-browser-results/.last-run.json": "91d1c43004802cd49950d78eb11c8fa7d05da8ffffe219a8b13b2f561bc00903",
+    "fixed-browser.log": "d58c63a0230706f1ea6a08e8fe9b2074b70272c92508b6a40e9caa7dbf5d2ce3",
+    "fixed-owned-processes.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "fixed-pagination.log": "bed3c003e3543fdad26f141c33c4ae947c19a6374741226800ac152dbf8966de",
+    "fixed-types.log": "75c97ba8f32dd032ee1e1293129c6bbdd2ff33c240a3223d4b150e23ab19ee29",
+    "initial-provenance.json": "ea639d57103f01318a58f5e7ab9cad01b9545685f5c441312587bed48f3a7901",
+    "original-api.log": "649c22b2e526569ef84924e07acbf04e0374a5c0b7a1926e537b1c928a7fd705",
+    "original-browser-results/.last-run.json": "53a107cdf8e9e9f1147605dd3cf2ba96595215bd715a8ebbe276badc59a4d391",
+    "original-browser-results/profile-rename-actions-pro-d80fc-ore-during-and-after-rename/error-context.md": "17746669d18af98fe5c04a1191a41591b846eb7d15c0d4e67039b1136d47e6ba",
+    "original-browser-results/profile-rename-actions-pro-d80fc-ore-during-and-after-rename/trace.zip": "5a32a26aaaaacd157417ac6577ab31c5856635dae264e8a32bfc630a9a97c770",
+    "original-browser.log": "a67a3b8eb2d66dad7b4e3d9ade6b10075d1fff071c8699fea633e514f4e43a74",
+    "original-cursor-diagnostics.json": "820685e84508dcfd03013862fd4637a7df815fe15b01f7de7d2affa894651d8b",
+    "original-owned-processes.json": "28ab4cd43662c8ad0632e2851be3df8ec67919fddd3b4fc5fff1ad9ce5413a47",
+    "original-phase-exit.json": "5c7b3d65e64b25ad54781c63c9abce4216be4f04e47618a2792555942a0c36ef"
+  }
+}

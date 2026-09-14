@@ -1,0 +1,17 @@
+{
+  "fixed": {
+    "src/studio-api.ts": "801aa8415afaaad6029c8d9fa74d6131f7a99dc38c15e4dfa05cac56712987ff",
+    "web/src/pages/Settings.tsx": "57c5f03f1035a96cde0ef5c02f159b707ed27086c76ee335c1643fb1d5b048ae",
+    "e2e/profile-rename-actions.spec.ts": "159c93b92c03ff1e5563fb9782b65141a863ffc198e7b3e67ba4485fd0073f2b"
+  },
+  "new": {
+    "test/knowledge-input-boundaries.test.ts": "644b2af7d4cef13752797c2116abf93194a45102c0141ea70b19ceb0605c6651"
+  },
+  "patch": "9e4b0374037c3fd83e4d97c691e738d55ea34c2e01e8fa500259fc8dbed7e14c",
+  "companions": {
+    "test/knowledge-concurrency.test.ts": "911a0449b56c4457b43f0af85736ebd543fc35b073e6b1224a1eed28d06273fb",
+    "test/knowledge-budget.test.ts": "74733ebb0fb46d3cb97391954ab63890a14f2311dde6d4aa24764d18a3c2a4b6",
+    "test/studio-api.test.ts": "190804f0f073eaae9e4448e857058a48134bcfca7fccc863d9942386d4c371ed"
+  },
+  "fresh_exact_patch_reconstruction": "PASS"
+}
