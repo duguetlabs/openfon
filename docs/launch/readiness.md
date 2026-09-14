@@ -11,6 +11,58 @@ findings from every reviewer still require verification and disposition. No new
 Codex review is requested or awaited. Historical dual-review references below
 record earlier requirements; this policy governs the current release.
 
+## Concurrent assistant saves and Asterisk admission
+
+Official `1ba053df` review
+[5657301610](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5657301610)
+reports no security concerns and three recommendations, without clean-major
+clearance. Both CI runs passed. All three findings were verified against source
+and corrected in the next application candidate `9f7215b`.
+
+Studio assistant PUT and the adjacent legacy Settings PUT now compare the
+original eleven overwritten fields and lifecycle state in their first UPDATE,
+using null-safe predicates alongside existing provider/credential pins.
+Conflicts return409; the same atomic batch gates mirrors and snapshots and
+incurs no refused-write charge. This detects changes between handler read and
+write. A full client payload already stale before that read remains explicit
+write intent; there is no client revision protocol or automatic retry.
+Owner29 original API conflicts fail200-versus409 with four controls passing;
+the original native case confirms a competing voice edit was lost. Fixed96 API
+cases, both types and11 production-Node-handler/native-D1 checks pass. Seven
+native conflict snapshots preserve all tables with every batch statement changing
+zero rows; retries charge once and quota/late failures roll back. This native
+scope is not full-workerd-handler concurrency.
+
+Asterisk readiness reads now pin authenticated route identity, and reservation
+INSERT pins provider presence/raw realtime fields plus assistant engine/model/
+voice. Existing direct-OpenAI compatibility validation runs before reservation.
+Conflicts return403 with no call row or session dispatch; intentional DO
+retirement still occurs. INSERT is the admission linearization point; startup
+continues to reread current settings, not a frozen lifetime configuration.
+Original17 admission cases yield11 expected failures and six passes, including
+the existing engine guard. Fixed124 focused cases and both types pass. Actual
+workerd owner/migrated-D1 checks reproduce the original reservation+dispatch,
+then verify eight refused interleavings, two admission controls and retired
+state across restart. Trusted binding and synthetic session fixtures are explicit.
+
+The PBX harness now chooses a complete local transport path: native rootful
+Linux uses host networking/loopback; Docker Desktop retains its host forwarding.
+Every Docker lifecycle command stays pinned to the resolved local daemon.
+Unsupported transports are rejected before fixture startup; arbitrary forwarded
+Unix/VM locality remains an operator responsibility. No wildcard proxy or image
+pull was added. Native Linux remains unexecuted. Platform-selection tests and
+an actual macOS Desktop Asterisk22.11 Local-channel run pass:19,200 recorded PCM
+bytes,12 marks, and revoked-route401 with zero rate writes. AI/audio are synthetic;
+this is not live-provider/SIP/PSTN evidence. See
+[dated Asterisk validation](../asterisk-admission-validation-2026-09-14.md).
+
+Final application `9f7215b` passes1,146 tests across50 files in22.41s and both
+typechecks. Owner native/Desktop evidence is reused with attribution; no
+frontend changed and no broad browser run was repeated. QA independently
+closed exact assembled source/evidence at9f7215b, including all12 delivered files,
+retained originals and evidence hashes; final publication still
+requires genuine latest-head security/major clearance and passing CI.
+
 ## Field layout, profile recovery and foundation repair
 
 Official `b18d60bb` report
