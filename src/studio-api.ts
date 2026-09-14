@@ -454,7 +454,16 @@ export async function ensureWorkspaceFoundation(
     } else {
       // With neither source present there is no configured legacy assistant to
       // publish. Blank essentials also keep concurrent repairs private.
-      await env.DB.prepare("INSERT OR IGNORE INTO agent_settings (business_id,agent_name,persona,language) VALUES (?,'','','')").bind(workspace.id).run();
+      // A provider can survive loss of both assistant rows. Read its text
+      // pair at insertion time; a missing provider still means instance defaults.
+      await env.DB.prepare(
+        `INSERT OR IGNORE INTO agent_settings
+          (business_id,agent_name,persona,language,llm_base_url,llm_api_key)
+         SELECT workspace.id,'','','',COALESCE(provider.llm_base_url,''),COALESCE(provider.llm_api_key,'')
+         FROM businesses AS workspace
+         LEFT JOIN provider_settings AS provider ON provider.business_id=workspace.id
+         WHERE workspace.id=?`
+      ).bind(workspace.id).run();
     }
     legacy = await env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?')
       .bind(workspace.id)
