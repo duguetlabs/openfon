@@ -1,0 +1,17 @@
+{
+  "pid": 45104,
+  "start": "2026-09-14T18:40:35.305167+00:00",
+  "end": "2026-09-14T18:40:39.223424+00:00",
+  "exit": 0,
+  "cwd": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-fixture-inverse-fixed-1d4-hbm5xjxt",
+  "command": [
+    "npx",
+    "vitest",
+    "run",
+    "test/telnyx-webhook-admission.test.ts",
+    "--maxWorkers=1",
+    "-t",
+    "holds completed signed bodies through durable dispatch|holds completed bodies through cryptographic verification"
+  ],
+  "sourceUnchanged": true
+}

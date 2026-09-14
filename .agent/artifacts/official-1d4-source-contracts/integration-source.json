@@ -1,0 +1,83 @@
+{
+  "head": "1d4b73331353ecacf07b46ce9d186c032a04fc51",
+  "review": {
+    "comment": "5668763633",
+    "sha256": "486300abef14de12da733a524b129699069259a36545b603661845696b572689"
+  },
+  "scope": "Source-only independent integration assessment; no application/test/rehearsal execution or new policy guarantee",
+  "committed_working_sha256": {
+    "web/src/pages/Onboarding.tsx": "b096119ad9d18e36990d0f4363305f664fd5574afe9df8b5e09005e9eff38916",
+    "web/src/App.tsx": "50c487e550a0c5940e2714d5800e6a9c877ad5e41a3be4a8b01787e11cf8db16",
+    "web/src/pages/Auth.tsx": "174c8dac5f11e51e6ccf35cfba67a1a25887af2cf09b93daf886ce8fad230d48",
+    "web/src/session-load.ts": "134a9f64968302007ae2a50ac1934afdf9f87d84d99360d66e1e47dae8e4ed53",
+    "test/session-load.test.ts": "e93a43ef8a278be7989c5cd5b1ac537cf843b21277b00cfd6b65c3cc454ffada",
+    "src/index.ts": "7d21900e2bc6ace0af34c9b0b4f745eeb0f3285249f469575fd7eb6b31e5e9d4",
+    "src/account-api.ts": "ba040d9af67ba3340f994ab4184dfe67831f999bda1f0dfc20d06cfecfb3ecbe",
+    "src/studio-api.ts": "801aa8415afaaad6029c8d9fa74d6131f7a99dc38c15e4dfa05cac56712987ff",
+    "migrations/0001_init.sql": "14d6ffa48d6f8db76de9aa6f66e3ff92cf5452a9ce0d6e0a439590f988b1d0cd",
+    "migrations/0020_browser_ticket_claim.sql": "3c205cc454e588d3b87c11e1e51001c5d42a55747c893ee5d86203bfe550b5ee",
+    "scripts/migration-rehearsal.py": "0b5a50a77aec1417db0dc3009f39b133e5110fc3e9ff4e6dd818bfdc7649f0f3",
+    ".github/workflows/ci.yml": "ea520be8d01443feea10618547b91b4f111c4af66b5a60dca1c64b298ceb347a",
+    "vitest.config.ts": "530bd3ae03a17ef1b60d63ca7bbceaa4231acf82ae4876151083c0e9c402e519",
+    "tsconfig.worker.json": "6f1b4cebf4e7ff46b73e2592b01f50d02cb18a2cdfdcb2b0bea413f2199edb05",
+    "web/tsconfig.json": "057b68f3b622b565c8b242b4150178b1c81cb239ca949adc560fa3a8c2b2a365",
+    "playwright.config.ts": "8bf932054f22bcc09fa30fed1f3d03b33b82a37282cd26d7cca117b206bdf0d9",
+    "test/telnyx-webhook-admission.test.ts": "13656346a7cc67bf39015b3ba791f403baed0e997d959d98c48aad45db76aa36"
+  },
+  "same_as_aa_source_receipt": [
+    "web/src/pages/Onboarding.tsx",
+    "web/src/App.tsx",
+    "web/src/pages/Auth.tsx",
+    "web/src/session-load.ts",
+    "test/session-load.test.ts",
+    "vitest.config.ts",
+    "tsconfig.worker.json",
+    "web/tsconfig.json"
+  ],
+  "same_as_3bb_deletion_receipt": [
+    "src/account-api.ts",
+    "migrations/0001_init.sql",
+    "migrations/0020_browser_ticket_claim.sql"
+  ],
+  "migration_static_ast": {
+    "assert_nodes": 0,
+    "require_calls": 24,
+    "require_implementation": "if not condition: raise RuntimeError(message)",
+    "execution": false
+  },
+  "contracts": {
+    "logout": "Current shared App/coordinator/Auth clears private data synchronously, blocks refresh/auth while pending or unconfirmed, warns and offers retry. Onboarding catch does not suppress shared warning. Reload/new-tab resets memory latch and valid cookie can restore session; no persistent revocation guarantee or stronger policy selected.",
+    "deletion": "Applied 0001/0020 schema forbids NULL channel/provenance; defaults preserve legacy provenance 0. Two modern issuers set 1 and pre-DO browser connection claim guards deletion. Account guard/migrations unchanged; newer ticket/Studio files inspected rather than claimed wholly unchanged. No remote-schema/corruption guarantee.",
+    "syntax": "Cited missing brace is retained historical pre-review4a54a619, outside explicit test/src discovery roots. Current13656346 executed in both CI results; one test timeout is separate. No archive rewrite/removal or arbitrary external tooling guarantee.",
+    "optimization": "Exact rehearsal has zero Python assert nodes; 24 require calls use explicit RuntimeError and remain under -O. Static assessment only, no rehearsal repeat."
+  },
+  "prior_remote_optimized_rehearsal": {
+    "run": "34880342066",
+    "check": "104097792393",
+    "raw_log_sha256": "548bb4a93be406570391678a9c0630e32e139ceb8c3b343cab7d5298a89dc623",
+    "reported_output": {
+      "result": "PASS",
+      "source_base": "migration 0006",
+      "upgraded_through": "0020",
+      "workspaces": 2,
+      "historical_calls": 3,
+      "transcript_turns": 3,
+      "checks": [
+        "legacy behavior unchanged; obsolete profile credentials scrubbed at0016",
+        "both public slugs preserved",
+        "completed history preserved",
+        "connected history backfilled",
+        "only stale active calls reclassified",
+        "presets and knowledge copied",
+        "carrier tables empty and reservations null",
+        "SQLite integrity and FK checks",
+        "binary snapshot restore after synthetic deletion",
+        "SQL dump restore exact",
+        "pre-upgrade rollback exact",
+        "re-upgrade succeeds"
+      ],
+      "temporary_files_removed": true
+    },
+    "attribution": "Read existing successful published1d4 CI merge log; no local rehearsal run. Failed companion CI remains unresolved."
+  }
+}

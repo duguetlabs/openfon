@@ -1,0 +1,21 @@
+{
+  "at": "2026-09-14T18:41:39.905311+00:00",
+  "ownedCommandPids": [
+    43594,
+    45104,
+    46522
+  ],
+  "ownedCommandPidsAbsent": true,
+  "applicationOrReviewRunners": [],
+  "reservedListeners": "",
+  "listenerScanExit": 1,
+  "removedVariantSnapshots": [
+    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-fixture-inverse-original-1d4-hnqvmaxv",
+    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-fixture-inverse-fixed-1d4-hbm5xjxt"
+  ],
+  "removedNaturalDependencySymlink": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-webhook-fixture-1d4-43nfdlh3/node_modules",
+  "naturalPreparedSnapshotRetained": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-webhook-fixture-1d4-43nfdlh3",
+  "naturalRestoredSha256": "5f8f69d108d2ac91d503a0948672d285bc47372d1b405bf77e6db6c0375e3d18",
+  "unexpectedRuntimeFiles": [],
+  "scope": "No native/client/server resources created. Shared dependency target and unrelated MCP/LinkedIn processes untouched. Exact sources preserved in artifact; all command processes exited."
+}

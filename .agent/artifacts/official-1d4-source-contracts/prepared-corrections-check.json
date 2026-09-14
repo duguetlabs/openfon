@@ -1,0 +1,23 @@
+{
+  "scope": "Static hash/source review only; no import/syntax/tests/types/browser/process run or integration source application",
+  "integration_head": "698bee02ab62007c16a0e811b812490d3464d70b",
+  "presets": {
+    "owner": "e6d5c5d",
+    "patch": "abd819b611b3aec0bf70c146b4623a4d3883ce618f4026410300e7f7c0cd16fd",
+    "artifact_matches": 6,
+    "original_matches": 2,
+    "protected_matches": 11,
+    "snapshot_matches": 4,
+    "apply_check": "PASS"
+  },
+  "launch": {
+    "owner": "11686c4",
+    "patch": "cec5836362daf3153e74c93351d4cd36ec6af95fe059b13129b13626200cec4d",
+    "original_matches": 6,
+    "fixed_matches": 7,
+    "protected_git_records": 27,
+    "prefix_unchanged": true,
+    "apply_check": "PASS"
+  },
+  "qa": "Launch actual accepted c5bf90e; presets actual accepted073511b. Runtime grants recorded separately in integration checkpoint."
+}

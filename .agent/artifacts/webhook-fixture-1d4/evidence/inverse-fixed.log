@@ -1,0 +1,9 @@
+
+ RUN  v5.0.0 /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-fixture-inverse-fixed-1d4-hbm5xjxt
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed | 12 skipped (15)
+   Start at  20:40:35
+   Duration  3.23s (tests 99%, transform 1%, import 1%)
+
