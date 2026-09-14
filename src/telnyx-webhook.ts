@@ -6,10 +6,12 @@
  * Signature: Ed25519 over the literal timestamp header, '|', and original bytes.
  */
 export const TELNYX_WEBHOOK_MAX_BYTES = 128 * 1024;
+export const TELNYX_WEBHOOK_BODY_TIMEOUT_MS = 5_000;
+export const TELNYX_WEBHOOK_MAX_READS = TELNYX_WEBHOOK_MAX_BYTES + 1; // one-byte fragments plus EOF
 export const TELNYX_WEBHOOK_MAX_SKEW_SECONDS = 300;
 
 export type TelnyxWebhookErrorCode =
-  | 'invalid_configuration' | 'body_too_large' | 'invalid_content_type'
+  | 'invalid_configuration' | 'body_too_large' | 'body_timeout' | 'invalid_content_type'
   | 'invalid_headers' | 'timestamp_out_of_range' | 'invalid_signature' | 'invalid_payload';
 
 export class TelnyxWebhookError extends Error {
