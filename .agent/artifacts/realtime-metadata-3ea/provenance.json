@@ -1,0 +1,34 @@
+{
+  "base": "3ea3ad184f8bde0609a0f38c9fdaafde4fa3793d",
+  "source_commit": "668b7ffd6141e6f09e65984f456927a4a45fdc18",
+  "status": "DOCS ONLY; actual sanitized-source QA review pending; no application execution",
+  "file": ".agent/workstreams/realtime.md",
+  "original_sha256": "ec6ef51929e31a80af38b78f4cc840ab6e76a085a0a2c73bb1d0a6c40fde90c2",
+  "sanitized_sha256": "aceec11a9f55f0603b3ea9e0bf037960c55a36a7b237e28d24d6a03789fa011e",
+  "private_removal_patch_sha256": "c23b6f923821f25e2d638f17446203bd4e66c5c4ff7ffa0e9689e0dd9c7667a8",
+  "changed_original_lines": [
+    43,
+    49,
+    62,
+    68,
+    72,
+    77,
+    78,
+    79,
+    82
+  ],
+  "unchanged_line_count": 152,
+  "preserved": "Live measurements/attribution, authorization limits, public configuration, all unrelated checkpoint content and application source.",
+  "removed_categories": [
+    "private inventory and lookup details",
+    "credential field and key characteristics",
+    "credential reuse relationships",
+    "local injection procedure and references"
+  ],
+  "private_retention": "Original document/report and removal patch retained outside tracked artifacts with owner-only permissions; no raw copy or removal diff added to public evidence.",
+  "limits": [
+    "Current-document cleanup does not erase prior commits, the published report or caches.",
+    "No vault/credential access or validation, raw-key compromise assertion, rotation, history rewrite or application change."
+  ],
+  "application_delta": []
+}

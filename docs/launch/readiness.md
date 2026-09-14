@@ -11,6 +11,14 @@ findings from every reviewer still require verification and disposition. No new
 Codex review is requested or awaited. Historical dual-review references below
 record earlier requirements; this policy governs the current release.
 
+## 3ea3ad18 metadata hygiene and source dispositions
+
+The [3ea3ad18 original review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5659080383) raised tracked operational metadata and seven recommendations. The [metadata correction](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5659143122) is independently closed for exact one-document assembly `40a5120`: nine passages genericized,152 lines unchanged, application delta zero. Private inventory/credential characteristics/reuse/local injection details are removed from the current checkpoint while live evidence and authorization boundaries remain. Only safe hashes/categories and sanitized dispositions are retained publicly; original/removal patch remain owner-private. Prior Git history, original public review and caches are not erased. No raw-key compromise, credential access or rotation is asserted.
+
+[Six source dispositions](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5659120203) retain the existing contracts. Shipped channel and claim provenance are NOT NULL, with old tickets defaulting to0; no nullable legacy deletion path was established under applied migrations. Activation checks and pins provider selection/model/voice compatibility, independently of endpoint/key readiness. Settings pending rename blocks the blur-time action and requires a later explicit click; no automatic action queue was selected. Default empty text keys remain accepted, discovery roots are explicit, and workflow block indentation is valid. These are qualified dispositions with schema/configuration/historical attribution limits, not new runtime results.
+
+Both exact3ea CI runs34806427611/34806414705 passed application/browser/scoring/realtime jobs; deploy skipped. The remote application check passed **1,403 tests across59 files in19.93s**, Worker/web types and build. Earlier local1,383 and isolated61 results retain their source attribution. No extra application validation was needed for metadata-only changes. Fresh published-head CI and genuine latest-head PR-Agent security/major clearance remain mandatory.
+
 ## b7700fa reorder correction and carrier confirmation policy
 
 The [unchanged b7700fa review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658922189) reports no security concerns and four recommendations, without clean-major clearance. Repeated startup/discovery findings and Stalled Calls have [source dispositions](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658976822). The [supported reorder correction](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5659042905) is assembled in `2d173f0`; QA29edb1f independently closed source/evidence/exact identity.

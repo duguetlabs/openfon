@@ -1,0 +1,55 @@
+{
+  "base": "3ea3ad184f8bde0609a0f38c9fdaafde4fa3793d",
+  "report_url": "https://github.com/duguetlabs/openfon/pull/16#issuecomment-5659080383",
+  "original_report_sha256": "53d7c5c2f0c40645877024053dffb4fad62c5523ea2d4ec9b339df3e9b57c603",
+  "status": "Source-only two qualified dispositions; independent QA/integration agreement pending. No changed policy or application correction selected.",
+  "exact_source_sha256": {
+    "src/provider-settings.ts": "1be5872fa2d85c9ec48194b5d52f3143d36c4a15643b1aa663fde4e9341fa035",
+    "src/studio-api.ts": "bf0fa99b2087a2aaa53b7432bf5ea1cc577e4802608f7c76bf6780980b0f58f9",
+    "src/realtime-providers.ts": "341f5dd8e9e825d36d75aac4fd6afcbbf94190811fa02a20c530fba8529c375e",
+    "src/call-session.ts": "8c884f8a6f39d7db83b22ff40eb9d0233436eb0391866b0701a7a09c2d18b413",
+    "web/src/pages/Settings.tsx": "1e12b8e40e8685258cae907ad881861ddde883274c582048a3b923746eff9cef",
+    "test/provider-activation-instance.test.ts": "00c7bcc36a5b49c30f6ec872db9a3cd588ae7b9f6f31187b0f13a6ba745ba143",
+    "test/assistant-provider-compatibility.test.ts": "accc534e636c1415cc4c8ee5cd311bda8a8cdc27ebe1e26ec8b3844276f130fa",
+    "e2e/profile-rename-actions.spec.ts": "6175ff4eaf4662e972059a83ebb82eeeabb308bb66596a7603a4e761c105efe4"
+  },
+  "activation": {
+    "disposition": "Decline full-provider-validation premise under existing activation contract.",
+    "validator": "src/provider-settings.ts assistantCompatibilityError explicitly does not resolve endpoints or require keys. It reads settings.engine/realtime_model/realtime_voice and provider.realtime_provider, falling back through env.REALTIME_PROVIDER to kataleptic. Only effective OpenAI imposes model/voice namespace constraints.",
+    "sql": "src/studio-api.ts activation pins assistant engine/realtime_model/realtime_voice, provider row presence and realtime_provider using null-safe predicates. SQL rechecks current nonblank name/persona/language with Unicode whitespace and uses RETURNING id for409. Request environment selection is not a mutable DB field.",
+    "not_consumed": [
+      "realtime_base_url",
+      "realtime_api_key",
+      "llm_base_url",
+      "llm_api_key",
+      "llm_model",
+      "stt_provider",
+      "stt_base_url",
+      "stt_api_key",
+      "stt_model"
+    ],
+    "separate_contracts": "presetCompatibilityError actually invokes resolveRealtime and is not the helper used by activation. Provider PUT validates supported endpoint/key writes; resolveRealtime validates effective endpoint/key/model at pickup. Activation does not promise runtime provider readiness or freeze credentials.",
+    "existing_source_tests": "provider-activation-instance explicitly accepts compatible activation without provider credentials, rejects changed/missing/deleted provider selection and engine/model/voice interleavings, and retains quota/privacy controls. Source inspected only; prior closed evidence reused, no rerun.",
+    "limits": [
+      "Same-selection endpoint/key edits may coexist with successful activation by design.",
+      "No universal runtime availability, live key acceptance, complete provider snapshot or client editing-revision guarantee.",
+      "No newly executed same-selection key-rotation case claimed."
+    ]
+  },
+  "dropped_action": {
+    "disposition": "Acknowledge blocked blur-click; decline automatic queue recommendation as a change to selected no-autoqueue policy.",
+    "source": "Settings.tsx166-169 checks pending map synchronously before action/generation writes;252-277 registers per-id queue and recomputes global pending in finally;481/500/510 exposes status and disables Apply/Delete.",
+    "selected_contract": "Any pending rename blocks Apply/Delete, including blur-click before disabled rerender; after all queues settle the owner explicitly clicks again. No queued automatic action, no altered backend Apply CAS.",
+    "existing_tests": "profile-rename-actions.spec.ts54-80 checks real blur-click zero requests during rename, zero requests after acknowledgement, then one successful explicit later click for Apply/Delete. Other two cases cover all queues and failure/retry/newer drafts.",
+    "identity": "Settings and new browser fixture byte-match QA-closed bee7c49 and prior accepted1e12b8e4/6175ff4e; prior original2fail/fixed11browser evidence retained, not re-executed or relabeled exact3ea runtime.",
+    "limits": [
+      "Does not claim the first click executes or a dedicated dropped-action toast appears; pending status is the existing feedback.",
+      "Queueing would require separately selected behavior for rename failure, newer drafts, action target and cancellation. No such policy is selected."
+    ]
+  },
+  "source_comparisons": {
+    "provider_settings_vs8436": true,
+    "settings_and_fixture_vsbee7": true
+  },
+  "execution": "None: no tests/types/browser/native/inference/runner or application edits. Owned checkpoint/hash-manifest only. Original report remains in existing QA evidence; unrelated report metadata not duplicated."
+}
