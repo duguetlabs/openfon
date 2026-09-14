@@ -1493,11 +1493,12 @@ export function registerStudioApi(app: StudioApp): void {
       .bind(collection.business_id, name, collection.id)
       .first();
     if (duplicate) return c.json({ error: 'A collection with this name already exists' }, 409);
-    await c.env.DB.prepare(
-      "UPDATE knowledge_collections SET name=?, description=?, updated_at=datetime('now') WHERE id=?"
+    const updated = await c.env.DB.prepare(
+      "UPDATE knowledge_collections SET name=?, description=?, updated_at=datetime('now') WHERE id=? AND business_id=? AND name IS ? AND description IS ?"
     )
-      .bind(name, body.description ?? collection.description, collection.id)
+      .bind(name, body.description ?? collection.description, collection.id, collection.business_id, collection.name, collection.description)
       .run();
+    if (!updated.meta.changes) return c.json({ error: 'Collection changed. Reload and retry.' }, 409);
     return c.json({ ok: true });
   });
 
@@ -1580,11 +1581,12 @@ export function registerStudioApi(app: StudioApp): void {
     };
     const status = normalizedStatus(body.status) ?? item.status;
     if (status === 'active' && !itemReady(candidate)) return c.json({ error: 'Complete the item before activation' }, 400);
-    await c.env.DB.prepare(
+    const updated = await c.env.DB.prepare(
       `UPDATE knowledge_items SET collection_id=?, kind=?, status=?, title=?, question=?, answer=?, content=?,
         updated_at=datetime('now'),
         activated_at=CASE WHEN ?='active' THEN COALESCE(activated_at, datetime('now')) ELSE NULL END
-       WHERE id=?`
+       WHERE id=? AND business_id=? AND collection_id IS ? AND kind IS ? AND status IS ?
+         AND title IS ? AND question IS ? AND answer IS ? AND content IS ?`
     )
       .bind(
         collectionId,
@@ -1595,9 +1597,11 @@ export function registerStudioApi(app: StudioApp): void {
         candidate.answer,
         candidate.content,
         status,
-        item.id
+        item.id, item.business_id, item.collection_id, item.kind, item.status,
+        item.title, item.question, item.answer, item.content
       )
       .run();
+    if (!updated.meta.changes) return c.json({ error: 'Knowledge item changed. Reload and retry.' }, 409);
     const row = await c.env.DB.prepare('SELECT * FROM knowledge_items WHERE id = ?').bind(item.id).first();
     return c.json(row);
   });

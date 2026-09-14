@@ -72,6 +72,7 @@ export default function Settings() {
   const profileListGeneration = useRef(0);
   const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
   const [newProfileName, setNewProfileName] = useState('');
+  const [profileRenamePending, setProfileRenamePending] = useState(false);
   const profileSavedNames = useRef(new Map<string, string>());
   const profileEditVersion = useRef(new Map<string, number>());
   const profileRenameRequests = useRef(new Map<string, { queued?: { name: string; version: number | undefined } }>());
@@ -163,7 +164,8 @@ export default function Settings() {
     }
   }
   async function profileAction(action: () => Promise<unknown>, message: string, deletedId?: string) {
-    if (saving || profileRefreshPending) return;
+    // Blur registers its rename before the following click, even before a render.
+    if (saving || profileRefreshPending || profileRenameRequests.current.size > 0) return;
     setSaving(true); setError(''); mutationGeneration.current++; profileListGeneration.current++;
     try {
       await action();
@@ -250,6 +252,7 @@ export default function Settings() {
     if (running) { running.queued = edit; return; }
     const request: { queued?: typeof edit } = { queued: edit };
     profileRenameRequests.current.set(id, request);
+    setProfileRenamePending(true);
     try {
       while (request.queued) {
         const next = request.queued;
@@ -268,7 +271,10 @@ export default function Settings() {
             profile.id === id && profile.name === next.name ? { ...profile, name: confirmed } : profile));
         }
       }
-    } finally { profileRenameRequests.current.delete(id); }
+    } finally {
+      profileRenameRequests.current.delete(id);
+      setProfileRenamePending(profileRenameRequests.current.size > 0);
+    }
   }
 
   const profileFields = ['engine', 'realtime_model', 'realtime_voice', 'language', 'voice', 'llm_model'] as const;
@@ -472,6 +478,7 @@ export default function Settings() {
           <p className="text-xs text-ink-soft">Up to 64 profiles are shown. Long historical values are previews and cannot be renamed here; applying uses the full saved configuration. Delete unused profiles to reveal more.</p>
           {profiles.length === 0 && <p className="text-sm text-ink-soft">No profiles yet. Configure the engine below, then save it here under a name.</p>}
           {profileDraftDirty && profiles.length > 0 && <p className="text-sm text-ink-soft">{profileApplyReason}</p>}
+          {profileRenamePending && <p role="status" className="text-sm text-ink-soft">Saving profile names…</p>}
           {profiles.map((p) => (
             <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-wash-iris/50 px-3 py-2">
               <input
@@ -490,7 +497,7 @@ export default function Settings() {
                 {(p.realtime_voice || p.voice) && ` · ${p.realtime_voice || p.voice}`}
               </span>
               <button
-                disabled={profileDraftDirty || saving || profileRefreshPending}
+                disabled={profileDraftDirty || saving || profileRefreshPending || profileRenamePending}
                 title={profileDraftDirty ? profileApplyReason : undefined}
                 className="rounded-lg bg-iris px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-iris-deep disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={() => void profileAction(() => api.applyProfile(p.id), `Applied "${p.name}".`)}
@@ -500,7 +507,7 @@ export default function Settings() {
               <button
                 className="px-1 text-ink-faint transition-colors hover:text-rose"
                 aria-label="Delete profile"
-                disabled={saving || profileRefreshPending}
+                disabled={saving || profileRefreshPending || profileRenamePending}
                 onClick={() => void profileAction(() => api.deleteProfile(p.id), 'Profile deleted.', p.id)}
               >
                 ✕
