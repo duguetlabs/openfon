@@ -685,6 +685,110 @@ describe('bounded media session connection', () => {
     expect([...f.o.storage.data]).toEqual([['retired',true]]);
     expect(f.o.storage.alarm).toBeNull();
   });
+
+  describe('post-connect failure reason provenance', () => {
+    const publicFailureMessage = 'The telephone audio connection failed. Please review the call and retry.';
+    const row = () => db.database.prepare('SELECT status, outcome, failure_code, failure_message, connected_at, carrier_released_at FROM calls WHERE id=?').get(callId);
+    const eligibilityQuery = (sql: string) => sql.includes('JOIN telnyx_number_routes route ON route.connection_id=link.connection_id');
+    async function signedHangup(f: Awaited<ReturnType<typeof pendingMedia>>) {
+      env.TELNYX_CALL = { idFromName: () => callId, get: () => ({ fetch: (request: Request) => f.o.object.fetch(request) }) } as unknown as DurableObjectNamespace;
+      expect((await worker.fetch(webhook('call.hangup'), env, fakeCtx)).status).toBe(200);
+      await f.o.drain();
+    }
+    async function disposePending(f: Awaited<ReturnType<typeof pendingMedia>>) {
+      db.hook = null;
+      f.reply(); // Settled gates ignore this; still-pending sessions are released.
+      await f.pending;
+      await f.o.drain();
+    }
+
+    it.each(['assistant', 'route', 'engine'] as const)('preserves post-connect boolean eligibility loss: %s', async changed => {
+      const f = await pendingMedia();
+      try {
+        if (changed === 'assistant') db.exec("UPDATE assistants SET state='paused'");
+        if (changed === 'route') db.exec('UPDATE telnyx_number_routes SET enabled=0');
+        if (changed === 'engine') db.exec("UPDATE assistants SET engine='pipeline'");
+        f.reply(); const response = await f.pending;
+        expect(response.status).toBe(502);
+        expect(f.socket.accept).toHaveBeenCalledOnce(); expect(f.socket.close).toHaveBeenCalledOnce();
+        expect(vi.getTimerCount()).toBe(0); expect(await occupied()).toBe(1);
+        const control = await f.o.storage.get<Record<string, unknown>>('control');
+        expect(control).toMatchObject({ ending: true, terminal: false, mediaClaimed: true, mediaValidated: false });
+        console.info('ELIGIBILITY_REASON_BEFORE_ASSERTION', JSON.stringify({ changed, responseStatus: response.status, reason: control?.reason, mediaValidated: control?.mediaValidated, socketCloseCalls: f.socket.close.mock.calls.length }));
+        expect(control?.reason).toBe('assistant_unavailable');
+        expect(row()).toMatchObject({ status: 'active', connected_at: null, carrier_released_at: null });
+        // A transient projection error must leave the stored reason available to the alarm retry.
+        let projectionAttempts = 0;
+        db.hook = sql => { if (sql.includes('failure_code=?')) { projectionAttempts++; throw Error('synthetic projection unavailable'); } };
+        await f.o.object.alarm();
+        expect(projectionAttempts).toBe(1); expect(f.o.storage.alarm).toBe(Date.now() + 60_000);
+        expect(row()).toMatchObject({ failure_code: null });
+        db.hook = null;
+        await f.o.object.alarm();
+        expect(row()).toMatchObject({ status: 'active', outcome: 'failed', failure_code: 'assistant_unavailable', failure_message: publicFailureMessage, connected_at: null, carrier_released_at: null });
+        expect(requests.at(-1)!.url).toContain('/hangup'); expect(await occupied()).toBe(1);
+        await signedHangup(f);
+        expect(row()).toMatchObject({ status: 'failed', outcome: 'failed', failure_code: 'assistant_unavailable', failure_message: publicFailureMessage, connected_at: null });
+        expect(row()?.carrier_released_at).not.toBeNull(); expect(await occupied()).toBe(0);
+      } finally { await disposePending(f); }
+    });
+
+    it.each(['connect', 'query', 'pair', 'carrier-accept'] as const)('does not promote thrown assistant_unavailable text: %s', async source => {
+      const f = await pendingMedia();
+      const construction = vi.fn(), carrier = { accept: vi.fn(() => { throw Error('assistant_unavailable'); }), close: vi.fn() };
+      let queryAttempts = 0;
+      try {
+        if (source === 'query') db.hook = sql => { if (eligibilityQuery(sql)) { queryAttempts++; throw Error('assistant_unavailable'); } };
+        if (source === 'pair' || source === 'carrier-accept') vi.stubGlobal('WebSocketPair', class {
+          0 = {}; 1 = carrier;
+          constructor() { construction(); if (source === 'pair') throw Error('assistant_unavailable'); }
+        });
+        if (source === 'connect') f.reject(Error('assistant_unavailable')); else f.reply();
+        expect((await f.pending).status).toBe(502);
+        expect(await f.o.storage.get('control')).toMatchObject({ ending: true, reason: 'media_bridge_failed', mediaValidated: false });
+        expect(f.socket.close).toHaveBeenCalledTimes(source === 'connect' ? 0 : 1);
+        if (source === 'query') expect(queryAttempts).toBe(1);
+        if (source === 'pair' || source === 'carrier-accept') expect(construction).toHaveBeenCalledOnce();
+        expect(carrier.close).toHaveBeenCalledTimes(source === 'carrier-accept' ? 1 : 0);
+        expect(vi.getTimerCount()).toBe(0); expect(await occupied()).toBe(1);
+        db.hook = null;
+        await f.o.object.alarm();
+        expect(row()).toMatchObject({ outcome: 'failed', failure_code: 'media_bridge_failed', failure_message: publicFailureMessage, connected_at: null, carrier_released_at: null });
+      } finally { await disposePending(f); }
+    });
+
+    it('retains first-check unavailable403 without connecting a session', async () => {
+      const o = owner(); await o.event('call.initiated'); await o.drain(); await o.event('call.answered'); await o.drain();
+      const control = await o.storage.get<{ streamToken: string }>('control');
+      const sessionFetch = vi.fn(async () => new Response(null, { status: 503 }));
+      env.CALL_SESSION = { idFromName: () => callId, get: () => ({ fetch: sessionFetch }) } as unknown as DurableObjectNamespace;
+      db.exec("UPDATE assistants SET state='paused'");
+      const response = await o.object.fetch(new Request('https://internal/media', { headers: { Upgrade: 'websocket', 'x-telnyx-streaming-auth-token': control!.streamToken } }));
+      expect(response.status).toBe(403); expect(sessionFetch).not.toHaveBeenCalled();
+      expect(await o.storage.get('control')).toMatchObject({ ending: true, reason: 'assistant_unavailable', mediaClaimed: false, mediaValidated: false });
+      expect(await occupied()).toBe(1);
+    });
+
+    it.each(['ending', 'terminal', 'retired'] as const)('preserves earlier %s state before late session reply', async prior => {
+      const f = await pendingMedia();
+      try {
+        if (prior === 'ending') {
+          vi.setSystemTime(Date.now() + 61_000); await f.o.object.alarm();
+          expect(await f.o.storage.get('control')).toMatchObject({ reason: 'media_setup_timeout', ending: true });
+        } else {
+          await signedHangup(f);
+          if (prior === 'retired') { vi.setSystemTime(Date.now() + 36 * 60_000); await f.o.object.alarm(); }
+        }
+        db.exec("UPDATE assistants SET state='paused'");
+        const stored = structuredClone([...f.o.storage.data]); const persistedRow = row();
+        f.reply(); expect((await f.pending).status).toBe(502);
+        expect(f.socket.close).toHaveBeenCalledOnce(); expect(vi.getTimerCount()).toBe(0);
+        expect([...f.o.storage.data]).toEqual(stored); expect(row()).toEqual(persistedRow);
+        expect(await occupied()).toBe(prior === 'ending' ? 1 : 0);
+      } finally { await disposePending(f); }
+    });
+  });
+
 });
 
 describe('signed ingress and provider API contract', () => {

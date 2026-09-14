@@ -476,6 +476,7 @@ export class TelnyxCall implements DurableObject {
     let session: WebSocket | null = null;
     const carrierRef: { socket: WebSocket | null } = { socket: null };
     let installed = false;
+    let failureReason: 'media_bridge_failed' | 'assistant_unavailable' = 'media_bridge_failed';
     try {
       // No lifecycle lock over external I/O: signed hangup, alarm and duplicate
       // upgrades must progress even if the conversation object never responds.
@@ -487,7 +488,10 @@ export class TelnyxCall implements DurableObject {
             !s.admitted || s.terminal || s.ending || !s.answered || !s.mediaClaimed || s.mediaValidated || this.bridge ||
             Date.now() >= s.tokenExpiresAt || Date.now() >= s.setupDeadline || Date.now() >= s.hardDeadline ||
             !equalStreamToken(claim.streamToken, s.streamToken) || session!.readyState !== 1) throw new Error('call_ended');
-        if (!await telnyxMediaAllowed(this.env, s.callId)) throw new Error('assistant_unavailable');
+        if (!await telnyxMediaAllowed(this.env, s.callId)) {
+          failureReason = 'assistant_unavailable';
+          throw new Error('assistant_unavailable');
+        }
         const pair = new WebSocketPair();
         const carrier = pair[1]; carrierRef.socket = carrier; carrier.accept();
         this.bridge = createTelnyxMediaBridge({
@@ -510,7 +514,7 @@ export class TelnyxCall implements DurableObject {
     } catch {
       // Reload under the lock; never write a pre-connect snapshot over a
       // terminal event/retirement that completed while the fetch was pending.
-      await this.terminate('media_bridge_failed');
+      await this.terminate(failureReason);
       return new Response(null, { status: 502 });
     } finally {
       if (!installed) {
