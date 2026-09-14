@@ -1,56 +1,71 @@
 import type { Hono } from 'hono';
 import { TelnyxMediaAdmission } from './telnyx-media-admission';
+import { TelnyxWebhookAdmission, type TelnyxWebhookLease } from './telnyx-webhook-admission';
 import type { Env } from './types';
 import { verifyTelnyxWebhook, TelnyxWebhookError, TELNYX_WEBHOOK_MAX_BYTES,
   TELNYX_WEBHOOK_BODY_TIMEOUT_MS, TELNYX_WEBHOOK_MAX_READS } from './telnyx-webhook';
 import { telnyxConfigured, telnyxControlEvent } from './telnyx-control';
 import { telnyxLocalCallId } from './telnyx-admission';
 
-async function boundedBody(request: Request): Promise<Uint8Array> {
-  if (!request.body) throw new TelnyxWebhookError('invalid_payload');
-  const reader = request.body.getReader();
-  const bytes = new Uint8Array(TELNYX_WEBHOOK_MAX_BYTES);
-  let size = 0, reads = 0, finished = false, cancelled = false;
+// Shared by every route registration in this isolate, never by request identity.
+const webhookAdmission = new TelnyxWebhookAdmission();
+
+async function boundedBody(request: Request, lease: TelnyxWebhookLease): Promise<Uint8Array> {
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let finished = false, cancelled = false;
   const cancel = () => {
-    if (cancelled) return;
+    if (!reader || cancelled) return;
     cancelled = true;
-    // Cancellation can throw, reject, or remain pending. None may hold the
-    // response open or replace the original rejection status.
-    try { void reader.cancel().catch(() => {}); } catch { /* best effort */ }
-  };
-  const expiresAt = Date.now() + TELNYX_WEBHOOK_BODY_TIMEOUT_MS;
-  let timer!: ReturnType<typeof setTimeout>;
-  const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new TelnyxWebhookError('body_timeout')), TELNYX_WEBHOOK_BODY_TIMEOUT_MS);
-  });
-  const checkDeadline = () => {
-    if (finished || Date.now() >= expiresAt) throw new TelnyxWebhookError('body_timeout');
-  };
-  const consume = async () => {
-    for (;;) {
-      checkDeadline();
-      // Empty chunks consume no bytes and can starve timers. Bound read work
-      // independently, while allowing a full body fragmented into single bytes.
-      if (++reads > TELNYX_WEBHOOK_MAX_READS) throw new TelnyxWebhookError('invalid_payload');
-      const { value, done } = await reader.read();
-      checkDeadline();
-      if (done) break;
-      if (value.byteLength > TELNYX_WEBHOOK_MAX_BYTES - size) throw new TelnyxWebhookError('body_too_large');
-      bytes.set(value, size); size += value.byteLength;
-    }
-    return bytes.subarray(0, size);
+    lease.cancellationStarted();
+    // Do not await cleanup on the response path. A failure quarantines capacity;
+    // an unresolved cancellation retains it even after the five-second response.
+    try {
+      void reader.cancel().then(() => lease.cancellationFulfilled(), () => lease.quarantine());
+    } catch { lease.quarantine(); }
   };
   try {
+    // Own the reader before any allocation/timer setup that can throw.
+    if (!request.body) throw new TelnyxWebhookError('invalid_payload');
+    reader = request.body.getReader();
+    lease.readerAcquired();
+    const bytes = new Uint8Array(TELNYX_WEBHOOK_MAX_BYTES);
+    let size = 0, reads = 0;
+    const expiresAt = Date.now() + TELNYX_WEBHOOK_BODY_TIMEOUT_MS;
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new TelnyxWebhookError('body_timeout')), TELNYX_WEBHOOK_BODY_TIMEOUT_MS);
+    });
+    const checkDeadline = () => {
+      if (finished || Date.now() >= expiresAt) throw new TelnyxWebhookError('body_timeout');
+    };
+    const consume = async () => {
+      for (;;) {
+        checkDeadline();
+        // Empty chunks consume no bytes and can starve timers. Bound read work
+        // independently, allowing a full body fragmented into single bytes.
+        if (++reads > TELNYX_WEBHOOK_MAX_READS) throw new TelnyxWebhookError('invalid_payload');
+        const { value, done } = await reader!.read();
+        checkDeadline();
+        if (done) break;
+        if (value.byteLength > TELNYX_WEBHOOK_MAX_BYTES - size) throw new TelnyxWebhookError('body_too_large');
+        bytes.set(value, size); size += value.byteLength;
+      }
+      return bytes.subarray(0, size);
+    };
+    lease.consumeStarted();
+    const consuming = consume().finally(() => lease.consumeSettled());
     // One deadline reaction, not one retained reaction per body fragment.
-    return await Promise.race([consume(), deadline]);
+    return await Promise.race([consuming, deadline]);
   } catch (error) {
     cancel();
     throw error;
   } finally {
     finished = true;
-    clearTimeout(timer);
-    // A late read is observed by the race and cannot advance to verification.
-    try { reader.releaseLock(); } catch { /* pending or cancelled read */ }
+    try { if (timer !== undefined) clearTimeout(timer); } catch { lease.quarantine(); }
+    if (reader) {
+      try { reader.releaseLock(); lease.readerReleased(); } catch { lease.quarantine(); }
+    }
+    lease.bodySettled();
   }
 }
 
@@ -59,9 +74,13 @@ export function registerTelnyxRoutes(app: Hono<{ Bindings: Env; Variables: { use
   app.post('/api/telnyx/webhooks', async c => {
     c.header('Cache-Control', 'no-store');
     if (!c.env.TELNYX_CALL || !c.env.TELNYX_PUBLIC_KEY || !c.env.TELNYX_CONNECTION_ID) return c.json({ error: 'Carrier ingress unavailable' }, 503);
+    if (!c.req.raw.body) return c.json({ error: 'Invalid carrier webhook' }, 400);
+    const lease = webhookAdmission.acquire();
+    // Never acquire/cancel a rejected reader or queue work outside the budget.
+    if (!lease) return c.json({ error: 'Carrier ingress unavailable' }, 503, { 'Retry-After': '1' });
     try {
       const event = await verifyTelnyxWebhook({
-        body: await boundedBody(c.req.raw), contentType: c.req.header('Content-Type') ?? null,
+        body: await boundedBody(c.req.raw, lease), contentType: c.req.header('Content-Type') ?? null,
         signature: c.req.header('telnyx-signature-ed25519') ?? null,
         timestamp: c.req.header('telnyx-timestamp') ?? null,
       }, { publicKey: c.env.TELNYX_PUBLIC_KEY!, nowSeconds: Math.floor(Date.now() / 1000) });
@@ -84,6 +103,10 @@ export function registerTelnyxRoutes(app: Hono<{ Bindings: Env; Variables: { use
         return c.json({ error: 'Invalid carrier webhook' }, status);
       }
       return c.json({ error: 'Carrier event could not be accepted' }, 503);
+    } finally {
+      // Successful body aliases/copies remain owned through crypto and durable
+      // dispatch. This is not a new deadline on either downstream operation.
+      lease.routeSettled();
     }
   });
 
