@@ -20,6 +20,18 @@ Protocol and configuration verified against official documentation on 2026-09-12
 [Asterisk WebSocket channel driver](https://docs.asterisk.org/Configuration/Channel-Drivers/WebSocket/)
 and [websocket_client.conf sample](https://github.com/asterisk/asterisk/blob/master/configs/samples/websocket_client.conf.sample).
 
+The PBX configuration offers the `media` WebSocket subprotocol. OpenFon selects
+only that exact, case-sensitive token when offered (including in a comma-separated
+list). At the application boundary, an absent protocol header is accepted without
+selecting one; an empty-present header, malformed/duplicate token list or
+unsupported-only offer is rejected before admission. If the HTTP transport removes
+an empty or whitespace-only header before the handler receives it, the application
+observes an absent offer and accepts without selection. Local ws/workerd probes
+observed this boundary limitation; they do not establish present-empty rejection
+through that transport or identify the layer that removed the header. The internal
+handoff carries only the selected choice. The separate CallSession socket does not
+negotiate this PBX protocol.
+
 ## Configure an existing installation
 
 1. Apply migrations through `0011_asterisk_inbound.sql` to your chosen database.

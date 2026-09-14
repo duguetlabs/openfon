@@ -165,3 +165,24 @@ it('binding admission freshly rejects revocation, rotation, reassignment and mis
   await db.prepare("UPDATE asterisk_routes SET password_hash=?,assistant_id='other'").bind(hash).run();expect(await validateAsteriskAdmission(env,'pbx',version)).toBeNull();
   expect(derive).not.toHaveBeenCalled();expect(asteriskAuthBudget.acquire).not.toHaveBeenCalled();
 });
+
+it.each([null,'media','other, media','media,other'])('public protocol offer %s forwards only the selected choice',async offer=>{
+  await provision();let forwarded!:Request;
+  env.ASTERISK_CALL={idFromName:(id:string)=>id,get:()=>({fetch:async(request:Request)=>{forwarded=request;return new Response(null,{status:204});}})} as unknown as DurableObjectNamespace;
+  const headers=new Headers({Upgrade:'websocket',Authorization:authorization,[ASTERISK_ADMISSION_HEADER]:'forged'});
+  if(offer!==null)headers.set('Sec-WebSocket-Protocol',offer);
+  const response=await worker.fetch(new Request('https://local.test/ws/asterisk/pbx?call=negotiation',{headers}),env,fakeCtx);
+  expect(response.status).toBe(204);
+  expect(forwarded.headers.get('Sec-WebSocket-Protocol')).toBe(offer===null?null:'media');
+  expect(forwarded.headers.get('Authorization')).toBeNull();
+  expect(forwarded.headers.get(ASTERISK_ADMISSION_HEADER)).toMatch(/^[a-f0-9]{64}$/);
+});
+it.each(['',' ','other','MEDIA','premedia','media,','other,,media','media,media','media,other,other','media,bad token','media,other/thing'])('public malformed/unsupported protocol %s refuses before auth or owner admission',async offer=>{
+  await provision();const derive=vi.spyOn(crypto.subtle,'deriveBits');const fetch=vi.fn(async()=>new Response(null,{status:204}));
+  env.ASTERISK_CALL={idFromName:(id:string)=>id,get:()=>({fetch})} as unknown as DurableObjectNamespace;
+  let queries=0;db.hook=()=>{queries++;};
+  const headers={Upgrade:'websocket',Authorization:authorization,'Sec-WebSocket-Protocol':offer};
+  const response=await worker.fetch(new Request('https://local.test/ws/asterisk/pbx?call=negotiation',{headers}),env,fakeCtx);
+  expect(response.status).toBe(400);expect(queries).toBe(0);expect(derive).not.toHaveBeenCalled();
+  expect(asteriskAuthBudget.acquire).not.toHaveBeenCalled();expect(fetch).not.toHaveBeenCalled();
+});

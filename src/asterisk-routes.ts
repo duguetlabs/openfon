@@ -1,3 +1,4 @@
+import { selectAsteriskProtocol } from './asterisk-websocket';
 import { OCCUPIED_CALL_SQL } from './telnyx-admission';
 import { asteriskAuthBudget, asteriskIngressBudget } from './asterisk-auth-budget';
 import { verifyPassword } from './auth';
@@ -48,6 +49,8 @@ export function registerAsteriskRoutes(app: Hono<{ Bindings: Env; Variables: { u
     const route = c.req.param('route');
     const call = c.req.query('call') || '';
     if (!/^[a-zA-Z0-9_-]{1,80}$/.test(route) || !/^[a-zA-Z0-9_.:-]{1,128}$/.test(call)) return c.json({ error: 'Invalid PBX route or call' }, 400);
+    const protocol = selectAsteriskProtocol(c.req.raw.headers.get('Sec-WebSocket-Protocol'));
+    if (protocol === false) return c.json({ error: 'Unsupported or malformed WebSocket protocol offer' }, 400);
     // Constant-size, nonpersistent guard; no attacker-supplied IP/route keys.
     const release = asteriskIngressBudget.acquire();
     if (!release) return c.json({ error: 'Too many attempts' }, 429);
@@ -70,7 +73,8 @@ export function registerAsteriskRoutes(app: Hono<{ Bindings: Env; Variables: { u
       const id = `ast_${await asteriskDigest(`${route}\0${call}`)}`;
       const stub = c.env.ASTERISK_CALL.get(c.env.ASTERISK_CALL.idFromName(id));
       return await stub.fetch(new Request(`https://internal/media?call=${id}&route=${encodeURIComponent(route)}`, {
-        headers: { Upgrade: 'websocket', [ASTERISK_ADMISSION_HEADER]: version, 'Sec-WebSocket-Protocol': 'media' },
+        headers: { Upgrade: 'websocket', [ASTERISK_ADMISSION_HEADER]: version,
+          ...(protocol === 'media' ? { 'Sec-WebSocket-Protocol': protocol } : {}) },
       }));
     } finally { release(); }
   });

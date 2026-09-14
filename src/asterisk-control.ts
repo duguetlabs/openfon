@@ -1,3 +1,4 @@
+import { selectAsteriskProtocol } from './asterisk-websocket';
 import { telephoneRealtimeAvailable, type RealtimeSettings } from './realtime-providers';
 import type { AgentSettings, Env, ProviderSettings } from './types';
 import { assistantCompatibilityError } from './provider-settings';
@@ -33,6 +34,8 @@ export class AsteriskCall implements DurableObject {
   }
 
   async fetch(request: Request): Promise<Response> {
+    const protocol = selectAsteriskProtocol(request.headers.get('Sec-WebSocket-Protocol'));
+    if (protocol === false) return new Response(null, { status: 400 });
     const prepared = await this.exclusive(() => this.prepare(request));
     if (prepared instanceof Response) return prepared;
     const { call } = prepared;
@@ -42,7 +45,7 @@ export class AsteriskCall implements DurableObject {
       // reservation while it waits, and installation rechecks their decision.
       const stub = this.env.CALL_SESSION.get(this.env.CALL_SESSION.idFromName(call));
       response = await this.openSession(stub, call);
-      return await this.exclusive(() => this.install(call, response!));
+      return await this.exclusive(() => this.install(call, response!, protocol));
     } catch {
       if (response) this.closeResponse(response);
       return this.exclusive(async () => {
@@ -138,7 +141,7 @@ export class AsteriskCall implements DurableObject {
     }
   }
 
-  private async install(call: string, response: Response): Promise<Response> {
+  private async install(call: string, response: Response, protocol: 'media' | null = null): Promise<Response> {
     if (await this.state.storage.get('retired') || await this.state.storage.get('ending') ||
         await this.state.storage.get('cleanup') || this.env.ASTERISK_ENABLED !== 'true') {
       this.closeResponse(response);
@@ -181,7 +184,7 @@ export class AsteriskCall implements DurableObject {
         socket.addEventListener('error', () => this.adapter?.close('socket_error'));
       }
       await this.state.storage.put('deadline', Date.now() + 30 * 60000);
-      return new Response(null, { status: 101, webSocket: pair[0], headers: { 'Sec-WebSocket-Protocol': 'media' } });
+      return new Response(null, { status: 101, webSocket: pair[0], headers: protocol === 'media' ? { 'Sec-WebSocket-Protocol': protocol } : undefined });
     } catch {
       this.closeResponse(response);
       this.adapter?.close('setup_failed');

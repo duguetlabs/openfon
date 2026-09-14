@@ -431,3 +431,39 @@ describe('Asterisk atomic compatibility reservation',()=>{
     expect(dispatch).toHaveBeenCalledTimes(1);expect(await db.prepare('SELECT COUNT(*) n FROM calls').first()).toEqual({n:1});
   });
 });
+
+// Header assertions use a Response shim, not a claim of client negotiation.
+// Planned ws/public-workerd validation must separately prove client negotiation.
+describe('Asterisk owner protocol negotiation',()=>{
+  class Socket {
+    readyState=1;binaryType='arraybuffer';listeners=new Map<string,((event:unknown)=>void)[]>();
+    accept(){} send(){} close(){this.readyState=3;}
+    addEventListener(type:string,fn:(event:unknown)=>void){this.listeners.set(type,[...(this.listeners.get(type)||[]),fn]);}
+    emit(type:string,event:unknown){for(const fn of this.listeners.get(type)||[])fn(event);}
+  }
+  it.each([null,'media','other, media','media,other'])('owner selects only the offered media token for %s',async offer=>{
+    const live=owner(),session=new Socket();let carrier!:Socket;let sessionRequest!:Request;
+    env.CALL_SESSION={idFromName:(id:string)=>id,get:()=>({fetch:async(req:Request)=>{sessionRequest=req;return {status:101,webSocket:session};}})} as unknown as DurableObjectNamespace;
+    vi.stubGlobal('WebSocketPair',class {0=new Socket();1=carrier=new Socket();});
+    const NativeResponse=Response;
+    vi.stubGlobal('Response',class extends NativeResponse {constructor(body:null,init:ResponseInit & {webSocket?:unknown}={}){
+      super(body,{headers:init.headers});Object.defineProperty(this,'status',{value:init.status??200});Object.defineProperty(this,'webSocket',{value:init.webSocket});
+    }});
+    const headers=new Headers(request().headers);if(offer!==null)headers.set('Sec-WebSocket-Protocol',offer);
+    try {
+      const response=await live.object.fetch(new Request(request().url,{headers}));
+      expect(response.status).toBe(101);expect(response.headers.get('Sec-WebSocket-Protocol')).toBe(offer===null?null:'media');
+      expect(sessionRequest.headers.get('Sec-WebSocket-Protocol')).toBeNull();
+      expect(await db.prepare('SELECT COUNT(*) n FROM calls').first()).toEqual({n:1});
+    } finally {
+      carrier?.emit('close',{code:1000});await (live.object as unknown as {pending:Promise<unknown>}).pending;
+    }
+  });
+  it.each(['','other','MEDIA','media,','media,media','media,other,other','media,bad token'])('owner refuses protocol %s before storage/auth/reservation',async offer=>{
+    const live=owner();const req=new Request(request().url,{headers:{...Object.fromEntries(request().headers),'Sec-WebSocket-Protocol':offer}});
+    const dispatch=vi.fn(async()=>new Response(null,{status:503}));env.CALL_SESSION={idFromName:(id:string)=>id,get:()=>({fetch:dispatch})} as unknown as DurableObjectNamespace;
+    let queries=0;db.hook=()=>{queries++;};
+    expect((await live.object.fetch(req)).status).toBe(400);expect(queries).toBe(0);expect(dispatch).not.toHaveBeenCalled();
+    expect([...live.storage.data]).toEqual([]);expect(live.storage.alarm).toBeNull();
+  });
+});
