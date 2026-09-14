@@ -1,0 +1,47 @@
+{
+  "base": "8436ac9c0055123d440c78760f6bc10ee406fe25",
+  "snapshot": "/tmp/openfon-webhook-8436-m8prudc_",
+  "status": "PREPARED_UNEXECUTED",
+  "files": {
+    "src/telnyx-routes.ts": {
+      "baseSha256": "2dcd65d69143331b6451d81a5161268d7e6e78cfc831fe05af50be5be300e4e9",
+      "preparedSha256": "2719a06b2c1ca1d951943685792cc03b08689304073be6b13c664d5a600c6770",
+      "bytes": 7018
+    },
+    "src/telnyx-webhook.ts": {
+      "baseSha256": "a11e106d55bd1c931c5dd49229f898166fa1eca5b3aa7499a032fa1bf9307b11",
+      "preparedSha256": "fba2355f23073ae5fdaa2ae4f4d056cb4e27dca67c49dad18c7f3c15d66a97e5",
+      "bytes": 9092
+    },
+    "test/telnyx-body.test.ts": {
+      "baseSha256": null,
+      "preparedSha256": "b011204d5a0ba4d337a81d60c6af0f45ecf06aa77e1ba3042b9ee8077d16147d",
+      "bytes": 12672
+    },
+    "scripts/telnyx-webhook-body-smoke.mjs": {
+      "baseSha256": null,
+      "preparedSha256": "9f72687219dce66c46c84424984b4c174722b44ef0a804e8945bc1576abdf7cc",
+      "bytes": 10872
+    }
+  },
+  "protected": {
+    "src/index.ts": "2497393f1c491097f8d033825a42dd70cdac19b37e7d288e1967c9b210af1629",
+    "src/call-session.ts": "8c884f8a6f39d7db83b22ff40eb9d0233436eb0391866b0701a7a09c2d18b413",
+    "src/telnyx-control.ts": "213038b7acd1660664014ad2067ca01d770097f6ba02ce8bc638e186658b4f32",
+    "src/telnyx-admission.ts": "259de6b3f8eb3d6787e1d6a7bce2e23fbca461fdcaf90a357ef1486335b2bc63",
+    "src/telnyx-media.ts": "e466dc5fe9d9651b123dc0b13d7468707756eb66723ab8adbb6d9fe7bba5a188",
+    "src/telnyx-media-admission.ts": "7bb30b1b06467197dac366e357d9f4687fbdd46b38048fe159663e59a881f265",
+    "src/asterisk-control.ts": "f6e314bf97f70de409a0af56640bc73585a202a785f6377337183a39ac1a24d9",
+    "src/asterisk-media.ts": "89b7448be299211ec7a016e96b4cdc0be58b4640f7cf501780c9888f1be2a583",
+    "src/provider-response.ts": "7dba2fa2361876a813580fe1fb4d1b45b1ec42525977a52a2ba469e21db09bad",
+    "test/call-session.test.ts": "7435aa9e536147439b3e5a7c420f8cd05883248364511c7d722116ecfa9af5a2",
+    "test/telnyx-control.test.ts": "a206d723ee2cd6a4a0adebbc0a9630cb19a6ce2c16151876692f5bd96b08e515",
+    "test/telnyx-webhook.test.ts": "1bb49b27e9788f0a6ad338a57b7675a1258fafb551a3efea62b2a45b1e68eca5",
+    "wrangler.jsonc": "0b23bfd315e432d084dec890c163228330c9528149b9bc7f9f36c15657a578ee"
+  },
+  "trackedChanges": [
+    "src/telnyx-routes.ts",
+    "src/telnyx-webhook.ts"
+  ],
+  "patchSha256": "76f9a2fe32b9fe74acd4d79f2b582e7f8f1d37b8f427eb498a5057c6562ee2c5"
+}

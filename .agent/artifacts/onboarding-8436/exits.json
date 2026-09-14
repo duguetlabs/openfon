@@ -1,0 +1,41 @@
+{
+  "original": {
+    "exit": 1,
+    "seconds": 28.179,
+    "command": [
+      "npx",
+      "playwright",
+      "test",
+      "e2e/onboarding-retry.spec.ts",
+      "--grep",
+      "onboarding-refresh",
+      "--workers=1",
+      "--retries=0",
+      "--reporter=line",
+      "--output=/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-onboarding-8436-ch1y7w34/original-results"
+    ]
+  },
+  "fixed": {
+    "exit": 0,
+    "seconds": 15.96,
+    "command": [
+      "npx",
+      "playwright",
+      "test",
+      "e2e/onboarding-retry.spec.ts",
+      "--workers=1",
+      "--retries=0",
+      "--reporter=line",
+      "--output=/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-onboarding-8436-ch1y7w34/fixed-results"
+    ]
+  },
+  "types": {
+    "exit": 0,
+    "seconds": 1.779,
+    "command": [
+      "npm",
+      "run",
+      "typecheck"
+    ]
+  }
+}

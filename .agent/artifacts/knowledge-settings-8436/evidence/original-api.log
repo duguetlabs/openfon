@@ -1,0 +1,115 @@
+
+ RUN  v5.0.0 /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-knowledge-8436-xzd8u0oc
+
+(node:56405) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ test/knowledge-concurrency.test.ts (21 tests | 14 failed) 191ms
+   × item conflicts on captured collection_id in the same second and fresh retry charges once 56ms
+   × item conflicts on captured kind in the same second and fresh retry charges once 8ms
+   × item conflicts on captured status in the same second and fresh retry charges once 9ms
+   × item conflicts on captured title in the same second and fresh retry charges once 7ms
+   × item conflicts on captured question in the same second and fresh retry charges once 7ms
+   × item conflicts on captured answer in the same second and fresh retry charges once 7ms
+   × item conflicts on captured content in the same second and fresh retry charges once 7ms
+   × item deletion after capture conflicts with no quota or persisted side effects 7ms
+   × item conflicts even when B installs A's desired value 7ms
+   × collection conflicts on captured name in the same second and fresh retry charges once 6ms
+   × collection conflicts on captured description in the same second and fresh retry charges once 7ms
+   × collection deletion after capture conflicts with no quota or persisted side effects 7ms
+   × collection conflicts even when B installs A's desired value 6ms
+   × activation conflicts if content becomes incomplete after readiness validation 6ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 14 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/knowledge-concurrency.test.ts > item conflicts on captured collection_id in the same second and fresh retry charges once
+ FAIL  test/knowledge-concurrency.test.ts > item conflicts on captured kind in the same second and fresh retry charges once
+ FAIL  test/knowledge-concurrency.test.ts > item conflicts on captured status in the same second and fresh retry charges once
+ FAIL  test/knowledge-concurrency.test.ts > item conflicts on captured title in the same second and fresh retry charges once
+ FAIL  test/knowledge-concurrency.test.ts > item conflicts on captured question in the same second and fresh retry charges once
+ FAIL  test/knowledge-concurrency.test.ts > item conflicts on captured answer in the same second and fresh retry charges once
+ FAIL  test/knowledge-concurrency.test.ts > item conflicts on captured content in the same second and fresh retry charges once
+ FAIL  test/knowledge-concurrency.test.ts > collection conflicts on captured name in the same second and fresh retry charges once
+ FAIL  test/knowledge-concurrency.test.ts > collection conflicts on captured description in the same second and fresh retry charges once
+AssertionError: expected 200 to be 409 // Object.is equality
+
+- Expected
++ Received
+
+- 409
++ 200
+
+ ❯ test/knowledge-concurrency.test.ts:76:38
+     74|       expect(row(kind).updated_at).toBe(timestamp);
+     75|       const afterB = snapshot(), beforeCount = count(kind); hold.relea…
+     76|       expect((await pending).status).toBe(409); expect(snapshot()).toE…
+       |                                      ^
+     77|       hold.restore(); expect((await save(kind, { [ownField]: 'A edit' …
+     78|       expect(row(kind)[field]).toBe(field === ownField ? 'A edit' : va…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/14]⎯
+
+ FAIL  test/knowledge-concurrency.test.ts > item deletion after capture conflicts with no quota or persisted side effects
+ FAIL  test/knowledge-concurrency.test.ts > collection deletion after capture conflicts with no quota or persisted side effects
+AssertionError: expected 200 to be 409 // Object.is equality
+
+- Expected
++ Received
+
+- 409
++ 200
+
+ ❯ test/knowledge-concurrency.test.ts:86:81
+     84|     try {
+     85|       await hold.reached; expect((await request(path(kind), undefined,…
+     86|       const afterB = snapshot(); hold.release(); expect((await pending…
+       |                                                                                 ^
+     87|     } finally { hold.release(); await pending; hold.restore(); }
+     88|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/14]⎯
+
+ FAIL  test/knowledge-concurrency.test.ts > item conflicts even when B installs A's desired value
+ FAIL  test/knowledge-concurrency.test.ts > collection conflicts even when B installs A's desired value
+AssertionError: expected 200 to be 409 // Object.is equality
+
+- Expected
++ Received
+
+- 409
++ 200
+
+ ❯ test/knowledge-concurrency.test.ts:93:81
+     91|     try {
+     92|       await hold.reached; expect((await save(kind, next)).status).toBe…
+     93|       const afterB = snapshot(); hold.release(); expect((await pending…
+       |                                                                                 ^
+     94|     } finally { hold.release(); await pending; hold.restore(); }
+     95|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/14]⎯
+
+ FAIL  test/knowledge-concurrency.test.ts > activation conflicts if content becomes incomplete after readiness validation
+AssertionError: expected 200 to be 409 // Object.is equality
+
+- Expected
++ Received
+
+- 409
++ 200
+
+ ❯ test/knowledge-concurrency.test.ts:114:79
+    112|   try {
+    113|     await hold.reached; expect((await save('item', { content: '' })).s…
+    114|     const afterB = snapshot(); hold.release(); expect((await pending).…
+       |                                                                               ^
+    115|     hold.restore(); expect((await save('item', { status: 'active' })).…
+    116|   } finally { hold.release(); await pending; hold.restore(); }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/14]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  14 failed | 7 passed (21)
+   Start at  05:49:38
+   Duration  877ms (transform 44%, import 32%, tests 23%)
+

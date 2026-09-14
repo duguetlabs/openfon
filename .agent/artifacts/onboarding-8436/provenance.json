@@ -1,0 +1,86 @@
+{
+  "base": "8436ac9c0055123d440c78760f6bc10ee406fe25",
+  "fixture": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-onboarding-8436-ch1y7w34",
+  "files": {
+    "web/src/pages/Onboarding.tsx": {
+      "original": "dba91e38e346acef3faecc86640d8e78c4cd16551642a61e5029c8d4ca884a76",
+      "fixed": "b096119ad9d18e36990d0f4363305f664fd5574afe9df8b5e09005e9eff38916"
+    },
+    "e2e/onboarding-retry.spec.ts": {
+      "original": "8ec332d18ff6464950b6de0fff14b92dd399652e0f0104f170e23fbdec73b764",
+      "fixed": "42e69bfc63decf37013954781fdbed6d51116278109c023f75d49dacdcefb8c5"
+    },
+    "docs/launch/readiness.md": {
+      "original": "ad0575cf74bf9254ff61df9ed4ef927f058bf8cfdf6e3e8fe3eed2408e8c9ebc",
+      "fixed": "6570d6e2a9ea6d45746ca422c67feda068823046ff9eac950c43320066da3600"
+    }
+  },
+  "patch": "98002f1536a5d895d616a64ace20211b23d59bad1f9ac0a886809b235ebe3f67",
+  "validation": {
+    "original": "3FAIL: duplicate writes2/2/2 and original values after peer updates; inputs enabled during held response; post-signout one late businessPUT. Logs before assertion retained; final readiness/later assertions on failed originals not claimed.",
+    "fixed": "6PASS15.3s includes3new+3incomplete-stage controls; write1/1/1/newer values through final Workspace readiness; held freeze/signout guard pass; Worker/web typesPASS.",
+    "cleanup": "session80346 exit0; fresh matching runner/listener scans empty. Sole integration slot RELEASED. No source correction during runs.",
+    "limits": "Actual local Chrome/workerd with synthetic setup/peer writes; no live/provider. Signout late-stage absence observed250ms. Rejected/lost mutation responses outside confirmed-success guarantee. No durable reload recovery claim."
+  },
+  "fixture_correction": "QA source review caught overview URL already true during Onboarding; added Workspace navigation readiness after final retry/held-response release and final peer-value reads/counts. Before any runner; previous test/patch retained.",
+  "evidence": {
+    "original.log": {
+      "sha256": "edff77869d1549a422290af589e6a1bd6c1d2ceca496655e13540764d88e311e",
+      "size": 10486
+    },
+    "fixed.log": {
+      "sha256": "bb4a4184f5348b76c530e076b38ecb38ee02f01cae012fe2d67553472509d386",
+      "size": 2802
+    },
+    "types.log": {
+      "sha256": "75c97ba8f32dd032ee1e1293129c6bbdd2ff33c240a3223d4b150e23ab19ee29",
+      "size": 104
+    },
+    "exits.json": {
+      "sha256": "8261d5c0b84075b346aff7f8c7a27ab2a5d3662b96aa1865a04eaa1154579352",
+      "size": 862
+    },
+    "onboarding-8436.patch": {
+      "sha256": "98002f1536a5d895d616a64ace20211b23d59bad1f9ac0a886809b235ebe3f67",
+      "size": 18040
+    },
+    "pre-review.patch": {
+      "sha256": "7dd9d7612b2849d159776353046fbafa591f316790806111c93c94d9faa60452",
+      "size": 17627
+    },
+    "pre-review-test.ts": {
+      "sha256": "7353b55445d86a469358e867605a5a9b93a4c45d3874cddd64839a01b1c134fe",
+      "size": 9374
+    }
+  },
+  "local_original_failure_artifacts": {
+    "original-results/.last-run.json": {
+      "sha256": "33864bf40f6b0815cd6c46a5274ab5403762dedade73fed716e5d90ad6f7f909",
+      "size": 194
+    },
+    "original-results/onboarding-retry-acknowled-cc14e-r-edits-onboarding-refresh-/trace.zip": {
+      "sha256": "fd6bfb9feb7b9629eed132e1633012375a942f741739c527f62fe63907d62211",
+      "size": 1321564
+    },
+    "original-results/onboarding-retry-acknowled-cc14e-r-edits-onboarding-refresh-/error-context.md": {
+      "sha256": "32ce889df14f677a4766f5fe23eb9de4f7fd781c1748ff851396707486704684",
+      "size": 13414
+    },
+    "original-results/onboarding-retry-signout-p-343e5-esponse-onboarding-refresh-/trace.zip": {
+      "sha256": "518b1ad7790ddcf49456baf762ef2906a3e1ff5b7116ed56b02b9e7974026301",
+      "size": 693520
+    },
+    "original-results/onboarding-retry-signout-p-343e5-esponse-onboarding-refresh-/error-context.md": {
+      "sha256": "f5ec3f0e174c8040fa364ee6df9e030919bc516a8a97120f20a87be49c91d998",
+      "size": 8421
+    },
+    "original-results/onboarding-retry-onboardin-0d597-is-held-onboarding-refresh-/trace.zip": {
+      "sha256": "7ecf1cdf383aba937dbee62a901b740a5875a2274d5012fcdb0adf77eacfe615",
+      "size": 969671
+    },
+    "original-results/onboarding-retry-onboardin-0d597-is-held-onboarding-refresh-/error-context.md": {
+      "sha256": "511d2164638c55d4c16efdad455b5535bed3497ac8c3e77216d9f2c68cb37da8",
+      "size": 9920
+    }
+  }
+}

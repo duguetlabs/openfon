@@ -11,22 +11,7 @@ findings from every reviewer still require verification and disposition. No new
 Codex review is requested or awaited. Historical dual-review references below
 record earlier requirements; this policy governs the current release.
 
-## 8436ac9 corrections and final combined validation
-
-The [8436ac9 original review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658598513) reported a webhook body-read security concern and seven focus items. Corrections are independently closed for exact source/evidence/assembly at `bee7c49`: Onboarding confirmed-write recovery and review wording (`ca24dbc`), Telnyx bounded body acquisition (`5f43904`), and Knowledge/Settings concurrency (`bee7c49`). This scoped closure is separate from mandatory fresh published-head review and CI.
-
-Onboarding retries reads after both writes are acknowledged and freezes the submitted fields; incomplete-stage retries remain available. Original three browser cases fail; fixed six local Chrome/workerd cases and both types pass. Original duplicate-write and peer-value-loss diagnostics precede assertions; the signout case observes an attempted late request within250ms, not a successful unauthorized write or durable reload guarantee.
-
-Telnyx body acquisition has an absolute five-second deadline,128KiB buffer/read-work bound and nonawaited cancellation. Signatures and durable acceptance remain unchanged. Original23 cases yield10 failures/13 controls; fixed192 and Worker types pass. Native originals yield5 failures/5 controls, distinguishing three HTTP uploads pending at7s from synthetic cancellation500/503. Fixed native10 pass, including HTTP408 around5.01–5.04s; no remote teardown or global concurrency guarantee follows.
-
-Knowledge item seven-field and collection two-field snapshot predicates reject conflicting partial updates with409. Settings pending rename queues gate Apply/Delete globally, including blur-before-render. Name-only rename remains compatible with backend Apply; the UI gate addresses shared-list refresh ordering. Original21 API cases yield14 failures/7 controls and two browser cases fail at the first action-count assertion. Fixed30 API, both types and11 actual Chrome/workerd cases pass. Snapshot assertions are in-memory, with no native Knowledge run. Initial leftover owned D1 directories and subsequent manual cleanup after process exit remain recorded.
-
-The [flush-completion finding is qualified-declined](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658657848) under the existing discard contract. Surviving post-flush PCM retains marks and its drain timeout; transport debt remains enforced. No remote discard-acknowledgement prerequisite was added.
-
-Final combined exact `bee7c49` passes **1,383 tests across58 files in25.88s** and both Worker/web typechecks. Session53019 exited0; fresh owned-runner/reserved-listener checks were empty. Evidence is retained under `.agent/artifacts/8436-final` and the three8436 artifact directories. Knowledge manifest planning sections are historical; actual_validation and the README record completion and subsequent QA identity closure. Owner-local traces remain hashed, not republished. No production, provider, carrier or deployment validation is implied. Both previous8436 CI runs passed, but new published-head CI and genuine PR-Agent security/major clearance remain required.
-
-## Historical beec8b70 review dispositions
-
+## beec8b70 review dispositions
 
 The [beec8b70 review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658442231)
 completed once with a security concern and five recommendations. Both exact-head
@@ -695,11 +680,7 @@ Implementation through `d43a3ff` includes presets `ce62114`, realtime `18d3638`/
 
 https://openfon-staging.duguetlabs.workers.dev runs Worker version `14edbcb0-a26d-4ff6-b82e-a14b70469e9d` from source `b15ed876`. Its D1 binding is the separate rehearsal database upgraded through 0012. Both carrier flags are false; copied assistants/routes are disabled and copied sessions cleared. HTTP checks returned 200 for root, 401 for signed-out account and 503 for each disabled carrier endpoint. The private fictional captures used earlier staging versions and staging-only provider secrets; the phone and assistant-retry corrections remain deployed. The newer review corrections through `d43a3ff` and migrations0013–0017 are not yet staged. This is not carrier or clean release acceptance. Production remains on its prior version.
 
-## Historical PR and review state
-
-The following receipts predate the temporary hosted-Codex suspension. They are
-historical evidence, not current review instructions; the policy at the top and
-the required gate below govern new reviews.
+## PR and review state
 
 PR #13 `d6ea5d2` has Codex no major issues and green applicable checks. PR #15 `37b3575` has green CI and Codex code/security no-issues results. PR #14 `cf1f6ec` fixes all three verified rounds, including active-call polling, assistant-list retry and bounded Knowledge pagination; it was pushed, closed/reopened and separately requested for Codex review. Its latest CI/review result remains pending. Every finding has a reasoned reply.
 
@@ -710,7 +691,7 @@ A genuine official PR-Agent CLI full code/security review completed on `526be52`
 ## Required release gate
 
 1. Resolve every confirmed test/review finding and rerun the relevant matrix against the final commit.
-2. Obtain genuine latest-head PR-Agent clearance for security and major issues, resolve every verified finding, and pass required CI on that same head. Hosted GitHub Codex reviews are suspended by the repository-local temporary exception: do not request or wait for them until the user reinstates that requirement. Do not merge around the active PR-Agent or CI gates.
+2. Satisfy the repository review requirement. Current instructions require PR-Agent and Codex. Official local PR-Agent now runs; resolve verified findings and obtain the actual clean rerun alongside hosted Codex. Do not merge around either review.
 3. Choose the real hostname and operator/support identity. Set absolute canonical/Open Graph URLs and an origin-correct sitemap. Write accurate hosting/privacy terms using actual operator and processor details; obtain any needed review.
 4. Confirm the production Cloudflare account, Worker, D1 binding, migration status and configured provider secrets through scoped tools. Never output values or use credentials from old plaintext files.
 5. Backup and separate D1 migration rehearsal through 0011 passed for the recorded snapshot. Refresh the production backup and confirm any intervening schema/data changes immediately before an approved production migration.
@@ -730,7 +711,7 @@ After an approved release, check public root, authentication, existing-account d
 
 - Final production hostname and support/operator identity.
 - Hosted service versus self-hosting-only launch; data retention and processor choices for the hosted instance.
-- Satisfy mandatory exact-head PR-Agent security/major clearance and required CI; hosted Codex remains suspended under the temporary repository policy.
+- Satisfy mandatory exact-head PR-Agent and Codex review gates.
 - Whether PSTN is required for the initial public launch. The current website truthfully describes browser-only calling.
 
 - Actual realtime authentication/ack/audio and text completion succeeded with the existing scoped credential. One preflight conversation and one recorded Northwheel conversation exhausted authorization; root subsequently authorized one corrective launch-owned acceptance with consistent fixture data and corrected staging code; canonical hours and missing-phone checks passed, interruption follow-up remains inconclusive.

@@ -11,22 +11,7 @@ findings from every reviewer still require verification and disposition. No new
 Codex review is requested or awaited. Historical dual-review references below
 record earlier requirements; this policy governs the current release.
 
-## 8436ac9 corrections and final combined validation
-
-The [8436ac9 original review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658598513) reported a webhook body-read security concern and seven focus items. Corrections are independently closed for exact source/evidence/assembly at `bee7c49`: Onboarding confirmed-write recovery and review wording (`ca24dbc`), Telnyx bounded body acquisition (`5f43904`), and Knowledge/Settings concurrency (`bee7c49`). This scoped closure is separate from mandatory fresh published-head review and CI.
-
-Onboarding retries reads after both writes are acknowledged and freezes the submitted fields; incomplete-stage retries remain available. Original three browser cases fail; fixed six local Chrome/workerd cases and both types pass. Original duplicate-write and peer-value-loss diagnostics precede assertions; the signout case observes an attempted late request within250ms, not a successful unauthorized write or durable reload guarantee.
-
-Telnyx body acquisition has an absolute five-second deadline,128KiB buffer/read-work bound and nonawaited cancellation. Signatures and durable acceptance remain unchanged. Original23 cases yield10 failures/13 controls; fixed192 and Worker types pass. Native originals yield5 failures/5 controls, distinguishing three HTTP uploads pending at7s from synthetic cancellation500/503. Fixed native10 pass, including HTTP408 around5.01–5.04s; no remote teardown or global concurrency guarantee follows.
-
-Knowledge item seven-field and collection two-field snapshot predicates reject conflicting partial updates with409. Settings pending rename queues gate Apply/Delete globally, including blur-before-render. Name-only rename remains compatible with backend Apply; the UI gate addresses shared-list refresh ordering. Original21 API cases yield14 failures/7 controls and two browser cases fail at the first action-count assertion. Fixed30 API, both types and11 actual Chrome/workerd cases pass. Snapshot assertions are in-memory, with no native Knowledge run. Initial leftover owned D1 directories and subsequent manual cleanup after process exit remain recorded.
-
-The [flush-completion finding is qualified-declined](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658657848) under the existing discard contract. Surviving post-flush PCM retains marks and its drain timeout; transport debt remains enforced. No remote discard-acknowledgement prerequisite was added.
-
-Final combined exact `bee7c49` passes **1,383 tests across58 files in25.88s** and both Worker/web typechecks. Session53019 exited0; fresh owned-runner/reserved-listener checks were empty. Evidence is retained under `.agent/artifacts/8436-final` and the three8436 artifact directories. Knowledge manifest planning sections are historical; actual_validation and the README record completion and subsequent QA identity closure. Owner-local traces remain hashed, not republished. No production, provider, carrier or deployment validation is implied. Both previous8436 CI runs passed, but new published-head CI and genuine PR-Agent security/major clearance remain required.
-
-## Historical beec8b70 review dispositions
-
+## beec8b70 review dispositions
 
 The [beec8b70 review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658442231)
 completed once with a security concern and five recommendations. Both exact-head

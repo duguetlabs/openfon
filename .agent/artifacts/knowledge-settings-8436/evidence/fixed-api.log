@@ -1,0 +1,13 @@
+
+ RUN  v5.0.0 /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-knowledge-8436-xzd8u0oc
+
+(node:59980) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:59992) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ Test Files  2 passed (2)
+      Tests  30 passed (30)
+   Start at  05:50:20
+   Duration  931ms (tests 39%, import 36%, transform 25%)
+

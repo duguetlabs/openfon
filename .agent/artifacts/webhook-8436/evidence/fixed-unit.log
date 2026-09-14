@@ -1,0 +1,15 @@
+
+> openfon@0.1.0 test
+> vitest run --maxWorkers=1 test/telnyx-body.test.ts test/telnyx-control.test.ts test/telnyx-webhook.test.ts
+
+
+ RUN  v5.0.0 /private/tmp/openfon-webhook-8436-m8prudc_
+
+(node:41492) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ Test Files  3 passed (3)
+      Tests  192 passed (192)
+   Start at  05:46:41
+   Duration  1.54s (tests 62%, import 22%, transform 16%)
+

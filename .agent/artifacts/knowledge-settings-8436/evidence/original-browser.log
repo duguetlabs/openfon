@@ -1,0 +1,101 @@
+[WebServer] (node:56697) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:56699) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:56700) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:56726) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:57063) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] ▲ [WARNING] Scheduled Workers are not automatically triggered during local development.
+[WebServer] 
+[WebServer]   To manually trigger a scheduled event, run:
+[WebServer]     curl "http://localhost:8812/cdn-cgi/local/scheduled"
+[WebServer]   For more details, see https://developers.cloudflare.com/workers/configuration/cron-triggers/#test-cron-triggers-locally
+[WebServer] 
+[WebServer] 
+
+
+Running 2 tests using 1 worker
+
+(node:57095) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+(node:57095) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/2] e2e/profile-rename-actions.spec.ts:54:3 › blur then Apply sends no action while rename is pending; explicit later click works
+  1) e2e/profile-rename-actions.spec.ts:54:3 › blur then Apply sends no action while rename is pending; explicit later click works 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 0
+    Received: 1
+
+      69 |       await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+      70 |       await expect.poll(() => gate.held.length).toBe(1); await frames(page);
+    > 71 |       expect(actions).toBe(0); await expectGated(page, 1);
+         |                       ^
+      72 |       const saved = page.waitForResponse(response => response.request().method() === 'PUT' && response.url().endsWith(`/profiles/${id}`));
+      73 |       await gate.settle(0); expect((await saved).ok()).toBe(true);
+      74 |       await expect(button).toBeEnabled(); expect(actions).toBe(0);
+        at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-knowledge-8436-xzd8u0oc/e2e/profile-rename-actions.spec.ts:71:23
+
+    Error Context: test-results/knowledge-8436-validation/original-browser-results/profile-rename-actions-blu-8cc62--explicit-later-click-works/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/knowledge-8436-validation/original-browser-results/profile-rename-actions-blu-8cc62--explicit-later-click-works/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/knowledge-8436-validation/original-browser-results/profile-rename-actions-blu-8cc62--explicit-later-click-works/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+(node:57952) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+(node:57952) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[2/2] e2e/profile-rename-actions.spec.ts:54:3 › blur then Delete profile sends no action while rename is pending; explicit later click works
+  2) e2e/profile-rename-actions.spec.ts:54:3 › blur then Delete profile sends no action while rename is pending; explicit later click works 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 0
+    Received: 1
+
+      69 |       await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+      70 |       await expect.poll(() => gate.held.length).toBe(1); await frames(page);
+    > 71 |       expect(actions).toBe(0); await expectGated(page, 1);
+         |                       ^
+      72 |       const saved = page.waitForResponse(response => response.request().method() === 'PUT' && response.url().endsWith(`/profiles/${id}`));
+      73 |       await gate.settle(0); expect((await saved).ok()).toBe(true);
+      74 |       await expect(button).toBeEnabled(); expect(actions).toBe(0);
+        at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-knowledge-8436-xzd8u0oc/e2e/profile-rename-actions.spec.ts:71:23
+
+    Error Context: test-results/knowledge-8436-validation/original-browser-results/profile-rename-actions-blu-3c3fa--explicit-later-click-works/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/knowledge-8436-validation/original-browser-results/profile-rename-actions-blu-3c3fa--explicit-later-click-works/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/knowledge-8436-validation/original-browser-results/profile-rename-actions-blu-3c3fa--explicit-later-click-works/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+  2 failed
+    e2e/profile-rename-actions.spec.ts:54:3 › blur then Apply sends no action while rename is pending; explicit later click works 
+    e2e/profile-rename-actions.spec.ts:54:3 › blur then Delete profile sends no action while rename is pending; explicit later click works 
