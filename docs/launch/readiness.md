@@ -680,7 +680,11 @@ Implementation through `d43a3ff` includes presets `ce62114`, realtime `18d3638`/
 
 https://openfon-staging.duguetlabs.workers.dev runs Worker version `14edbcb0-a26d-4ff6-b82e-a14b70469e9d` from source `b15ed876`. Its D1 binding is the separate rehearsal database upgraded through 0012. Both carrier flags are false; copied assistants/routes are disabled and copied sessions cleared. HTTP checks returned 200 for root, 401 for signed-out account and 503 for each disabled carrier endpoint. The private fictional captures used earlier staging versions and staging-only provider secrets; the phone and assistant-retry corrections remain deployed. The newer review corrections through `d43a3ff` and migrations0013–0017 are not yet staged. This is not carrier or clean release acceptance. Production remains on its prior version.
 
-## PR and review state
+## Historical PR and review state
+
+The following receipts predate the temporary hosted-Codex suspension. They are
+historical evidence, not current review instructions; the policy at the top and
+the required gate below govern new reviews.
 
 PR #13 `d6ea5d2` has Codex no major issues and green applicable checks. PR #15 `37b3575` has green CI and Codex code/security no-issues results. PR #14 `cf1f6ec` fixes all three verified rounds, including active-call polling, assistant-list retry and bounded Knowledge pagination; it was pushed, closed/reopened and separately requested for Codex review. Its latest CI/review result remains pending. Every finding has a reasoned reply.
 
@@ -691,7 +695,7 @@ A genuine official PR-Agent CLI full code/security review completed on `526be52`
 ## Required release gate
 
 1. Resolve every confirmed test/review finding and rerun the relevant matrix against the final commit.
-2. Satisfy the repository review requirement. Current instructions require PR-Agent and Codex. Official local PR-Agent now runs; resolve verified findings and obtain the actual clean rerun alongside hosted Codex. Do not merge around either review.
+2. Obtain genuine latest-head PR-Agent clearance for security and major issues, resolve every verified finding, and pass required CI on that same head. Hosted GitHub Codex reviews are suspended by the repository-local temporary exception: do not request or wait for them until the user reinstates that requirement. Do not merge around the active PR-Agent or CI gates.
 3. Choose the real hostname and operator/support identity. Set absolute canonical/Open Graph URLs and an origin-correct sitemap. Write accurate hosting/privacy terms using actual operator and processor details; obtain any needed review.
 4. Confirm the production Cloudflare account, Worker, D1 binding, migration status and configured provider secrets through scoped tools. Never output values or use credentials from old plaintext files.
 5. Backup and separate D1 migration rehearsal through 0011 passed for the recorded snapshot. Refresh the production backup and confirm any intervening schema/data changes immediately before an approved production migration.
@@ -711,7 +715,7 @@ After an approved release, check public root, authentication, existing-account d
 
 - Final production hostname and support/operator identity.
 - Hosted service versus self-hosting-only launch; data retention and processor choices for the hosted instance.
-- Satisfy mandatory exact-head PR-Agent and Codex review gates.
+- Satisfy mandatory exact-head PR-Agent security/major clearance and required CI; hosted Codex remains suspended under the temporary repository policy.
 - Whether PSTN is required for the initial public launch. The current website truthfully describes browser-only calling.
 
 - Actual realtime authentication/ack/audio and text completion succeeded with the existing scoped credential. One preflight conversation and one recorded Northwheel conversation exhausted authorization; root subsequently authorized one corrective launch-owned acceptance with consistent fixture data and corrected staging code; canonical hours and missing-phone checks passed, interruption follow-up remains inconclusive.

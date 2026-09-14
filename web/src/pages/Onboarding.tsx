@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { confirmDiscardUnsaved, useUnsavedEdits } from '../unsaved-edits';
 import { api } from '../api';
@@ -19,6 +19,11 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 export default function Onboarding() {
   const { business, workspaceReady, firstAssistant, refresh, signOut } = useSession();
   const navigate = useNavigate();
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
   const defaultHours = DAYS.map((day) => ({
     day,
     open: '09:00',
@@ -28,6 +33,7 @@ export default function Onboarding() {
   const [step, setStep] = useState(business && workspaceReady ? 2 : 0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [refreshPending, setRefreshPending] = useState(false);
 
   const [name, setName] = useState(business?.name ?? '');
   const [description, setDescription] = useState(business?.description ?? '');
@@ -47,8 +53,22 @@ export default function Onboarding() {
   const savedDraft = useRef(draft);
   const markSaved = useUnsavedEdits(draft !== savedDraft.current);
 
+  async function openStudio() {
+    if (!active.current) return;
+    setBusy(true);
+    setError('');
+    try {
+      await refresh();
+      if (active.current) navigate('/overview');
+    } catch {
+      if (active.current) setError('Workspace saved, but the studio could not be loaded. Retry opening the studio.');
+    } finally {
+      if (active.current) setBusy(false);
+    }
+  }
+
   async function finish() {
-    if (busy) return;
+    if (!active.current || busy || refreshPending) return;
     if (!name.trim() || !description.trim() || !agentName.trim() || !persona.trim() || !language.trim()) {
       setError('Complete the required workspace and assistant details first.');
       return;
@@ -72,17 +92,24 @@ export default function Onboarding() {
       // creation. e2e/onboarding-retry.spec.ts covers interrupted setup with the
       // same workspace ID, not every refresh-failure/edited-payload combination.
       const biz = business ?? (await api.createBusiness(workspace));
+      if (!active.current) return;
       await api.updateBusiness(biz.id, workspace);
+      if (!active.current) return;
       // Workspace creation provisions a draft primary assistant. Update it through
       // the studio API so setup does not implicitly publish a public call line.
       const primary = firstAssistant ?? (await api.assistants()).find(a => a.public_slug === biz.slug);
+      if (!active.current) return;
       if (!primary) throw new Error('Your first assistant could not be loaded. Reload to resume setup.');
       await api.updateAssistant(primary.id, { name: agentName, persona, language, greeting });
+      if (!active.current) return;
       savedDraft.current = draft;
       markSaved();
-      await refresh();
-      navigate('/overview');
+      // Both writes are acknowledged. Recovery from here must only read;
+      // incomplete setup above still accepts intentional edited-draft retries.
+      setRefreshPending(true);
+      await openStudio();
     } catch (err) {
+      if (!active.current) return;
       setError(err instanceof Error ? err.message : 'Something went wrong');
       setBusy(false);
     }
@@ -115,7 +142,7 @@ export default function Onboarding() {
           </ol>
         </div>
 
-        <div className="mb-6 flex justify-end"><button className="text-sm text-ink-soft underline" onClick={() => { if (!confirmDiscardUnsaved()) return; void signOut().catch(() => {}); navigate('/auth'); }}>Sign out</button></div>
+        <div className="mb-6 flex justify-end"><button className="text-sm text-ink-soft underline" onClick={() => { if (!confirmDiscardUnsaved()) return; active.current = false; void signOut().catch(() => {}); navigate('/auth'); }}>Sign out</button></div>
         <p className="rise rise-1 font-mono text-[11px] uppercase tracking-[0.2em] text-ink-faint">
           Step {step + 1} of {steps.length}
         </p>
@@ -129,6 +156,7 @@ export default function Onboarding() {
         </p>
 
         <Card className="rise rise-3 space-y-5 shadow-raise sm:p-7">
+          <fieldset disabled={busy || refreshPending} className="space-y-5">
           {step === 0 && (
             <>
               <Field label="Business name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Riverside Dental" />
@@ -275,10 +303,16 @@ export default function Onboarding() {
             </>
           )}
 
+          </fieldset>
+
           {error && <p className="rounded-[10px] border border-rose/20 bg-wash-rose px-3 py-2 text-sm text-rose">{error}</p>}
 
+          {refreshPending && <Button disabled={busy} onClick={() => { if (!busy) void openStudio(); }}>
+            {busy ? 'Opening studio…' : 'Retry opening studio'}
+          </Button>}
+
           <div className="flex justify-between border-t border-line pt-5">
-            <Button variant="ghost" disabled={step === 0 || busy} onClick={() => setStep(step - 1)}>
+            <Button variant="ghost" disabled={step === 0 || busy || refreshPending} onClick={() => setStep(step - 1)}>
               ← Back
             </Button>
             {step < 2 ? (
@@ -291,7 +325,7 @@ export default function Onboarding() {
             ) : (
               <Button
                 onClick={() => void finish()}
-                disabled={busy || !agentName.trim() || !persona.trim() || !language.trim()}
+                disabled={busy || refreshPending || !agentName.trim() || !persona.trim() || !language.trim()}
               >
                 {busy ? 'Saving…' : 'Save and open studio →'}
               </Button>
