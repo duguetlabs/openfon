@@ -13,7 +13,7 @@ import pathlib
 import sqlite3
 import tempfile
 
-RELEASE_MIGRATION_TARGET = 20
+RELEASE_MIGRATION_TARGET = 21
 
 
 def require(condition, message):
@@ -95,6 +95,9 @@ def main():
         before_dump = '\n'.join(db.iterdump())
         for path in migrations[6:]:
             apply_migration(db, path.read_text())
+        if args.through >= 21:
+            require(db.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name IN ('knowledge_item_tenant_insert','knowledge_item_tenant_update','knowledge_attachment_tenant_insert','knowledge_attachment_tenant_update')").fetchone()[0] == 4,
+                    'Knowledge tenant guards missing after upgrade')
         if args.through >= 20:
             require(db.execute('SELECT COUNT(*) FROM calls WHERE browser_claim_required != 0').fetchone()[0] == 0,
                     'Historical tickets must retain unknown claim provenance')
@@ -150,6 +153,7 @@ def main():
             'carrier tables empty and reservations null', 'SQLite integrity and FK checks',
             'binary snapshot restore after synthetic deletion', 'SQL dump restore exact',
             'pre-upgrade rollback exact', 're-upgrade succeeds',
+            *(['four knowledge tenant guards installed'] if args.through >= 21 else []),
         ],
         'temporary_files_removed': True,
     }))

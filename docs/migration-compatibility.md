@@ -109,3 +109,42 @@ protected. Rollbacks to pre-0007 require draining modern tickets/sessions first.
 The column is additive for old writers, but its deletion exception assumes the
 new ticket is served by a claim-capable WebSocket handler. Migration and staging
 validation do not authorize a production deployment.
+
+## Knowledge tenant relationships (0021)
+
+Migration 0021 requires an item's collection to belong to the item's business and
+an assistant attachment's two parents to belong to the same business. Its first
+read-only check includes missing parents and refuses any inconsistent historical
+relationship before installing four validation-only triggers. Apply the entire
+file atomically. No rows are backfilled, deleted, detached or assigned a different
+owner. A refusal requires restricted inspection and explicit operator
+reconciliation; neither side of a mismatch is automatically authoritative.
+
+Keep the backup and inspect mismatch counts before exposing row content. Do not
+skip the check, reset quotas, drop guards or manually mark a failed migration
+applied. Earlier successful migration files stay applied when a later one fails.
+The triggers retain existing foreign keys, cascade deletes and source-call/turn
+SET NULL cleanup, including at exhausted editing quota. Valid item writes retain
+their existing charges; attachment validation adds no counter writes.
+
+SQLite RAISE(ABORT) rolls back the failing statement and its trigger effects. It
+does not roll back earlier statements in an explicit transaction. The migration
+runner and D1 batch must provide the whole-transaction rollback on failure.
+Rehearse the exact release through 0021, including corrupt-upgrade refusal,
+statement versus batch rollback, historical data preservation and valid legacy
+projection/foundation repair. Local synthetic evidence is not production backup
+or remote migration acceptance.
+
+Current checked HTTP writers derive or verify these relationships. The call
+knowledge query also compares all participating businesses. No current untrusted
+producer of a mismatch is established. A privileged import or earlier corruption
+can nevertheless expose foreign item content or assistant metadata through old
+Studio reads that trust the relationships. A refused migration does not protect
+those still-running reads or sanitize existing data; use an explicit operator
+recovery window for reconciliation. No defensive read-filter change is included.
+
+If the migration succeeds but Worker upload fails, valid old/current issuers
+continue to satisfy the guards, including legacy JSON projection and foundation
+repair. An invalid direct import now fails. Keep guards installed on code rollback;
+use compatible code or an explicitly coordinated database-and-code recovery that
+accounts for intervening writes. Do not treat a Worker rollback as a schema undo.
