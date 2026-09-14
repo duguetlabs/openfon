@@ -11,6 +11,55 @@ findings from every reviewer still require verification and disposition. No new
 Codex review is requested or awaited. Historical dual-review references below
 record earlier requirements; this policy governs the current release.
 
+## Telnyx reservation and parser helper correction
+
+Original `d2b72617` review
+[5657485256](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5657485256)
+reported two security allegations and five recommendations; both CI runs passed.
+Independent owner/QA source checks support the published
+[security and Apply dispositions](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5657536432)
+and [lockfile disposition](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5657505404).
+Endpoint identity already includes query strings, and the sole production
+realtime parser caller discards the native exception before fixed-error logging
+or persistence. Preset Apply intentionally writes its explicit selected fields,
+without the stale omitted-field fallback corrected in partial saves. Exact
+manifest maps match, and both clean CI `npm ci` steps passed. These scoped
+dispositions do not constitute a clean latest-head review verdict.
+
+Separately, the parser helper now normalizes malformed JSON to its fixed error,
+matching its other rejection paths. Five original helper-contract cases fail
+with native SyntaxError, while one valid control passes; fixed20 tests and both
+types pass. No production payload leak was reproduced. Exact two-file assembly
+`9ca9558` is QA-closed; CallSession/audio/Piper behavior is unchanged.
+
+Telnyx admission now validates one route/assistant/provider snapshot and pins it
+in the call INSERT. The immediately following link INSERT is gated by that
+write and matching identity; the final lookup requires complete carrier
+correlation. Existing exact-match recovery remains first and incurs no new
+reservation. Conflicts create no new call/link or answer action; rejection
+hangup/control state is intentional. Admission is a value snapshot at INSERT,
+not a lifetime configuration freeze or arbitrary inconsistent-row repair.
+
+Owner original31 tests yield18 assertion failures and13 controls passing. Fixed
+200 focused tests and worker types pass. Actual workerd owner/migrated-D1 checks
+retain original16-case11failure/5pass evidence and the final17-case11failure/
+6pass run with an added exact-link recovery control. Fixed17/17 scenarios pass:
+configuration/identity conflicts, ignored calls, mismatched correlation, quotas,
+late SQL rollback and recovery. Recovery seeds committed D1 rows then invokes a
+fresh owner after route/provider edits; no real crash was injected. Full row
+equality is asserted in the executed harness; retained logs record counts and
+results, not full serialized row snapshots. Verified-event/carrier responses are
+synthetic; public signatures, live carrier/media/provider behavior are unclaimed.
+The two-owner fixture correction happened before execution. A packaging-only
+missing-new-file-mode check failure was retained and corrected without rerunning
+application validation.
+
+Final application `3e950c8` passes1,183 tests across51 files in22.73s and both
+typechecks. Independent QA closed exact3e950c8 source/evidence and all five delivered
+file identities; owner artifacts are retained; no unrelated browser/native suite was repeated. Fresh published-head
+PR-Agent security/major clearance and CI remain mandatory. No staging or
+production deployment occurred.
+
 ## Concurrent assistant saves and Asterisk admission
 
 Official `1ba053df` review
