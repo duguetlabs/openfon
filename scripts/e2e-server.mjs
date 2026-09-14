@@ -40,6 +40,9 @@ const worker = spawn(npx, ['wrangler', 'dev', '--local', '--port', process.env.O
   '--var', `REALTIME_BASE_URL:${providerUrl.replace('http:', 'ws:')}/realtime`, '--var', 'DEFAULT_TTS_PROVIDER:browser',
   '--var', 'DEFAULT_LLM_API_KEY:local-test-key', '--var', 'DEFAULT_STT_API_KEY:local-test-key',
   '--var', 'AZURE_SPEECH_KEY:local-test-key', '--var', 'REALTIME_API_KEY:local-test-key'], { stdio: 'inherit' });
-for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => worker.kill(signal));
+const requestedShutdownSignals = new Set();
+for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
+  if (worker.kill(signal) === true) requestedShutdownSignals.add(signal);
+});
 worker.on('error', error => { console.error(error.message); rmSync(state, { recursive: true, force: true }); process.exit(1); });
-worker.on('exit', code => { provider.close(); rmSync(state, { recursive: true, force: true }); process.exit(code || 0); });
+worker.on('exit', (code, signal) => { provider.close(); rmSync(state, { recursive: true, force: true }); process.exit(code ?? (signal && requestedShutdownSignals.has(signal) ? 0 : 1)); });
