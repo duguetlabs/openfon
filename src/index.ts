@@ -855,6 +855,9 @@ app.put('/api/me/profiles/:pid', async (c) => {
   if (!p) return c.json({ error: 'Not found' }, 404);
   const b = await readWorkspaceBody<Partial<ProfileFields>>(c.req);
   if (b.language !== undefined && !b.language.trim()) return c.json({ error: 'Profile language is required' }, 400);
+  if (b.engine !== undefined && b.engine !== 'pipeline' && b.engine !== 'realtime') {
+    return c.json({ error: 'Profile engine must be pipeline or realtime' }, 400);
+  }
   const legacyProfileUpdate = c.env.DB.prepare(
     `UPDATE engine_profiles SET name=?, engine=?, realtime_model=?, realtime_voice=?, language=?, voice=?, llm_base_url=?, llm_api_key=?, llm_model=? WHERE id=?`
   ).bind(
