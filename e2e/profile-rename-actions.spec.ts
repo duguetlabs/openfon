@@ -126,3 +126,19 @@ test('failed rename releases actions with error and confirmed baseline, then ret
     await page.reload(); await expect(rows(page).first().locator('input')).toHaveValue('Newer draft');
   } finally { await gate.dispose(); }
 });
+
+
+test('profile action retry guidance stays visible before during and after rename', async ({ page }) => {
+  await setup(page); const gate = await gateRenames(page);
+  const guidance = page.getByText('If you click Apply or Delete profile while a name is saving, click it again after saving finishes.', { exact: true });
+  try {
+    await expect(guidance).toBeVisible();
+    const input = rows(page).first().locator('input');
+    await input.fill('Guided rename'); await input.blur();
+    await expect.poll(() => gate.held.length).toBe(1);
+    await expectGated(page, 1); await expect(guidance).toBeVisible();
+    await gate.settle(0);
+    await expect(rows(page).first().getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
+    await expect(guidance).toBeVisible(); await expect(input).toHaveValue('Guided rename');
+  } finally { await gate.dispose(); }
+});

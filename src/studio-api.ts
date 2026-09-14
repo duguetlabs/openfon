@@ -849,7 +849,7 @@ function encodeCursor(startedAt: string, id: string): string {
 }
 
 function decodeCursor(raw: string | undefined): [string, string] | null {
-  if (!raw) return null;
+  if (!raw || raw.length > 2048) return null;
   try {
     const normalized = raw.replace(/-/g, '+').replace(/_/g, '/');
     const parsed = JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '='))) as unknown;
@@ -864,7 +864,7 @@ function decodeCursor(raw: string | undefined): [string, string] | null {
 async function knowledgePage(env: Env, collectionId: string, rawCursor?: string) {
   const decoded = rawCursor ? decodeCursor(rawCursor) : null;
   const position = decoded?.[0].split('|');
-  if (rawCursor && (rawCursor.length > 2048 || !decoded || position?.length !== 2 || !['active','draft'].includes(position[0]) || !position[1] || !decoded[1])) return null;
+  if (rawCursor && (!decoded || position?.length !== 2 || !['active','draft'].includes(position[0]) || !position[1] || !decoded[1])) return null;
   const query = env.DB.prepare(`SELECT * FROM knowledge_items WHERE collection_id=?
     ${decoded ? 'AND (status,created_at,id) > (?,?,?)' : ''}
     ORDER BY status,created_at,id LIMIT 21`);
@@ -1525,6 +1525,7 @@ export function registerStudioApi(app: StudioApp): void {
     const body = await readWorkspaceBody<Partial<KnowledgeItem>>(c.req);
     const kind = normalizedKind(body.kind);
     if (!kind) return c.json({ error: 'Knowledge kind must be faq, service, or note' }, 400);
+    if (body.status !== undefined && !normalizedStatus(body.status)) return c.json({ error: 'Knowledge status must be draft or active' }, 400);
     const candidate = {
       kind,
       title: body.title?.trim() ?? '',
@@ -1572,6 +1573,8 @@ export function registerStudioApi(app: StudioApp): void {
       if (!collection || collection.business_id !== item.business_id) return c.json({ error: 'Collection not found' }, 404);
       collectionId = collection.id;
     }
+    if (body.kind !== undefined && !normalizedKind(body.kind)) return c.json({ error: 'Knowledge kind must be faq, service, or note' }, 400);
+    if (body.status !== undefined && !normalizedStatus(body.status)) return c.json({ error: 'Knowledge status must be draft or active' }, 400);
     const candidate = {
       kind: normalizedKind(body.kind) ?? item.kind,
       title: body.title?.trim() ?? item.title,

@@ -478,6 +478,7 @@ export default function Settings() {
           <p className="text-xs text-ink-soft">Up to 64 profiles are shown. Long historical values are previews and cannot be renamed here; applying uses the full saved configuration. Delete unused profiles to reveal more.</p>
           {profiles.length === 0 && <p className="text-sm text-ink-soft">No profiles yet. Configure the engine below, then save it here under a name.</p>}
           {profileDraftDirty && profiles.length > 0 && <p className="text-sm text-ink-soft">{profileApplyReason}</p>}
+          <p className="text-xs text-ink-soft">If you click Apply or Delete profile while a name is saving, click it again after saving finishes.</p>
           {profileRenamePending && <p role="status" className="text-sm text-ink-soft">Saving profile names…</p>}
           {profiles.map((p) => (
             <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-wash-iris/50 px-3 py-2">
