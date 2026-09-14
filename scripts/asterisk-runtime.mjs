@@ -17,6 +17,46 @@ export async function waitForPbxRejection({wait, attempts, after, call}) {
   assert.equal(rejected.rateWriteAttempts,0,'revoked handshake attempts no D1 rate-counter write');
   return rejected;
 }
+/** The proxy stays on host loopback. Native Linux therefore needs the host
+ * namespace, while Docker Desktop provides its own host-loopback forwarding.
+ * A host-gateway DNS alias alone does not make a bridge reach 127.0.0.1. */
+export function asteriskRuntimeNetwork({ platform, daemonHost, operatingSystem, securityOptions = [] }) {
+  if (!daemonHost?.startsWith('unix://')) {
+    throw Error('Asterisk runtime requires a local Unix-socket Docker daemon; remote/TCP/SSH daemons are unsupported.');
+  }
+  if (operatingSystem === 'Docker Desktop') {
+    return { host: 'host.docker.internal', dockerArgs: [], mode: 'docker-desktop' };
+  }
+  if (platform === 'linux' && operatingSystem && !securityOptions.some(option => /rootless/i.test(option))) {
+    return { host: '127.0.0.1', dockerArgs: ['--network=host'], mode: 'linux-host' };
+  }
+  throw Error('Asterisk runtime supports Docker Desktop or a local rootful Linux Docker Engine.');
+}
+
+// Resolve once using Docker CLI precedence, then pin every daemon command to
+// that endpoint. Changing the saved context cannot redirect run or cleanup.
+export async function prepareAsteriskRuntimeDocker(run, env = process.env, platform = process.platform) {
+  let daemonHost;
+  if (!env.DOCKER_CONTEXT && env.DOCKER_HOST) daemonHost = env.DOCKER_HOST;
+  else {
+    const contextName = env.DOCKER_CONTEXT || (await run(['context', 'show'], env)).trim();
+    const [context] = JSON.parse(await run(['context', 'inspect', contextName], env));
+    daemonHost = context?.Endpoints?.docker?.Host;
+  }
+  if (!daemonHost?.startsWith('unix://')) {
+    throw Error('Asterisk runtime requires a local Unix-socket Docker daemon; remote/TCP/SSH daemons are unsupported.');
+  }
+  // Explicit --host plus cleared context/TLS overrides targets this local socket
+  // even if the caller changes context or environment after preparation.
+  const pinnedEnv = { ...env, DOCKER_CONTEXT: '', DOCKER_HOST: daemonHost,
+    DOCKER_TLS: '', DOCKER_TLS_VERIFY: '', DOCKER_CERT_PATH: '' };
+  const docker = (...args) => run(['--host', daemonHost, ...args], pinnedEnv);
+  const operatingSystem = JSON.parse(await docker('info', '--format', '{{json .OperatingSystem}}'));
+  const securityOptions = JSON.parse(await docker('info', '--format', '{{json .SecurityOptions}}')) || [];
+  const network = asteriskRuntimeNetwork({ platform, daemonHost, operatingSystem, securityOptions });
+  return { docker, network };
+}
+
 export async function runAsteriskRuntime({ temp, db, telemetry, wait, password }) {
   const name = `openfon-asterisk-${process.pid}`;
   const image = process.env.OPENFON_ASTERISK_IMAGE || 'openfon-asterisk-runtime:22.11.0';
@@ -43,12 +83,16 @@ export async function runAsteriskRuntime({ temp, db, telemetry, wait, password }
     });});
   });
   const config = join(temp, 'pbx'); await mkdir(config);
-  const docker = async (...args) => (await exec('docker', args, { timeout: 30000, maxBuffer: 1024 * 1024 })).stdout;
+  const { docker, network } = await prepareAsteriskRuntimeDocker(async (args, env) =>
+    (await exec('docker', args, { env, timeout: 30000, maxBuffer: 1024 * 1024 })).stdout);
+  // Never pull/build against an implicit or changed context. The selected local
+  // daemon must already contain the operator-built fixture image.
+  await docker('image', 'inspect', image);
   const cli = command => docker('exec', name, 'asterisk', '-rx', command);
   await writeFile(join(config, 'asterisk.conf'), `[directories]\nastetcdir => /test\nastmoddir => /usr/lib/asterisk/modules\nastvarlibdir => /var/lib/asterisk\nastdbdir => /var/lib/asterisk\nastkeydir => /var/lib/asterisk\nastdatadir => /var/lib/asterisk\nastagidir => /var/lib/asterisk/agi-bin\nastspooldir => /var/spool/asterisk\nastrundir => /var/run/asterisk\nastlogdir => /var/log/asterisk\n[options]\nverbose=3\ndebug=3\n`);
   await writeFile(join(config, 'modules.conf'), '[modules]\nautoload=yes\nnoload=chan_pjsip.so\nnoload=chan_iax2.so\nnoload=res_manager_devicestate.so\n');
   await writeFile(join(config, 'logger.conf'), '[logfiles]\nconsole=notice,warning,error,verbose,debug\n');
-  await writeFile(join(config, 'websocket_client.conf'), `[openfon]\ntype=websocket_client\nconnection_type=per_call_config\nuri=ws://host.docker.internal:${proxyPort}/ws/asterisk/pbx\nprotocols=media\nusername=pbx\npassword=${password}\nconnection_timeout=10000\nreconnect_attempts=0\ntls_enabled=no\nenable_pingpongs=yes\npingpong_interval=5\npingpong_probes=2\n`, { mode: 0o600 });
+  await writeFile(join(config, 'websocket_client.conf'), `[openfon]\ntype=websocket_client\nconnection_type=per_call_config\nuri=ws://${network.host}:${proxyPort}/ws/asterisk/pbx\nprotocols=media\nusername=pbx\npassword=${password}\nconnection_timeout=10000\nreconnect_attempts=0\ntls_enabled=no\nenable_pingpongs=yes\npingpong_interval=5\npingpong_probes=2\n`, { mode: 0o600 });
   // Cleartext is confined to the local Docker-to-host test hop, using fixture credentials.
   await writeFile(join(config, 'extensions.conf'), `[general]\nstatic=yes\n[openfon-test]\nexten => s,1,Answer()\n same => n,Set(TIMEOUT(absolute)=15)\n same => n,MixMonitor(/test/mixed.wav,r(/test/caller.wav)t(/test/assistant.wav))\n same => n,Dial(WebSocket/openfon/c(ulaw)nf(json)v(call=runtime-one),10)\n same => n,StopMixMonitor()\n same => n,Hangup()\nexten => revoked,1,Answer()\n same => n,Dial(WebSocket/openfon/c(ulaw)nf(json)v(call=runtime-revoked),10)\n same => n,Hangup()\n`);
   const tone = Buffer.alloc(8000 * 2 * 6);
@@ -56,7 +100,7 @@ export async function runAsteriskRuntime({ temp, db, telemetry, wait, password }
   await writeFile(join(config, 'tone.sln'), tone);
   try {
     await new Promise((resolve,reject)=>{proxy.once('error',reject);proxy.listen(proxyPort,'127.0.0.1',resolve);});
-    await docker('run', '-d', '--rm', '--name', name, '--mount', `type=bind,src=${config},dst=/test`, image, 'asterisk', '-f', '-vvv', '-C', '/test/asterisk.conf');
+    await docker('run', '-d', '--rm', '--pull=never', ...network.dockerArgs, '--name', name, '--mount', `type=bind,src=${config},dst=/test`, image, 'asterisk', '-f', '-vvv', '-C', '/test/asterisk.conf');
     await wait(async () => { try { return (await cli('core show version')).includes('Asterisk'); } catch { return false; } }, 'Asterisk startup');
     const version = (await cli('core show version')).trim();
     const modules = await cli('module show like websocket');
@@ -105,7 +149,7 @@ export async function runAsteriskRuntime({ temp, db, telemetry, wait, password }
     assert.deepEqual((await db.prepare("SELECT bucket,window_start,count FROM rate_counters WHERE bucket LIKE 'asterisk:%' ORDER BY bucket,window_start").all()).results,counters.results,'revoked handshake leaves rate counters unchanged');
     assert.equal((await db.prepare("SELECT COUNT(*) n FROM calls").first()).n,1,'revoked PBX creates no call');
     assert.equal(telemetry.filter(x => x.path === '/unexpected').length, 0);
-    console.log(JSON.stringify({ evidence: 'real Asterisk + Local channel + workerd/D1/DO; mocked AI; no SIP trunk/PSTN', version, modules: modules.trim(), inputPcmBytes: telemetry.find(x=>x.path==='/input').body.bytes, assistantRecordedBytes: data.length, assistantPeak: peak, tone440Amplitude: Math.round(tone440), controlsToPbx: controls, eventsFromPbx: events, revokedRouteRejected: true, revokedHandshake: rejected, persistedTurns: turns.results.length, calls: rows.results, activeChannels: 0 }, null, 2));
+    console.log(JSON.stringify({ evidence: 'real Asterisk + Local channel + workerd/D1/DO; mocked AI; no SIP trunk/PSTN', networkMode: network.mode, version, modules: modules.trim(), inputPcmBytes: telemetry.find(x=>x.path==='/input').body.bytes, assistantRecordedBytes: data.length, assistantPeak: peak, tone440Amplitude: Math.round(tone440), controlsToPbx: controls, eventsFromPbx: events, revokedRouteRejected: true, revokedHandshake: rejected, persistedTurns: turns.results.length, calls: rows.results, activeChannels: 0 }, null, 2));
   } catch (error) {
     // Only this fixture container: its config contains no real credentials.
     const logs = await docker('logs', '--tail', '100', name).catch(() => 'Container unavailable');

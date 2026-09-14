@@ -127,7 +127,8 @@ suite. A real local Asterisk 22.11.0 runtime test subsequently passed on
 
 ## Repeat the actual PBX runtime test
 
-Start your installed Docker runtime, then from the repository root run:
+Use a local Docker Desktop daemon (macOS or Linux), or a local rootful Docker
+Engine on native Linux, then from the repository root run:
 
 ```sh
 docker build -t openfon-asterisk-runtime:22.11.0 examples/asterisk/runtime
@@ -146,6 +147,30 @@ channels. Temporary audio is deleted after validation.
 Ports default to Worker 8811, inspector 9251 and capture proxy 8821. Override with
 `OPENFON_TEST_PORT`, `OPENFON_INSPECTOR_PORT`, and `OPENFON_ASTERISK_PROXY_PORT` for
 concurrent work. `OPENFON_ASTERISK_IMAGE` selects another locally built image.
+The proxy and Worker remain bound to host `127.0.0.1`. Docker Desktop uses its
+`host.docker.internal` forwarding. Native Linux Docker Engine uses
+`--network=host` and connects directly to `127.0.0.1`; a bridge `host-gateway`
+DNS mapping alone cannot reach a loopback-only listener. The native Linux fixture
+shares the host network namespace; it runs only the generated Local-channel PBX
+configuration, with SIP/IAX modules disabled, and publishes no ports.
+
+The harness resolves `DOCKER_CONTEXT` first, then `DOCKER_HOST`, then the saved
+context. It pins that Unix-socket endpoint for daemon inspection, image inspection,
+container startup, commands, logs and cleanup, so a later default-context change
+cannot redirect the fixture. Build the image on that selected local daemon before
+starting the harness; runtime startup requires the image there and never pulls it.
+The daemon's Docker Desktop identity, not its Linux kernel/OSType alone, selects
+the Desktop connection path.
+Only a local Unix-socket daemon on the machine running the harness is supported;
+Detectable TCP/SSH endpoints, rootless native Engine and non-Desktop daemons
+on non-Linux hosts are refused. Other VM runtimes and forwarded Unix sockets are
+unsupported topologies, not reliably detected by this check. The operator must
+ensure that the bind-mounted fixture files and host loopback belong to the
+machine running the harness; a Unix endpoint alone does not establish locality. No Docker
+Desktop host-networking setting is required or changed. Recorded real-PBX
+validation was on macOS Docker Desktop; the Linux connection mode is not itself
+evidence that the PBX smoke passed on Linux.
+
 The fixture-only Docker-to-host hop uses plain WS with a synthetic password;
 production configuration continues to require verified WSS. The test does not
 use a real AI account, microphone, SIP trunk, telephone number or PSTN carrier.
@@ -186,3 +211,16 @@ The budget holds no per-IP/route entries and needs no persistent cleanup.
 
 Config syntax source: [Asterisk22.11.0 main/config.c](https://github.com/asterisk/asterisk/blob/22.11.0/main/config.c)
 uses semicolon as COMMENT_META and strips it during config parsing.
+
+
+### Admission configuration changes
+
+Asterisk validates realtime eligibility and direct OpenAI model/voice compatibility,
+then conditionally reserves against the same route assignment, credential and
+provider/assistant compatibility fields. A change before the reservation commits
+returns a generic rejection without creating a call or starting CallSession; the
+PBX call identity is retired to prevent replay. Start a new PBX attempt after the
+configuration settles. Quota and active-assistant checks remain atomic with that
+reservation. This is an admission boundary, not a frozen per-call configuration:
+CallSession reloads settings at pickup and performs its normal provider/audio
+startup checks. Configuration edits after reservation can affect that startup.

@@ -1,5 +1,6 @@
 import { telephoneRealtimeAvailable, type RealtimeSettings } from './realtime-providers';
-import type { AgentSettings, Env } from './types';
+import type { AgentSettings, Env, ProviderSettings } from './types';
+import { assistantCompatibilityError } from './provider-settings';
 import { ASTERISK_ADMISSION_HEADER, validateAsteriskAdmission } from './asterisk-routes';
 import { AsteriskMediaAdapter } from './asterisk-media';
 import { OCCUPIED_CALL_SQL } from './telnyx-admission';
@@ -96,26 +97,39 @@ export class AsteriskCall implements DurableObject {
       return new Response(null, { status: 503 });
     }
     try {
-      const settings = await this.env.DB.prepare(`SELECT a.engine,a.realtime_model,
-        p.realtime_provider,p.realtime_base_url,p.realtime_api_key
+      const settings = await this.env.DB.prepare(`SELECT a.engine,a.realtime_model,a.realtime_voice,
+        p.business_id IS NOT NULL AS provider_present,p.realtime_provider,p.realtime_base_url,p.realtime_api_key
         FROM asterisk_routes r JOIN assistants a ON a.id=r.assistant_id AND a.business_id=r.business_id
-        LEFT JOIN provider_settings p ON p.business_id=r.business_id WHERE r.id=? AND r.enabled=1`)
-        .bind(route).first<AgentSettings & RealtimeSettings>();
-      if (!telephoneRealtimeAvailable(this.env, settings)) {
+        LEFT JOIN provider_settings p ON p.business_id=r.business_id
+        WHERE r.id=? AND r.enabled=1 AND r.password_hash=? AND r.business_id=? AND r.assistant_id=?`)
+        .bind(route, credential.password_hash, credential.business_id, credential.assistant_id)
+        .first<AgentSettings & RealtimeSettings & ProviderSettings & { provider_present: number }>();
+      if (!settings || !telephoneRealtimeAvailable(this.env, settings) ||
+          assistantCompatibilityError(this.env, settings, settings)) {
         await this.compact(); return new Response(null, { status: 403 });
       }
+      // Admission linearizes at this INSERT. Refuse a changed compatibility
+      // snapshot before creating a call; pickup still reloads current settings.
+      // Pin the SELECT identity too, so a temporary route reassignment cannot
+      // validate B then restore A before this credential-pinned reservation.
       const row = await this.env.DB.prepare(`INSERT OR IGNORE INTO calls
         (id,business_id,assistant_id,channel,caller_id,environment,direction,reserved_at)
         SELECT ?,r.business_id,r.assistant_id,'asterisk','PBX caller','live','inbound',datetime('now')
         FROM asterisk_routes r JOIN assistants a ON a.id=r.assistant_id AND a.business_id=r.business_id
         JOIN businesses b ON b.id=r.business_id
+        LEFT JOIN provider_settings p ON p.business_id=r.business_id
         WHERE r.id=? AND r.enabled=1 AND r.password_hash=? AND r.business_id=? AND r.assistant_id=?
           AND a.state='active' AND a.engine='realtime'
+          AND a.engine IS ? AND a.realtime_model IS ? AND a.realtime_voice IS ?
+          AND (p.business_id IS NOT NULL)=? AND p.realtime_provider IS ?
+          AND p.realtime_base_url IS ? AND p.realtime_api_key IS ?
           AND trim(a.name)<>'' AND trim(a.persona)<>'' AND trim(a.language)<>''
           AND (SELECT COUNT(*) FROM calls WHERE business_id=r.business_id AND environment='live' AND ${OCCUPIED_CALL_SQL})<b.max_concurrent_calls
           AND (SELECT COUNT(*) FROM calls WHERE business_id=r.business_id AND environment='live'
             AND started_at>datetime('now','-1 day') AND NOT(status='abandoned' AND connected_at IS NULL AND reserved_at IS NULL))<b.max_calls_per_day
-        RETURNING id`).bind(call, route, credential.password_hash, credential.business_id, credential.assistant_id).first();
+        RETURNING id`).bind(call, route, credential.password_hash, credential.business_id, credential.assistant_id,
+          settings.engine, settings.realtime_model, settings.realtime_voice, settings.provider_present,
+          settings.realtime_provider ?? null, settings.realtime_base_url ?? null, settings.realtime_api_key ?? null).first();
       if (!row) { await this.compact(); return new Response(null, { status: 403 }); }
       return { call };
     } catch {

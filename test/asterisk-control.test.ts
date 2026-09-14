@@ -362,3 +362,72 @@ it.each(['concurrency','daily'])('atomic owner quota still rejects a %s race aft
   expect(await db.prepare("SELECT COUNT(*) n FROM calls WHERE channel='asterisk'").first()).toEqual({n:0});
   expect([...live.storage.data]).toEqual([['retired',true]]);
 });
+
+
+// Change the database after the compatibility SELECT has completed but before
+// the reservation statement executes. A later failing session is not refusal.
+describe('Asterisk atomic compatibility reservation',()=>{
+  function sessionDispatch() {
+    const fetch=vi.fn(async()=>new Response(null,{status:503}));
+    env.CALL_SESSION={idFromName:(id:string)=>id,get:()=>({fetch})} as unknown as DurableObjectNamespace;
+    return fetch;
+  }
+  const seedProvider=()=>db.exec("INSERT INTO provider_settings(business_id,realtime_provider,realtime_api_key) VALUES('biz','kataleptic','synthetic-workspace-key')");
+  it.each([
+    ['provider selection',"UPDATE provider_settings SET realtime_provider='custom',realtime_base_url='wss://custom.example.com/realtime'"],
+    ['provider URL',"UPDATE provider_settings SET realtime_base_url='wss://other.example.com/realtime'"],
+    ['provider key',"UPDATE provider_settings SET realtime_api_key='synthetic-rotated-key'"],
+    ['provider deleted',"DELETE FROM provider_settings"],
+    ['model',"UPDATE assistants SET realtime_model='kataleptic-realtime-hd'"],
+    ['voice',"UPDATE assistants SET realtime_voice='different-voice'"],
+    ['engine',"UPDATE assistants SET engine='pipeline'"],
+  ])('refuses changed %s before creating a call',async(_label,mutation)=>{
+    seedProvider(); const dispatch=sessionDispatch(); const live=owner(); let changed=false;
+    db.hook=sql=>{if(!changed && sql.includes('INSERT OR IGNORE INTO calls')){changed=true;db.exec(mutation);}};
+    expect((await live.object.fetch(request())).status).toBe(403);
+    expect(changed).toBe(true); expect(dispatch).not.toHaveBeenCalled();
+    expect(await db.prepare('SELECT COUNT(*) n FROM calls').first()).toEqual({n:0});
+    expect([...live.storage.data]).toEqual([['retired',true]]);expect(live.storage.alarm).toBeNull();
+  });
+  it.each(['insert','delete'])('pins provider row presence with instance defaults: %s',async(change)=>{
+    if(change==='delete')db.exec("INSERT INTO provider_settings(business_id) VALUES('biz')");
+    const dispatch=sessionDispatch();const live=owner();let changed=false;
+    db.hook=sql=>{if(!changed && sql.includes('INSERT OR IGNORE INTO calls')){
+      changed=true;db.exec(change==='insert'?"INSERT INTO provider_settings(business_id) VALUES('biz')":"DELETE FROM provider_settings");
+    }};
+    expect((await live.object.fetch(request())).status).toBe(403);expect(changed).toBe(true);
+    expect(dispatch).not.toHaveBeenCalled();expect(await db.prepare('SELECT COUNT(*) n FROM calls').first()).toEqual({n:0});
+    expect([...live.storage.data]).toEqual([['retired',true]]);expect(live.storage.alarm).toBeNull();
+  });
+  it('cannot validate a temporarily reassigned assistant then reserve the authenticated assistant',async()=>{
+    db.exec("INSERT INTO assistants(id,business_id,public_slug,state,name,persona,language,engine,realtime_model) VALUES('other','biz','other','active','Other','Helpful','en','realtime','gpt-realtime-2')");
+    const dispatch=sessionDispatch();const live=owner();let retargeted=false;
+    db.hook=sql=>{
+      if(!retargeted && sql.includes('SELECT a.engine')){retargeted=true;db.exec("UPDATE asterisk_routes SET assistant_id='other'");}
+      if(sql.includes('INSERT OR IGNORE INTO calls'))db.exec("UPDATE asterisk_routes SET assistant_id='assistant'");
+    };
+    expect((await live.object.fetch(request())).status).toBe(403);expect(retargeted).toBe(true);
+    expect(dispatch).not.toHaveBeenCalled();expect(await db.prepare('SELECT COUNT(*) n FROM calls').first()).toEqual({n:0});
+    expect([...live.storage.data]).toEqual([['retired',true]]);expect(live.storage.alarm).toBeNull();
+  });
+  it.each(['absent','instance','openai','custom'])('retains unchanged %s provider defaults and voice namespaces',async(provider)=>{
+    if(provider==='instance')db.exec("INSERT INTO provider_settings(business_id) VALUES('biz')");
+    if(provider==='openai')db.exec("INSERT INTO provider_settings(business_id,realtime_provider,realtime_api_key) VALUES('biz','openai','synthetic-only'); UPDATE assistants SET realtime_model='',realtime_voice='alloy'");
+    if(provider==='custom')db.exec("INSERT INTO provider_settings(business_id,realtime_provider,realtime_base_url,realtime_api_key) VALUES('biz','custom','wss://custom.example.com/realtime','synthetic-only'); UPDATE assistants SET realtime_model='custom-model',realtime_voice='custom-voice'");
+    const dispatch=sessionDispatch();expect((await owner().object.fetch(request())).status).toBe(503);
+    expect(dispatch).toHaveBeenCalledTimes(1);expect(await db.prepare('SELECT COUNT(*) n FROM calls').first()).toEqual({n:1});
+  });
+  it.each([['gpt-realtime','custom-voice'],['gpt-realtime-2','alloy']])('refuses incompatible direct OpenAI model %s / voice %s before reservation',async(model,voice)=>{
+    db.exec("INSERT INTO provider_settings(business_id,realtime_provider,realtime_api_key) VALUES('biz','openai','synthetic-only')");
+    await db.prepare('UPDATE assistants SET realtime_model=?,realtime_voice=?').bind(model,voice).run();
+    const dispatch=sessionDispatch();const live=owner();expect((await live.object.fetch(request())).status).toBe(403);
+    expect(dispatch).not.toHaveBeenCalled();expect(await db.prepare('SELECT COUNT(*) n FROM calls').first()).toEqual({n:0});
+    expect([...live.storage.data]).toEqual([['retired',true]]);expect(live.storage.alarm).toBeNull();
+  });
+  it('permits unrelated speech configuration changes at reservation',async()=>{
+    seedProvider();const dispatch=sessionDispatch();let changed=false;
+    db.hook=sql=>{if(!changed && sql.includes('INSERT OR IGNORE INTO calls')){changed=true;db.exec("UPDATE provider_settings SET stt_model='unrelated' ");}};
+    expect((await owner().object.fetch(request())).status).toBe(503);expect(changed).toBe(true);
+    expect(dispatch).toHaveBeenCalledTimes(1);expect(await db.prepare('SELECT COUNT(*) n FROM calls').first()).toEqual({n:1});
+  });
+});
