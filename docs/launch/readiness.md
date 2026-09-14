@@ -11,6 +11,33 @@ findings from every reviewer still require verification and disposition. No new
 Codex review is requested or awaited. Historical dual-review references below
 record earlier requirements; this policy governs the current release.
 
+## Account export endpoint sanitization
+
+The [ce7830cf review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658194913)
+identified credential-bearing provider URLs in account archives. Both CI runs
+passed, but that review has no security or major-issue clearance. The export
+correction is local and awaiting final QA and release gates.
+
+Export now removes userinfo, every query parameter and fragments from exactly
+five provider URL fields. Malformed or unsupported URLs become empty; null and
+empty values remain. Endpoint scheme, host and path remain metadata. Query
+routing is intentionally omitted, so this archive is not a credential-restorable
+configuration image. Stored settings, provider routing and other exported user
+data are unchanged. This is not a generic scrub of secrets written in paths or
+free text. The existing authenticated owner scope and no-store policy remain.
+
+The original bounded single SQL snapshot and preallocation checks remain, with
+additional transformed-row, aggregate and final response byte checks for URL
+serialization growth. Original ten cases yielded nine failures, one null control
+pass and39 skips; fixed account/auth suites pass62 tests and both typechecks.
+A current API query save was asserted in storage before the original export
+failed its URL assertion; historical userinfo coverage is separate. Failed
+originals stop at their first assertion, so later checks are not claimed.
+Fixed checks preserve the database except the existing export-rate charge.
+Null payload and post-transformation budget cases inject SQL results; ordinary
+SQL preallocation, authentication, snapshot and size-limit cases also pass.
+No native workerd-handler, live provider or cross-account exposure is claimed.
+
 ## Capture helper retained-error hardening
 
 The [77a9eab review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658098092)

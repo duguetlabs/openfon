@@ -1,0 +1,209 @@
+
+> openfon@0.1.0 test
+> vitest run test/account-api.test.ts --maxWorkers=1 -t \[export-url\]
+
+
+ RUN  v5.0.0 /private/tmp/openfon-export-ce783-9tHoDd
+
+(node:99761) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ test/account-api.test.ts (49 tests | 9 failed | 39 skipped) 301ms
+   ❯ account self service (49)
+     × exports historical owned data with sanitized provider URLs in all five locations [export-url] 65ms
+     × exports a currently accepted query-bearing text provider without its query credentials [export-url] 31ms
+     × blanks malformed or unsupported provider URL not an absolute URL?token=bad-canary [export-url] 27ms
+     × blanks malformed or unsupported provider URL https [export-url] 25ms
+     × blanks malformed or unsupported provider URL data [export-url] 25ms
+     × blanks malformed or unsupported provider URL file [export-url] 25ms
+     × retains safe endpoint metadata and bounds serialized Unicode growth [export-url] 25ms
+     × refuses URL serialization growth beyond the row output budget [export-url] 26ms
+     × refuses URL serialization growth beyond the aggregate output budget [export-url] 27ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/account-api.test.ts > account self service > exports historical owned data with sanitized provider URLs in all five locations [export-url]
+AssertionError: expected 'HtTpS://user:encoded%2Dsecret@provide…' to be 'https://provider.example/v1' // Object.is equality
+
+Expected: "https://provider.example/v1"
+Received: "HtTpS://user:encoded%2Dsecret@provider.example/v1?unknown=query-canary&unknown=second#fragment-canary"
+
+ ❯ test/account-api.test.ts:153:49
+    151|     const body = await response.text();
+    152|     const { data } = JSON.parse(body);
+    153|     expect(data.agent_settings[0].llm_base_url).toBe('https://provider…
+       |                                                 ^
+    154|     expect(data.engine_profiles[0].llm_base_url).toBe('https://provide…
+    155|     expect(data.provider_settings[0]).toMatchObject({ llm_base_url: 'h…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  test/account-api.test.ts > account self service > exports a currently accepted query-bearing text provider without its query credentials [export-url]
+AssertionError: expected 'https://text.example/v1?arbitrary=que…' to be 'https://text.example/v1' // Object.is equality
+
+Expected: "https://text.example/v1"
+Received: "https://text.example/v1?arbitrary=query-canary&target=route#fragment-canary"
+
+ ❯ test/account-api.test.ts:175:69
+    173|     expect(response.status).toBe(200);
+    174|     const body = await response.text();
+    175|     expect(JSON.parse(body).data.provider_settings[0].llm_base_url).to…
+       |                                                                     ^
+    176|     expect(body).not.toContain('query-canary');
+    177|     expect(body).not.toContain('fragment-canary');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  test/account-api.test.ts > account self service > blanks malformed or unsupported provider URL not an absolute URL?token=bad-canary [export-url]
+AssertionError: expected { business_id: 'biz-owner', …(9) } to match object { llm_base_url: '', …(2) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "llm_base_url": "",
+-   "realtime_base_url": "",
+-   "stt_base_url": "",
++   "llm_base_url": "not an absolute URL?token=bad-canary",
++   "realtime_base_url": "not an absolute URL?token=bad-canary",
++   "stt_base_url": "not an absolute URL?token=bad-canary",
+  }
+
+ ❯ test/account-api.test.ts:190:58
+    188|       expect(response.status).toBe(200);
+    189|       const text = await response.text();
+    190|       expect(JSON.parse(text).data.provider_settings[0]).toMatchObject…
+       |                                                          ^
+    191|       expect(text).not.toContain('bad-canary');
+    192|       expect(snapshotExceptExportCharge()).toEqual(before);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  test/account-api.test.ts > account self service > blanks malformed or unsupported provider URL https [export-url]
+AssertionError: expected { business_id: 'biz-owner', …(9) } to match object { llm_base_url: '', …(2) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "llm_base_url": "",
+-   "realtime_base_url": "",
+-   "stt_base_url": "",
++   "llm_base_url": "https://[bad/?token=bad-canary",
++   "realtime_base_url": "https://[bad/?token=bad-canary",
++   "stt_base_url": "https://[bad/?token=bad-canary",
+  }
+
+ ❯ test/account-api.test.ts:190:58
+    188|       expect(response.status).toBe(200);
+    189|       const text = await response.text();
+    190|       expect(JSON.parse(text).data.provider_settings[0]).toMatchObject…
+       |                                                          ^
+    191|       expect(text).not.toContain('bad-canary');
+    192|       expect(snapshotExceptExportCharge()).toEqual(before);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  test/account-api.test.ts > account self service > blanks malformed or unsupported provider URL data [export-url]
+AssertionError: expected { business_id: 'biz-owner', …(9) } to match object { llm_base_url: '', …(2) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "llm_base_url": "",
+-   "realtime_base_url": "",
+-   "stt_base_url": "",
++   "llm_base_url": "data:text/plain,bad-canary",
++   "realtime_base_url": "data:text/plain,bad-canary",
++   "stt_base_url": "data:text/plain,bad-canary",
+  }
+
+ ❯ test/account-api.test.ts:190:58
+    188|       expect(response.status).toBe(200);
+    189|       const text = await response.text();
+    190|       expect(JSON.parse(text).data.provider_settings[0]).toMatchObject…
+       |                                                          ^
+    191|       expect(text).not.toContain('bad-canary');
+    192|       expect(snapshotExceptExportCharge()).toEqual(before);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  test/account-api.test.ts > account self service > blanks malformed or unsupported provider URL file [export-url]
+AssertionError: expected { business_id: 'biz-owner', …(9) } to match object { llm_base_url: '', …(2) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "llm_base_url": "",
+-   "realtime_base_url": "",
+-   "stt_base_url": "",
++   "llm_base_url": "file:///private/bad-canary",
++   "realtime_base_url": "file:///private/bad-canary",
++   "stt_base_url": "file:///private/bad-canary",
+  }
+
+ ❯ test/account-api.test.ts:190:58
+    188|       expect(response.status).toBe(200);
+    189|       const text = await response.text();
+    190|       expect(JSON.parse(text).data.provider_settings[0]).toMatchObject…
+       |                                                          ^
+    191|       expect(text).not.toContain('bad-canary');
+    192|       expect(snapshotExceptExportCharge()).toEqual(before);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  test/account-api.test.ts > account self service > retains safe endpoint metadata and bounds serialized Unicode growth [export-url]
+AssertionError: expected { business_id: 'biz-owner', …(9) } to match object { …(3) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "llm_base_url": "https://xn--bcher-kva.example/%E6%97%A5%20%E6%9C%AC",
++   "llm_base_url": "HTTPS://bücher.example/日 本",
+    "realtime_base_url": "ws://localhost:8080/v1",
+    "stt_base_url": "",
+  }
+
+ ❯ test/account-api.test.ts:205:22
+    203|     const text = await response.text();
+    204|     const provider = JSON.parse(text).data.provider_settings[0];
+    205|     expect(provider).toMatchObject({ llm_base_url: 'https://xn--bcher-…
+       |                      ^
+    206|     expect(new TextEncoder().encode(provider.llm_base_url).length).toB…
+    207|     expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  test/account-api.test.ts > account self service > refuses URL serialization growth beyond the row output budget [export-url]
+ FAIL  test/account-api.test.ts > account self service > refuses URL serialization growth beyond the aggregate output budget [export-url]
+AssertionError: expected 200 to be 413 // Object.is equality
+
+- Expected
++ Received
+
+- 413
++ 200
+
+ ❯ test/account-api.test.ts:234:31
+    232|       });
+    233|       const response = await call('/api/me/account/export');
+    234|       expect(response.status).toBe(413);
+       |                               ^
+    235|       expect(response.headers.get('Content-Disposition')).toBeNull();
+    236|       expect(response.headers.get('Cache-Control')).toBe('no-store');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  9 failed | 1 passed | 39 skipped (49)
+   Start at  04:45:40
+   Duration  978ms (tests 35%, transform 34%, import 30%, worker 1%)
+
