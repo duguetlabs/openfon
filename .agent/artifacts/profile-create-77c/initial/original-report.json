@@ -1,0 +1,893 @@
+{
+  "config": {
+    "argv": [
+      "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node",
+      "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/node_modules/.bin/playwright",
+      "test",
+      "e2e/profile-create-pending.spec.ts",
+      "--workers=1",
+      "--retries=0",
+      "--output=/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/original-browser-results",
+      "--reporter=line,json"
+    ],
+    "configFile": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/playwright.config.ts",
+    "rootDir": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/original-browser-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "line"
+      ],
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": {
+      "command": "npm run build && node scripts/e2e-server.mjs",
+      "url": "http://localhost:8812",
+      "reuseExistingServer": false,
+      "timeout": 120000
+    }
+  },
+  "suites": [
+    {
+      "title": "profile-create-pending.spec.ts",
+      "file": "profile-create-pending.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "one pending create admits one POST and one persisted id with confirmed no-op blur",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 6521,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m0\u001b[39m\nReceived:   \u001b[31m0\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m0\u001b[39m\nReceived:   \u001b[31m0\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:87:47",
+                    "location": {
+                      "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                      "column": 47,
+                      "line": 87
+                    },
+                    "snippet": "  85 |   try {\n  86 |     await mouseClick(page, create(page), true);\n> 87 |     await expect.poll(() => gate.held.length).toBeGreaterThan(0); await frames(page);\n     |                                               ^\n  88 |     // Wait for all observed POST responses to reach the hold, including an original duplicate.\n  89 |     await expect.poll(() => gate.held.length).toBe(postRequests);\n  90 |     // Let every actually sent create settle before the original's first assertion."
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                        "column": 47,
+                        "line": 87
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m0\u001b[39m\nReceived:   \u001b[31m0\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate\n\n  85 |   try {\n  86 |     await mouseClick(page, create(page), true);\n> 87 |     await expect.poll(() => gate.held.length).toBeGreaterThan(0); await frames(page);\n     |                                               ^\n  88 |     // Wait for all observed POST responses to reach the hold, including an original duplicate.\n  89 |     await expect.poll(() => gate.held.length).toBe(postRequests);\n  90 |     // Let every actually sent create settle before the original's first assertion.\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:87:47"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T05:37:29.765Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/original-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/original-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                    "column": 47,
+                    "line": 87
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "5d38282983314d9d30ea-eedbaab93d96ace7bcf2",
+          "file": "profile-create-pending.spec.ts",
+          "line": 76,
+          "column": 1
+        },
+        {
+          "title": "create acknowledgement preserves later name revision and assistant draft (Newer name)",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 7245,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByPlaceholder('Save current setup as… e.g. \"Realtime HD English (Emma)\"')\nExpected: \u001b[32m\"Newer name\"\u001b[39m\nReceived: \u001b[31m\"\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveValue\" getByPlaceholder('Save current setup as… e.g. \"Realtime HD English (Emma)\"') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByPlaceholder('Save current setup as… e.g. \"Realtime HD English (Emma)\"')\u001b[22m\n\u001b[2m    14 × locator resolved to <input value=\"\" placeholder=\"Save current setup as… e.g. \"Realtime HD English (Emma)\"\" class=\"rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm text-ink outline-none transition-[border-color,box-shadow] placeholder:text-ink-faint focus:border-iris focus:ring-[3px] focus:ring-iris/15 flex-1 px-3.5 py-2\"/>\u001b[22m\n\u001b[2m       - unexpected value \"\"\u001b[22m\n",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByPlaceholder('Save current setup as… e.g. \"Realtime HD English (Emma)\"')\nExpected: \u001b[32m\"Newer name\"\u001b[39m\nReceived: \u001b[31m\"\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveValue\" getByPlaceholder('Save current setup as… e.g. \"Realtime HD English (Emma)\"') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByPlaceholder('Save current setup as… e.g. \"Realtime HD English (Emma)\"')\u001b[22m\n\u001b[2m    14 × locator resolved to <input value=\"\" placeholder=\"Save current setup as… e.g. \"Realtime HD English (Emma)\"\" class=\"rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm text-ink outline-none transition-[border-color,box-shadow] placeholder:text-ink-faint focus:border-iris focus:ring-[3px] focus:ring-iris/15 flex-1 px-3.5 py-2\"/>\u001b[22m\n\u001b[2m       - unexpected value \"\"\u001b[22m\n\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:120:35",
+                    "location": {
+                      "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                      "column": 35,
+                      "line": 120
+                    },
+                    "snippet": "  118 |       await page.getByLabel('Name', { exact: true }).fill('Newer workspace draft');\n  119 |       await gate.release(0); await expect(rows(page)).toHaveCount(2);\n> 120 |       await expect(newName(page)).toHaveValue(draft);\n      |                                   ^\n  121 |       await expect(page.getByLabel('Assistant text model override', { exact: true })).toHaveValue('newer-model');\n  122 |       await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Newer workspace draft');\n  123 |       expect((await persisted(page, path)).find(p => p.name === 'Created profile')?.llm_model).toBe('captured-model');"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                        "column": 35,
+                        "line": 120
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByPlaceholder('Save current setup as… e.g. \"Realtime HD English (Emma)\"')\nExpected: \u001b[32m\"Newer name\"\u001b[39m\nReceived: \u001b[31m\"\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveValue\" getByPlaceholder('Save current setup as… e.g. \"Realtime HD English (Emma)\"') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByPlaceholder('Save current setup as… e.g. \"Realtime HD English (Emma)\"')\u001b[22m\n\u001b[2m    14 × locator resolved to <input value=\"\" placeholder=\"Save current setup as… e.g. \"Realtime HD English (Emma)\"\" class=\"rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm text-ink outline-none transition-[border-color,box-shadow] placeholder:text-ink-faint focus:border-iris focus:ring-[3px] focus:ring-iris/15 flex-1 px-3.5 py-2\"/>\u001b[22m\n\u001b[2m       - unexpected value \"\"\u001b[22m\n\n\n  118 |       await page.getByLabel('Name', { exact: true }).fill('Newer workspace draft');\n  119 |       await gate.release(0); await expect(rows(page)).toHaveCount(2);\n> 120 |       await expect(newName(page)).toHaveValue(draft);\n      |                                   ^\n  121 |       await expect(page.getByLabel('Assistant text model override', { exact: true })).toHaveValue('newer-model');\n  122 |       await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Newer workspace draft');\n  123 |       expect((await persisted(page, path)).find(p => p.name === 'Created profile')?.llm_model).toBe('captured-model');\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:120:35"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T05:37:37.817Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/original-browser-results/profile-create-pending-cre-9751e-assistant-draft-Newer-name-/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/original-browser-results/profile-create-pending-cre-9751e-assistant-draft-Newer-name-/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                    "column": 35,
+                    "line": 120
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "5d38282983314d9d30ea-b4fd75bbcf5d5773cae7",
+          "file": "profile-create-pending.spec.ts",
+          "line": 108,
+          "column": 3
+        },
+        {
+          "title": "create acknowledgement preserves later name revision and assistant draft (Created profile)",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 7180,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByPlaceholder('Save current setup as… e.g. \"Realtime HD English (Emma)\"')\nExpected: \u001b[32m\"Created profile\"\u001b[39m\nReceived: \u001b[31m\"\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveValue\" getByPlaceholder('Save current setup as… e.g. \"Realtime HD English (Emma)\"') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByPlaceholder('Save current setup as… e.g. \"Realtime HD English (Emma)\"')\u001b[22m\n\u001b[2m    14 × locator resolved to <input value=\"\" placeholder=\"Save current setup as… e.g. \"Realtime HD English (Emma)\"\" class=\"rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm text-ink outline-none transition-[border-color,box-shadow] placeholder:text-ink-faint focus:border-iris focus:ring-[3px] focus:ring-iris/15 flex-1 px-3.5 py-2\"/>\u001b[22m\n\u001b[2m       - unexpected value \"\"\u001b[22m\n",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByPlaceholder('Save current setup as… e.g. \"Realtime HD English (Emma)\"')\nExpected: \u001b[32m\"Created profile\"\u001b[39m\nReceived: \u001b[31m\"\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveValue\" getByPlaceholder('Save current setup as… e.g. \"Realtime HD English (Emma)\"') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByPlaceholder('Save current setup as… e.g. \"Realtime HD English (Emma)\"')\u001b[22m\n\u001b[2m    14 × locator resolved to <input value=\"\" placeholder=\"Save current setup as… e.g. \"Realtime HD English (Emma)\"\" class=\"rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm text-ink outline-none transition-[border-color,box-shadow] placeholder:text-ink-faint focus:border-iris focus:ring-[3px] focus:ring-iris/15 flex-1 px-3.5 py-2\"/>\u001b[22m\n\u001b[2m       - unexpected value \"\"\u001b[22m\n\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:120:35",
+                    "location": {
+                      "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                      "column": 35,
+                      "line": 120
+                    },
+                    "snippet": "  118 |       await page.getByLabel('Name', { exact: true }).fill('Newer workspace draft');\n  119 |       await gate.release(0); await expect(rows(page)).toHaveCount(2);\n> 120 |       await expect(newName(page)).toHaveValue(draft);\n      |                                   ^\n  121 |       await expect(page.getByLabel('Assistant text model override', { exact: true })).toHaveValue('newer-model');\n  122 |       await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Newer workspace draft');\n  123 |       expect((await persisted(page, path)).find(p => p.name === 'Created profile')?.llm_model).toBe('captured-model');"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                        "column": 35,
+                        "line": 120
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByPlaceholder('Save current setup as… e.g. \"Realtime HD English (Emma)\"')\nExpected: \u001b[32m\"Created profile\"\u001b[39m\nReceived: \u001b[31m\"\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveValue\" getByPlaceholder('Save current setup as… e.g. \"Realtime HD English (Emma)\"') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByPlaceholder('Save current setup as… e.g. \"Realtime HD English (Emma)\"')\u001b[22m\n\u001b[2m    14 × locator resolved to <input value=\"\" placeholder=\"Save current setup as… e.g. \"Realtime HD English (Emma)\"\" class=\"rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm text-ink outline-none transition-[border-color,box-shadow] placeholder:text-ink-faint focus:border-iris focus:ring-[3px] focus:ring-iris/15 flex-1 px-3.5 py-2\"/>\u001b[22m\n\u001b[2m       - unexpected value \"\"\u001b[22m\n\n\n  118 |       await page.getByLabel('Name', { exact: true }).fill('Newer workspace draft');\n  119 |       await gate.release(0); await expect(rows(page)).toHaveCount(2);\n> 120 |       await expect(newName(page)).toHaveValue(draft);\n      |                                   ^\n  121 |       await expect(page.getByLabel('Assistant text model override', { exact: true })).toHaveValue('newer-model');\n  122 |       await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Newer workspace draft');\n  123 |       expect((await persisted(page, path)).find(p => p.name === 'Created profile')?.llm_model).toBe('captured-model');\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:120:35"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T05:37:46.471Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/original-browser-results/profile-create-pending-cre-def32-tant-draft-Created-profile-/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/original-browser-results/profile-create-pending-cre-def32-tant-draft-Created-profile-/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                    "column": 35,
+                    "line": 120
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "5d38282983314d9d30ea-89ce15b1fc8543cf8599",
+          "file": "profile-create-pending.spec.ts",
+          "line": 108,
+          "column": 3
+        },
+        {
+          "title": "pending create blocks Apply, rename and Settings save until explicit later action",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 3464,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:144:31",
+                    "location": {
+                      "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                      "column": 31,
+                      "line": 144
+                    },
+                    "snippet": "  142 |       // Original Delete may already have removed this row; discriminate before touching its input.\n  143 |       console.log('create-competing-action-diagnostic', JSON.stringify({ action, competingWrites }));\n> 144 |       expect(competingWrites).toBe(0);\n      |                               ^\n  145 |       await input.focus(); await page.keyboard.press('End'); await page.keyboard.type(' must not rename'); await input.blur();\n  146 |       await mouseClick(page, page.getByRole('button', { name: /^(Save changes|Saving…)$/ })); await frames(page);\n  147 |       expect(competingWrites).toBe(0);"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                        "column": 31,
+                        "line": 144
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  142 |       // Original Delete may already have removed this row; discriminate before touching its input.\n  143 |       console.log('create-competing-action-diagnostic', JSON.stringify({ action, competingWrites }));\n> 144 |       expect(competingWrites).toBe(0);\n      |                               ^\n  145 |       await input.focus(); await page.keyboard.press('End'); await page.keyboard.type(' must not rename'); await input.blur();\n  146 |       await mouseClick(page, page.getByRole('button', { name: /^(Save changes|Saving…)$/ })); await frames(page);\n  147 |       expect(competingWrites).toBe(0);\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:144:31"
+                    }
+                  ],
+                  "stdout": [
+                    {
+                      "text": "create-competing-action-diagnostic {\"action\":\"Apply\",\"competingWrites\":1}\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T05:37:55.393Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/original-browser-results/profile-create-pending-pen-2a3eb-until-explicit-later-action/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/original-browser-results/profile-create-pending-pen-2a3eb-until-explicit-later-action/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                    "column": 31,
+                    "line": 144
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "5d38282983314d9d30ea-17993cde97a403faa39f",
+          "file": "profile-create-pending.spec.ts",
+          "line": 129,
+          "column": 3
+        },
+        {
+          "title": "pending Apply blocks create and allows a later explicit create",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 4,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3165,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T05:37:59.955Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d38282983314d9d30ea-26f96c87d3e9f6564411",
+          "file": "profile-create-pending.spec.ts",
+          "line": 159,
+          "column": 3
+        },
+        {
+          "title": "pending create blocks Delete profile, rename and Settings save until explicit later action",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 4,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 4259,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:144:31",
+                    "location": {
+                      "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                      "column": 31,
+                      "line": 144
+                    },
+                    "snippet": "  142 |       // Original Delete may already have removed this row; discriminate before touching its input.\n  143 |       console.log('create-competing-action-diagnostic', JSON.stringify({ action, competingWrites }));\n> 144 |       expect(competingWrites).toBe(0);\n      |                               ^\n  145 |       await input.focus(); await page.keyboard.press('End'); await page.keyboard.type(' must not rename'); await input.blur();\n  146 |       await mouseClick(page, page.getByRole('button', { name: /^(Save changes|Saving…)$/ })); await frames(page);\n  147 |       expect(competingWrites).toBe(0);"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                        "column": 31,
+                        "line": 144
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  142 |       // Original Delete may already have removed this row; discriminate before touching its input.\n  143 |       console.log('create-competing-action-diagnostic', JSON.stringify({ action, competingWrites }));\n> 144 |       expect(competingWrites).toBe(0);\n      |                               ^\n  145 |       await input.focus(); await page.keyboard.press('End'); await page.keyboard.type(' must not rename'); await input.blur();\n  146 |       await mouseClick(page, page.getByRole('button', { name: /^(Save changes|Saving…)$/ })); await frames(page);\n  147 |       expect(competingWrites).toBe(0);\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:144:31"
+                    }
+                  ],
+                  "stdout": [
+                    {
+                      "text": "create-competing-action-diagnostic {\"action\":\"Delete profile\",\"competingWrites\":1}\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T05:38:03.485Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/original-browser-results/profile-create-pending-pen-06137-until-explicit-later-action/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/original-browser-results/profile-create-pending-pen-06137-until-explicit-later-action/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                    "column": 31,
+                    "line": 144
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "5d38282983314d9d30ea-ef9c0eccf5db5cbc5a25",
+          "file": "profile-create-pending.spec.ts",
+          "line": 129,
+          "column": 3
+        },
+        {
+          "title": "pending Delete profile blocks create and allows a later explicit create",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 5,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3663,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T05:38:08.883Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d38282983314d9d30ea-6b32037f45a49ccf3208",
+          "file": "profile-create-pending.spec.ts",
+          "line": 159,
+          "column": 3
+        },
+        {
+          "title": "blur then create stays blocked through the final queued rename and requires another click",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 5,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2856,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T05:38:13.048Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d38282983314d9d30ea-a0aadb6b829155659e91",
+          "file": "profile-create-pending.spec.ts",
+          "line": 176,
+          "column": 1
+        },
+        {
+          "title": "independent Settings refresh suppresses list dispatch during committed create and preserves drafts",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 5,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 5244,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:211:23",
+                    "location": {
+                      "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                      "column": 23,
+                      "line": 211
+                    },
+                    "snippet": "  209 |     // Do not wait for a GET which fixed code intentionally does not dispatch.\n  210 |     console.log('create-read-suppression-diagnostic', JSON.stringify({ listReads, acknowledged: false }));\n> 211 |     expect(listReads).toBe(0);\n      |                       ^\n  212 |     await gate.release(0); await expect(rows(page)).toHaveCount(2);\n  213 |     await expect(newName(page)).toHaveValue('Next profile draft');\n  214 |     await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Retained workspace draft');"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                        "column": 23,
+                        "line": 211
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  209 |     // Do not wait for a GET which fixed code intentionally does not dispatch.\n  210 |     console.log('create-read-suppression-diagnostic', JSON.stringify({ listReads, acknowledged: false }));\n> 211 |     expect(listReads).toBe(0);\n      |                       ^\n  212 |     await gate.release(0); await expect(rows(page)).toHaveCount(2);\n  213 |     await expect(newName(page)).toHaveValue('Next profile draft');\n  214 |     await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Retained workspace draft');\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:211:23"
+                    }
+                  ],
+                  "stdout": [
+                    {
+                      "text": "create-read-suppression-diagnostic {\"listReads\":1,\"acknowledged\":false}\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T05:38:15.926Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/original-browser-results/profile-create-pending-ind-8de30-create-and-preserves-drafts/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/original-browser-results/profile-create-pending-ind-8de30-create-and-preserves-drafts/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                    "column": 23,
+                    "line": 211
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "5d38282983314d9d30ea-54bb06cbdb090ae8f28a",
+          "file": "profile-create-pending.spec.ts",
+          "line": 195,
+          "column": 1
+        },
+        {
+          "title": "a pre-create list response is not adopted while create is pending",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 6,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 10696,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('button', { name: 'Apply', exact: true }).locator('..').first().locator('input')\nExpected: \u001b[32m\"Original profile\"\u001b[39m\nReceived: \u001b[31m\"External list marker\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveValue\" getByRole('button', { name: 'Apply', exact: true }).locator('..').first().locator('input') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Apply', exact: true }).locator('..').first().locator('input')\u001b[22m\n\u001b[2m    14 × locator resolved to <input value=\"External list marker\" class=\"min-w-32 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-ink outline-none hover:border-line-strong focus:border-iris focus:bg-surface focus:ring-[3px] focus:ring-iris/15\"/>\u001b[22m\n\u001b[2m       - unexpected value \"External list marker\"\u001b[22m\n",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('button', { name: 'Apply', exact: true }).locator('..').first().locator('input')\nExpected: \u001b[32m\"Original profile\"\u001b[39m\nReceived: \u001b[31m\"External list marker\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveValue\" getByRole('button', { name: 'Apply', exact: true }).locator('..').first().locator('input') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Apply', exact: true }).locator('..').first().locator('input')\u001b[22m\n\u001b[2m    14 × locator resolved to <input value=\"External list marker\" class=\"min-w-32 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-ink outline-none hover:border-line-strong focus:border-iris focus:bg-surface focus:ring-[3px] focus:ring-iris/15\"/>\u001b[22m\n\u001b[2m       - unexpected value \"External list marker\"\u001b[22m\n\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:234:55",
+                    "location": {
+                      "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                      "column": 55,
+                      "line": 234
+                    },
+                    "snippet": "  232 |     await create(page).click(); await expect.poll(() => createGate.held.length).toBe(1);\n  233 |     await readGate.release(0); await frames(page);\n> 234 |     await expect(rows(page).first().locator('input')).toHaveValue('Original profile');\n      |                                                       ^\n  235 |     await createGate.release(0); await expect(rows(page)).toHaveCount(2);\n  236 |     expect((await persisted(page, path)).find(p => p.id === profile.id)?.name).toBe('External list marker');\n  237 |   } finally { await createGate.dispose(); await readGate.dispose(); }"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                        "column": 55,
+                        "line": 234
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('button', { name: 'Apply', exact: true }).locator('..').first().locator('input')\nExpected: \u001b[32m\"Original profile\"\u001b[39m\nReceived: \u001b[31m\"External list marker\"\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveValue\" getByRole('button', { name: 'Apply', exact: true }).locator('..').first().locator('input') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Apply', exact: true }).locator('..').first().locator('input')\u001b[22m\n\u001b[2m    14 × locator resolved to <input value=\"External list marker\" class=\"min-w-32 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-ink outline-none hover:border-line-strong focus:border-iris focus:bg-surface focus:ring-[3px] focus:ring-iris/15\"/>\u001b[22m\n\u001b[2m       - unexpected value \"External list marker\"\u001b[22m\n\n\n  232 |     await create(page).click(); await expect.poll(() => createGate.held.length).toBe(1);\n  233 |     await readGate.release(0); await frames(page);\n> 234 |     await expect(rows(page).first().locator('input')).toHaveValue('Original profile');\n      |                                                       ^\n  235 |     await createGate.release(0); await expect(rows(page)).toHaveCount(2);\n  236 |     expect((await persisted(page, path)).find(p => p.id === profile.id)?.name).toBe('External list marker');\n  237 |   } finally { await createGate.dispose(); await readGate.dispose(); }\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:234:55"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T05:38:22.199Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/original-browser-results/profile-create-pending-a-p-89e7d-ted-while-create-is-pending/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/original-browser-results/profile-create-pending-a-p-89e7d-ted-while-create-is-pending/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                    "column": 55,
+                    "line": 234
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "5d38282983314d9d30ea-0080dcdfd93d97ca11b2",
+          "file": "profile-create-pending.spec.ts",
+          "line": 223,
+          "column": 1
+        },
+        {
+          "title": "a pre-create list response cannot remove the acknowledged row after creation settles",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 7,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3177,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T05:38:34.055Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d38282983314d9d30ea-1db5047131bd23c55994",
+          "file": "profile-create-pending.spec.ts",
+          "line": 240,
+          "column": 1
+        },
+        {
+          "title": "refused create preserves newer input and releases admission for one explicit retry",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 7,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4537,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T05:38:37.533Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d38282983314d9d30ea-b24939ec2e623514596c",
+          "file": "profile-create-pending.spec.ts",
+          "line": 254,
+          "column": 1
+        },
+        {
+          "title": "pending Settings save excludes create without changing accepted save stages",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 7,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3532,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T05:38:42.082Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d38282983314d9d30ea-f7f1c51c00426065f66a",
+          "file": "profile-create-pending.spec.ts",
+          "line": 271,
+          "column": 1
+        },
+        {
+          "title": "Settings retry and create exclude each other (create first)",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 7,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 5137,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:316:59",
+                    "location": {
+                      "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                      "column": 59,
+                      "line": 316
+                    },
+                    "snippet": "  314 |       await expect.poll(() => gate.held.length).toBe(1);\n  315 |       await mouseClick(page, first === 'create' ? retry : create(page)); await frames(page);\n> 316 |       expect(first === 'create' ? sessionReads : creates).toBe(0);\n      |                                                           ^\n  317 |       await gate.release(0);\n  318 |       if (first === 'create') {\n  319 |         await expect(rows(page)).toHaveCount(2); await expect(retry).toBeEnabled();"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                        "column": 59,
+                        "line": 316
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  314 |       await expect.poll(() => gate.held.length).toBe(1);\n  315 |       await mouseClick(page, first === 'create' ? retry : create(page)); await frames(page);\n> 316 |       expect(first === 'create' ? sessionReads : creates).toBe(0);\n      |                                                           ^\n  317 |       await gate.release(0);\n  318 |       if (first === 'create') {\n  319 |         await expect(rows(page)).toHaveCount(2); await expect(retry).toBeEnabled();\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:316:59"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T05:38:45.633Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/original-browser-results/profile-create-pending-Set-a47f2-de-each-other-create-first-/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/original-browser-results/profile-create-pending-Set-a47f2-de-each-other-create-first-/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                    "column": 59,
+                    "line": 316
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "5d38282983314d9d30ea-6b31143778e69eed8f0c",
+          "file": "profile-create-pending.spec.ts",
+          "line": 303,
+          "column": 3
+        },
+        {
+          "title": "Settings retry and create exclude each other (retry first)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 8,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 8141,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T05:38:53.849Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d38282983314d9d30ea-1d09b1df5474b7b0fede",
+          "file": "profile-create-pending.spec.ts",
+          "line": 303,
+          "column": 3
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-09-14T05:37:18.345Z",
+    "duration": 106246.34400000001,
+    "expected": 7,
+    "skipped": 0,
+    "unexpected": 8,
+    "flaky": 0
+  }
+}

@@ -1,0 +1,131 @@
+{
+  "config": {
+    "argv": [
+      "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node",
+      "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/node_modules/.bin/playwright",
+      "test",
+      "e2e/profile-create-pending.spec.ts",
+      "--grep",
+      "one pending create admits one POST and one persisted id with confirmed no-op blur$",
+      "--workers=1",
+      "--retries=0",
+      "--output=/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/targeted-duplicate-20260914T055049Z/fixed-browser-results",
+      "--reporter=line,json"
+    ],
+    "configFile": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/playwright.config.ts",
+    "rootDir": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/targeted-duplicate-20260914T055049Z/fixed-browser-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "line"
+      ],
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": {
+      "command": "npm run build && node scripts/e2e-server.mjs",
+      "url": "http://localhost:8812",
+      "reuseExistingServer": false,
+      "timeout": 120000
+    }
+  },
+  "suites": [
+    {
+      "title": "profile-create-pending.spec.ts",
+      "file": "profile-create-pending.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "one pending create admits one POST and one persisted id with confirmed no-op blur",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3087,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "create-duplicate-diagnostic {\"sent\":1,\"saved\":[{\"id\":\"7b8feefd-1110-4589-9579-40e2c8980b0e\",\"name\":\"Original profile\"},{\"id\":\"9413798f-ea7a-477d-a97c-7da9cc0b8779\",\"name\":\"Created profile\"}],\"listReads\":0}\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T05:52:03.281Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d38282983314d9d30ea-eedbaab93d96ace7bcf2",
+          "file": "profile-create-pending.spec.ts",
+          "line": 76,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-09-14T05:51:56.062Z",
+    "duration": 12256.024000000001,
+    "expected": 1,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "duplicate_case": {
+    "original_and_fixed": "First POST-hold wait timed out at0; no accepted duplicate-id diagnostic was reached. Do not attribute duplicate prevention or persisted duplicates to these runs.",
+    "mouse": {
+      "x": 894.578125,
+      "y": 701.21875,
+      "clickCount": 2
+    },
+    "trace_frames": "Extracted original/fixed nearest frames show blank lower viewport at requested click region; suggests geometry/visibility issue, not independently rerun or fixed.",
+    "followup_proposal": "If authorized, a fixture-only initial duplicate-click positioning/hit-target check before raw double-click; preserve raw mouse no-autoqueue behavior and original failed run."
+  },
+  "rename_case": "Passed on both sources despite predicted original negative; bounded click/frame schedule is not discriminating evidence for original rename/create overlap. Geometry must be inspected before claiming a reproduced negative.",
+  "scope": "Offline retained-trace/source inspection only; no browser replay or fixture edit."
+}

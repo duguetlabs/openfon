@@ -1,0 +1,104 @@
+[WebServer] (node:88084) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:88089) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:88090) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:88116) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:88415) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] ▲ [WARNING] Scheduled Workers are not automatically triggered during local development.
+[WebServer] 
+[WebServer]   To manually trigger a scheduled event, run:
+[WebServer]     curl "http://localhost:8812/cdn-cgi/local/scheduled"
+[WebServer]   For more details, see https://developers.cloudflare.com/workers/configuration/cron-triggers/#test-cron-triggers-locally
+[WebServer] 
+[WebServer] 
+
+
+Running 20 tests using 1 worker
+
+(node:88472) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+(node:88472) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/20] e2e/confirmation-refresh.spec.ts:41:3 › confirmed profile apply survives refresh failure and retries reads only
+[2/20] e2e/confirmation-refresh.spec.ts:41:3 › confirmed profile delete survives refresh failure and retries reads only
+[3/20] e2e/profile-create-pending.spec.ts:76:1 › one pending create admits one POST and one persisted id with confirmed no-op blur
+  1) e2e/profile-create-pending.spec.ts:76:1 › one pending create admits one POST and one persisted id with confirmed no-op blur 
+
+    Error: expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+    Call Log:
+    - Timeout 5000ms exceeded while waiting on the predicate
+
+      85 |   try {
+      86 |     await mouseClick(page, create(page), true);
+    > 87 |     await expect.poll(() => gate.held.length).toBeGreaterThan(0); await frames(page);
+         |                                               ^
+      88 |     // Wait for all observed POST responses to reach the hold, including an original duplicate.
+      89 |     await expect.poll(() => gate.held.length).toBe(postRequests);
+      90 |     // Let every actually sent create settle before the original's first assertion.
+        at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:87:47
+
+    Error Context: ../../../../../../../Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/fixed-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/fixed-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../../Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/fixed-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+(node:89796) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+(node:89796) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[4/20] e2e/profile-create-pending.spec.ts:108:3 › create acknowledgement preserves later name revision and assistant draft (Newer name)
+[5/20] e2e/profile-create-pending.spec.ts:108:3 › create acknowledgement preserves later name revision and assistant draft (Created profile)
+[6/20] e2e/profile-create-pending.spec.ts:129:3 › pending create blocks Apply, rename and Settings save until explicit later action
+e2e/profile-create-pending.spec.ts:129:3 › pending create blocks Apply, rename and Settings save until explicit later action
+create-competing-action-diagnostic {"action":"Apply","competingWrites":0}
+
+[7/20] e2e/profile-create-pending.spec.ts:159:3 › pending Apply blocks create and allows a later explicit create
+[8/20] e2e/profile-create-pending.spec.ts:129:3 › pending create blocks Delete profile, rename and Settings save until explicit later action
+e2e/profile-create-pending.spec.ts:129:3 › pending create blocks Delete profile, rename and Settings save until explicit later action
+create-competing-action-diagnostic {"action":"Delete profile","competingWrites":0}
+
+[9/20] e2e/profile-create-pending.spec.ts:159:3 › pending Delete profile blocks create and allows a later explicit create
+[10/20] e2e/profile-create-pending.spec.ts:176:1 › blur then create stays blocked through the final queued rename and requires another click
+[11/20] e2e/profile-create-pending.spec.ts:195:1 › independent Settings refresh suppresses list dispatch during committed create and preserves drafts
+e2e/profile-create-pending.spec.ts:195:1 › independent Settings refresh suppresses list dispatch during committed create and preserves drafts
+create-read-suppression-diagnostic {"listReads":0,"acknowledged":false}
+
+[12/20] e2e/profile-create-pending.spec.ts:223:1 › a pre-create list response is not adopted while create is pending
+[13/20] e2e/profile-create-pending.spec.ts:240:1 › a pre-create list response cannot remove the acknowledged row after creation settles
+[14/20] e2e/profile-create-pending.spec.ts:254:1 › refused create preserves newer input and releases admission for one explicit retry
+[15/20] e2e/profile-create-pending.spec.ts:271:1 › pending Settings save excludes create without changing accepted save stages
+[16/20] e2e/profile-create-pending.spec.ts:303:3 › Settings retry and create exclude each other (create first)
+[17/20] e2e/profile-create-pending.spec.ts:303:3 › Settings retry and create exclude each other (retry first)
+[18/20] e2e/profile-rename-actions.spec.ts:54:3 › blur then Apply sends no action while rename is pending; explicit later click works
+[19/20] e2e/profile-rename-actions.spec.ts:54:3 › blur then Delete profile sends no action while rename is pending; explicit later click works
+[20/20] e2e/profile-rename-recovery.spec.ts:5:3 › failed profile rename preserves retry and newer edits (newer=true)
+  1 failed
+    e2e/profile-create-pending.spec.ts:76:1 › one pending create admits one POST and one persisted id with confirmed no-op blur 
+  19 passed (58.8s)

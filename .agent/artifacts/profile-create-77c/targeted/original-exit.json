@@ -1,0 +1,181 @@
+{
+  "exit": 1,
+  "duration_seconds": 17.902,
+  "observed_processes": [
+    {
+      "pid": 21459,
+      "ppid": 21222,
+      "comm": "<defunct>"
+    },
+    {
+      "pid": 21477,
+      "ppid": 21459,
+      "comm": "node"
+    },
+    {
+      "pid": 21481,
+      "ppid": 21477,
+      "comm": "/bin/sh"
+    },
+    {
+      "pid": 21482,
+      "ppid": 21481,
+      "comm": "npm"
+    },
+    {
+      "pid": 21507,
+      "ppid": 21482,
+      "comm": "sh"
+    },
+    {
+      "pid": 21508,
+      "ppid": 21507,
+      "comm": "node"
+    },
+    {
+      "pid": 21509,
+      "ppid": 21508,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+    },
+    {
+      "pid": 21542,
+      "ppid": 21481,
+      "comm": "node"
+    },
+    {
+      "pid": 21597,
+      "ppid": 21542,
+      "comm": "npm"
+    },
+    {
+      "pid": 21783,
+      "ppid": 21597,
+      "comm": "node"
+    },
+    {
+      "pid": 21784,
+      "ppid": 21783,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    },
+    {
+      "pid": 21806,
+      "ppid": 21784,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 21811,
+      "ppid": 21784,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 21816,
+      "ppid": 21784,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 21822,
+      "ppid": 21784,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 21828,
+      "ppid": 21784,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 21859,
+      "ppid": 21542,
+      "comm": "npm"
+    },
+    {
+      "pid": 21887,
+      "ppid": 21859,
+      "comm": "node"
+    },
+    {
+      "pid": 21888,
+      "ppid": 21887,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    },
+    {
+      "pid": 21890,
+      "ppid": 21888,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/wrangler/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+    },
+    {
+      "pid": 21891,
+      "ppid": 21888,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 21892,
+      "ppid": 21888,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/wrangler/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+    },
+    {
+      "pid": 21893,
+      "ppid": 21888,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 21895,
+      "ppid": 21477,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    },
+    {
+      "pid": 21896,
+      "ppid": 21895,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 21899,
+      "ppid": 21896,
+      "comm": "/usr/bin/profiles"
+    },
+    {
+      "pid": 21903,
+      "ppid": 21896,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 21904,
+      "ppid": 21896,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 21905,
+      "ppid": 21896,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 21906,
+      "ppid": 21896,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 21908,
+      "ppid": 21896,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 21909,
+      "ppid": 21896,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 21910,
+      "ppid": 21896,
+      "comm": "/Applications/Google"
+    }
+  ],
+  "observed_remaining": [],
+  "temp_new_remaining": [
+    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-FbclzS"
+  ],
+  "scan": {
+    "utc": "2026-09-14T05:51:32.326648+00:00",
+    "application_processes": [],
+    "reserved_listeners": {}
+  },
+  "fixed_restored_sha256": "376bd195ec8373c88c11774e5bb95daa643fef298f9b2d456e498002d1fa3a9c"
+}

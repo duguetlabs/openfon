@@ -1,0 +1,11 @@
+{
+  "application_or_test_chrome": [],
+  "listeners": "",
+  "excluded_historical_browser": {
+    "pid": 54328,
+    "parent": 54317,
+    "started": "2026-09-11",
+    "owner": "unrelated linkedin-mcp Playwright driver; untouched"
+  },
+  "initial_overbroad_scan": "Matched historical browser; corrected ownership classification before fixed launch"
+}

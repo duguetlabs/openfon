@@ -1,0 +1,67 @@
+[WebServer] (node:21508) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:21527) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:21542) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:21597) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:21859) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] ▲ [WARNING] Scheduled Workers are not automatically triggered during local development.
+[WebServer] 
+[WebServer]   To manually trigger a scheduled event, run:
+[WebServer]     curl "http://localhost:8812/cdn-cgi/local/scheduled"
+[WebServer]   For more details, see https://developers.cloudflare.com/workers/configuration/cron-triggers/#test-cron-triggers-locally
+[WebServer] 
+[WebServer] 
+
+
+Running 1 test using 1 worker
+
+(node:21895) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+(node:21895) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/1] e2e/profile-create-pending.spec.ts:76:1 › one pending create admits one POST and one persisted id with confirmed no-op blur
+e2e/profile-create-pending.spec.ts:76:1 › one pending create admits one POST and one persisted id with confirmed no-op blur
+create-duplicate-diagnostic {"sent":2,"saved":[{"id":"06318a8b-b5ac-4bad-908e-6ab889b18877","name":"Original profile"},{"id":"b013690c-923d-4b54-a163-8067a047ce72","name":"Created profile"},{"id":"cac963b1-1f86-405d-899c-5b670dfb19a3","name":"Created profile"}],"listReads":0}
+
+  1) e2e/profile-create-pending.spec.ts:76:1 › one pending create admits one POST and one persisted id with confirmed no-op blur 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1
+    Received: 2
+
+      94 |     const saved = await persisted(page, path);
+      95 |     console.log('create-duplicate-diagnostic', JSON.stringify({ sent, saved: saved.map(p => ({ id: p.id, name: p.name })), listReads }));
+    > 96 |     expect(sent).toBe(1);
+         |                  ^
+      97 |     expect(saved.filter(p => p.name === 'Created profile')).toHaveLength(1);
+      98 |     expect(listReads).toBe(0);
+      99 |     await expect(page.getByText('Profile saved.', { exact: true })).toBeVisible();
+        at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:96:18
+
+    Error Context: ../../../../../../../Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/targeted-duplicate-20260914T055049Z/original-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/targeted-duplicate-20260914T055049Z/original-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../../Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/targeted-duplicate-20260914T055049Z/original-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+  1 failed
+    e2e/profile-create-pending.spec.ts:76:1 › one pending create admits one POST and one persisted id with confirmed no-op blur 

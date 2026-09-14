@@ -1,0 +1,332 @@
+{
+  "utc": "2026-09-14T05:53:02.148223+00:00",
+  "application_test_chrome_official": [],
+  "owned_pids_remaining": [],
+  "reserved_listeners": {},
+  "known_unrelated_mcp_present": [
+    54328,
+    54317
+  ],
+  "owned_processes": [
+    {
+      "pid": 21459,
+      "ppid": 21222,
+      "comm": "<defunct>"
+    },
+    {
+      "pid": 21477,
+      "ppid": 21459,
+      "comm": "node"
+    },
+    {
+      "pid": 21481,
+      "ppid": 21477,
+      "comm": "/bin/sh"
+    },
+    {
+      "pid": 21482,
+      "ppid": 21481,
+      "comm": "npm"
+    },
+    {
+      "pid": 21507,
+      "ppid": 21482,
+      "comm": "sh"
+    },
+    {
+      "pid": 21508,
+      "ppid": 21507,
+      "comm": "node"
+    },
+    {
+      "pid": 21509,
+      "ppid": 21508,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+    },
+    {
+      "pid": 21542,
+      "ppid": 21481,
+      "comm": "node"
+    },
+    {
+      "pid": 21597,
+      "ppid": 21542,
+      "comm": "npm"
+    },
+    {
+      "pid": 21783,
+      "ppid": 21597,
+      "comm": "node"
+    },
+    {
+      "pid": 21784,
+      "ppid": 21783,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    },
+    {
+      "pid": 21806,
+      "ppid": 21784,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 21811,
+      "ppid": 21784,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 21816,
+      "ppid": 21784,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 21822,
+      "ppid": 21784,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 21828,
+      "ppid": 21784,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 21859,
+      "ppid": 21542,
+      "comm": "npm"
+    },
+    {
+      "pid": 21887,
+      "ppid": 21859,
+      "comm": "node"
+    },
+    {
+      "pid": 21888,
+      "ppid": 21887,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    },
+    {
+      "pid": 21890,
+      "ppid": 21888,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/wrangler/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+    },
+    {
+      "pid": 21891,
+      "ppid": 21888,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 21892,
+      "ppid": 21888,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/wrangler/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+    },
+    {
+      "pid": 21893,
+      "ppid": 21888,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 21895,
+      "ppid": 21477,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    },
+    {
+      "pid": 21896,
+      "ppid": 21895,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 21899,
+      "ppid": 21896,
+      "comm": "/usr/bin/profiles"
+    },
+    {
+      "pid": 21903,
+      "ppid": 21896,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 21904,
+      "ppid": 21896,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 21905,
+      "ppid": 21896,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 21906,
+      "ppid": 21896,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 21908,
+      "ppid": 21896,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 21909,
+      "ppid": 21896,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 21910,
+      "ppid": 21896,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 23344,
+      "ppid": 22971,
+      "comm": "(node)"
+    },
+    {
+      "pid": 23579,
+      "ppid": 23344,
+      "comm": "(node)"
+    },
+    {
+      "pid": 23633,
+      "ppid": 23579,
+      "comm": "(bash)"
+    },
+    {
+      "pid": 23634,
+      "ppid": 23633,
+      "comm": "npm"
+    },
+    {
+      "pid": 23671,
+      "ppid": 23634,
+      "comm": "sh"
+    },
+    {
+      "pid": 23672,
+      "ppid": 23671,
+      "comm": "node"
+    },
+    {
+      "pid": 23673,
+      "ppid": 23672,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+    },
+    {
+      "pid": 23725,
+      "ppid": 23633,
+      "comm": "(node)"
+    },
+    {
+      "pid": 23751,
+      "ppid": 23725,
+      "comm": "npm"
+    },
+    {
+      "pid": 23777,
+      "ppid": 23751,
+      "comm": "node"
+    },
+    {
+      "pid": 23778,
+      "ppid": 23777,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    },
+    {
+      "pid": 23781,
+      "ppid": 23778,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 23788,
+      "ppid": 23778,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 23796,
+      "ppid": 23778,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 23803,
+      "ppid": 23778,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 23835,
+      "ppid": 23725,
+      "comm": "(node)"
+    },
+    {
+      "pid": 24274,
+      "ppid": 23835,
+      "comm": "(node)"
+    },
+    {
+      "pid": 24276,
+      "ppid": 24274,
+      "comm": "(node)"
+    },
+    {
+      "pid": 24279,
+      "ppid": 24276,
+      "comm": "(esbuild)"
+    },
+    {
+      "pid": 24280,
+      "ppid": 24276,
+      "comm": "(workerd)"
+    },
+    {
+      "pid": 24281,
+      "ppid": 24276,
+      "comm": "(esbuild)"
+    },
+    {
+      "pid": 24282,
+      "ppid": 24276,
+      "comm": "(workerd)"
+    },
+    {
+      "pid": 24283,
+      "ppid": 23579,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    },
+    {
+      "pid": 24285,
+      "ppid": 24283,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 24309,
+      "ppid": 24285,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 24310,
+      "ppid": 24285,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 24311,
+      "ppid": 24285,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 24314,
+      "ppid": 24285,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 24315,
+      "ppid": 24285,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 24316,
+      "ppid": 24285,
+      "comm": "/Applications/Google"
+    }
+  ],
+  "owned_temps_remaining": [
+    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-FbclzS",
+    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-mwW1G8"
+  ],
+  "attribution": "750ms owned-tree sampling; new D1 directories relative to each phase prelaunch sole-slot inventory. Historical LinkedIn MCP driver54317/Chromium54328 excluded by confirmed command identity and preserved."
+}

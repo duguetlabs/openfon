@@ -1,0 +1,63 @@
+{
+  "original": [
+    {
+      "scope": "real owned child, deliberate SIGTERM handler",
+      "pid": 47796,
+      "result": "TEST_WATCHDOG",
+      "elapsedMs": 7502,
+      "calls": [
+        {
+          "signal": "SIGTERM",
+          "sent": true
+        }
+      ],
+      "stdout": "ready\\nreceived\\n",
+      "exits": 0,
+      "errors": 0,
+      "exitCode": null,
+      "signalCode": null,
+      "browserClosed": true,
+      "temporaryExists": true,
+      "settled": false
+    },
+    {
+      "scope": "real owned graceful child",
+      "pid": 48748,
+      "calls": 1,
+      "result": "resolved",
+      "exitCode": 0,
+      "signalCode": null
+    }
+  ],
+  "fixed": [
+    {
+      "scope": "real owned child, deliberate SIGTERM handler",
+      "pid": 50238,
+      "result": "rejected",
+      "code": "CAPTURE_CHILD_STOP_TIMEOUT",
+      "elapsedMs": 5009,
+      "calls": [
+        {
+          "signal": "SIGTERM",
+          "sent": true
+        }
+      ],
+      "stdout": "ready\\nreceived\\n",
+      "exits": 0,
+      "errors": 0,
+      "exitCode": null,
+      "signalCode": null,
+      "browserClosed": true,
+      "temporaryExists": false,
+      "settled": true
+    },
+    {
+      "scope": "real owned graceful child",
+      "pid": 50299,
+      "calls": 1,
+      "result": "resolved",
+      "exitCode": 0,
+      "signalCode": null
+    }
+  ]
+}

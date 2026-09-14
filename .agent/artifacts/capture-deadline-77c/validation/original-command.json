@@ -1,0 +1,16 @@
+{
+  "argv": [
+    "node",
+    "--test",
+    "docs/launch/demo/capture-child-deadline.test.mjs"
+  ],
+  "cwd": "/tmp/openfon-capture-deadline-77c-13r_31u1/source",
+  "environment_override": {
+    "CAPTURE_CHILD_HELPER": "/tmp/openfon-capture-deadline-77c-13r_31u1/original/docs/launch/demo/capture-child.mjs"
+  },
+  "pid": 47792,
+  "started": "2026-09-14T05:30:59.565383+00:00",
+  "finished": "2026-09-14T05:31:07.420743+00:00",
+  "exit_code": 1,
+  "log_sha256": "f324ba3d65888480a5bd553f76a9ab842ee832289536af8c170734218776ec8f"
+}

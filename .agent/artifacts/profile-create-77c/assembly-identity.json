@@ -1,0 +1,98 @@
+{
+  "head": "26e4387e1eace02d1e6cc2b1d035d2723829197f",
+  "parent": "a4e1640156a468ac2ea3614d6a97c99ff234009c",
+  "source_base": "77cde12b99cc63344251dc8bab34256f23216628",
+  "source_sha256": {
+    "web/src/pages/Settings.tsx": "376bd195ec8373c88c11774e5bb95daa643fef298f9b2d456e498002d1fa3a9c",
+    "e2e/profile-create-pending.spec.ts": "8c8b4739e7eeffe553e63005d0211572e1e5fcf3339a4384c39eb76a57312712"
+  },
+  "patch_sha256": "34c4623114e12780ac003f1f3907a721d9b37aeb923da58ca2ab8c43ef40f749",
+  "owner_delivery": "6f2d1eb",
+  "copied_evidence": {
+    "initial": {
+      "classified-browser-results.json": "65852d4b5f312637720c2c93c352ac8e005d82b756143a54a0bb34464b9639ee",
+      "cleanup-before-temp-removal.json": "14a6d50eab9d84b32e8d16ffd7c3b594492091c2a9664ad484778f02e678a5c5",
+      "cleanup.json": "a5b93efcc2043d36f92520615db02c6dcb2a69e8bdc947b69062f68f67da1ca2",
+      "final-source-provenance.json": "5933ba864328a5bef0ea89660b589d945aeb95141dfbfa636499f402439dd49b",
+      "fixed-after-scan.json": "6b428ef9532013171eef61603c6a4182ef8fc7f0fb99356f77f9569d9852b408",
+      "fixed-before-scan.json": "1e7fba990194173bf3f501bce76589d1f55117910994ab7f312fa9b8e5289e0e",
+      "fixed-browser-results/.last-run.json": "beb1d3ded4ae29b9a79a584c1794bae2765423ce896af122d0b5b63567a3760a",
+      "fixed-exit.json": "b4d6237e80eb8dff5c9cf9531023edacc2680b06a6582896118392fe8f3f0d5a",
+      "fixed-launch.json": "269553b0c8670d7d0b5c71978142919d70f7ad4cdb8ee16b18e7972231ff7df1",
+      "fixed-report.json": "7424a2453109209c4223d5c123f243c268a3cc1f156beabf0e74681ae7553553",
+      "fixed.log": "c32a229579ef99733569b40293da52e874b2518405c664a19c4edaf24fac1ccd",
+      "original-after-scan.json": "06d1d11be812fccfe4d6a02ab9d2ab6ad5fb9cf23f5c200c8a8f766c0b95c9da",
+      "original-before-scan.json": "b5523fdbb8edef71bcf22fb1047e85b523108d4a9bf26f2935df2d79f20216c6",
+      "original-browser-results/.last-run.json": "384dccfd6da95b8b3c3b21ecfd428578ada4e44e068dbf26e1dfdfd865ec72f6",
+      "original-exit.json": "909d42a3d172f4695315226ca711bb3b641446bb1255eaa70f824638aa0edb46",
+      "original-launch.json": "0e04e865e340eee08a4411067d04a41eae161017778a294f2c3151f231b8f344",
+      "original-report.json": "9c415ecc80b40921791fc7213f50f476f430b4d13ea003d053fcc00165817334",
+      "original.log": "5f97aef4be4f543b75b6a4f23277efce70d5c23ac6b1e59813a6033be7687c2a",
+      "pre-fixed-independent-scan.json": "1e3a8baf888a0c4cb4f06b14e10b4cdc9b42e602656b4ee58a4556ef04be0586",
+      "trace-assessment.json": "57169a1d719d02883ac7496de9c5067f7d37c23225943fc3edb93faa88c89b29",
+      "types-after-scan.json": "7a293821658b0d32dd0734be71528c8352f82c5bf6a116b3a8473fd73c69b39d",
+      "types-before-scan.json": "77e38a24980629a4e536aa5f3be53309581f678beb51459d8567ba9a2d2b7c68",
+      "types-exit.json": "13a1a7a16f9af002b1401f0ee045701f0c9a10da3f1efaa4b8440a8808539dfa",
+      "types-launch.json": "08198c0d5239737bf23c03a77df59c51a3178f6fb14fbae7ee72c785b559a4ef",
+      "types.log": "75c97ba8f32dd032ee1e1293129c6bbdd2ff33c240a3223d4b150e23ab19ee29",
+      "validation-orchestration.py": "0d773cc0deb5d3a929cc8fc19a19d4630e76861ef617507abad6d642c0092f8b",
+      "final-release-scan.json": "542e01a317729aa60e971269ddb106d38f515a34a4c6d476883991e5bc31b0d2"
+    },
+    "targeted": {
+      "cleanup-before-temp-removal.json": "6bab74bd5254a1fe7db3da65a862fd21ba763aa55160e33312189d4df37b9636",
+      "cleanup-release.json": "d7982cdc7711876d308cd15ec119c6e3bb5dc80259177ed1b325c2ae40920e4f",
+      "fixed-after-scan.json": "f15a1c3a6c28134ffe71db8b00316a853384468bbf5204c98b083f960da2f4c5",
+      "fixed-before-scan.json": "0e73b4b73c7581c920a8dd0eb2ca724b2b27de04017bc24c1646765847c4f7fc",
+      "fixed-browser-results/.last-run.json": "91d1c43004802cd49950d78eb11c8fa7d05da8ffffe219a8b13b2f561bc00903",
+      "fixed-exit.json": "66c80c078740d4e7915598c64fed1d94d9507fc59e6979264722c090d4553f26",
+      "fixed-launch.json": "7bb35e025e89a9632dacab0d0092d1165c0e8890f8a61d119d4a7d1f17c4cc4e",
+      "fixed-report.json": "b50c280ba7f6f58769f28212f893948c472c927165fbb8faa0dd3124b0881947",
+      "fixed.log": "71170a2a8bedc5ff8c3c4db0f2c8a13dc018d014850ce4a296c4a453b24b63a4",
+      "original-after-scan.json": "e27291e341ab78cef88bcc78320395fedeaf208614f1ac36e47a3eb3a0354974",
+      "original-before-scan.json": "5974d63eabc8a1261188b355da65a3ea5010a2a21f2ca7e360cde27de17d78ae",
+      "original-browser-results/.last-run.json": "beb1d3ded4ae29b9a79a584c1794bae2765423ce896af122d0b5b63567a3760a",
+      "original-exit.json": "aceff135f860a01edce856a3e3a9b5da5683909ff2615e8829daf108d3993a9f",
+      "original-launch.json": "b1133f605a06b8a713dabf2f796a43bc5ba64ea961f79725560a0fd73b6524aa",
+      "original-report.json": "c123bf1363c14b7448cb88afe430f4292c7db94701ed6f121a4c992d01adb449",
+      "original.log": "83b5265addee16c11e1f99d189c014d566ccee5eda547140ee724f04ead47ba6",
+      "prelaunch-historical-mcp-attribution.json": "1d9a130c8f5435d1f3129941e4be60e41d6392974fc967fbe8132d4b632ba5e4",
+      "targeted-orchestration.py": "adc9bdf4bf1f80280283272e60cfef3c568b8546dbc3fa7a0566f6e222741a6b",
+      "targeted-source-provenance.json": "1bbe1862f660591b5e541487eadb6818772317b2715e39cb9c5e89b1abffbd8c",
+      "targeted-summary.json": "268c05e9055276541c6f6979eaeb6ede959e49213df42c005f8e683ecaba2c57"
+    }
+  },
+  "owner_local_evidence": {
+    "initial": {
+      "fixed-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/error-context.md": "48dd76fcf20faeb9ee80a890cae48c207497d3f07d35b496532de4df7f85f26a",
+      "fixed-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/trace.zip": "39bb78c2f2b70d854159493962135aecd2c15244fa200ff8a59b3f1e4ec7c1cf",
+      "fixed-duplicate-after-click.jpeg": "3819a536ef9bdf26e3ae61dba27c5a9a29cbc63746da86b3800803cc19b9bd5e",
+      "original-browser-results/profile-create-pending-Set-a47f2-de-each-other-create-first-/error-context.md": "99afcbad9f1278a05e720abfbb28afb7d39bb1c11f8ab686e5165806cccd6b4a",
+      "original-browser-results/profile-create-pending-Set-a47f2-de-each-other-create-first-/trace.zip": "cfed7a45216979fd012dc4d3f485ef5420172833a1e9609d68cfece986ee2eb6",
+      "original-browser-results/profile-create-pending-a-p-89e7d-ted-while-create-is-pending/error-context.md": "ece460f7b1d51de1a5469096f6e430f458dd6b0d438e55868d5d52b71ba62051",
+      "original-browser-results/profile-create-pending-a-p-89e7d-ted-while-create-is-pending/trace.zip": "e203807f688c44fccdaff69fd6e1992877c51c717032a19dfc9d5bdb1cd3b1b2",
+      "original-browser-results/profile-create-pending-cre-9751e-assistant-draft-Newer-name-/error-context.md": "dc0a7348aae4cae6ebe5c1b7d96c11fae733523cc479e431bba272a9f597f1f9",
+      "original-browser-results/profile-create-pending-cre-9751e-assistant-draft-Newer-name-/trace.zip": "d75f12c5fda6d0159a6848077309035dc3e97b2cda46938c82c9b5568e3cc39b",
+      "original-browser-results/profile-create-pending-cre-def32-tant-draft-Created-profile-/error-context.md": "71660123c2dde0e9cff9b9808977822e88a1debe490636415e1302b9ae5d476d",
+      "original-browser-results/profile-create-pending-cre-def32-tant-draft-Created-profile-/trace.zip": "b069d66b89afae4e2e6ebeacf81ac82c4f9d6c1c43ed9d21230e318a6d9ef4a1",
+      "original-browser-results/profile-create-pending-ind-8de30-create-and-preserves-drafts/error-context.md": "3ba8dc48be0171bf63718ee2ad9fe844e3e6c4b19bcac8c75edf04b09e46abc3",
+      "original-browser-results/profile-create-pending-ind-8de30-create-and-preserves-drafts/trace.zip": "3b6d75ed1929027f0efcf618c2cab8b2605f9d55ad51d6432decbfe20cfc7df3",
+      "original-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/error-context.md": "a0abf65301d2b5f8ef61c91891e71ab738d83cd1ef9a4d8c2d2ef6090c0e87c8",
+      "original-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/trace.zip": "449fcf7b9de1b17de24d82d77120fead0424c41945e0353f154fa06c72ab9bcd",
+      "original-browser-results/profile-create-pending-pen-06137-until-explicit-later-action/error-context.md": "df7eab5eec8fd0c98cc95a9daef6a2eb8a5210c8c748751d3fe308c9b9885e0a",
+      "original-browser-results/profile-create-pending-pen-06137-until-explicit-later-action/trace.zip": "2fccb5426e0a11fbb0df190011564d7fd88e18298f330a67e3950c3c63478feb",
+      "original-browser-results/profile-create-pending-pen-2a3eb-until-explicit-later-action/error-context.md": "befa2e9522f40bc3cd0c9c1d56f40e645cee1b496214d04cc7f8459fc204131f",
+      "original-browser-results/profile-create-pending-pen-2a3eb-until-explicit-later-action/trace.zip": "6c783f80e4fe736c3afd7c9b125c45f3608d6365ae048a342260da7831670736",
+      "original-duplicate-after-click.jpeg": "0ae2cb5b6a34246d15d0954c223ec4c42aba956c5d069c4595322e9c03f3db94",
+      "original-duplicate-click-frame.jpeg": "7a314928913e3a3d4f0b6d1817ee7444b5fa064741591669d04698c447d67ed7"
+    },
+    "targeted": {
+      "original-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/error-context.md": "e6fcc5f4f62b56b3cd761293034dd5e11cf00dacd4702195c27309801a7ef9d4",
+      "original-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/trace.zip": "fcda8b15fee72195b59b4c9ca23c29395e040c903e376ee014e8bfbfe84da6f3"
+    }
+  },
+  "owner_evidence_directories": {
+    "initial": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z",
+    "targeted": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/targeted-duplicate-20260914T055049Z"
+  },
+  "qa": "CLOSED 5ae745e: exact source/evidence/combined assembly; no runtime repeated"
+}

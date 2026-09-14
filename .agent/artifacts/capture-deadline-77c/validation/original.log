@@ -1,0 +1,212 @@
+TAP version 13
+# Subtest: real owned child accepts SIGTERM but stays alive: deadline rejects and existing cleanup removes wrapper directory
+not ok 1 - real owned child accepts SIGTERM but stays alive: deadline rejects and existing cleanup removes wrapper directory
+  ---
+  duration_ms: 7533.834083
+  location: '/private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:69:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + 'TEST_WATCHDOG'
+    - 'rejected'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'rejected'
+  actual: 'TEST_WATCHDOG'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:96:12)
+    async Test.run (node:internal/test_runner/test:980:9)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# {"scope":"real owned child, deliberate SIGTERM handler","pid":47796,"result":"TEST_WATCHDOG","elapsedMs":7502,"calls":[{"signal":"SIGTERM","sent":true}],"stdout":"ready\\nreceived\\n","exits":0,"errors":0,"exitCode":null,"signalCode":null,"browserClosed":true,"temporaryExists":true,"settled":false}
+# Subtest: real owned child exits gracefully after SIGTERM before the deadline
+ok 2 - real owned child exits gracefully after SIGTERM before the deadline
+  ---
+  duration_ms: 68.837833
+  ...
+# {"scope":"real owned graceful child","pid":48748,"calls":1,"result":"resolved","exitCode":0,"signalCode":null}
+# Subtest: synthetic prior error plus deadline preserves both errors and safely observes late error/exit
+not ok 3 - synthetic prior error plus deadline preserves both errors and safely observes late error/exit
+  ---
+  duration_ms: 0.936791
+  location: '/private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:157:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    live stop installs one deadline
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    deadline (file:///private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:152:10)
+    TestContext.<anonymous> (file:///private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:164:19)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:979:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
+    Test.postRun (node:internal/test_runner/test:1090:19)
+    Test.run (node:internal/test_runner/test:1018:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
+  ...
+# Subtest: synthetic synchronous exit wins over a stale deadline callback and clears timer
+not ok 4 - synthetic synchronous exit wins over a stale deadline callback and clears timer
+  ---
+  duration_ms: 0.435041
+  location: '/private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:179:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    live stop installs one deadline
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    deadline (file:///private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:152:10)
+    TestContext.<anonymous> (file:///private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:182:17)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:979:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
+    Test.postRun (node:internal/test_runner/test:1090:19)
+    Test.run (node:internal/test_runner/test:1018:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
+  ...
+# Subtest: synthetic deadline wins over same-turn late exit and remains one rejected attempt
+not ok 5 - synthetic deadline wins over same-turn late exit and remains one rejected attempt
+  ---
+  duration_ms: 0.13775
+  location: '/private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:190:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    live stop installs one deadline
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    deadline (file:///private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:152:10)
+    TestContext.<anonymous> (file:///private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:194:19)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:979:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
+    Test.postRun (node:internal/test_runner/test:1090:19)
+    Test.run (node:internal/test_runner/test:1018:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
+  ...
+# Subtest: synthetic new stop error wins before deadline and retains prior error identity
+not ok 6 - synthetic new stop error wins before deadline and retains prior error identity
+  ---
+  duration_ms: 0.220958
+  location: '/private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:204:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    live stop installs one deadline
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    deadline (file:///private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:152:10)
+    TestContext.<anonymous> (file:///private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:209:19)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:979:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
+    Test.postRun (node:internal/test_runner/test:1090:19)
+    Test.run (node:internal/test_runner/test:1018:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
+  ...
+# Subtest: synthetic failed signal false clears deadline without confirming exit
+not ok 7 - synthetic failed signal false clears deadline without confirming exit
+  ---
+  duration_ms: 0.205125
+  location: '/private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:219:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    live stop installs one deadline
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    deadline (file:///private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:152:10)
+    TestContext.<anonymous> (file:///private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:224:21)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:979:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
+    Test.postRun (node:internal/test_runner/test:1090:19)
+    Test.run (node:internal/test_runner/test:1018:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
+  ...
+# Subtest: synthetic failed signal throw clears deadline without confirming exit
+not ok 8 - synthetic failed signal throw clears deadline without confirming exit
+  ---
+  duration_ms: 0.1265
+  location: '/private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:219:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    live stop installs one deadline
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    deadline (file:///private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:152:10)
+    TestContext.<anonymous> (file:///private/tmp/openfon-capture-deadline-77c-13r_31u1/source/docs/launch/demo/capture-child-deadline.test.mjs:224:21)
+    Test.runInAsyncScope (node:async_hooks:211:14)
+    Test.run (node:internal/test_runner/test:979:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
+    Test.postRun (node:internal/test_runner/test:1090:19)
+    Test.run (node:internal/test_runner/test:1018:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
+  ...
+# Subtest: synthetic terminal prior error does not create a deadline or signal
+ok 9 - synthetic terminal prior error does not create a deadline or signal
+  ---
+  duration_ms: 0.345292
+  ...
+# Subtest: synthetic no-pid prior error does not create a deadline or signal
+ok 10 - synthetic no-pid prior error does not create a deadline or signal
+  ---
+  duration_ms: 0.350667
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 3
+# fail 7
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 7649.68775

@@ -1,0 +1,11 @@
+{
+  "utc": "2026-09-14T05:50:49.610077+00:00",
+  "application_processes": [
+    {
+      "pid": 54317,
+      "ppid": 53707,
+      "comm": "/Users/cristian/projects/fun/linkedin-mcps/linkedin-mcp/.venv/lib/python3.13/site-packages/playwright/driver/node"
+    }
+  ],
+  "reserved_listeners": {}
+}

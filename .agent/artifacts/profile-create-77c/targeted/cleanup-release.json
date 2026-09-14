@@ -1,0 +1,17 @@
+{
+  "utc": "2026-09-14T05:53:02.432102+00:00",
+  "application_test_chrome_official": [],
+  "owned_pids_remaining": [],
+  "reserved_listeners": {},
+  "known_unrelated_mcp_present": [
+    54328,
+    54317
+  ],
+  "removed_owned_temps": [
+    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-FbclzS",
+    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-mwW1G8"
+  ],
+  "removed_paths_still_exist": [],
+  "observed_process_count": 63,
+  "slot": "Explicit sole8812/9252 RELEASE; no active runner"
+}

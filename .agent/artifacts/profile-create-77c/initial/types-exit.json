@@ -1,0 +1,34 @@
+{
+  "exit": 0,
+  "duration_seconds": 3.624,
+  "observed_processes": [
+    {
+      "pid": 93283,
+      "ppid": 93028,
+      "comm": "<defunct>"
+    },
+    {
+      "pid": 93299,
+      "ppid": 93283,
+      "comm": "sh"
+    },
+    {
+      "pid": 93300,
+      "ppid": 93299,
+      "comm": "node"
+    },
+    {
+      "pid": 93521,
+      "ppid": 93299,
+      "comm": "node"
+    }
+  ],
+  "observed_remaining": [],
+  "temp_new_remaining": [],
+  "scan": {
+    "utc": "2026-09-14T05:42:29.566896+00:00",
+    "application_processes": [],
+    "reserved_listeners": {}
+  },
+  "fixed_restored_sha256": "376bd195ec8373c88c11774e5bb95daa643fef298f9b2d456e498002d1fa3a9c"
+}

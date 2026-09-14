@@ -1,0 +1,166 @@
+{
+  "exit": 0,
+  "duration_seconds": 13.706,
+  "observed_processes": [
+    {
+      "pid": 23344,
+      "ppid": 22971,
+      "comm": "(node)"
+    },
+    {
+      "pid": 23579,
+      "ppid": 23344,
+      "comm": "(node)"
+    },
+    {
+      "pid": 23633,
+      "ppid": 23579,
+      "comm": "(bash)"
+    },
+    {
+      "pid": 23634,
+      "ppid": 23633,
+      "comm": "npm"
+    },
+    {
+      "pid": 23671,
+      "ppid": 23634,
+      "comm": "sh"
+    },
+    {
+      "pid": 23672,
+      "ppid": 23671,
+      "comm": "node"
+    },
+    {
+      "pid": 23673,
+      "ppid": 23672,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+    },
+    {
+      "pid": 23725,
+      "ppid": 23633,
+      "comm": "(node)"
+    },
+    {
+      "pid": 23751,
+      "ppid": 23725,
+      "comm": "npm"
+    },
+    {
+      "pid": 23777,
+      "ppid": 23751,
+      "comm": "node"
+    },
+    {
+      "pid": 23778,
+      "ppid": 23777,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    },
+    {
+      "pid": 23781,
+      "ppid": 23778,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 23788,
+      "ppid": 23778,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 23796,
+      "ppid": 23778,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 23803,
+      "ppid": 23778,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 23835,
+      "ppid": 23725,
+      "comm": "(node)"
+    },
+    {
+      "pid": 24274,
+      "ppid": 23835,
+      "comm": "(node)"
+    },
+    {
+      "pid": 24276,
+      "ppid": 24274,
+      "comm": "(node)"
+    },
+    {
+      "pid": 24279,
+      "ppid": 24276,
+      "comm": "(esbuild)"
+    },
+    {
+      "pid": 24280,
+      "ppid": 24276,
+      "comm": "(workerd)"
+    },
+    {
+      "pid": 24281,
+      "ppid": 24276,
+      "comm": "(esbuild)"
+    },
+    {
+      "pid": 24282,
+      "ppid": 24276,
+      "comm": "(workerd)"
+    },
+    {
+      "pid": 24283,
+      "ppid": 23579,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    },
+    {
+      "pid": 24285,
+      "ppid": 24283,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 24309,
+      "ppid": 24285,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 24310,
+      "ppid": 24285,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 24311,
+      "ppid": 24285,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 24314,
+      "ppid": 24285,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 24315,
+      "ppid": 24285,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 24316,
+      "ppid": 24285,
+      "comm": "/Applications/Google"
+    }
+  ],
+  "observed_remaining": [],
+  "temp_new_remaining": [
+    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-mwW1G8"
+  ],
+  "scan": {
+    "utc": "2026-09-14T05:52:08.872726+00:00",
+    "application_processes": [],
+    "reserved_listeners": {}
+  },
+  "fixed_restored_sha256": "376bd195ec8373c88c11774e5bb95daa643fef298f9b2d456e498002d1fa3a9c"
+}

@@ -1,0 +1,23 @@
+{
+  "head": "a4e1640156a468ac2ea3614d6a97c99ff234009c",
+  "parent": "77cde12b99cc63344251dc8bab34256f23216628",
+  "files": {
+    "docs/launch/demo/capture-child.mjs": "2962cb0248cb4fb6b9eafc1e41c980160b867ae61c2b34f8df8019642869bc77",
+    "docs/launch/demo/capture-child-deadline.test.mjs": "66c17cc2742b117ef3c4e323f579909a9f10027cab6041358f10b587f81de9bd"
+  },
+  "patch": "8e69db2dd251cb482f594cb56a521b4f51ca9f15ebd2bb20de9542c5895635bf",
+  "evidence": {
+    "after.json": "5819443c7a95bb6c18ab04edb6a1f55995293b81b2f31160e1173e779a29fbe4",
+    "before.json": "e557a237b546055c3c385db111feeb96b43c8ef207e3c57f8134a0ea06969a82",
+    "diagnostics.json": "8bee9956696612c0a6b68c857d6f9ead3a7437bb4e5bbaef554fce7bb9ad163c",
+    "fixed-command.json": "d8f84afbfda6c8a6c7d2ce145084a742cae48e6b41b5a559b6de6f401c2b841b",
+    "fixed.log": "5cf87a9a0151e295ce8b2e41b7cca0df6536c59c3c40a7568f3a8d9f42755c41",
+    "original-command.json": "1fc6dcb0fa7b490795b4b31161e134ebd60f404ce38f729101a62d30ee565e1a",
+    "original.log": "f324ba3d65888480a5bd553f76a9ab842ee832289536af8c170734218776ec8f",
+    "syntax-helper-command.json": "c03b13600a8a92b8ed3af72e897e4c7e2c98909492c0061c71c915a4ad6853a6",
+    "syntax-helper.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "syntax-test-command.json": "0aa2af3b4642007fe66540128a8662218d8f01867737b6d171fbbfb99155316c",
+    "syntax-test.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "qa": "f628b53 CLOSED source/evidence/exact assembly"
+}

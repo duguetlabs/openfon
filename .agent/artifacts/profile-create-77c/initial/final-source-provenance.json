@@ -1,0 +1,18 @@
+{
+  "artifacts": {
+    ".agent/artifacts/profile-create-77c.patch": "34c4623114e12780ac003f1f3907a721d9b37aeb923da58ca2ab8c43ef40f749",
+    ".agent/artifacts/profile-create-77c/original-Settings.tsx.txt": "57c5f03f1035a96cde0ef5c02f159b707ed27086c76ee335c1643fb1d5b048ae",
+    ".agent/artifacts/profile-create-77c/fixed-Settings.tsx.txt": "376bd195ec8373c88c11774e5bb95daa643fef298f9b2d456e498002d1fa3a9c",
+    ".agent/artifacts/profile-create-77c/profile-create-pending.spec.ts": "920571929397888153e8c5218688e10072ffe487ded78beae423ed1d1a67ae7d"
+  },
+  "active_snapshot": {
+    "web/src/pages/Settings.tsx": "376bd195ec8373c88c11774e5bb95daa643fef298f9b2d456e498002d1fa3a9c",
+    "e2e/profile-create-pending.spec.ts": "920571929397888153e8c5218688e10072ffe487ded78beae423ed1d1a67ae7d"
+  },
+  "companions": {
+    "e2e/profile-rename-actions.spec.ts": "159c93b92c03ff1e5563fb9782b65141a863ffc198e7b3e67ba4485fd0073f2b",
+    "e2e/confirmation-refresh.spec.ts": "731a234a49b63dcae1fccf31192c891c0d6f483011ac866ff383eb914d108c8e",
+    "e2e/profile-rename-recovery.spec.ts": "e82b091f161f931b4398edca43b913a1e64f3e6ae62aa2f4d50ad00fd70f5c89"
+  },
+  "source_and_fixture_unchanged": true
+}

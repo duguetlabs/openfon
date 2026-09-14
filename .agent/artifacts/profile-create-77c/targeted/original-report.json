@@ -1,0 +1,166 @@
+{
+  "config": {
+    "argv": [
+      "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node",
+      "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/node_modules/.bin/playwright",
+      "test",
+      "e2e/profile-create-pending.spec.ts",
+      "--grep",
+      "one pending create admits one POST and one persisted id with confirmed no-op blur$",
+      "--workers=1",
+      "--retries=0",
+      "--output=/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/targeted-duplicate-20260914T055049Z/original-browser-results",
+      "--reporter=line,json"
+    ],
+    "configFile": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/playwright.config.ts",
+    "rootDir": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/targeted-duplicate-20260914T055049Z/original-browser-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "line"
+      ],
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": {
+      "command": "npm run build && node scripts/e2e-server.mjs",
+      "url": "http://localhost:8812",
+      "reuseExistingServer": false,
+      "timeout": 120000
+    }
+  },
+  "suites": [
+    {
+      "title": "profile-create-pending.spec.ts",
+      "file": "profile-create-pending.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "one pending create admits one POST and one persisted id with confirmed no-op blur",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 4878,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m1\u001b[39m\nReceived: \u001b[31m2\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m1\u001b[39m\nReceived: \u001b[31m2\u001b[39m\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:96:18",
+                    "location": {
+                      "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                      "column": 18,
+                      "line": 96
+                    },
+                    "snippet": "  94 |     const saved = await persisted(page, path);\n  95 |     console.log('create-duplicate-diagnostic', JSON.stringify({ sent, saved: saved.map(p => ({ id: p.id, name: p.name })), listReads }));\n> 96 |     expect(sent).toBe(1);\n     |                  ^\n  97 |     expect(saved.filter(p => p.name === 'Created profile')).toHaveLength(1);\n  98 |     expect(listReads).toBe(0);\n  99 |     await expect(page.getByText('Profile saved.', { exact: true })).toBeVisible();"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                        "column": 18,
+                        "line": 96
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m1\u001b[39m\nReceived: \u001b[31m2\u001b[39m\n\n  94 |     const saved = await persisted(page, path);\n  95 |     console.log('create-duplicate-diagnostic', JSON.stringify({ sent, saved: saved.map(p => ({ id: p.id, name: p.name })), listReads }));\n> 96 |     expect(sent).toBe(1);\n     |                  ^\n  97 |     expect(saved.filter(p => p.name === 'Created profile')).toHaveLength(1);\n  98 |     expect(listReads).toBe(0);\n  99 |     await expect(page.getByText('Profile saved.', { exact: true })).toBeVisible();\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:96:18"
+                    }
+                  ],
+                  "stdout": [
+                    {
+                      "text": "create-duplicate-diagnostic {\"sent\":2,\"saved\":[{\"id\":\"06318a8b-b5ac-4bad-908e-6ab889b18877\",\"name\":\"Original profile\"},{\"id\":\"b013690c-923d-4b54-a163-8067a047ce72\",\"name\":\"Created profile\"},{\"id\":\"cac963b1-1f86-405d-899c-5b670dfb19a3\",\"name\":\"Created profile\"}],\"listReads\":0}\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T05:51:25.007Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/targeted-duplicate-20260914T055049Z/original-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/targeted-duplicate-20260914T055049Z/original-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                    "column": 18,
+                    "line": 96
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "5d38282983314d9d30ea-eedbaab93d96ace7bcf2",
+          "file": "profile-create-pending.spec.ts",
+          "line": 76,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-09-14T05:51:15.608Z",
+    "duration": 15733.651,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 1,
+    "flaky": 0
+  }
+}

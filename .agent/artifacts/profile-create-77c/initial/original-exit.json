@@ -1,0 +1,626 @@
+{
+  "exit": 1,
+  "duration_seconds": 109.732,
+  "observed_processes": [
+    {
+      "pid": 77854,
+      "ppid": 77618,
+      "comm": "<defunct>"
+    },
+    {
+      "pid": 77875,
+      "ppid": 77854,
+      "comm": "node"
+    },
+    {
+      "pid": 77879,
+      "ppid": 77875,
+      "comm": "(bash)"
+    },
+    {
+      "pid": 77880,
+      "ppid": 77879,
+      "comm": "npm"
+    },
+    {
+      "pid": 77905,
+      "ppid": 77880,
+      "comm": "sh"
+    },
+    {
+      "pid": 77906,
+      "ppid": 77905,
+      "comm": "node"
+    },
+    {
+      "pid": 77908,
+      "ppid": 77906,
+      "comm": "/Users/cristian/"
+    },
+    {
+      "pid": 77912,
+      "ppid": 77879,
+      "comm": "(node)"
+    },
+    {
+      "pid": 77938,
+      "ppid": 77912,
+      "comm": "npm"
+    },
+    {
+      "pid": 77965,
+      "ppid": 77938,
+      "comm": "node"
+    },
+    {
+      "pid": 77966,
+      "ppid": 77965,
+      "comm": "/Users/cristian/"
+    },
+    {
+      "pid": 77992,
+      "ppid": 77966,
+      "comm": "/Users/cristian/"
+    },
+    {
+      "pid": 77997,
+      "ppid": 77966,
+      "comm": "(workerd)"
+    },
+    {
+      "pid": 78005,
+      "ppid": 77966,
+      "comm": "/Users/cristian/"
+    },
+    {
+      "pid": 78011,
+      "ppid": 77966,
+      "comm": "/Users/cristian/"
+    },
+    {
+      "pid": 78232,
+      "ppid": 77966,
+      "comm": "/Users/cristian/"
+    },
+    {
+      "pid": 78271,
+      "ppid": 77912,
+      "comm": "(node)"
+    },
+    {
+      "pid": 78302,
+      "ppid": 78271,
+      "comm": "(node)"
+    },
+    {
+      "pid": 78304,
+      "ppid": 78302,
+      "comm": "(node)"
+    },
+    {
+      "pid": 78307,
+      "ppid": 78304,
+      "comm": "(esbuild)"
+    },
+    {
+      "pid": 78310,
+      "ppid": 78304,
+      "comm": "(workerd)"
+    },
+    {
+      "pid": 78312,
+      "ppid": 78304,
+      "comm": "(esbuild)"
+    },
+    {
+      "pid": 78318,
+      "ppid": 78304,
+      "comm": "(workerd)"
+    },
+    {
+      "pid": 78325,
+      "ppid": 77875,
+      "comm": "/Users/cristian/"
+    },
+    {
+      "pid": 78326,
+      "ppid": 78325,
+      "comm": "(Google"
+    },
+    {
+      "pid": 78332,
+      "ppid": 78326,
+      "comm": "(Google"
+    },
+    {
+      "pid": 78333,
+      "ppid": 78326,
+      "comm": "(Google"
+    },
+    {
+      "pid": 78335,
+      "ppid": 78326,
+      "comm": "(Google"
+    },
+    {
+      "pid": 78338,
+      "ppid": 78326,
+      "comm": "<defunct>"
+    },
+    {
+      "pid": 78339,
+      "ppid": 78326,
+      "comm": "<defunct>"
+    },
+    {
+      "pid": 78340,
+      "ppid": 78326,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 78843,
+      "ppid": 77875,
+      "comm": "/Users/cristian/"
+    },
+    {
+      "pid": 79024,
+      "ppid": 78843,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79035,
+      "ppid": 79024,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79036,
+      "ppid": 79024,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79037,
+      "ppid": 79024,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79039,
+      "ppid": 79024,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79040,
+      "ppid": 79024,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79041,
+      "ppid": 79024,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79283,
+      "ppid": 77875,
+      "comm": "/Users/cristian/"
+    },
+    {
+      "pid": 79284,
+      "ppid": 79283,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79290,
+      "ppid": 79284,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79291,
+      "ppid": 79284,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79292,
+      "ppid": 79284,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79293,
+      "ppid": 79284,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79296,
+      "ppid": 79284,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79297,
+      "ppid": 79284,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79298,
+      "ppid": 79284,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79345,
+      "ppid": 77875,
+      "comm": "/Users/cristian/"
+    },
+    {
+      "pid": 79347,
+      "ppid": 79345,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79351,
+      "ppid": 79347,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79352,
+      "ppid": 79347,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79353,
+      "ppid": 79347,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79354,
+      "ppid": 79347,
+      "comm": "<defunct>"
+    },
+    {
+      "pid": 79355,
+      "ppid": 79347,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79356,
+      "ppid": 79347,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79357,
+      "ppid": 79347,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79591,
+      "ppid": 77875,
+      "comm": "/Users/cristian/"
+    },
+    {
+      "pid": 79592,
+      "ppid": 79591,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79596,
+      "ppid": 79592,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79597,
+      "ppid": 79592,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79598,
+      "ppid": 79592,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79599,
+      "ppid": 79592,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79602,
+      "ppid": 79592,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79603,
+      "ppid": 79592,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79604,
+      "ppid": 79592,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79627,
+      "ppid": 79592,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79628,
+      "ppid": 79592,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 79629,
+      "ppid": 79592,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80306,
+      "ppid": 77875,
+      "comm": "/Users/cristian/"
+    },
+    {
+      "pid": 80307,
+      "ppid": 80306,
+      "comm": "(Google"
+    },
+    {
+      "pid": 80316,
+      "ppid": 80307,
+      "comm": "(Google"
+    },
+    {
+      "pid": 80317,
+      "ppid": 80307,
+      "comm": "(Google"
+    },
+    {
+      "pid": 80318,
+      "ppid": 80307,
+      "comm": "(Google"
+    },
+    {
+      "pid": 80319,
+      "ppid": 80307,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80321,
+      "ppid": 80307,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80322,
+      "ppid": 80307,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80323,
+      "ppid": 80307,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80333,
+      "ppid": 80307,
+      "comm": "(Google"
+    },
+    {
+      "pid": 80400,
+      "ppid": 80307,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80421,
+      "ppid": 80307,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80423,
+      "ppid": 80307,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80584,
+      "ppid": 80307,
+      "comm": "<defunct>"
+    },
+    {
+      "pid": 80585,
+      "ppid": 80307,
+      "comm": "<defunct>"
+    },
+    {
+      "pid": 80586,
+      "ppid": 80307,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80598,
+      "ppid": 77875,
+      "comm": "/Users/cristian/"
+    },
+    {
+      "pid": 80600,
+      "ppid": 80598,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80604,
+      "ppid": 80600,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80605,
+      "ppid": 80600,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80606,
+      "ppid": 80600,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80607,
+      "ppid": 80600,
+      "comm": "<defunct>"
+    },
+    {
+      "pid": 80628,
+      "ppid": 80600,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80629,
+      "ppid": 80600,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80630,
+      "ppid": 80600,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80873,
+      "ppid": 77875,
+      "comm": "/Users/cristian/"
+    },
+    {
+      "pid": 80874,
+      "ppid": 80873,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80878,
+      "ppid": 80874,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80879,
+      "ppid": 80874,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80880,
+      "ppid": 80874,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80881,
+      "ppid": 80874,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80883,
+      "ppid": 80874,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80884,
+      "ppid": 80874,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 80885,
+      "ppid": 80874,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 81096,
+      "ppid": 80874,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 81108,
+      "ppid": 80874,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 81110,
+      "ppid": 80874,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 81332,
+      "ppid": 80874,
+      "comm": "<defunct>"
+    },
+    {
+      "pid": 81333,
+      "ppid": 80874,
+      "comm": "<defunct>"
+    },
+    {
+      "pid": 81334,
+      "ppid": 80874,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 81751,
+      "ppid": 80874,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 81752,
+      "ppid": 80874,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 81753,
+      "ppid": 80874,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 82243,
+      "ppid": 77875,
+      "comm": "(node)"
+    },
+    {
+      "pid": 82266,
+      "ppid": 82243,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 82272,
+      "ppid": 82266,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 82274,
+      "ppid": 82266,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 82275,
+      "ppid": 82266,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 82276,
+      "ppid": 82266,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 82286,
+      "ppid": 82266,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 82288,
+      "ppid": 82266,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 82289,
+      "ppid": 82266,
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": 82305,
+      "ppid": 82266,
+      "comm": "(Google"
+    }
+  ],
+  "observed_remaining": [],
+  "temp_new_remaining": [
+    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-2KKE8a"
+  ],
+  "scan": {
+    "utc": "2026-09-14T05:39:05.737532+00:00",
+    "application_processes": [],
+    "reserved_listeners": {}
+  },
+  "fixed_restored_sha256": "376bd195ec8373c88c11774e5bb95daa643fef298f9b2d456e498002d1fa3a9c"
+}

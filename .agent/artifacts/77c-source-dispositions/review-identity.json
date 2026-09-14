@@ -1,0 +1,23 @@
+{
+  "head": "77cde12b99cc63344251dc8bab34256f23216628",
+  "review": "https://github.com/duguetlabs/openfon/pull/16#issuecomment-5659360760",
+  "artifact_sha256": "6d438ab4d60cd0bf8846c96a9b676f9537fef4d02033d2efb089c3286e82f2ad",
+  "body_sha256": "de9255163e4ea87a4a809423485e7621e60f60f521bd341c4cfcb6dbecb023b3",
+  "disposition": "https://github.com/duguetlabs/openfon/pull/16#issuecomment-5659396342",
+  "disposition_body_sha256": "3a3dc987c30fd17a71c4c3a7a5505e3e2642ce003109f4e902a98cc31cbd9d08",
+  "ci": [
+    34808711170,
+    34808744233
+  ],
+  "ci_result": "Both four required jobs passed; deployment skipped.",
+  "ci_check": {
+    "job": 103865589622,
+    "tests": 1444,
+    "files": 60,
+    "duration": "15.37s",
+    "types": "Worker/web PASS",
+    "build": "PASS",
+    "log_sha256": "a3c29f05c2d73c86f627b00c47beb2d9ba29ffba7c7cdaa8e8db4814337d7066"
+  },
+  "limits": "No new local runtime; exact source/config plus remote CI. Creation/cleanup separately selected corrections not declined. No clean-major clearance."
+}
