@@ -11,6 +11,53 @@ findings from every reviewer still require verification and disposition. No new
 Codex review is requested or awaited. Historical dual-review references below
 record earlier requirements; this policy governs the current release.
 
+## Preset concurrency and Docker ownership
+
+Original `a8752a36` [review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5657939149)
+reported no security concerns and four recommendations, without clean-major
+clearance. Both exact-head CI runs passed; deployment was skipped.
+
+Both partial preset/profile PUT routes now compare the seven fields captured
+by their merge before the first write. A conflict skips the mirrored write and
+returns409; successful writes preserve existing quotas, credential scrubbing
+and missing-mirror behavior. This covers handler-read-to-write changes, not a
+full client payload already stale before the request or values changed and
+restored identically.
+
+Apply now requires the selected saved source to still exist in the same
+workspace with its six copied values at the first assistant write. This is an
+explicitly selected stronger source-at-write contract. Source name-only renames
+remain allowed. Intentional replacement of the target assistant's six engine
+fields remains unchanged; unrelated greeting/persona fields survive. No whole
+assistant CAS, source generation/version, schema or target-identity redesign
+is added. Prior qualified target-overwrite declines do not cover this new
+source-snapshot guarantee.
+
+Owner126 focused tests and both types pass. Original46 tests retain35failures/
+11controls; original production Node-handler/native-D1 evidence confirms a
+concurrent accepted voice was erased from both profile rows. Fixed16native
+groups cover four409/all-zero/full-snapshot conflicts, accepted save2/Apply1
+charges, name-only source rename/intentional target replacement, missing mirrors
+with one charge, and quota/late rollback. These are held-batch Node-handler+
+workerd-D1 tests, not full workerd-handler concurrent-request or live evidence.
+
+The Asterisk runtime ownership correction requires an invocation label and
+verified immutable full container ID before exec, diagnostic logs or removal.
+Ambiguous creation can recover only the attempted invocation's matching label;
+pre-run proxy failure triggers no lookup. Unknown ownership authorizes no
+container effect, and name reuse cannot redirect cleanup. Daemon selection,
+Desktop/Linux networking and loopback containment remain unchanged. Real
+Docker/Linux execution is not implied by the command-flow tests.
+
+Ownership validation passes21 tests (12new plus9 unchanged runtime/network),
+syntax and both types. Original12 retains11 failures and one automatic-removal
+control pass; cases stop at their first failing assertion. These tests exercise
+the actual runtime with fake Docker/HTTP/WebSocket, not real daemon or OS socket
+teardown. Independent QA closed the exact eight-file combined assembly01912c2.
+Its full suite passes1,266 tests across55 files in23.83s and both Worker/web
+typechecks pass. Fresh published-head review and CI remain pending; prior
+review findings do not constitute clean-major clearance.
+
 ## Legacy profile engine validation
 
 Original `8f5b1d59` [review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5657859272)
