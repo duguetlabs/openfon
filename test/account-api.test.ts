@@ -38,7 +38,9 @@ afterEach(() => { db.close(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('account self service', () => {
   it('requires authentication for export and mutations', async () => {
-    expect((await call('/api/me/account/export', 'GET', undefined, 'invalid')).status).toBe(401);
+    const response = await call('/api/me/account/export', 'GET', undefined, 'invalid');
+    expect(response.status).toBe(401);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect((await call('/api/me/account', 'DELETE', { confirmation: 'DELETE', currentPassword: password }, 'invalid')).status).toBe(401);
   });
 
@@ -99,6 +101,9 @@ describe('account self service', () => {
     db.database.prepare('INSERT INTO call_turns (call_id,role,text) VALUES (?,?,?)').run('call-owner', 'caller', 'My question');
     const response = await call('/api/me/account/export');
     expect(response.status).toBe(200);
+    // The registered account route inherits private-API middleware headers.
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(response.headers.get('Content-Disposition')).toContain('attachment');
     const text = await response.text();
     for (const forbidden of ['provider-secret', 'profile-secret', oldHash, 'owner-session', 'other@example.test', 'biz-other']) expect(text).not.toContain(forbidden);
     expect(text).toContain('My question');

@@ -68,6 +68,7 @@ export default function Settings() {
   const [refreshFailed, setRefreshFailed] = useState(false);
   const [profiles, setProfiles] = useState<EngineProfile[]>([]);
   const [profileRefreshPending, setProfileRefreshPending] = useState(false);
+  const profileRefreshKind = useRef<'apply' | 'delete'>('apply');
   const profileListGeneration = useRef(0);
   const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
   const [newProfileName, setNewProfileName] = useState('');
@@ -139,17 +140,21 @@ export default function Settings() {
   }
   async function refreshProfileDisplay() {
     try {
-      await refresh();
-      // Effects and explicit recovery share dispatch order. If an independent
-      // provider refresh starts a newer read, await its result instead of letting
-      // this older snapshot supersede it or declaring recovery prematurely.
-      let pending = readSettings();
-      let applied = await pending;
-      while (settingsRead.current && settingsRead.current !== pending) {
-        pending = settingsRead.current;
-        applied = await pending;
+      // Deletion changes only this list. Avoid an unrelated session refresh
+      // and the effect-driven second list request it would start.
+      if (profileRefreshKind.current === 'apply') {
+        await refresh();
+        // Effects and explicit recovery share dispatch order. If an independent
+        // provider refresh starts a newer read, await its result instead of letting
+        // this older snapshot supersede it or declaring recovery prematurely.
+        let pending = readSettings();
+        let applied = await pending;
+        while (settingsRead.current && settingsRead.current !== pending) {
+          pending = settingsRead.current;
+          applied = await pending;
+        }
+        if (!applied) throw new Error('Settings changed during the read. Retry the refresh.');
       }
-      if (!applied) throw new Error('Settings changed during the read. Retry the refresh.');
       if (!loaded.current) throw new Error('Workspace unavailable');
       if (!await loadProfiles(loaded.current.business.id)) throw new Error('A newer profile read started. Retry the refresh to confirm the latest list.');
       setProfileRefreshPending(false); setError('');
@@ -163,6 +168,7 @@ export default function Settings() {
     try {
       await action();
       mutationGeneration.current++; profileListGeneration.current++;
+      profileRefreshKind.current = deletedId ? 'delete' : 'apply';
       if (deletedId) setProfiles(current => current.filter(row => row.id !== deletedId));
       setSaved(message); setProfileRefreshPending(true);
       await refreshProfileDisplay();
