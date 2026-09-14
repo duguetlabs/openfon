@@ -23,6 +23,28 @@ const EXPORT_COLUMNS: Record<string, string[]> = {
   assistant_knowledge_collections: ['assistant_id', 'collection_id', 'attached_at'],
 };
 const EXPORT_BYTE_LIMIT = 4 * 1024 * 1024;
+const EXPORT_URL_COLUMNS: Record<string, readonly string[]> = {
+  agent_settings: ['llm_base_url'],
+  provider_settings: ['llm_base_url', 'stt_base_url', 'realtime_base_url'],
+  engine_profiles: ['llm_base_url'],
+};
+const EXPORT_TOO_LARGE = 'This account is too large for browser export. Ask your deployment administrator for a database export.';
+
+function exportedProviderUrl(value: unknown): string | null {
+  if (value === null || value === '') return value;
+  if (typeof value !== 'string') return '';
+  try {
+    const url = new URL(value);
+    if (!['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol)) return '';
+    // Endpoint metadata only: arbitrary query names can carry credentials.
+    // This intentionally omits query routing and never mutates stored settings.
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    url.hash = '';
+    return url.href;
+  } catch { return ''; }
+}
 
 export function registerAccountApi(app: App): void {
   app.use('/api/me/account/*', bodyLimit({ maxSize: 16 * 1024, onError: (c) => c.json({ error: 'Account request is too large.' }, 413) }));
@@ -159,18 +181,32 @@ export function registerAccountApi(app: App): void {
       .bind(...bindings).all<{ table_name: string | null; payload: string | null; bytes: number; largest_row: number; too_many: number }>();
     const measurement = result.results.find(row => row.table_name === null);
     if (!measurement || measurement.bytes > EXPORT_BYTE_LIMIT - 4096 || measurement.largest_row > 1_500_000 || measurement.too_many) {
-      return c.json({ error: 'This account is too large for browser export. Ask your deployment administrator for a database export.' }, 413);
+      return c.json({ error: EXPORT_TOO_LARGE }, 413);
     }
     let account: RecordRow | null = null;
+    let outputBytes = 0;
+    const encoder = new TextEncoder();
     for (const table of Object.keys(EXPORT_COLUMNS)) data[table] = [];
     for (const row of result.results) {
       if (row.table_name === null || row.payload === null) continue;
       const item = JSON.parse(row.payload) as RecordRow;
+      for (const column of EXPORT_URL_COLUMNS[row.table_name] ?? []) {
+        item[column] = exportedProviderUrl(item[column]);
+      }
+      // URL serialization can expand Unicode/escaping. Keep the original SQL
+      // preallocation gates and also bound transformed rows before accumulation.
+      const rowBytes = encoder.encode(JSON.stringify(item)).byteLength;
+      outputBytes += rowBytes + 1;
+      if (rowBytes > 1_500_000 || outputBytes > EXPORT_BYTE_LIMIT - 4096) {
+        return c.json({ error: EXPORT_TOO_LARGE }, 413);
+      }
       if (row.table_name === 'users') account = item;
       else data[row.table_name].push(item);
     }
+    const body = JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), account, data });
+    if (encoder.encode(body).byteLength > EXPORT_BYTE_LIMIT) return c.json({ error: EXPORT_TOO_LARGE }, 413);
     c.header('Content-Disposition', 'attachment; filename="openfon-account.json"');
-    return c.json({ schemaVersion: 1, exportedAt: new Date().toISOString(), account, data });
+    return c.body(body, 200, { 'Content-Type': 'application/json' });
   });
 
   app.delete('/api/me/account', accountLimit('mutation'), async (c) => {

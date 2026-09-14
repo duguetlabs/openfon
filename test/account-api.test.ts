@@ -125,6 +125,143 @@ describe('account self service', () => {
     });
   });
 
+  function snapshotExceptExportCharge() {
+    const tables = db.database.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as Array<{ name: string }>;
+    return Object.fromEntries(tables.map(({ name }) => [name,
+      (db.database.prepare(`SELECT * FROM "${name.replaceAll('"', '""')}"`).all() as Array<Record<string, unknown>>)
+        .filter(row => name !== 'rate_counters' || row.bucket !== 'account:export:owner')
+        .map(row => JSON.stringify(row)).sort(),
+    ]));
+  }
+
+  it('exports historical owned data with sanitized provider URLs in all five locations [export-url]', async () => {
+    const url = 'HtTpS://user:encoded%2Dsecret@provider.example/v1?unknown=query-canary&unknown=second#fragment-canary';
+    db.database.prepare('INSERT INTO agent_settings(business_id,llm_base_url,llm_api_key) VALUES (?,?,?)')
+      .run('biz-owner', url, 'dedicated-canary');
+    db.database.prepare('INSERT INTO engine_profiles(id,business_id,name,llm_base_url) VALUES (?,?,?,?)')
+      .run('historical-url', 'biz-owner', 'Retain name', url);
+    db.database.prepare('INSERT INTO provider_settings(business_id,llm_base_url,stt_base_url,realtime_base_url) VALUES (?,?,?,?)')
+      .run('biz-owner', url, url.replace('HtTpS:', 'http:'), url.replace('HtTpS:', 'wss:'));
+    db.database.prepare('UPDATE businesses SET website=? WHERE id=?').run('https://site.example/?routing=keep', 'biz-owner');
+    const before = snapshotExceptExportCharge();
+    const response = await call('/api/me/account/export');
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(response.headers.get('Content-Disposition')).toContain('attachment');
+    const body = await response.text();
+    const { data } = JSON.parse(body);
+    expect(data.agent_settings[0].llm_base_url).toBe('https://provider.example/v1');
+    expect(data.engine_profiles[0].llm_base_url).toBe('https://provider.example/v1');
+    expect(data.provider_settings[0]).toMatchObject({ llm_base_url: 'https://provider.example/v1',
+      stt_base_url: 'http://provider.example/v1', realtime_base_url: 'wss://provider.example/v1' });
+    for (const canary of ['encoded%2Dsecret', 'query-canary', 'fragment-canary', 'dedicated-canary']) expect(body).not.toContain(canary);
+    expect(data.engine_profiles[0].name).toBe('Retain name');
+    expect(data.businesses[0].website).toBe('https://site.example/?routing=keep');
+    expect(snapshotExceptExportCharge()).toEqual(before);
+    expect(db.database.prepare('SELECT count FROM rate_counters WHERE bucket=?').get('account:export:owner')).toMatchObject({ count: 1 });
+  });
+
+  it('exports a currently accepted query-bearing text provider without its query credentials [export-url]', async () => {
+    const saved = await call('/api/me/provider', 'PUT', {
+      baseUrl: 'https://text.example/v1?arbitrary=query-canary&target=route#fragment-canary', apiKey: 'own-provider-key',
+    });
+    expect(saved.status).toBe(200);
+    expect(db.database.prepare('SELECT llm_base_url,llm_api_key FROM provider_settings WHERE business_id=?').get('biz-owner'))
+      .toMatchObject({ llm_base_url: 'https://text.example/v1?arbitrary=query-canary&target=route#fragment-canary', llm_api_key: 'own-provider-key' });
+    const before = snapshotExceptExportCharge();
+    const response = await call('/api/me/account/export');
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(JSON.parse(body).data.provider_settings[0].llm_base_url).toBe('https://text.example/v1');
+    expect(body).not.toContain('query-canary');
+    expect(body).not.toContain('fragment-canary');
+    expect(body).not.toContain('own-provider-key');
+    expect(snapshotExceptExportCharge()).toEqual(before);
+  });
+
+  for (const url of ['not an absolute URL?token=bad-canary', 'https://[bad/?token=bad-canary', 'data:text/plain,bad-canary', 'file:///private/bad-canary']) {
+    it(`blanks malformed or unsupported provider URL ${url.split(':')[0]} [export-url]`, async () => {
+      db.database.prepare('INSERT INTO provider_settings(business_id,llm_base_url,stt_base_url,realtime_base_url) VALUES (?,?,?,?)')
+        .run('biz-owner', url, url, url);
+      const before = snapshotExceptExportCharge();
+      const response = await call('/api/me/account/export');
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      expect(JSON.parse(text).data.provider_settings[0]).toMatchObject({ llm_base_url: '', stt_base_url: '', realtime_base_url: '' });
+      expect(text).not.toContain('bad-canary');
+      expect(snapshotExceptExportCharge()).toEqual(before);
+    });
+  }
+
+  it('retains safe endpoint metadata and bounds serialized Unicode growth [export-url]', async () => {
+    const original = 'HTTPS://bücher.example/日 本';
+    db.database.prepare('INSERT INTO provider_settings(business_id,llm_base_url,stt_base_url,realtime_base_url) VALUES (?,?,?,?)')
+      .run('biz-owner', original, '', 'ws://localhost:8080/v1');
+    const before = snapshotExceptExportCharge();
+    const response = await call('/api/me/account/export');
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    const provider = JSON.parse(text).data.provider_settings[0];
+    expect(provider).toMatchObject({ llm_base_url: 'https://xn--bcher-kva.example/%E6%97%A5%20%E6%9C%AC', stt_base_url: '', realtime_base_url: 'ws://localhost:8080/v1' });
+    expect(new TextEncoder().encode(provider.llm_base_url).length).toBeGreaterThan(new TextEncoder().encode(original).length);
+    expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(4 * 1024 * 1024);
+    expect(snapshotExceptExportCharge()).toEqual(before);
+  });
+
+  for (const mode of ['row', 'aggregate'] as const) {
+    it(`refuses URL serialization growth beyond the ${mode} output budget [export-url]`, async () => {
+      // Synthetic SQL-result boundary to exercise the independent post-transform
+      // guard. Existing tests separately prove real raw/SQL preallocation refusal.
+      db.exec("INSERT INTO provider_settings(business_id) VALUES ('biz-owner')");
+      const prepare = db.prepare.bind(db);
+      vi.spyOn(db, 'prepare').mockImplementation(sql => {
+        const statement = prepare(sql);
+        if (sql.startsWith('WITH ')) {
+          const all = statement.all.bind(statement);
+          statement.all = async <T>() => {
+            const result = await all<{ table_name: string; payload: string }>();
+            const row = result.results.find(item => item.table_name === 'provider_settings')!;
+            const item = JSON.parse(row.payload);
+            item.llm_base_url = `https://provider.example/${'é'.repeat(mode === 'row' ? 260000 : 180000)}`;
+            row.payload = JSON.stringify(item);
+            if (mode === 'aggregate') for (let i = 0; i < 3; i++) result.results.push({ ...row });
+            return result as unknown as Awaited<ReturnType<typeof statement.all<T>>>;
+          };
+        }
+        return statement;
+      });
+      const response = await call('/api/me/account/export');
+      expect(response.status).toBe(413);
+      expect(response.headers.get('Content-Disposition')).toBeNull();
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      expect((await response.text()).length).toBeLessThan(1024);
+    });
+  }
+
+  it('preserves nullable historical payload metadata [export-url]', async () => {
+    // Synthetic SQL-result boundary: current provider URL columns are NOT NULL.
+    // Exercise legacy/null payload tolerance without weakening the schema.
+    db.exec("INSERT INTO provider_settings(business_id) VALUES ('biz-owner')");
+    const prepare = db.prepare.bind(db);
+    vi.spyOn(db, 'prepare').mockImplementation(sql => {
+      const statement = prepare(sql);
+      if (sql.startsWith('WITH ')) {
+        const all = statement.all.bind(statement);
+        statement.all = async <T>() => {
+          const result = await all<{ table_name: string; payload: string }>();
+          for (const row of result.results) if (row.table_name === 'provider_settings') {
+            const item = JSON.parse(row.payload); item.llm_base_url = null; row.payload = JSON.stringify(item);
+          }
+          return result as unknown as Awaited<ReturnType<typeof statement.all<T>>>;
+        };
+      }
+      return statement;
+    });
+    const response = await call('/api/me/account/export');
+    expect(response.status).toBe(200);
+    expect((await response.json() as any).data.provider_settings[0].llm_base_url).toBeNull();
+  });
+
   it('reads account, calls and turns in one snapshot when finalization happens between operations', async () => {
     db.exec("INSERT INTO calls(id,business_id,status) VALUES ('snapshot-call','biz-owner','active')");
     let exportReads = 0;
