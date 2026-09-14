@@ -29,7 +29,8 @@ function boundedUtf8(text: string, limit: number): number {
 
 export function parseRealtimeMessage(raw: unknown): Record<string, unknown> {
   if (typeof raw !== 'string' || boundedUtf8(raw, MAX_REALTIME_JSON_BYTES) < 0) invalid();
-  const msg: unknown = JSON.parse(raw);
+  let msg: unknown;
+  try { msg = JSON.parse(raw); } catch { invalid(); }
   if (!msg || typeof msg !== 'object' || Array.isArray(msg)) invalid();
   const event = msg as Record<string, unknown>;
   if (event.type === 'response.output_audio.delta' &&

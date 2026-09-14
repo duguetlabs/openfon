@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { decodeRealtimeAudio, parseRealtimeMessage, MAX_REALTIME_JSON_BYTES, MAX_REALTIME_AUDIO_BASE64, MAX_REALTIME_AUDIO_BYTES } from '../src/realtime-input';
+import { RealtimeInputError, decodeRealtimeAudio, parseRealtimeMessage, MAX_REALTIME_JSON_BYTES, MAX_REALTIME_AUDIO_BASE64, MAX_REALTIME_AUDIO_BYTES } from '../src/realtime-input';
 
 afterEach(() => vi.restoreAllMocks());
 describe('realtime input allocation bounds', () => {
@@ -53,5 +53,44 @@ describe('realtime transcript field bounds', () => {
     expect(parseRealtimeMessage(JSON.stringify({ type, transcript: '' })).transcript).toBe('');
     const escaped = '{"type":"' + type + '","transcript":"' + '\\u20ac'.repeat(2731) + '"}';
     expect(() => parseRealtimeMessage(escaped)).toThrow();
+  });
+});
+
+
+describe('realtime parser fixed error contract', () => {
+  const canary = 'SYNTHETIC_PARSER_CANARY_5657485256';
+  const fixedMessage = 'Invalid or oversized realtime provider message';
+  const assertFixedError = (raw: string) => {
+    let caught: unknown;
+    try { parseRealtimeMessage(raw); } catch (error) { caught = error; }
+    expect(caught).toBeInstanceOf(RealtimeInputError);
+    expect((caught as Error).message).toBe(fixedMessage);
+    expect(String(caught)).not.toContain(canary);
+    expect((caught as Error).stack).not.toContain(canary);
+    expect(Object.prototype.hasOwnProperty.call(caught, 'cause')).toBe(false);
+    expect(Object.keys(caught as object)).toEqual([]);
+  };
+
+  it.each([
+    `not-json ${canary}`,
+    `{"type":"response.output_audio_transcript.done","transcript":"${canary}`,
+    `{"type":"test","text":"${canary}",}`,
+    `{"type":"test"} ${canary}`,
+  ])('normalizes malformed JSON without retaining the synthetic canary: %s', raw => {
+    assertFixedError(raw);
+  });
+
+  it('discards a native parse error and its provider-controlled diagnostic properties', () => {
+    const parseError = new SyntaxError(`Unexpected token in ${canary}`);
+    Object.assign(parseError, { payload: canary, cause: new Error(canary) });
+    vi.spyOn(JSON, 'parse').mockImplementationOnce(() => { throw parseError; });
+    assertFixedError(`{"synthetic":"${canary}"}`);
+  });
+
+  it('preserves valid unknown events and escaped transcript content', () => {
+    const event = { type: 'future.event', text: `quotes " and newline\n${canary}` };
+    expect(parseRealtimeMessage(JSON.stringify(event))).toEqual(event);
+    const transcript = { type: 'response.output_audio_transcript.done', transcript: `hello\n${canary}` };
+    expect(parseRealtimeMessage(JSON.stringify(transcript))).toEqual(transcript);
   });
 });
