@@ -12,9 +12,9 @@
   "qa_source": "073511b",
   "scope": "Seven serial commands; original new10 API/new8 browser; fixed new10 API and separately only6 activation controls, Worker+web types, new8+named1 browser. No retries/edits/native/other scope.",
   "tool_sessions": {
-    "original_orchestration": 4783,
-    "fixed_orchestration": 63654,
-    "cleanup": 46929
+    "original_orchestration": "private-ref:baff4a0bfb524e8a88fb9c47fd99901a",
+    "fixed_orchestration": "private-ref:7211d045d1654c1e887c3094b7cacad0",
+    "cleanup": "private-ref:20c4c6d0541c41b78f2370dfc5addfad"
   },
   "browser": {
     "original": {

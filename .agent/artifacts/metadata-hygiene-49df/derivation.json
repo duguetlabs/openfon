@@ -355,11 +355,12 @@
       "state": "public-derived",
       "original_sha256": "31ce6c8d2b2773f096c2108ddc5b8720044a93b7489746226b474d7e625a1253",
       "original_bytes": 125352,
-      "public_sha256": "c2f14040702f40251014f052f6cc778c01ff58ac5e0d655a5c517e6ee242ecd7",
-      "public_bytes": 114972,
-      "changed_metadata_fields": 1231,
+      "public_sha256": "185897fdb5e2032167c2613cb6b31133783ce61a76616e999ae52aa07d776a6a",
+      "public_bytes": 115096,
+      "changed_metadata_fields": 1234,
       "original_retention": "verified private archive",
-      "historical_reference_annotation": false
+      "historical_reference_annotation": false,
+      "correction_lineage": ".agent/artifacts/metadata-hygiene-49df/execution-reference-correction-6f.json"
     },
     ".agent/artifacts/activation-settings-1d4/evidence/web-types-before-scan.json": {
       "state": "public-derived",

@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "status": "ISOLATED_CANDIDATE_REQUIRES_ACTUAL_QA",
+  "base": "6f001779476dcc85f4b6a0ef9cc6d8ae52477a9a",
+  "review_comment": 5671181031,
+  "scope": "Three tool-session values replaced with new persisted random execution-domain references. No process-domain reuse.",
+  "summary": {
+    "path": ".agent/artifacts/activation-settings-1d4/evidence/validation-summary.json",
+    "historical_original_sha256": "31ce6c8d2b2773f096c2108ddc5b8720044a93b7489746226b474d7e625a1253",
+    "prior_public_sha256": "c2f14040702f40251014f052f6cc778c01ff58ac5e0d655a5c517e6ee242ecd7",
+    "corrected_public_sha256": "185897fdb5e2032167c2613cb6b31133783ce61a76616e999ae52aa07d776a6a",
+    "changed_pointers": [
+      "/tool_sessions/original_orchestration",
+      "/tool_sessions/fixed_orchestration",
+      "/tool_sessions/cleanup"
+    ]
+  },
+  "catalog": {
+    "path": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "prior_sha256": "9900eff3f21407d6934382ddb2303167a55668cf8a20cc53a4970663ca35fdea",
+    "corrected_sha256": "e34ba18864c21ae0aebfa262570340e01f05b4427ea0dcb6a7a60126fc87efba"
+  },
+  "preserved_historical_receipt": {
+    "path": ".agent/artifacts/metadata-hygiene-49df/integration-assembly.json",
+    "sha256": "d423a8fa314025ce164dca644e24045265975bd3eb3d3fe887c5cf1bb367cd62",
+    "meaning": "Records the earlier closed199path assembly and its then-current catalog/summary identities. Those historical identities are not overwritten by this correction."
+  },
+  "limits": [
+    "All historical outcomes, first-assertion and cleanup limitations preserved.",
+    "No new test execution, historical external availability, runtime validation or exhaustive privacy claim.",
+    "Historical original hashes continue to identify original bytes, not derived candidates."
+  ]
+}
