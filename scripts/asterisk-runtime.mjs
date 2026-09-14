@@ -3,6 +3,7 @@
  */
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -57,8 +58,74 @@ export async function prepareAsteriskRuntimeDocker(run, env = process.env, platf
   return { docker, network };
 }
 
+// Name randomness avoids ordinary collisions; the label and immutable full CID
+// establish ownership. Never read logs or remove a candidate by name alone.
+export function createAsteriskRuntimeContainer(docker) {
+  const invocation = randomUUID();
+  const name = `openfon-asterisk-${process.pid}-${invocation}`;
+  const label = 'org.openfon.asterisk-runtime.invocation';
+  const format = `[{{json .Id}},{{json (index .Config.Labels "${label}")}}]`;
+  let runAttempted = false;
+  let cid;
+  const fullId = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+  const missing = (error, reference) => error?.code === 1 && typeof error.stderr === 'string' &&
+    [`Error: No such container: ${reference}`, `Error response from daemon: No such container: ${reference}`].includes(error.stderr.trim());
+  async function inspect(reference) {
+    let output;
+    try { output = await docker('container', 'inspect', '--format', format, reference); }
+    catch (error) {
+      if (missing(error, reference)) return null;
+      throw Error('Asterisk container ownership inspection failed; no unverified container will be touched.');
+    }
+    let identity;
+    try { identity = JSON.parse(output); }
+    catch { throw Error('Asterisk container ownership inspection returned invalid data.'); }
+    if (!Array.isArray(identity) || identity.length !== 2 || !fullId(identity[0]) ||
+        identity[1] !== invocation || (fullId(reference) && identity[0] !== reference)) {
+      throw Error('Asterisk container ownership does not match this invocation.');
+    }
+    return identity[0];
+  }
+  async function ownedId() {
+    if (!runAttempted) return null; // In particular, proxy-bind failure owns nothing.
+    const verified = await inspect(cid || name);
+    // Name lookup is only recovery for ambiguous creation. Once bound to a CID,
+    // absence never falls back to a possibly reused name.
+    if (verified) cid = verified;
+    return verified;
+  }
+  return {
+    async run(args) {
+      if (runAttempted) throw Error('Asterisk container creation was already attempted.');
+      runAttempted = true; // CLI failure can follow successful daemon creation.
+      const returned = (await docker('run', '-d', '--rm', '--pull=never',
+        '--name', name, '--label', `${label}=${invocation}`, ...args)).trim();
+      if (!fullId(returned)) throw Error('Docker did not return a full Asterisk container ID.');
+      const verified = await inspect(returned);
+      if (!verified) throw Error('The created Asterisk container no longer exists.');
+      cid = verified;
+    },
+    async exec(...args) {
+      const owned = await ownedId();
+      if (!owned) throw Error('The owned Asterisk container no longer exists.');
+      return docker('exec', owned, ...args);
+    },
+    async logs() {
+      const owned = await ownedId();
+      return owned ? docker('logs', '--tail', '100', owned) : null;
+    },
+    async remove() {
+      const owned = await ownedId();
+      if (!owned) return;
+      try { await docker('rm', '-f', owned); }
+      catch (error) {
+        if (!missing(error, owned)) throw Error('The owned Asterisk container could not be removed.');
+      }
+    },
+  };
+}
+
 export async function runAsteriskRuntime({ temp, db, telemetry, wait, password }) {
-  const name = `openfon-asterisk-${process.pid}`;
   const image = process.env.OPENFON_ASTERISK_IMAGE || 'openfon-asterisk-runtime:22.11.0';
   const port = Number(process.env.OPENFON_TEST_PORT || 8811);
   const proxyPort = Number(process.env.OPENFON_ASTERISK_PROXY_PORT || 8821);
@@ -88,7 +155,8 @@ export async function runAsteriskRuntime({ temp, db, telemetry, wait, password }
   // Never pull/build against an implicit or changed context. The selected local
   // daemon must already contain the operator-built fixture image.
   await docker('image', 'inspect', image);
-  const cli = command => docker('exec', name, 'asterisk', '-rx', command);
+  const container = createAsteriskRuntimeContainer(docker);
+  const cli = command => container.exec('asterisk', '-rx', command);
   await writeFile(join(config, 'asterisk.conf'), `[directories]\nastetcdir => /test\nastmoddir => /usr/lib/asterisk/modules\nastvarlibdir => /var/lib/asterisk\nastdbdir => /var/lib/asterisk\nastkeydir => /var/lib/asterisk\nastdatadir => /var/lib/asterisk\nastagidir => /var/lib/asterisk/agi-bin\nastspooldir => /var/spool/asterisk\nastrundir => /var/run/asterisk\nastlogdir => /var/log/asterisk\n[options]\nverbose=3\ndebug=3\n`);
   await writeFile(join(config, 'modules.conf'), '[modules]\nautoload=yes\nnoload=chan_pjsip.so\nnoload=chan_iax2.so\nnoload=res_manager_devicestate.so\n');
   await writeFile(join(config, 'logger.conf'), '[logfiles]\nconsole=notice,warning,error,verbose,debug\n');
@@ -98,9 +166,11 @@ export async function runAsteriskRuntime({ temp, db, telemetry, wait, password }
   const tone = Buffer.alloc(8000 * 2 * 6);
   for (let i = 0; i < tone.length / 2; i++) tone.writeInt16LE(Math.round(6000 * Math.sin(2 * Math.PI * 660 * i / 8000)), i * 2);
   await writeFile(join(config, 'tone.sln'), tone);
+  let primaryError;
+  const secondaryErrors = [];
   try {
     await new Promise((resolve,reject)=>{proxy.once('error',reject);proxy.listen(proxyPort,'127.0.0.1',resolve);});
-    await docker('run', '-d', '--rm', '--pull=never', ...network.dockerArgs, '--name', name, '--mount', `type=bind,src=${config},dst=/test`, image, 'asterisk', '-f', '-vvv', '-C', '/test/asterisk.conf');
+    await container.run([...network.dockerArgs, '--mount', `type=bind,src=${config},dst=/test`, image, 'asterisk', '-f', '-vvv', '-C', '/test/asterisk.conf']);
     await wait(async () => { try { return (await cli('core show version')).includes('Asterisk'); } catch { return false; } }, 'Asterisk startup');
     const version = (await cli('core show version')).trim();
     const modules = await cli('module show like websocket');
@@ -151,12 +221,28 @@ export async function runAsteriskRuntime({ temp, db, telemetry, wait, password }
     assert.equal(telemetry.filter(x => x.path === '/unexpected').length, 0);
     console.log(JSON.stringify({ evidence: 'real Asterisk + Local channel + workerd/D1/DO; mocked AI; no SIP trunk/PSTN', networkMode: network.mode, version, modules: modules.trim(), inputPcmBytes: telemetry.find(x=>x.path==='/input').body.bytes, assistantRecordedBytes: data.length, assistantPeak: peak, tone440Amplitude: Math.round(tone440), controlsToPbx: controls, eventsFromPbx: events, revokedRouteRejected: true, revokedHandshake: rejected, persistedTurns: turns.results.length, calls: rows.results, activeChannels: 0 }, null, 2));
   } catch (error) {
-    // Only this fixture container: its config contains no real credentials.
-    const logs = await docker('logs', '--tail', '100', name).catch(() => 'Container unavailable');
-    console.error(logs); throw error;
+    primaryError = error;
+    try {
+      const logs = await container.logs();
+      if (logs !== null) console.error(logs);
+    } catch (diagnosticError) { secondaryErrors.push(diagnosticError); }
   } finally {
-    await docker('rm', '-f', name).catch(() => {});
-    for(const socket of sockets)socket.terminate();
-    websockets.close();await new Promise(resolve=>proxy.close(resolve));
+    try { await container.remove(); }
+    catch (cleanupError) { secondaryErrors.push(cleanupError); }
+    finally {
+      // Owned-container cleanup failure must not retain local resources.
+      for (const socket of sockets) {
+        try { socket.terminate(); } catch (error) { secondaryErrors.push(error); }
+      }
+      try { websockets.close(); } catch (error) { secondaryErrors.push(error); }
+      try { await new Promise((resolve, reject) => proxy.close(error => {
+        if (error && error.code !== 'ERR_SERVER_NOT_RUNNING') reject(error); else resolve();
+      })); } catch (error) { secondaryErrors.push(error); }
+    }
   }
+  if (secondaryErrors.length) {
+    throw new AggregateError(primaryError ? [primaryError, ...secondaryErrors] : secondaryErrors,
+      'Asterisk runtime failed or cleanup could not be confirmed.', primaryError ? { cause: primaryError } : undefined);
+  }
+  if (primaryError) throw primaryError;
 }

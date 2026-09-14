@@ -136,8 +136,14 @@ node scripts/asterisk-smoke.mjs --asterisk
 ```
 
 The Dockerfile builds the pinned official Asterisk source and checks its SHA-256.
-The harness creates and removes only its own `openfon-asterisk-<pid>` container,
-fixture config and recordings. It exposes no SIP ports. Asterisk Local channels
+The harness gives its container a random `openfon-asterisk-<pid>-<invocation>`
+name and an invocation label. It verifies that label and the full container ID
+before exec, logs or removal; those commands target the immutable ID. A failed
+run may have created a container, so recovery checks only that invocation's name
+and label before binding cleanup to its ID. A pre-run failure performs no
+container lookup. Failed ownership verification or removal reports uncertainty;
+there is no unchecked name removal or prefix sweep. Fixture config and recordings
+are temporary. It exposes no SIP ports. Asterisk Local channels
 play a generated 660 Hz caller tone, while the mocked AI sends a 440 Hz response;
 MixMonitor and signal checks verify the response in the real PBX. A transparent
 local WebSocket proxy counts actual commands/acknowledgments without modifying
