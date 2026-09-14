@@ -1051,10 +1051,10 @@ export function registerStudioApi(app: StudioApp): void {
        SELECT ?, id FROM knowledge_collections WHERE business_id = ? AND is_default = 1 AND changes()>0`
     )
       .bind(id, workspace.id);
-    const [created] = await c.env.DB.batch([createAssistant, attachDefault]);
+    const responseRow = c.env.DB.prepare('SELECT * FROM assistants WHERE id = ?').bind(id);
+    const [created, , response] = await c.env.DB.batch<Assistant>([createAssistant, attachDefault, responseRow]);
     if (!created.meta.changes) return c.json({ error: 'Provider configuration changed. Reload and retry.' }, 409);
-    const row = await c.env.DB.prepare('SELECT * FROM assistants WHERE id = ?').bind(id).first<Assistant>();
-    return c.json(row, 201);
+    return c.json(response.results[0], 201);
   });
 
   app.get('/api/me/assistants/:assistantId', async (c) => {

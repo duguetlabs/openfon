@@ -287,11 +287,15 @@ export default function Settings() {
         request.queued = undefined;
         const confirmed = profileSavedNames.current.get(id);
         const normalized = next.name.trim() || confirmed || '';
-        if (normalized === confirmed) continue;
+        const acknowledgeName = () => setProfiles(current => current.map(profile =>
+          profile.id === id && profileEditVersion.current.get(id) === next.version && profile.name === next.name
+            ? { ...profile, name: normalized } : profile));
+        if (normalized === confirmed) { acknowledgeName(); continue; }
         try {
           await api.updateProfile(id, { name: normalized });
           profileListGeneration.current++;
           profileSavedNames.current.set(id, normalized);
+          acknowledgeName();
         } catch (err) {
           if (profileEditVersion.current.get(id) !== next.version) continue;
           setError(err instanceof Error ? err.message : 'Rename failed');

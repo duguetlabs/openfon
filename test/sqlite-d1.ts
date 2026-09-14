@@ -40,6 +40,16 @@ class SqliteStatement {
     this.database.prepare(this.sql).run(...this.values);
     return { results: [], success: true, meta: { changes: changes() - before } };
   }
+
+  async batchRun(): Promise<{ results: unknown[]; success: true; meta: { changes: number } }> {
+    this.beforeExecute();
+    const changes = () => (this.database.prepare('SELECT total_changes() AS n').get() as { n: number }).n;
+    const before = changes();
+    // One execution returns SELECT/RETURNING rows while preserving DML and
+    // trigger-inclusive counters. Standalone run() keeps its existing contract.
+    const results = this.database.prepare(this.sql).all(...this.values);
+    return { results, success: true, meta: { changes: changes() - before } };
+  }
 }
 
 export class SqliteD1 {
@@ -70,7 +80,7 @@ export class SqliteD1 {
     this.database.exec('BEGIN');
     try {
       const results = [];
-      for (const statement of statements) results.push(await statement.run());
+      for (const statement of statements) results.push(await statement.batchRun());
       this.database.exec('COMMIT');
       return results as Array<{ results: T[]; meta: { changes: number } }>;
     } catch (error) {
