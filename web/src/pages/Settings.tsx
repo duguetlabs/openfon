@@ -66,6 +66,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const savingOperation = useRef<{ kind: 'create' | 'profile' | 'settings' } | null>(null);
   const [error, setError] = useState('');
+  const [settingsLoadError, setSettingsLoadError] = useState('');
   const [refreshFailed, setRefreshFailed] = useState(false);
   const [profiles, setProfiles] = useState<EngineProfile[]>([]);
   const [profileRefreshPending, setProfileRefreshPending] = useState(false);
@@ -117,8 +118,15 @@ export default function Settings() {
         setServices(draft => previous && JSON.stringify(draft) !== JSON.stringify(previous.services) ? draft : incoming.services);
         setFaqs(draft => previous && JSON.stringify(draft) !== JSON.stringify(previous.faqs) ? draft : incoming.faqs);
         setClosures(draft => previous && JSON.stringify(draft) !== JSON.stringify(previous.closures) ? draft : incoming.closures);
+        setSettingsLoadError('');
         return true;
-      } catch (e) { if (current()) throw e; return false; }
+      } catch (e) {
+        if (current()) {
+          setSettingsLoadError(e instanceof Error ? e.message : 'Could not load settings');
+          throw e;
+        }
+        return false;
+      }
     })();
     settingsRead.current = request;
     return request;
@@ -131,11 +139,7 @@ export default function Settings() {
         if (!active || !applied || settingsRead.current !== request) return;
         void loadProfiles(business.id).catch(() => {});
         void api.voices().then(setVoiceCatalog).catch(() => {});
-      }).catch(e => {
-        if (!active) return;
-        setRefreshFailed(true);
-        setError(e instanceof Error ? e.message : 'Could not load settings');
-      });
+      }).catch(() => {}); // readSettings owns only its still-current load failure.
     }
     return () => { active = false; };
   }, [business]);
@@ -198,9 +202,11 @@ export default function Settings() {
     finally { finishSaving(operation); }
   }
 
+  const displayError = error || settingsLoadError;
+  const settingsRefreshNeeded = refreshFailed || Boolean(settingsLoadError);
   if (!biz || !agent) return <div>
-    <p role={error ? 'alert' : 'status'}>{error || 'Loading workspace settings…'}</p>
-    {refreshFailed && <Button disabled={saving} onClick={() => void retryRefresh()}>Retry settings refresh</Button>}
+    <p role={displayError ? 'alert' : 'status'}>{displayError || 'Loading workspace settings…'}</p>
+    {settingsRefreshNeeded && <Button disabled={saving} onClick={() => void retryRefresh()}>Retry settings refresh</Button>}
   </div>;
 
   const workspacePayload = businessPayload(biz, { hours, services, faqs, closures });
@@ -679,9 +685,9 @@ export default function Settings() {
         </p>
         <div className="flex items-center gap-3">
           {saved && <span role="status" className="text-sm font-semibold text-ok">{saved}</span>}
-          {error && <span role="alert" className="text-sm text-rose">{error}</span>}
+          {displayError && <span role="alert" className="text-sm text-rose">{displayError}</span>}
           {profileRefreshPending && <Button variant="ghost" disabled={saving} onClick={() => { const operation = beginSaving('settings'); if (!operation) return; void refreshProfileDisplay().finally(() => finishSaving(operation)); }}>Retry profile refresh</Button>}
-          {refreshFailed && <Button variant="ghost" disabled={saving} onClick={() => void retryRefresh()}>Retry settings refresh</Button>}
+          {settingsRefreshNeeded && <Button variant="ghost" disabled={saving} onClick={() => void retryRefresh()}>Retry settings refresh</Button>}
           <Button disabled={saving || profileRefreshPending || !dirty} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</Button>
         </div>
       </div>

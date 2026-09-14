@@ -1179,7 +1179,7 @@ export function registerStudioApi(app: StudioApp): void {
     const activated = await c.env.DB.prepare(
       `UPDATE assistants SET state='active', activated_at=COALESCE(activated_at, datetime('now')),
         updated_at=datetime('now')
-       WHERE id=?
+       WHERE id=? AND state IS ?
          AND engine IS ? AND realtime_model IS ? AND realtime_voice IS ?
          AND EXISTS(SELECT 1 FROM provider_settings WHERE business_id=assistants.business_id)=?
          AND (SELECT realtime_provider FROM provider_settings WHERE business_id=assistants.business_id) IS ?
@@ -1187,7 +1187,7 @@ export function registerStudioApi(app: StudioApp): void {
          AND trim(persona, char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>''
          AND trim(language, char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))<>'' RETURNING id`
     )
-      .bind(assistant.id, assistant.engine, assistant.realtime_model, assistant.realtime_voice,
+      .bind(assistant.id, assistant.state, assistant.engine, assistant.realtime_model, assistant.realtime_voice,
         provider ? 1 : 0, provider?.realtime_provider ?? null)
       .first<{ id: string }>();
     if (!activated) {
