@@ -61,7 +61,7 @@ export function Field({
   const hintId = `${id}-hint`;
   const description = [props['aria-describedby'], hint ? hintId : undefined].filter(Boolean).join(' ') || undefined;
   return (
-    <div className="block">
+    <div className="field block">
       <label htmlFor={id}><FieldLabel>{label}</FieldLabel></label>
       <input className={inputClass} {...props} id={id} aria-describedby={description} />
       {hint && <span id={hintId} className="mt-1.5 block text-xs leading-relaxed text-ink-soft">{hint}</span>}
