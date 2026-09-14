@@ -1,3 +1,4 @@
+import { CHECKED_ASSISTANT_SNAPSHOT_SQL, checkedAssistantSnapshot } from './assistant-write-snapshot';
 import { PRESET_RECONCILIATION_SQL, PRESET_CHANGED_SQL, assertPresetWriteBudget, PRESET_LIST_COLUMNS, PRESET_ROW_BYTES } from './preset-budgets';
 import { CHECKED_REALTIME_PROVIDER_SQL, checkedRealtimeProvider, providerUpdate, assistantCompatibilityError, presetCompatibilityError, ProviderInputError, TEXT_PRESETS, OPENAI_REALTIME_VOICES } from './provider-settings';
 import type { Hono } from 'hono';
@@ -1100,7 +1101,8 @@ export function registerStudioApi(app: StudioApp): void {
       c.env.DB.prepare(
       `UPDATE assistants SET name=?, greeting=?, persona=?, language=?, voice=?, take_messages=?,
         custom_instructions=?, engine=?, realtime_model=?, realtime_voice=?, llm_model=?, updated_at=datetime('now')
-       WHERE id=? AND ${CHECKED_REALTIME_PROVIDER_SQL}`
+       WHERE id=? AND ${CHECKED_REALTIME_PROVIDER_SQL}
+        AND ${CHECKED_ASSISTANT_SNAPSHOT_SQL}`
       ).bind(
         name,
         greeting,
@@ -1114,7 +1116,8 @@ export function registerStudioApi(app: StudioApp): void {
         realtimeVoice,
         llmModel,
         assistant.id,
-        ...checkedRealtimeProvider(realtimeProvider)
+        ...checkedRealtimeProvider(realtimeProvider),
+        ...checkedAssistantSnapshot(assistant)
       ),
     ];
     if (await isCompatibilityAssistant(c.env, assistant)) {

@@ -1,3 +1,4 @@
+import { CHECKED_ASSISTANT_SNAPSHOT_SQL, checkedAssistantSnapshot } from './assistant-write-snapshot';
 import { assertPresetWriteBudget, PRESET_LIST_COLUMNS } from './preset-budgets';
 import { CHECKED_REALTIME_PROVIDER_SQL, checkedRealtimeProvider, OPENAI_REALTIME_VOICES, assistantCompatibilityError, presetCompatibilityError, retainedProviderKey, ProviderInputError } from './provider-settings';
 import { Hono } from 'hono';
@@ -684,6 +685,7 @@ app.put('/api/me/business/:id/agent', async (c) => {
     `UPDATE assistants SET name=?, greeting=?, persona=?, language=?, voice=?, take_messages=?, custom_instructions=?,
       engine=?, realtime_model=?, realtime_voice=?, llm_model=?,
       updated_at=datetime('now') WHERE id=? AND ${CHECKED_REALTIME_PROVIDER_SQL}
+        AND ${CHECKED_ASSISTANT_SNAPSHOT_SQL}
       AND (SELECT llm_base_url FROM provider_settings WHERE business_id=assistants.business_id) IS ?
       AND (SELECT llm_api_key FROM provider_settings WHERE business_id=assistants.business_id) IS ?`
   ).bind(
@@ -699,7 +701,7 @@ app.put('/api/me/business/:id/agent', async (c) => {
       realtimeVoice,
       s.llm_model ?? cur.llm_model,
       cur.id,
-      ...checkedRealtimeProvider(realtimeProvider), cur.llm_base_url ?? null, cur.llm_api_key ?? null
+      ...checkedRealtimeProvider(realtimeProvider), ...checkedAssistantSnapshot(cur), cur.llm_base_url ?? null, cur.llm_api_key ?? null
     );
   const providerUpdate = c.env.DB.prepare(
     `INSERT INTO provider_settings (business_id, llm_base_url, llm_api_key) SELECT ?, ?, ? WHERE changes()>0
