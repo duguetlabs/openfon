@@ -110,12 +110,16 @@ export class TelnyxMediaAdapter {
         const timestamp = integer(media.timestamp);
         if (chunk < 1) throw new Error('invalid_chunk');
         if (chunk < this.nextChunk || this.reorder.has(chunk)) return; // late/duplicate packet
-        if (chunk - this.nextChunk > 10 || this.reorder.size >= 10) throw new Error('reorder_overflow');
+        if (chunk - this.nextChunk > 10 || (chunk !== this.nextChunk && this.reorder.size >= 10)) throw new Error('reorder_overflow');
         const bytes = decodePcmuFrame(media.payload).length;
         if (this.reorderBytes + bytes > 8000) throw new Error('reorder_overflow');
-        this.reorder.set(chunk, { payload: media.payload as string, timestamp, sequence, bytes });
-        this.reorderBytes += bytes;
-        this.drainInput();
+        const packet = { payload: media.payload as string, timestamp, sequence, bytes };
+        if (chunk === this.nextChunk) this.drainInput(packet);
+        else {
+          this.reorder.set(chunk, packet);
+          this.reorderBytes += bytes;
+          this.drainInput();
+        }
       } else if (msg.event === 'mark') {
         const name = object(msg.mark).name;
         if (typeof name !== 'string' || name.length > 100) throw new Error('invalid_mark');
@@ -131,11 +135,18 @@ export class TelnyxMediaAdapter {
     } catch { this.close('invalid_carrier_frame'); }
   }
 
-  private drainInput(): void {
-    while (this.reorder.has(this.nextChunk)) {
-      const packet = this.reorder.get(this.nextChunk)!;
-      this.reorder.delete(this.nextChunk++);
-      this.reorderBytes -= packet.bytes;
+  private drainInput(expected?: Packet): void {
+    // Consume the gap-closing packet without an eleventh waiting entry. The
+    // aggregate byte admission check still includes it before reaching here.
+    while (expected || this.reorder.has(this.nextChunk)) {
+      const packet = expected ?? this.reorder.get(this.nextChunk)!;
+      if (expected) {
+        expected = undefined;
+        this.nextChunk++;
+      } else {
+        this.reorder.delete(this.nextChunk++);
+        this.reorderBytes -= packet.bytes;
+      }
       if (packet.timestamp < this.lastTimestamp || packet.sequence <= this.lastSequence) throw new Error('invalid_order');
       this.lastTimestamp = packet.timestamp;
       this.lastSequence = packet.sequence;
