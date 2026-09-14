@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
+import { observeCaptureChild } from './capture-child.mjs';
 
 const output = dirname(fileURLToPath(import.meta.url));
 const root = resolve(output, '../../..');
@@ -18,6 +19,7 @@ const serverSource = readFileSync(join(root, 'scripts/e2e-server.mjs'), 'utf8')
   .replace("'8790'", `'${port}'`).replace("'9232'", `'${inspector}'`);
 const serverPath = join(temporary, 'server.mjs'); writeFileSync(serverPath, serverSource);
 const server = spawn(process.execPath, [serverPath], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+const stopServer = observeCaptureChild(server);
 let serverLog = ''; server.stdout.on('data', x => serverLog += x); server.stderr.on('data', x => serverLog += x);
 const origin = `http://localhost:${port}`;
 let browser;
@@ -107,4 +109,10 @@ try {
   rmSync(join(output,'poster-ui.png'),{force:true});
   rmSync(join(output,'conversation-ui.png'),{force:true});
   console.log(JSON.stringify(metadata));
-} finally { await browser?.close(); if(server.exitCode===null){server.kill('SIGTERM'); await new Promise(r=>server.once('exit',r));} rmSync(temporary,{recursive:true,force:true}); }
+} finally {
+  try { await browser?.close(); }
+  finally {
+    try { await stopServer(); }
+    finally { rmSync(temporary,{recursive:true,force:true}); }
+  }
+}
