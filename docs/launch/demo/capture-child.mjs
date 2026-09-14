@@ -43,10 +43,24 @@ export function observeCaptureChild(child) {
     // This fresh waiter sees only actual exit or an error during this attempt.
     const result = await new Promise(resolve => {
       let stopError;
-      finishStop = outcome => {
+      let settled = false;
+      let timer;
+      const settle = outcome => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
         if (outcome.type === 'error') stopError ??= outcome.error;
         resolve(outcome);
       };
+      finishStop = settle;
+      // Bound this wait, not child lifetime: timeout leaves exit unconfirmed.
+      // Keep observing late errors/exit; the caller retains its cleanup policy.
+      timer = setTimeout(() => {
+        settle({ type: 'error', error: Object.assign(
+          new Error(`Capture child ${child.pid} did not exit within 5000ms after SIGTERM; exit is unconfirmed`),
+          { code: 'CAPTURE_CHILD_STOP_TIMEOUT', pid: child.pid, timeoutMs: 5000 },
+        ) });
+      }, 5000);
       try {
         const sent = child.kill('SIGTERM');
         if (!sent && !terminal() && !stopError) {
