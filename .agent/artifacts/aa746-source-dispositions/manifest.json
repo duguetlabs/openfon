@@ -1,0 +1,18 @@
+{
+  "head": "aa7467566662a4c43b54563226e78abeb575dc2d",
+  "original_comment": "5658817846",
+  "original_artifact_sha256": "73d2523d2dcc02b369c988deaaad518fe8ff2b3eefe8ede55ce744a05f8464a8",
+  "original_body_sha256": "3f6adf0cc685540561e6e49873fd389c8e4b3e43ea5cafa9e9f720a378e26ff0",
+  "disposition_comment": "5658883874",
+  "disposition_body_sha256": "06fb96824d47a239f731f501813fd925ea28ce67c6e8980528035c839d927fc1",
+  "qa": "07a076f",
+  "booking_owner": "d746c8d",
+  "realtime_owner": "bb98faf",
+  "validation": "Source-only findings. No new application tests or source changes. Both exact CI34804394200 and34804377512 pass all required jobs; deploy skipped. Prior1383/types atbee7c49 retained. Qualified declines do not establish reviewer clearance.",
+  "files": {
+    "integration-source-hashes.json": "1960ca939d8db3ba032b35a65f25559b2620203a1d72af7d76bd8517aa9af73f",
+    "disposition.md": "06fb96824d47a239f731f501813fd925ea28ce67c6e8980528035c839d927fc1",
+    "original-public-review.md": "09bf3f7cf35361374e78d7a202f0a9f0bcd07de05ab7230b71616a3e65411f24",
+    "booking-source.json": "545d39c218139ebc69712026b2e1595a0db4c482490a616867cbdd727efbf65e"
+  }
+}

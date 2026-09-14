@@ -11,6 +11,16 @@ findings from every reviewer still require verification and disposition. No new
 Codex review is requested or awaited. Historical dual-review references below
 record earlier requirements; this policy governs the current release.
 
+## aa746756 source dispositions
+
+The [unchanged aa746756 review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658817846) raised a logout security concern and four recommendations. Independent QA and owners verified the exact source; [all findings have qualified public dispositions](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658883874). No application change or duplicate runtime was selected.
+
+Logout failure already reaches the shared Auth alert and retry flow before the local catch; pending/unconfirmed logout blocks refresh and authentication submission. **Failed server revocation can leave the HttpOnly cookie valid.** The latch and warning are memory-only, so reload/new-tab authentication can succeed after failure. This is explicitly unconfirmed signout, with retry required before leaving a shared device; no durable lockout or offline revocation guarantee is claimed. The silent-failure allegation is declined, without denying this availability boundary.
+
+Artifact test discovery is excluded by explicit Vitest test roots, TypeScript source roots and Playwright e2e root. Missing default text keys remain accepted; invalid custom text configuration intentionally fails pickup. Message content takes primary outcome/display precedence over booking intent under the existing finalizer contract; arbitrary historical mixed booking/message rows remain possible, and no new dual-label compatibility policy was selected. No dedicated mixed-case runtime proof is claimed.
+
+Both exactaa CI runs34804394200/34804377512 passed all four required jobs, with deployment skipped. Prior exactbee7c49 combined1,383/types and owner evidence remain unchanged. Original report, source hashes and disposition are retained in `.agent/artifacts/aa746-source-dispositions`. Fresh latest-head genuine PR-Agent security/major clearance remains mandatory; these source dispositions are not that clearance.
+
 ## 8436ac9 corrections and final combined validation
 
 The [8436ac9 original review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658598513) reported a webhook body-read security concern and seven focus items. Corrections are independently closed for exact source/evidence/assembly at `bee7c49`: Onboarding confirmed-write recovery and review wording (`ca24dbc`), Telnyx bounded body acquisition (`5f43904`), and Knowledge/Settings concurrency (`bee7c49`). This scoped closure is separate from mandatory fresh published-head review and CI.
