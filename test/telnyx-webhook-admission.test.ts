@@ -65,13 +65,79 @@ function fill(options: Parameters<typeof heldReader>[0] = {}, count = 16) {
     const f = heldReader(options); return { ...f, ...start(f.request) };
   });
 }
-function signed() {
-  const raw = JSON.stringify({ data: { id: 'lease-fixture', record_type: 'event', event_type: 'call.hangup',
+function signed(id = 'lease-fixture') {
+  const raw = JSON.stringify({ data: { id, record_type: 'event', event_type: 'call.hangup',
     occurred_at: '2026-09-14T00:00:00Z', payload: { call_control_id: 'control', call_leg_id: 'leg',
       call_session_id: 'session', connection_id: 'connection', hangup_cause: 'normal_clearing' } } });
   const timestamp = String(Math.floor(Date.now() / 1000));
   return new Request(URL, { method: 'POST', body: raw, headers: { 'Content-Type': 'application/json',
     'telnyx-timestamp': timestamp, 'telnyx-signature-ed25519': sign(null, Buffer.from(`${timestamp}|${raw}`), keys.privateKey).toString('base64') } });
+}
+
+
+type SignedFixture<T> = {
+  id: string; request: Request; body: Uint8Array; signedInput: Uint8Array;
+  gate: ReturnType<typeof deferred<T>>;
+};
+type SignedOwner<T> = SignedFixture<T> & ReturnType<typeof start>;
+
+async function signedBatch<T>(): Promise<SignedFixture<T>[]> {
+  return Promise.all(Array.from({ length: 16 }, async (_, index) => {
+    const id = `lease-fixture-${index}`, request = signed(id);
+    const body = new Uint8Array(await request.clone().arrayBuffer());
+    const prefix = new TextEncoder().encode(`${request.headers.get('telnyx-timestamp')}|`);
+    const signedInput = new Uint8Array(prefix.length + body.length);
+    signedInput.set(prefix); signedInput.set(body, prefix.length);
+    return { id, request, body, signedInput, gate: deferred<T>() };
+  }));
+}
+
+function signedBoundary<T>(fixtures: SignedFixture<T>[]) {
+  const byId = new Map(fixtures.map(f => [f.id, f]));
+  const byInput = new Map(fixtures.map(f => [Buffer.from(f.signedInput).toString('base64'), f.id]));
+  expect(byId.size).toBe(16); expect(byInput.size).toBe(16);
+  const ids: string[] = [], errors: string[] = [];
+  function fail(message: string): never { errors.push(message); throw Error(message); }
+  function enter(id: unknown) {
+    if (typeof id !== 'string' || !byId.has(id)) return fail(`Unknown signed fixture identity: ${String(id)}`);
+    if (ids.includes(id)) return fail(`Duplicate signed fixture identity: ${id}`);
+    ids.push(id);
+    return byId.get(id)!.gate.promise;
+  }
+  return {
+    ids, errors, enter,
+    verifyInput(data: BufferSource) {
+      const bytes = data instanceof ArrayBuffer ? new Uint8Array(data) : new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+      const id = byInput.get(Buffer.from(bytes).toString('base64'));
+      if (id === undefined) return fail('Unknown exact signed fixture bytes');
+      return enter(id);
+    },
+    async wait(count: number) {
+      // Existing Vitest waitFor bounds apply; no longer test/body deadlines.
+      await vi.waitFor(() => { expect(errors).toEqual([]); expect(ids).toHaveLength(count); });
+    },
+  };
+}
+
+async function startSignedBatch<T>(fixtures: SignedFixture<T>[], boundary: ReturnType<typeof signedBoundary<T>>) {
+  const owners = fixtures.map(f => ({ ...f, ...start(f.request) }));
+  await boundary.wait(16);
+  expectAllHeld(owners);
+  return owners;
+}
+
+function expectAllHeld<T>(owners: SignedOwner<T>[]) {
+  expect(owners).toHaveLength(16);
+  for (const owner of owners) { expect(owner.result.error).toBeUndefined(); expect(owner.result.response).toBeUndefined(); }
+}
+
+async function expectSelectedResponse<T>(owners: SignedOwner<T>[], selected: SignedOwner<T>, status: number) {
+  await vi.waitFor(() => {
+    for (const owner of owners) expect(owner.result.error).toBeUndefined();
+    expect(selected.result.response?.status).toBe(status);
+    expect(owners.filter(owner => owner.result.response !== undefined)).toHaveLength(1);
+    expect(owners.filter(owner => owner !== selected && owner.result.response === undefined)).toHaveLength(15);
+  });
 }
 
 beforeEach(async () => {
@@ -190,27 +256,37 @@ describe('aggregate public webhook lease ownership', () => {
   });
 
   it.each(['fulfill', 'reject'] as const)('holds completed signed bodies through durable dispatch %s', async completion => {
-    const gates = Array.from({ length: 16 }, () => deferred<Response>());
-    gates.forEach(gate => cleanup.push(() => gate.resolve(new Response(null, { status: 204 }))));
-    let next = 0; lookup.mockImplementation(() => gates[next++].promise);
-    const owners = Array.from({ length: 16 }, () => start(signed()));
-    await vi.waitFor(() => expect(lookup).toHaveBeenCalledTimes(16));
-    expect(owners.every(owner => !owner.result.response)).toBe(true); expect(vi.getTimerCount()).toBe(0);
+    const fixtures = await signedBatch<Response>();
+    fixtures.forEach(f => cleanup.push(() => f.gate.resolve(new Response(null, { status: 204 }))));
+    const boundary = signedBoundary(fixtures);
+    lookup.mockImplementation(async (request: Request) => {
+      const control = await request.json() as { id?: unknown };
+      return boundary.enter(control.id);
+    });
+    const owners = await startSignedBatch(fixtures, boundary);
+    expect(lookup).toHaveBeenCalledTimes(16); expect(vi.getTimerCount()).toBe(0);
     await vi.advanceTimersByTimeAsync(6000); await probe(503); // No downstream timeout.
-    if (completion === 'fulfill') gates[0].resolve(new Response(null, { status: 204 })); else gates[0].reject(Error('synthetic dispatch failure'));
-    await owners[0].settled; expect(owners[0].result.response?.status).toBe(completion === 'fulfill' ? 200 : 503);
+    expectAllHeld(owners);
+    const selected = owners[0];
+    if (completion === 'fulfill') selected.gate.resolve(new Response(null, { status: 204 })); else selected.gate.reject(Error('synthetic dispatch failure'));
+    await expectSelectedResponse(owners, selected, completion === 'fulfill' ? 200 : 503);
+    expect(boundary.errors).toEqual([]);
     await probe(400);
   });
 
   it('holds completed bodies through cryptographic verification', async () => {
-    const gates = Array.from({ length: 16 }, () => deferred<boolean>());
-    gates.forEach(gate => cleanup.push(() => gate.resolve(false)));
-    let next = 0;
-    const verify = vi.spyOn(crypto.subtle, 'verify').mockImplementation(() => gates[next++].promise);
-    const owners = Array.from({ length: 16 }, () => start(signed()));
-    await vi.waitFor(() => expect(verify).toHaveBeenCalledTimes(16));
-    await probe(503); gates[0].resolve(false); await owners[0].settled;
-    expect(owners[0].result.response?.status).toBe(401); await probe(400);
+    const fixtures = await signedBatch<boolean>();
+    fixtures.forEach(f => cleanup.push(() => f.gate.resolve(false)));
+    const boundary = signedBoundary(fixtures);
+    const verify = vi.spyOn(crypto.subtle, 'verify').mockImplementation((_algorithm, _key, _signature, data) => boundary.verifyInput(data));
+    const owners = await startSignedBatch(fixtures, boundary);
+    expect(verify).toHaveBeenCalledTimes(16);
+    await probe(503); expectAllHeld(owners);
+    const selected = owners[0];
+    selected.gate.resolve(false);
+    await expectSelectedResponse(owners, selected, 401);
+    expect(boundary.errors).toEqual([]);
+    await probe(400);
     expect(lookup).not.toHaveBeenCalled();
   });
 
