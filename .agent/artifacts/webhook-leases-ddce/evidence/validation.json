@@ -1,0 +1,162 @@
+{
+  "base": "ddce0bde6c16633541dc65811fbb833865c7af2a",
+  "patchSha256": "1dc6fc61d41cf0a7af5a78c07be61474f947521053bdfd3ea452defe7064a1e4",
+  "sourceAfter": {
+    "original": {
+      "files": {
+        "src/telnyx-routes.ts": "2719a06b2c1ca1d951943685792cc03b08689304073be6b13c664d5a600c6770",
+        "src/telnyx-webhook-admission.ts": null,
+        "test/telnyx-webhook-admission.test.ts": "13656346a7cc67bf39015b3ba791f403baed0e997d959d98c48aad45db76aa36",
+        "scripts/telnyx-webhook-admission-smoke.mjs": "74ca3bddbb182240ac333bfa0d9df61bf4d386c84e4cef83c6fb1e531df65b00"
+      },
+      "protectedUnchanged": 13,
+      "priorWebhookUnchanged": 3
+    },
+    "fixed": {
+      "files": {
+        "src/telnyx-routes.ts": "2351a3bcdca548785d439ae32be2cdfb64be6148e1d1c03a681281b8b2d73c41",
+        "src/telnyx-webhook-admission.ts": "fc043545b374aa6b6d378faf64a51006df6bfb9ebc752535dcaa62807c777e24",
+        "test/telnyx-webhook-admission.test.ts": "13656346a7cc67bf39015b3ba791f403baed0e997d959d98c48aad45db76aa36",
+        "scripts/telnyx-webhook-admission-smoke.mjs": "74ca3bddbb182240ac333bfa0d9df61bf4d386c84e4cef83c6fb1e531df65b00"
+      },
+      "protectedUnchanged": 13,
+      "priorWebhookUnchanged": 3
+    }
+  },
+  "results": {
+    "originalUnit": {
+      "cases": 15,
+      "passed": 2,
+      "failed": 13,
+      "durationMs": 902,
+      "classification": "11 failures at extra probe400vs503;2 allocation cleanup probes at cancel0vs1, after synthetic503"
+    },
+    "originalNative": {
+      "kind": "summary",
+      "passes": [],
+      "unavailable": [],
+      "failures": [
+        {
+          "scenario": "http-saturation",
+          "classification": "assertion-or-transport",
+          "error": "Expected values to be strictly equal:\n\n415 !== 503\n"
+        },
+        {
+          "scenario": "held-cancel",
+          "classification": "assertion-or-transport",
+          "error": "Expected values to be strictly equal:\n\n415 !== 503\n"
+        },
+        {
+          "scenario": "failed-lock",
+          "classification": "assertion-or-transport",
+          "error": "Expected values to be strictly equal:\n\n415 !== 503\n"
+        },
+        {
+          "scenario": "held-dispatch",
+          "classification": "assertion-or-transport",
+          "error": "Expected values to be strictly equal:\n\n415 !== 503\n"
+        }
+      ],
+      "cleanupErrors": []
+    },
+    "fixedUnit": {
+      "passed": 207,
+      "files": 4,
+      "durationMs": 2040
+    },
+    "workerTypes": "PASS",
+    "fixedNative": {
+      "kind": "summary",
+      "passes": [
+        "http-saturation",
+        "held-dispatch"
+      ],
+      "unavailable": [
+        {
+          "scenario": "held-cancel",
+          "boundary": "late fulfillment callbacks after request-context teardown"
+        },
+        {
+          "scenario": "failed-lock",
+          "boundary": "late fulfillment callbacks after request-context teardown"
+        }
+      ],
+      "failures": [],
+      "cleanupErrors": []
+    }
+  },
+  "exits": {
+    "original-unit": 1,
+    "original-native": 1,
+    "fixed-unit": 0,
+    "worker-types": 0,
+    "fixed-native": 0
+  },
+  "sessions": {
+    "original-unit": 6518,
+    "original-native": 97813,
+    "fixed-unit": 2761,
+    "worker-types": 45101,
+    "fixed-native": 39815
+  },
+  "release": "All5sessions exited;8native scenarios disposed/clients0/errors[];fresh runner/listener/runtime-temp scan empty. Sole slot RELEASED.",
+  "limits": "Native late read/cancel callbacks unobserved after gate release in finite window for2synthetic scenarios; not PASS,eventual refill,or fully settled quarantine proof. No TCP/global/realDO/D1 guarantee.",
+  "evidence": {
+    "fixed-native.exit": {
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    "fixed-native.log": {
+      "sha256": "ce8cf9e58e829a4558d7dbe60470484ee559b947f667d13f5ec72b070b5ab64c",
+      "bytes": 41904
+    },
+    "fixed-unit.exit": {
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    "fixed-unit.log": {
+      "sha256": "1c41d2b198cc0350988d9ec135056a7fcd33265dd89ea409e713ee9dd67def7f",
+      "bytes": 541
+    },
+    "native-observations.json": {
+      "sha256": "9c6fac3ae3e5e19a98be4e330a1438281627008866642bdc3b4153ad36c2b599",
+      "bytes": 6998
+    },
+    "original-native.exit": {
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "bytes": 2
+    },
+    "original-native.log": {
+      "sha256": "eb9c5314a81ac2819703eee77d5c8e5f11243ad69186ee6b7c4f52951179d597",
+      "bytes": 13710
+    },
+    "original-unit.exit": {
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "bytes": 2
+    },
+    "original-unit.log": {
+      "sha256": "9bdd088622c561fc8a5f30201d1b8ed6d373e9342b45d4e30bc5cf0d70cdf325",
+      "bytes": 9240
+    },
+    "release-scan.json": {
+      "sha256": "8ebbad0f0984a6f39f9e77c60c6c36fb9d7cad5d33801fcf0b7617a8400ebd1e",
+      "bytes": 211
+    },
+    "run-identity.json": {
+      "sha256": "304e71df1e55090d27aaaed254c5d9df563a60ee2f94c8f8aeb5034d58393d12",
+      "bytes": 2812
+    },
+    "source-after.json": {
+      "sha256": "fd1a4b293b41f42a7cb85efb801734f0af4e7cda4797a2723cb5bb54b69b7728",
+      "bytes": 1028
+    },
+    "worker-types.exit": {
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    "worker-types.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}
