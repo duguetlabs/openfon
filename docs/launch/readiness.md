@@ -11,12 +11,46 @@ findings from every reviewer still require verification and disposition. No new
 Codex review is requested or awaited. Historical dual-review references below
 record earlier requirements; this policy governs the current release.
 
+## Asterisk WebSocket protocol negotiation
+
+The second [ce7830cf finding](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658194913)
+was verified: a public client offering no subprotocol received an unsolicited
+`media` selection. The internal route did explicitly offer `media`, contrary
+to that part of the report; the defect was manufacturing this offer regardless
+of the public client's request.
+
+The public route now validates the complete offer list and forwards only the
+selected `media` token, or no selection for an absent offer. Unsupported or
+malformed lists are rejected before admission. The owner selects `media` only
+when offered; its separate CallSession socket is unchanged. Empty-present
+rejection applies to values exposed to the application. Some local transport
+paths remove empty/whitespace-only headers first, so the handler sees absence.
+
+Original focused cases yielded20 failures/6 passes/85 skips. A direct ws client
+against original public workerd reproduced the unsolicited-protocol error after
+one call/session reservation. Fixed171 focused cases and both types pass.
+Initial fixed native validation remains14 passes/2 failures: the two header
+options arrived as absent. A targeted serialization probe yielded3 passes,
+2 unavailable policy proofs and0 failures. Node serialized each empty/whitespace
+header, but the public handler observed null and correctly made no selection;
+this is not packet capture or attribution to a specific normalizing layer.
+Both initial and targeted runs disposed all clients and Miniflare successfully.
+
+Native evidence uses the real public route, Asterisk owner, D1 and PBKDF2 with
+an accepted synthetic CallSession socket. No provider, audio, PBX or Linux
+execution is claimed. Initial failures, later unavailable results and their
+separate attribution remain retained. Independent QA closed exact3b95ce3
+source/evidence/assembly; combined1,332 tests across56 files pass in24.75s,
+with both Worker/web typechecks passing. Fresh published-head review/CI remain
+release gates.
+
 ## Account export endpoint sanitization
 
 The [ce7830cf review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658194913)
 identified credential-bearing provider URLs in account archives. Both CI runs
 passed, but that review has no security or major-issue clearance. The export
-correction is local and awaiting final QA and release gates.
+correction is local; independent QA closed exactba72fe3 source, evidence and
+assembly. Public disposition and fresh release gates remain required.
 
 Export now removes userinfo, every query parameter and fragments from exactly
 five provider URL fields. Malformed or unsupported URLs become empty; null and
