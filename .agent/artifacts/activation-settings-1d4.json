@@ -1,0 +1,345 @@
+{
+  "status": "BOUNDED VALIDATION COMPLETE; sole8812/9252 explicitly RELEASED; final evidence QA and exact4file integration assembly pending",
+  "base": "1d4b73331353ecacf07b46ce9d186c032a04fc51",
+  "owner_contract_commit": "ccfd3bb60178f5a1bcfa4b02572a27e5097c3be3",
+  "contract_qa": "045b3cc",
+  "snapshot": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc",
+  "report": {
+    "url": "https://github.com/duguetlabs/openfon/pull/16#issuecomment-5668763633",
+    "sha256": "486300abef14de12da733a524b129699069259a36545b603661845696b572689"
+  },
+  "original_source_sha256": {
+    "src/studio-api.ts": "801aa8415afaaad6029c8d9fa74d6131f7a99dc38c15e4dfa05cac56712987ff",
+    "web/src/pages/Settings.tsx": "376bd195ec8373c88c11774e5bb95daa643fef298f9b2d456e498002d1fa3a9c"
+  },
+  "fixed_source_sha256": {
+    "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+    "web/src/pages/Settings.tsx": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af"
+  },
+  "patch": {
+    "path": ".agent/artifacts/activation-settings-1d4.patch",
+    "sha256": "abd819b611b3aec0bf70c146b4623a4d3883ce618f4026410300e7f7c0cd16fd"
+  },
+  "new_fixtures": {
+    "test/activation-state.test.ts": {
+      "artifact": ".agent/artifacts/activation-settings-1d4/activation-state.test.ts",
+      "sha256": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd"
+    },
+    "e2e/settings-load-error.spec.ts": {
+      "artifact": ".agent/artifacts/activation-settings-1d4/settings-load-error.spec.ts",
+      "sha256": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+    }
+  },
+  "artifact_sha256": {
+    ".agent/artifacts/activation-settings-1d4/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+    ".agent/artifacts/activation-settings-1d4/fixed-Settings.txt": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af",
+    ".agent/artifacts/activation-settings-1d4/fixed-studio-api.txt": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+    ".agent/artifacts/activation-settings-1d4/original-Settings.txt": "376bd195ec8373c88c11774e5bb95daa643fef298f9b2d456e498002d1fa3a9c",
+    ".agent/artifacts/activation-settings-1d4/original-studio-api.txt": "801aa8415afaaad6029c8d9fa74d6131f7a99dc38c15e4dfa05cac56712987ff",
+    ".agent/artifacts/activation-settings-1d4/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+  },
+  "prepared_cases": {
+    "API": [
+      {
+        "title": "activation refuses a committed pause from captured draft within the same second",
+        "predicted_original": "negative"
+      },
+      {
+        "title": "activation refuses a committed pause from captured active within the same second",
+        "predicted_original": "negative"
+      },
+      {
+        "title": "two activations captured from paused allow the winner and conflict the stale state",
+        "predicted_original": "negative"
+      },
+      {
+        "title": "changed-state conflict bypasses activation trigger even when pause spends the final quota unit",
+        "predicted_original": "negative"
+      },
+      {
+        "title": "same-state pause is outside the value-equality conflict guarantee",
+        "predicted_original": "control"
+      },
+      {
+        "title": "state ABA remains outside the equality guarantee",
+        "predicted_original": "control"
+      },
+      {
+        "title": "valid current essentials and greeting remain publishable without full-snapshot CAS",
+        "predicted_original": "control"
+      },
+      {
+        "title": "already-active activation retains its timestamp and one accepted charge",
+        "predicted_original": "control"
+      },
+      {
+        "title": "current Unicode-blank essentials still refuse after an initially valid precheck",
+        "predicted_original": "control"
+      },
+      {
+        "title": "accepted-state activation still rolls back atomically at exhausted quota",
+        "predicted_original": "control"
+      }
+    ],
+    "browser": [
+      {
+        "title": "accepted automatic settings read clears only an earlier local load failure and retains drafts",
+        "predicted_original": "negative"
+      },
+      {
+        "title": "superseded local success cannot change the newer load outcome",
+        "predicted_original": "control"
+      },
+      {
+        "title": "superseded local failure cannot change the newer load outcome",
+        "predicted_original": "control"
+      },
+      {
+        "title": "accepted settings read preserves a newer create refusal with identical error text",
+        "predicted_original": "negative"
+      },
+      {
+        "title": "accepted settings read preserves a newer rename refusal with identical error text",
+        "predicted_original": "negative"
+      },
+      {
+        "title": "independent accepted settings read retains confirmed apply display recovery",
+        "predicted_original": "control"
+      },
+      {
+        "title": "independent accepted settings read retains confirmed delete display recovery",
+        "predicted_original": "control"
+      },
+      {
+        "title": "independent accepted settings read preserves accepted-write session recovery and baseline",
+        "predicted_original": "control"
+      }
+    ]
+  },
+  "predictions_unexecuted": {
+    "API": "10 cases: 4 expected original property failures / 6 controls",
+    "browser": "8 cases: 3 expected original failures / 5 controls; identical-text cases distinguish retry ownership after accepted read, not disappearance of mutation message"
+  },
+  "static_checks": [
+    "Both saved originals byte-match git show exact base",
+    "Active snapshot equals saved fixed source; fixture copies identical",
+    "git apply --check; applying minimal patch to disposable originals exactly reproduces saved fixed bytes",
+    "No application import/parser/test collection/typecheck/runtime/browser/native/inference/install",
+    "git diff --cached --check reports two whitespace notices only on blank unified-patch context lines; application/fixture source unchanged by those notices"
+  ],
+  "proposed_validation_not_granted": {
+    "sequence": [
+      "Original new10 API",
+      "Original new8 browser if explicitly selected",
+      "After all original processes exit, restore accepted fixed source",
+      "Fixed new10 API plus only existing activation provider/consumed-field cases selected below",
+      "Both Worker/web types",
+      "Fixed new8 browser plus only a failed second settings read retains refresh-only recovery from e2e/settings-save-recovery.spec.ts if explicitly selected"
+    ],
+    "existing_API_file": "test/provider-activation-instance.test.ts",
+    "existing_API_title_pattern": "rejects activation|rejects an assistant configuration edit after activation precheck",
+    "browser_configuration": "actual Chrome/workerd 8812/9252 workers1 retries0 only after sole integration grant",
+    "no_native": "No new native requirement established for this single conditional RETURNING predicate or client-only error ownership",
+    "existing_API_source_titles": [
+      "it.each(['existing custom', 'missing'])('rejects activation when %s provider changes after compatibility check', async initial => {",
+      "it('rejects activation if its checked provider row disappears', async () => {",
+      "rejects an assistant configuration edit after activation precheck (%j) \u2014 engine / realtime_model / realtime_voice"
+    ],
+    "existing_API_expanded_count": 6,
+    "fixed_API_count": 16
+  },
+  "limits": [
+    "State equality is handler-read to conditional-write only; same-state pause and ABA accepted, no request-order/pause-wins/fullsnapshot/readiness promise",
+    "Node production-handler/SQLite held first() interleavings; not workerd-native handler concurrency",
+    "Original failures stop at their first assertion; subsequent snapshot/cleanup properties are not presumed executed",
+    "Browser route failure/hold schedules synthetic local HTTP interleavings, actual Chrome/workerd execution ungranted",
+    "Business read ordinal selection is scoped after loaded Settings to explicit provider refresh session-then-local sequence; boundary misses are fixture failures",
+    "Mutation/profile/session errors retain ownership; generic error priority can mask load message while retry still indicates load failure",
+    "All artifacts/fixtures prepared but unexecuted; no global runner vacancy claim"
+  ],
+  "companion_sha256": {
+    "test/provider-activation-instance.test.ts": "00c7bcc36a5b49c30f6ec872db9a3cd588ae7b9f6f31187b0f13a6ba745ba143",
+    "e2e/settings-save-recovery.spec.ts": "12f1668cb285baf197a4dabc4a0e8df4de626c0973ceceb5f73573cd2f99e580",
+    "test/sqlite-d1.ts": "b78afce19ff64b75b8b369c1fbe6aa2fbdca6c0ed45e9d88b19ef9fafd037284"
+  },
+  "protected_source_sha256": {
+    "src/provider-settings.ts": "1be5872fa2d85c9ec48194b5d52f3143d36c4a15643b1aa663fde4e9341fa035",
+    "src/assistant-write-snapshot.ts": "e37594eed016483b0eb5e40800ccf7df284c1bf00611de7f741a9793147a55aa",
+    "migrations/0015_assistant_budgets.sql": "5faa7a48d605beccdfdcf0dfae5114ead33da545e23fd7b04ac6e27a6841c6e4",
+    "web/src/pages/Studio.tsx": "23ebbb9cae00b8640609dd0947f5fdc8f50d0fb5b3a5f75779bacb2982a8be8e",
+    "web/src/pages/ProviderSettings.tsx": "58718c5cd48622695d5d5bc9dc85a39fa97a22a0ff446e1837857062c663d718",
+    "web/src/App.tsx": "50c487e550a0c5940e2714d5800e6a9c877ad5e41a3be4a8b01787e11cf8db16",
+    "web/src/api.ts": "a737158ee2d5fc69a22876555fedf8243480a9b1ea459b14ac3175269a9f5188",
+    "test/provider-activation-instance.test.ts": "00c7bcc36a5b49c30f6ec872db9a3cd588ae7b9f6f31187b0f13a6ba745ba143",
+    "e2e/settings-save-recovery.spec.ts": "12f1668cb285baf197a4dabc4a0e8df4de626c0973ceceb5f73573cd2f99e580",
+    "e2e/confirmation-refresh.spec.ts": "731a234a49b63dcae1fccf31192c891c0d6f483011ac866ff383eb914d108c8e",
+    "e2e/profile-rename-recovery.spec.ts": "e82b091f161f931b4398edca43b913a1e64f3e6ae62aa2f4d50ad00fd70f5c89"
+  },
+  "prepared_status_note": "Earlier proposals/predictions/static checks are historical source-preparation records; actual_validation below governs completed execution.",
+  "actual_validation": {
+    "original_API": {
+      "failed": 4,
+      "passed": 6,
+      "duration": "1.76s",
+      "exit": 1
+    },
+    "original_browser": {
+      "failed_intended": 3,
+      "passed": 5,
+      "stats": {
+        "startTime": "2026-09-14T18:52:32.566Z",
+        "duration": 61673.742,
+        "expected": 5,
+        "skipped": 0,
+        "unexpected": 3,
+        "flaky": 0
+      },
+      "exit": 1
+    },
+    "fixed_API": {
+      "passed_new": 10,
+      "duration": "2.19s",
+      "exit": 0
+    },
+    "fixed_activation_controls": {
+      "passed": 6,
+      "skipped_unselected": 17,
+      "duration": "785ms",
+      "exit": 0
+    },
+    "types": {
+      "worker_exit": 0,
+      "web_exit": 0
+    },
+    "fixed_browser": {
+      "passed": 9,
+      "stats": {
+        "startTime": "2026-09-14T18:54:24.170Z",
+        "duration": 41349.686,
+        "expected": 9,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "exit": 0
+    },
+    "unexpected_failures": 0,
+    "retries": 0,
+    "source_or_fixture_edits_during_run": 0,
+    "sessions": {
+      "original_orchestration": 4783,
+      "fixed_orchestration": 63654,
+      "cleanup": 46929
+    },
+    "evidence_directory": "test-results/activation-settings-1d4/validation-20260914T185223Z",
+    "summary_sha256": "31ce6c8d2b2773f096c2108ddc5b8720044a93b7489746226b474d7e625a1253",
+    "cleanup": {
+      "utc": "2026-09-14T18:55:27.537704+00:00",
+      "slot": "Explicit sole8812/9252 RELEASE; all seven authorized commands exited, no active owned runner",
+      "observed_process_count": 139,
+      "observed_remaining": [],
+      "scan": {
+        "utc": "2026-09-14T18:55:27.534748+00:00",
+        "application_processes": [],
+        "reserved_listeners": {},
+        "known_unrelated_preserved": [
+          {
+            "pid": 54328,
+            "ppid": 54317,
+            "comm": "/Users/cristian/Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+          },
+          {
+            "pid": 54317,
+            "ppid": 53707,
+            "comm": "/Users/cristian/projects/fun/linkedin-mcps/linkedin-mcp/.venv/lib/python3.13/site-packages/playwright/driver/node"
+          }
+        ]
+      },
+      "removed_owned_temps": [
+        "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-FDud2N",
+        "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-k1SIhA"
+      ],
+      "owned_temps_remaining": [],
+      "removed_added_dependency_symlink": true,
+      "preserved_dependency": "/Users/cristian/projects/fun/openfon/node_modules",
+      "retained_exact_source_snapshot": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc",
+      "source_sha256": {
+        "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+        "web/src/pages/Settings.tsx": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af",
+        "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+        "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+      },
+      "limits": "750ms process-tree sampling is not exhaustive for short-lived descendants; global application/official/test Chrome and reserved-port scan complements sampled absence"
+    },
+    "limits": [
+      "Original4API failures stop at first status assertion; only two pause diagnostics separately prove overwritten state and extra charge. Later failed-case equality/public/retry assertions not executed.",
+      "Original3browser failures stop at alert/retry count assertion; passed preceding markers/gates identify accepted current reads and mutation messages. Later assertions not claimed.",
+      "Fixed full all-table equality is an executed assertion, not a separately exported raw passing snapshot. No native D1 concurrency.",
+      "Passing browser traces not retained by existing retain-on-failure; original3 failure traces retained. Browser HTTP errors/holds and finite-frame schedules synthetic.",
+      "Same-state pause/ABA intentionally accepted; no full-snapshot/readiness/request-order policy.",
+      "139sampled PIDs is nonexhaustive; retained release scan confirms matching runner/listener vacancy. Two leftover D1 paths manually removed only after processes exited; no standalone MF lifecycle instrumentation."
+    ]
+  },
+  "evidence_sha256": {
+    "cleanup-before-scan.json": "985a9cf056fdfb572f8fb69e4df176e9fb1067f47ff0abad07ad7f7ab0a664a2",
+    "cleanup-before-temp-removal.json": "bff44fb4cdc8f4e303222279e63c901125ec3a82a9cdd5dbf3bd2f1b30aaa0f0",
+    "cleanup-final-scan.json": "f9d9c2bb23901d2f20c4c3ec61fb7e7e4b6d609299ebf14f5be9b097e175a48e",
+    "cleanup-release.json": "5941d541401a7ef106e954e2bd39a72e82360ab78e085212dfc1fabe1acf16cf",
+    "final-delivery-identity.json": "2ba6b0a6c22dc8b5b8f2194c7b4028efa369cf790bc2b22d98023b61d1ffc16f",
+    "fixed-activation-controls-before-scan.json": "1182a56e7811165b2e71c7d2e750397998176258987224589b33cad89cc093a8",
+    "fixed-activation-controls-exit.json": "d411536dd4b2585f0411aeb836092f16260b8e228fc963be7c3f3bc1d379470a",
+    "fixed-activation-controls-launch.json": "d9eb8608980ae88e1cae36a0b26b89af67ee8002d61492658d68fea56ba72ad2",
+    "fixed-activation-controls.log": "e0fba351f8f7c23072290b90e5ac7eb03fd5cb92e53845e8a2da38f870d6ab58",
+    "fixed-api-before-scan.json": "4b2e7b165537732c07ca9075ba1ae3a8e86bb66fed809072d2c191cdb7759c3b",
+    "fixed-api-exit.json": "30de5d87eb8248e38ed72f7fbd8b294a016efb9d1f4157b9b9f357e7c7748e62",
+    "fixed-api-launch.json": "e2d5066d4f9df5d70dd094de5a79f72a868449b0ddd1c73743966c1febbdfbe7",
+    "fixed-api.log": "4c65e8a1111983702caa0b813ec2b7b4af09bb1da71c1a3107c871cbde7f7bab",
+    "fixed-browser-before-scan.json": "9bbcb650bcbf7f1309e49ad2767da8eb9a2484b5d1be73c07e6f067425505438",
+    "fixed-browser-exit.json": "a87c70406b972aff4390ceaf384a49d6a9945df937e0e2904c913c76cf541c46",
+    "fixed-browser-launch.json": "4725f8e0bec332b6662e62f8d746262a2b2039884fda57ff058b1410424b7302",
+    "fixed-browser-report.json": "114d17b00e66342dc3bb2b508e92a8d8323a851090f55ecf7556afaa6ab473f6",
+    "fixed-browser-results/.last-run.json": "91d1c43004802cd49950d78eb11c8fa7d05da8ffffe219a8b13b2f561bc00903",
+    "fixed-browser.log": "7eddfb843a86a1031d96028f52c231ef92d06a80b5e2c4a5acac111d04e16172",
+    "fixed-restoration.json": "ceb68fb919555574e2478665c396817dc827ba9b5f8388e8577eddaf9c56120c",
+    "initial-provenance.json": "239928055b3395491362752e15f12a067983354c1f5f1fa1a0fed29b2a88593e",
+    "original-api-before-scan.json": "97df58960fd470b5625ee5b5f5f5bf474e323870a557d807e6246af158f7f821",
+    "original-api-exit.json": "70e63a18dbf8404f9c2006787e01be0512296197a6118406c000f8f07149771c",
+    "original-api-launch.json": "1216556c5cf3d7c38bce7101fc92149454e3b1d51b7b41350cb9911acab7cd31",
+    "original-api.log": "4c23a86049e9dc529b02156825c9cf6a8a77949797c2710817639cd03b028098",
+    "original-browser-before-scan.json": "c5ff0079ef64110c6a9c6c2dbe4f6ff9347f53066b343422bc578b87fa79c3e9",
+    "original-browser-exit.json": "3c9caf55fd4ecacaef6a2fb33c39e78d116bce54671857bbf7e143c04ccd6658",
+    "original-browser-launch.json": "126617baa9bd5061ae36d6060f59ebff9f0ee2043ade74b58b4ee0142ab384f2",
+    "original-browser-report.json": "dcd125536906cb23c9489c2fcd81768960af08cb441652c61c9bf73f394686f6",
+    "original-browser-results/.last-run.json": "0a538f12b099c1f9c81860acd79c0f3f2cfffcf398868ff25607bf7dd8580c02",
+    "original-browser-results/settings-load-error-accept-0adb9-l-with-identical-error-text/error-context.md": "5621d5e90ab269e0784a2d4ed3cb7e3ddf1d20ceb571a6e248ca7610e4549651",
+    "original-browser-results/settings-load-error-accept-0adb9-l-with-identical-error-text/trace.zip": "3ca98ef0a68d441e62b545ec67b1d31060f0d1915de563cb51d7fb09cb01b32e",
+    "original-browser-results/settings-load-error-accept-844f8--failure-and-retains-drafts/error-context.md": "a9ffd98e8d240a789e710625f841090f33f5814ac2b190cf316129a828f2f2b9",
+    "original-browser-results/settings-load-error-accept-844f8--failure-and-retains-drafts/trace.zip": "2e8710be1b8025c2fb2020bb8d17b682ade71e396ad50b6fe59ef1b56d007990",
+    "original-browser-results/settings-load-error-accept-917af-l-with-identical-error-text/error-context.md": "0ccd30eb810416fdc893958e6858278f7124dfb85e2d677cf3e6c1264a78a177",
+    "original-browser-results/settings-load-error-accept-917af-l-with-identical-error-text/trace.zip": "3507d3b302a70b7547e7c58d99a30414f1228b9eaf6dc65dd84a15dc66273970",
+    "original-browser.log": "ada6a5ec5ea8b7b23442cc73f3a6d53cc7140439313d79a2bd294f170d588494",
+    "original-phase-final-scan.json": "cf8c6b761a9abcbc4a5635c8662309d58baea4fb6bddffa74f14132237648f7b",
+    "prelaunch-scan.json": "e04895798f64753fa2798aca2efe4460d9e51b39bb7b91930e89bcffc1e75376",
+    "validation-finalize.py": "ab82739360560c471d0fb63cf2729ae4218183a053e3e139bf250b8d0149883b",
+    "validation-orchestration.py": "3014f9149492ea5edcb426689aabaadbfcd39ed64510018274262851645692f5",
+    "validation-summary.json": "31ce6c8d2b2773f096c2108ddc5b8720044a93b7489746226b474d7e625a1253",
+    "web-types-before-scan.json": "e99111ba927e41a9d4f339930cb3e567589708ed4ed80c38dc6ed7ec81d78138",
+    "web-types-exit.json": "11e59cfbbd5d44b69346e98a950f348496e2fe57205616f8c3443b64e03957e9",
+    "web-types-launch.json": "7b2e220129a0cec50c95c86b5c28c357ddfcffa3ee0acf15db1c23223ec796c6",
+    "web-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "worker-types-before-scan.json": "a231ca36be523241d45f1396d318c082d65d5290e12881b24a8c64795b31ee3c",
+    "worker-types-exit.json": "562b19549ffb051d13f8ae81ad997e2ad8e750fa212367d2b01f4d88a9362ec8",
+    "worker-types-launch.json": "5eca824e09ea0be6d219aa57c20867ed45f2384bf0ef9a0842a03b39058d9494",
+    "worker-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "evidence_storage": {
+    "committed_text_files": 47,
+    "owner_local_trace_files": 3,
+    "owner_local_trace_paths": [
+      "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-0adb9-l-with-identical-error-text/trace.zip",
+      "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-844f8--failure-and-retains-drafts/trace.zip",
+      "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-917af-l-with-identical-error-text/trace.zip"
+    ],
+    "all_fifty_hashes": "evidence_sha256; traces retained immutable at original owner paths, never deleted"
+  }
+}

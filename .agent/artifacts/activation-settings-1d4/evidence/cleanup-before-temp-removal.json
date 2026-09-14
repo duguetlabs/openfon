@@ -1,0 +1,30 @@
+{
+  "utc": "2026-09-14T18:55:26.952093+00:00",
+  "observed_process_count": 139,
+  "observed_remaining": [],
+  "owned_temp_paths": [
+    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-FDud2N",
+    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-k1SIhA"
+  ],
+  "existing_owned_temps": [
+    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-FDud2N",
+    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-k1SIhA"
+  ],
+  "scan": {
+    "utc": "2026-09-14T18:55:26.877253+00:00",
+    "application_processes": [],
+    "reserved_listeners": {},
+    "known_unrelated_preserved": [
+      {
+        "pid": 54328,
+        "ppid": 54317,
+        "comm": "/Users/cristian/Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+      },
+      {
+        "pid": 54317,
+        "ppid": 53707,
+        "comm": "/Users/cristian/projects/fun/linkedin-mcps/linkedin-mcp/.venv/lib/python3.13/site-packages/playwright/driver/node"
+      }
+    ]
+  }
+}

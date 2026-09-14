@@ -1,0 +1,182 @@
+[WebServer] (node:67144) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:68026) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:68032) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:68046) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:69296) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] ▲ [WARNING] Scheduled Workers are not automatically triggered during local development.
+[WebServer] 
+[WebServer]   To manually trigger a scheduled event, run:
+[WebServer]     curl "http://localhost:8812/cdn-cgi/local/scheduled"
+[WebServer]   For more details, see https://developers.cloudflare.com/workers/configuration/cron-triggers/#test-cron-triggers-locally
+[WebServer] 
+[WebServer] 
+
+
+Running 8 tests using 1 worker
+
+(node:69874) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+(node:69874) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/8] e2e/settings-load-error.spec.ts:58:1 › accepted automatic settings read clears only an earlier local load failure and retains drafts
+e2e/settings-load-error.spec.ts:58:1 › accepted automatic settings read clears only an earlier local load failure and retains drafts
+settings-load-diagnostic {"reads":4,"delivered":[1,2,3,4],"loadAlerts":1}
+
+  1) e2e/settings-load-error.spec.ts:58:1 › accepted automatic settings read clears only an earlier local load failure and retains drafts 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  getByRole('alert').filter({ hasText: 'Local load unavailable' })
+    Expected: 0
+    Received: 1
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveCount" getByRole('alert').filter({ hasText: 'Local load unavailable' }) with timeout 5000ms
+      - waiting for getByRole('alert').filter({ hasText: 'Local load unavailable' })
+        14 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      68 |   await expect.poll(() => reads.delivered.includes(4)).toBe(true);
+      69 |   console.log('settings-load-diagnostic', JSON.stringify({ reads: reads.reads, delivered: reads.delivered, loadAlerts: await alert(page, 'Local load unavailable').count() }));
+    > 70 |   await expect(alert(page, 'Local load unavailable')).toHaveCount(0);
+         |                                                       ^
+      71 |   await expect(retrySettings(page)).toHaveCount(0);
+      72 |   await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Newer unsaved business draft');
+      73 |   expect((await (await page.request.get('/api/me/business')).json()).name).toBe('Load ownership workshop');
+        at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e/settings-load-error.spec.ts:70:55
+
+    Error Context: ../../../../../../../Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-844f8--failure-and-retains-drafts/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-844f8--failure-and-retains-drafts/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../../Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-844f8--failure-and-retains-drafts/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+(node:71057) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+(node:71057) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[2/8] e2e/settings-load-error.spec.ts:77:3 › superseded local success cannot change the newer load outcome
+[3/8] e2e/settings-load-error.spec.ts:77:3 › superseded local failure cannot change the newer load outcome
+[4/8] e2e/settings-load-error.spec.ts:111:3 › accepted settings read preserves a newer create refusal with identical error text
+  2) e2e/settings-load-error.spec.ts:111:3 › accepted settings read preserves a newer create refusal with identical error text 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  getByRole('button', { name: 'Retry settings refresh', exact: true })
+    Expected: 0
+    Received: 1
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveCount" getByRole('button', { name: 'Retry settings refresh', exact: true }) with timeout 5000ms
+      - waiting for getByRole('button', { name: 'Retry settings refresh', exact: true })
+        14 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      139 |       await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Accepted after mutation error');
+      140 |       await expect(alert(page, 'Same ownership message')).toBeVisible();
+    > 141 |       await expect(retrySettings(page)).toHaveCount(0);
+          |                                         ^
+      142 |       await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Newer draft after refusal');
+      143 |       if (mutation === 'create') await expect(page.getByPlaceholder(/Save current setup as/)).toHaveValue('Retained create draft');
+      144 |       expect(writes).toBe(1);
+        at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e/settings-load-error.spec.ts:141:41
+
+    Error Context: ../../../../../../../Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-917af-l-with-identical-error-text/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-917af-l-with-identical-error-text/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../../Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-917af-l-with-identical-error-text/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+(node:72670) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+(node:72670) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[5/8] e2e/settings-load-error.spec.ts:111:3 › accepted settings read preserves a newer rename refusal with identical error text
+  3) e2e/settings-load-error.spec.ts:111:3 › accepted settings read preserves a newer rename refusal with identical error text 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  getByRole('button', { name: 'Retry settings refresh', exact: true })
+    Expected: 0
+    Received: 1
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveCount" getByRole('button', { name: 'Retry settings refresh', exact: true }) with timeout 5000ms
+      - waiting for getByRole('button', { name: 'Retry settings refresh', exact: true })
+        14 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      139 |       await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Accepted after mutation error');
+      140 |       await expect(alert(page, 'Same ownership message')).toBeVisible();
+    > 141 |       await expect(retrySettings(page)).toHaveCount(0);
+          |                                         ^
+      142 |       await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Newer draft after refusal');
+      143 |       if (mutation === 'create') await expect(page.getByPlaceholder(/Save current setup as/)).toHaveValue('Retained create draft');
+      144 |       expect(writes).toBe(1);
+        at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e/settings-load-error.spec.ts:141:41
+
+    Error Context: ../../../../../../../Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-0adb9-l-with-identical-error-text/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../../../Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-0adb9-l-with-identical-error-text/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../../../Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-0adb9-l-with-identical-error-text/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+(node:73177) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+(node:73177) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[6/8] e2e/settings-load-error.spec.ts:150:3 › independent accepted settings read retains confirmed apply display recovery
+[7/8] e2e/settings-load-error.spec.ts:150:3 › independent accepted settings read retains confirmed delete display recovery
+[8/8] e2e/settings-load-error.spec.ts:181:1 › independent accepted settings read preserves accepted-write session recovery and baseline
+  3 failed
+    e2e/settings-load-error.spec.ts:58:1 › accepted automatic settings read clears only an earlier local load failure and retains drafts 
+    e2e/settings-load-error.spec.ts:111:3 › accepted settings read preserves a newer create refusal with identical error text 
+    e2e/settings-load-error.spec.ts:111:3 › accepted settings read preserves a newer rename refusal with identical error text 
+  5 passed (1.0m)

@@ -1,0 +1,17 @@
+{
+  "utc": "2026-09-14T18:52:24.294414+00:00",
+  "application_processes": [],
+  "reserved_listeners": {},
+  "known_unrelated_preserved": [
+    {
+      "pid": 54328,
+      "ppid": 54317,
+      "comm": "/Users/cristian/Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+    },
+    {
+      "pid": 54317,
+      "ppid": 53707,
+      "comm": "/Users/cristian/projects/fun/linkedin-mcps/linkedin-mcp/.venv/lib/python3.13/site-packages/playwright/driver/node"
+    }
+  ]
+}

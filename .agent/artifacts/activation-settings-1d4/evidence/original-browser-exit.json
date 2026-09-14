@@ -1,0 +1,379 @@
+{
+  "utc": "2026-09-14T18:53:35.261219+00:00",
+  "exit": 1,
+  "duration_seconds": 65.71,
+  "observed_processes": [
+    {
+      "pid": 66781,
+      "ppid": 64583,
+      "comm": "<defunct>"
+    },
+    {
+      "pid": 66869,
+      "ppid": 66781,
+      "comm": "node"
+    },
+    {
+      "pid": 67084,
+      "ppid": 66869,
+      "comm": "/bin/sh"
+    },
+    {
+      "pid": 67085,
+      "ppid": 67084,
+      "comm": "npm"
+    },
+    {
+      "pid": 67142,
+      "ppid": 67085,
+      "comm": "sh"
+    },
+    {
+      "pid": 67144,
+      "ppid": 67142,
+      "comm": "node"
+    },
+    {
+      "pid": 67175,
+      "ppid": 67144,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+    },
+    {
+      "pid": 68032,
+      "ppid": 67084,
+      "comm": "node"
+    },
+    {
+      "pid": 68046,
+      "ppid": 68032,
+      "comm": "npm"
+    },
+    {
+      "pid": 68169,
+      "ppid": 68046,
+      "comm": "node"
+    },
+    {
+      "pid": 68179,
+      "ppid": 68169,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    },
+    {
+      "pid": 68864,
+      "ppid": 68179,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 68893,
+      "ppid": 68179,
+      "comm": "(workerd)"
+    },
+    {
+      "pid": 68932,
+      "ppid": 68179,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 69296,
+      "ppid": 68032,
+      "comm": "npm"
+    },
+    {
+      "pid": 69410,
+      "ppid": 69296,
+      "comm": "node"
+    },
+    {
+      "pid": 69411,
+      "ppid": 69410,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    },
+    {
+      "pid": 69425,
+      "ppid": 69411,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/wrangler/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+    },
+    {
+      "pid": 69426,
+      "ppid": 69411,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 69431,
+      "ppid": 69411,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/wrangler/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+    },
+    {
+      "pid": 69641,
+      "ppid": 69411,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 69874,
+      "ppid": 66869,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    },
+    {
+      "pid": 69891,
+      "ppid": 69874,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 69897,
+      "ppid": 69891,
+      "comm": "/usr/bin/profiles"
+    },
+    {
+      "pid": 69906,
+      "ppid": 69891,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 69907,
+      "ppid": 69891,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 69908,
+      "ppid": 69891,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 69909,
+      "ppid": 69891,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 69914,
+      "ppid": 69891,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 69915,
+      "ppid": 69891,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 69916,
+      "ppid": 69891,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 71057,
+      "ppid": 66869,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    },
+    {
+      "pid": 71059,
+      "ppid": 71057,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 71063,
+      "ppid": 71059,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 71064,
+      "ppid": 71059,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 71065,
+      "ppid": 71059,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 71067,
+      "ppid": 71059,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 71068,
+      "ppid": 71059,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 71069,
+      "ppid": 71059,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 71488,
+      "ppid": 71059,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 71491,
+      "ppid": 71059,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 71492,
+      "ppid": 71059,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 71524,
+      "ppid": 71059,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 71525,
+      "ppid": 71059,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 71526,
+      "ppid": 71059,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 71531,
+      "ppid": 71059,
+      "comm": "(Google"
+    },
+    {
+      "pid": 72670,
+      "ppid": 66869,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    },
+    {
+      "pid": 72671,
+      "ppid": 72670,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 72676,
+      "ppid": 72671,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 72677,
+      "ppid": 72671,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 72678,
+      "ppid": 72671,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 72681,
+      "ppid": 72671,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 72682,
+      "ppid": 72671,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 72683,
+      "ppid": 72671,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 72693,
+      "ppid": 72671,
+      "comm": "(Google"
+    },
+    {
+      "pid": 73177,
+      "ppid": 66869,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    },
+    {
+      "pid": 73178,
+      "ppid": 73177,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 73183,
+      "ppid": 73178,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 73184,
+      "ppid": 73178,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 73185,
+      "ppid": 73178,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 73187,
+      "ppid": 73178,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 73189,
+      "ppid": 73178,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 73190,
+      "ppid": 73178,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 73636,
+      "ppid": 73178,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 73637,
+      "ppid": 73178,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 73638,
+      "ppid": 73178,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 73681,
+      "ppid": 73178,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 73682,
+      "ppid": 73178,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 73683,
+      "ppid": 73178,
+      "comm": "/Applications/Google"
+    }
+  ],
+  "observed_remaining": [],
+  "temp_new_remaining": [
+    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-k1SIhA"
+  ],
+  "scan": {
+    "utc": "2026-09-14T18:53:35.223648+00:00",
+    "application_processes": [],
+    "reserved_listeners": {},
+    "known_unrelated_preserved": [
+      {
+        "pid": 54328,
+        "ppid": 54317,
+        "comm": "/Users/cristian/Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+      },
+      {
+        "pid": 54317,
+        "ppid": 53707,
+        "comm": "/Users/cristian/projects/fun/linkedin-mcps/linkedin-mcp/.venv/lib/python3.13/site-packages/playwright/driver/node"
+      }
+    ]
+  },
+  "source_after": {
+    "src/studio-api.ts": "801aa8415afaaad6029c8d9fa74d6131f7a99dc38c15e4dfa05cac56712987ff",
+    "web/src/pages/Settings.tsx": "376bd195ec8373c88c11774e5bb95daa643fef298f9b2d456e498002d1fa3a9c",
+    "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+    "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+  }
+}

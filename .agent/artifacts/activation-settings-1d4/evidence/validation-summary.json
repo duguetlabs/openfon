@@ -1,0 +1,2401 @@
+{
+  "base": "1d4b73331353ecacf07b46ce9d186c032a04fc51",
+  "source_commit": "e6d5c5d94fddc64a5ea4b8b373f41f8c43c2925c",
+  "qa_source": "073511b",
+  "scope": "Seven serial commands; original new10 API/new8 browser; fixed new10 API and separately only6 activation controls, Worker+web types, new8+named1 browser. No retries/edits/native/other scope.",
+  "tool_sessions": {
+    "original_orchestration": 4783,
+    "fixed_orchestration": 63654,
+    "cleanup": 46929
+  },
+  "browser": {
+    "original": {
+      "stats": {
+        "startTime": "2026-09-14T18:52:32.566Z",
+        "duration": 61673.742,
+        "expected": 5,
+        "skipped": 0,
+        "unexpected": 3,
+        "flaky": 0
+      },
+      "cases": [
+        {
+          "title": "accepted automatic settings read clears only an earlier local load failure and retains drafts",
+          "status": "failed",
+          "duration_ms": 8652,
+          "first_error": "Error: expect(locator).toHaveCount(expected) failed\n\nLocator:  getByRole('alert').filter({ hasText: 'Local load unavailable' })\nExpected: 0\nReceived: 1\nTimeout:  5000ms\n\nCall log:\n  - Expect \"toHaveCount\" getByRole('alert').filter({ hasText: 'Local load unavailable' }) with timeout 5000ms\n  - waiting for getByRole('alert').filter({ hasText: 'Local load unavailable' })\n    14 \u00d7 locator resolved to 1 element\n       - unexpected value \"1\"\n",
+          "stdout": [
+            {
+              "text": "settings-load-diagnostic {\"reads\":4,\"delivered\":[1,2,3,4],\"loadAlerts\":1}\n"
+            }
+          ],
+          "attachments": [
+            {
+              "name": "error-context",
+              "contentType": "text/markdown",
+              "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-844f8--failure-and-retains-drafts/error-context.md"
+            },
+            {
+              "name": "trace",
+              "contentType": "application/zip",
+              "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-844f8--failure-and-retains-drafts/trace.zip"
+            }
+          ]
+        },
+        {
+          "title": "superseded local success cannot change the newer load outcome",
+          "status": "passed",
+          "duration_ms": 2052,
+          "first_error": "",
+          "stdout": [],
+          "attachments": []
+        },
+        {
+          "title": "superseded local failure cannot change the newer load outcome",
+          "status": "passed",
+          "duration_ms": 1758,
+          "first_error": "",
+          "stdout": [],
+          "attachments": []
+        },
+        {
+          "title": "accepted settings read preserves a newer create refusal with identical error text",
+          "status": "failed",
+          "duration_ms": 7855,
+          "first_error": "Error: expect(locator).toHaveCount(expected) failed\n\nLocator:  getByRole('button', { name: 'Retry settings refresh', exact: true })\nExpected: 0\nReceived: 1\nTimeout:  5000ms\n\nCall log:\n  - Expect \"toHaveCount\" getByRole('button', { name: 'Retry settings refresh', exact: true }) with timeout 5000ms\n  - waiting for getByRole('button', { name: 'Retry settings refresh', exact: true })\n    14 \u00d7 locator resolved to 1 element\n       - unexpected value \"1\"\n",
+          "stdout": [],
+          "attachments": [
+            {
+              "name": "error-context",
+              "contentType": "text/markdown",
+              "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-917af-l-with-identical-error-text/error-context.md"
+            },
+            {
+              "name": "trace",
+              "contentType": "application/zip",
+              "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-917af-l-with-identical-error-text/trace.zip"
+            }
+          ]
+        },
+        {
+          "title": "accepted settings read preserves a newer rename refusal with identical error text",
+          "status": "failed",
+          "duration_ms": 6673,
+          "first_error": "Error: expect(locator).toHaveCount(expected) failed\n\nLocator:  getByRole('button', { name: 'Retry settings refresh', exact: true })\nExpected: 0\nReceived: 1\nTimeout:  5000ms\n\nCall log:\n  - Expect \"toHaveCount\" getByRole('button', { name: 'Retry settings refresh', exact: true }) with timeout 5000ms\n  - waiting for getByRole('button', { name: 'Retry settings refresh', exact: true })\n    14 \u00d7 locator resolved to 1 element\n       - unexpected value \"1\"\n",
+          "stdout": [],
+          "attachments": [
+            {
+              "name": "error-context",
+              "contentType": "text/markdown",
+              "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-0adb9-l-with-identical-error-text/error-context.md"
+            },
+            {
+              "name": "trace",
+              "contentType": "application/zip",
+              "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-0adb9-l-with-identical-error-text/trace.zip"
+            }
+          ]
+        },
+        {
+          "title": "independent accepted settings read retains confirmed apply display recovery",
+          "status": "passed",
+          "duration_ms": 2877,
+          "first_error": "",
+          "stdout": [],
+          "attachments": []
+        },
+        {
+          "title": "independent accepted settings read retains confirmed delete display recovery",
+          "status": "passed",
+          "duration_ms": 2549,
+          "first_error": "",
+          "stdout": [],
+          "attachments": []
+        },
+        {
+          "title": "independent accepted settings read preserves accepted-write session recovery and baseline",
+          "status": "passed",
+          "duration_ms": 2532,
+          "first_error": "",
+          "stdout": [],
+          "attachments": []
+        }
+      ]
+    },
+    "fixed": {
+      "stats": {
+        "startTime": "2026-09-14T18:54:24.170Z",
+        "duration": 41349.686,
+        "expected": 9,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "cases": [
+        {
+          "title": "accepted automatic settings read clears only an earlier local load failure and retains drafts",
+          "status": "passed",
+          "duration_ms": 1985,
+          "first_error": "",
+          "stdout": [
+            {
+              "text": "settings-load-diagnostic {\"reads\":4,\"delivered\":[1,2,3,4],\"loadAlerts\":0}\n"
+            }
+          ],
+          "attachments": []
+        },
+        {
+          "title": "superseded local success cannot change the newer load outcome",
+          "status": "passed",
+          "duration_ms": 1782,
+          "first_error": "",
+          "stdout": [],
+          "attachments": []
+        },
+        {
+          "title": "superseded local failure cannot change the newer load outcome",
+          "status": "passed",
+          "duration_ms": 1675,
+          "first_error": "",
+          "stdout": [],
+          "attachments": []
+        },
+        {
+          "title": "accepted settings read preserves a newer create refusal with identical error text",
+          "status": "passed",
+          "duration_ms": 2788,
+          "first_error": "",
+          "stdout": [],
+          "attachments": []
+        },
+        {
+          "title": "accepted settings read preserves a newer rename refusal with identical error text",
+          "status": "passed",
+          "duration_ms": 5455,
+          "first_error": "",
+          "stdout": [],
+          "attachments": []
+        },
+        {
+          "title": "independent accepted settings read retains confirmed apply display recovery",
+          "status": "passed",
+          "duration_ms": 2612,
+          "first_error": "",
+          "stdout": [],
+          "attachments": []
+        },
+        {
+          "title": "independent accepted settings read retains confirmed delete display recovery",
+          "status": "passed",
+          "duration_ms": 2648,
+          "first_error": "",
+          "stdout": [],
+          "attachments": []
+        },
+        {
+          "title": "independent accepted settings read preserves accepted-write session recovery and baseline",
+          "status": "passed",
+          "duration_ms": 3769,
+          "first_error": "",
+          "stdout": [],
+          "attachments": []
+        },
+        {
+          "title": "a failed second settings read retains refresh-only recovery",
+          "status": "passed",
+          "duration_ms": 2312,
+          "first_error": "",
+          "stdout": [],
+          "attachments": []
+        }
+      ]
+    }
+  },
+  "commands": {
+    "original-api": {
+      "log_summary": "Test Files  1 failed (1)\n      Tests  4 failed | 6 passed (10)\n   Start at  20:52:26\n   Duration  1.76s (transform 44%, import 42%, tests 14%)",
+      "launch": {
+        "utc": "2026-09-14T18:52:25.310473+00:00",
+        "command": [
+          "npx",
+          "--no-install",
+          "vitest",
+          "run",
+          "test/activation-state.test.ts",
+          "--reporter=verbose"
+        ],
+        "cwd": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc",
+        "source_sha256": {
+          "src/studio-api.ts": "801aa8415afaaad6029c8d9fa74d6131f7a99dc38c15e4dfa05cac56712987ff",
+          "web/src/pages/Settings.tsx": "376bd195ec8373c88c11774e5bb95daa643fef298f9b2d456e498002d1fa3a9c",
+          "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+          "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+        },
+        "temp_before": [
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-130lwt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-1Bcre3",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-1ZY90s",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-21Szmd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-223lQV",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-2kjrVR",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-2zmkSU",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-4EN04m",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-55WgEg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-6aFIC9",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-7vQ4jZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-7wtK79",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-8Z2l0A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-8pOxvy",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-93C3Uf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-9SMLb7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-9i5pcg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Aes9yM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-CIj3J0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-CRSjHT",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ECj6zX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-EUBPGL",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-EVArOm",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-F96x1e",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-FZn21g",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-GZ9KoZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Htl1zf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-HuaaJI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Hy49ku",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-I9WMQ7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-IRNgVM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-IcnF0L",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Iyy85A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-JUq9AS",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-L7CthQ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LAoEwx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LJBZyp",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LLaO58",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LyNGU8",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-MSrKIw",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-McFxXI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Mg0FYB",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-N3sbFa",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-NmwGJw",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-NslXbZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OC5VPb",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OOxFH1",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OkEAip",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OzJiqU",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-PMQQQi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-PZmNqc",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-QMvWeC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-QqLQ6H",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RFnvGO",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RbhMlC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RjS0Rg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RqO7nL",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-SZCwm1",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-SoMicX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-T3qBdD",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-T8lRI2",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-TBzEdI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-TXUry6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ThDbvb",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V5ScLu",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V9Qq2j",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V9tOB4",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-VD5Lnk",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-YAll5r",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ZZzVuH",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ZxKlzM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-aIfUQt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-axOTyM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-cEG8zd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-chJWXK",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-dS7EwF",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-dVR8HS",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-driy2A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-f0ThBd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-gBv5gg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ggneFc",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-gvvjj7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i0ig5Z",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i6S5jY",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i7qJG0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-iBnwvv",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-iP3Jwg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-jRzmWC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-jTzepC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-kughw5",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-kxMbEx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-lGHi9V",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-lhcKcx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-mH6zC0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-mdvUQ5",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-meftaN",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-nJd9fi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-nzxdGA",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-oEn4Rt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-oKOoGP",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pgPGHg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pt1ONi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pvNfDv",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-r3Hni4",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-r6hef7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-rh6B20",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-s4ZZaP",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-sE46hM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-sr3FAe",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-t64h7U",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-tm1rtz",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ukp65E",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-wGUwpa",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-wnH0w6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xD4dMF",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xgWFEX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xjD5q6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-y4m8ph",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ycOgTf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-znfExP"
+        ],
+        "dependency_snapshot": "/Users/cristian/projects/fun/openfon/node_modules",
+        "environment": {
+          "OPENFON_E2E_PORT": "8812",
+          "OPENFON_E2E_INSPECTOR_PORT": "9252",
+          "PLAYWRIGHT_CHROMIUM_EXECUTABLE": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        }
+      },
+      "exit": {
+        "utc": "2026-09-14T18:52:29.061478+00:00",
+        "exit": 1,
+        "duration_seconds": 3.749,
+        "observed_processes": [
+          {
+            "pid": 65362,
+            "ppid": 64583,
+            "comm": "<defunct>"
+          },
+          {
+            "pid": 65466,
+            "ppid": 65362,
+            "comm": "node"
+          },
+          {
+            "pid": 65569,
+            "ppid": 65466,
+            "comm": "/Users/cristian/projects/fun/openfon/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+          },
+          {
+            "pid": 65691,
+            "ppid": 65466,
+            "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+          }
+        ],
+        "observed_remaining": [],
+        "temp_new_remaining": [],
+        "scan": {
+          "utc": "2026-09-14T18:52:29.022565+00:00",
+          "application_processes": [],
+          "reserved_listeners": {},
+          "known_unrelated_preserved": [
+            {
+              "pid": 54328,
+              "ppid": 54317,
+              "comm": "/Users/cristian/Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+            },
+            {
+              "pid": 54317,
+              "ppid": 53707,
+              "comm": "/Users/cristian/projects/fun/linkedin-mcps/linkedin-mcp/.venv/lib/python3.13/site-packages/playwright/driver/node"
+            }
+          ]
+        },
+        "source_after": {
+          "src/studio-api.ts": "801aa8415afaaad6029c8d9fa74d6131f7a99dc38c15e4dfa05cac56712987ff",
+          "web/src/pages/Settings.tsx": "376bd195ec8373c88c11774e5bb95daa643fef298f9b2d456e498002d1fa3a9c",
+          "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+          "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+        }
+      }
+    },
+    "fixed-api": {
+      "log_summary": "Test Files  1 passed (1)\n      Tests  10 passed (10)\n   Start at  20:54:09\n   Duration  2.19s (transform 47%, import 37%, tests 14%, worker 2%)",
+      "launch": {
+        "utc": "2026-09-14T18:53:56.340414+00:00",
+        "command": [
+          "npx",
+          "--no-install",
+          "vitest",
+          "run",
+          "test/activation-state.test.ts",
+          "--reporter=verbose"
+        ],
+        "cwd": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc",
+        "source_sha256": {
+          "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+          "web/src/pages/Settings.tsx": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af",
+          "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+          "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+        },
+        "temp_before": [
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-130lwt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-1Bcre3",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-1ZY90s",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-21Szmd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-223lQV",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-2kjrVR",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-2zmkSU",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-4EN04m",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-55WgEg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-6aFIC9",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-7vQ4jZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-7wtK79",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-8Z2l0A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-8pOxvy",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-93C3Uf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-9SMLb7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-9i5pcg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Aes9yM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-CIj3J0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-CRSjHT",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ECj6zX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-EUBPGL",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-EVArOm",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-F96x1e",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-FZn21g",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-GZ9KoZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Htl1zf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-HuaaJI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Hy49ku",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-I9WMQ7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-IRNgVM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-IcnF0L",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Iyy85A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-JUq9AS",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-L7CthQ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LAoEwx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LJBZyp",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LLaO58",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LyNGU8",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-MSrKIw",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-McFxXI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Mg0FYB",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-N3sbFa",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-NmwGJw",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-NslXbZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OC5VPb",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OOxFH1",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OkEAip",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OzJiqU",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-PMQQQi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-PZmNqc",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-QMvWeC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-QqLQ6H",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RFnvGO",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RbhMlC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RjS0Rg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RqO7nL",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-SZCwm1",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-SoMicX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-T3qBdD",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-T8lRI2",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-TBzEdI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-TXUry6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ThDbvb",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V5ScLu",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V9Qq2j",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V9tOB4",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-VD5Lnk",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-YAll5r",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ZZzVuH",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ZxKlzM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-aIfUQt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-axOTyM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-cEG8zd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-chJWXK",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-dS7EwF",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-dVR8HS",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-driy2A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-f0ThBd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-gBv5gg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ggneFc",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-gvvjj7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i0ig5Z",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i6S5jY",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i7qJG0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-iBnwvv",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-iP3Jwg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-jRzmWC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-jTzepC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-k1SIhA",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-kughw5",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-kxMbEx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-lGHi9V",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-lhcKcx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-mH6zC0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-mdvUQ5",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-meftaN",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-nJd9fi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-nzxdGA",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-oEn4Rt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-oKOoGP",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pgPGHg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pt1ONi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pvNfDv",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-r3Hni4",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-r6hef7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-rh6B20",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-s4ZZaP",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-sE46hM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-sr3FAe",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-t64h7U",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-tm1rtz",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ukp65E",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-wGUwpa",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-wnH0w6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xD4dMF",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xgWFEX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xjD5q6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-y4m8ph",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ycOgTf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-znfExP"
+        ],
+        "dependency_snapshot": "/Users/cristian/projects/fun/openfon/node_modules",
+        "environment": {
+          "OPENFON_E2E_PORT": "8812",
+          "OPENFON_E2E_INSPECTOR_PORT": "9252",
+          "PLAYWRIGHT_CHROMIUM_EXECUTABLE": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        }
+      },
+      "exit": {
+        "utc": "2026-09-14T18:54:12.253932+00:00",
+        "exit": 0,
+        "duration_seconds": 15.913,
+        "observed_processes": [
+          {
+            "pid": 80162,
+            "ppid": 78312,
+            "comm": "<defunct>"
+          },
+          {
+            "pid": 80557,
+            "ppid": 80162,
+            "comm": "node"
+          },
+          {
+            "pid": 80564,
+            "ppid": 80557,
+            "comm": "/Users/cristian/projects/fun/openfon/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+          },
+          {
+            "pid": 80566,
+            "ppid": 80557,
+            "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+          }
+        ],
+        "observed_remaining": [],
+        "temp_new_remaining": [],
+        "scan": {
+          "utc": "2026-09-14T18:54:12.216375+00:00",
+          "application_processes": [],
+          "reserved_listeners": {},
+          "known_unrelated_preserved": [
+            {
+              "pid": 54328,
+              "ppid": 54317,
+              "comm": "/Users/cristian/Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+            },
+            {
+              "pid": 54317,
+              "ppid": 53707,
+              "comm": "/Users/cristian/projects/fun/linkedin-mcps/linkedin-mcp/.venv/lib/python3.13/site-packages/playwright/driver/node"
+            }
+          ]
+        },
+        "source_after": {
+          "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+          "web/src/pages/Settings.tsx": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af",
+          "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+          "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+        }
+      }
+    },
+    "original-browser": {
+      "launch": {
+        "utc": "2026-09-14T18:52:29.549922+00:00",
+        "command": [
+          "npx",
+          "--no-install",
+          "playwright",
+          "test",
+          "e2e/settings-load-error.spec.ts",
+          "--workers=1",
+          "--retries=0",
+          "--output=/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results",
+          "--reporter=line,json"
+        ],
+        "cwd": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc",
+        "source_sha256": {
+          "src/studio-api.ts": "801aa8415afaaad6029c8d9fa74d6131f7a99dc38c15e4dfa05cac56712987ff",
+          "web/src/pages/Settings.tsx": "376bd195ec8373c88c11774e5bb95daa643fef298f9b2d456e498002d1fa3a9c",
+          "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+          "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+        },
+        "temp_before": [
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-130lwt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-1Bcre3",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-1ZY90s",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-21Szmd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-223lQV",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-2kjrVR",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-2zmkSU",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-4EN04m",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-55WgEg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-6aFIC9",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-7vQ4jZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-7wtK79",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-8Z2l0A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-8pOxvy",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-93C3Uf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-9SMLb7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-9i5pcg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Aes9yM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-CIj3J0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-CRSjHT",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ECj6zX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-EUBPGL",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-EVArOm",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-F96x1e",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-FZn21g",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-GZ9KoZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Htl1zf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-HuaaJI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Hy49ku",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-I9WMQ7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-IRNgVM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-IcnF0L",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Iyy85A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-JUq9AS",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-L7CthQ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LAoEwx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LJBZyp",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LLaO58",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LyNGU8",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-MSrKIw",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-McFxXI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Mg0FYB",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-N3sbFa",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-NmwGJw",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-NslXbZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OC5VPb",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OOxFH1",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OkEAip",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OzJiqU",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-PMQQQi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-PZmNqc",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-QMvWeC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-QqLQ6H",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RFnvGO",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RbhMlC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RjS0Rg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RqO7nL",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-SZCwm1",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-SoMicX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-T3qBdD",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-T8lRI2",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-TBzEdI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-TXUry6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ThDbvb",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V5ScLu",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V9Qq2j",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V9tOB4",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-VD5Lnk",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-YAll5r",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ZZzVuH",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ZxKlzM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-aIfUQt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-axOTyM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-cEG8zd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-chJWXK",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-dS7EwF",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-dVR8HS",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-driy2A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-f0ThBd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-gBv5gg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ggneFc",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-gvvjj7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i0ig5Z",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i6S5jY",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i7qJG0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-iBnwvv",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-iP3Jwg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-jRzmWC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-jTzepC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-kughw5",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-kxMbEx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-lGHi9V",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-lhcKcx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-mH6zC0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-mdvUQ5",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-meftaN",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-nJd9fi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-nzxdGA",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-oEn4Rt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-oKOoGP",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pgPGHg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pt1ONi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pvNfDv",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-r3Hni4",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-r6hef7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-rh6B20",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-s4ZZaP",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-sE46hM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-sr3FAe",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-t64h7U",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-tm1rtz",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ukp65E",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-wGUwpa",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-wnH0w6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xD4dMF",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xgWFEX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xjD5q6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-y4m8ph",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ycOgTf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-znfExP"
+        ],
+        "dependency_snapshot": "/Users/cristian/projects/fun/openfon/node_modules",
+        "environment": {
+          "OPENFON_E2E_PORT": "8812",
+          "OPENFON_E2E_INSPECTOR_PORT": "9252",
+          "PLAYWRIGHT_CHROMIUM_EXECUTABLE": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        }
+      },
+      "exit": {
+        "utc": "2026-09-14T18:53:35.261219+00:00",
+        "exit": 1,
+        "duration_seconds": 65.71,
+        "observed_processes": [
+          {
+            "pid": 66781,
+            "ppid": 64583,
+            "comm": "<defunct>"
+          },
+          {
+            "pid": 66869,
+            "ppid": 66781,
+            "comm": "node"
+          },
+          {
+            "pid": 67084,
+            "ppid": 66869,
+            "comm": "/bin/sh"
+          },
+          {
+            "pid": 67085,
+            "ppid": 67084,
+            "comm": "npm"
+          },
+          {
+            "pid": 67142,
+            "ppid": 67085,
+            "comm": "sh"
+          },
+          {
+            "pid": 67144,
+            "ppid": 67142,
+            "comm": "node"
+          },
+          {
+            "pid": 67175,
+            "ppid": 67144,
+            "comm": "/Users/cristian/projects/fun/openfon/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+          },
+          {
+            "pid": 68032,
+            "ppid": 67084,
+            "comm": "node"
+          },
+          {
+            "pid": 68046,
+            "ppid": 68032,
+            "comm": "npm"
+          },
+          {
+            "pid": 68169,
+            "ppid": 68046,
+            "comm": "node"
+          },
+          {
+            "pid": 68179,
+            "ppid": 68169,
+            "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+          },
+          {
+            "pid": 68864,
+            "ppid": 68179,
+            "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+          },
+          {
+            "pid": 68893,
+            "ppid": 68179,
+            "comm": "(workerd)"
+          },
+          {
+            "pid": 68932,
+            "ppid": 68179,
+            "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+          },
+          {
+            "pid": 69296,
+            "ppid": 68032,
+            "comm": "npm"
+          },
+          {
+            "pid": 69410,
+            "ppid": 69296,
+            "comm": "node"
+          },
+          {
+            "pid": 69411,
+            "ppid": 69410,
+            "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+          },
+          {
+            "pid": 69425,
+            "ppid": 69411,
+            "comm": "/Users/cristian/projects/fun/openfon/node_modules/wrangler/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+          },
+          {
+            "pid": 69426,
+            "ppid": 69411,
+            "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+          },
+          {
+            "pid": 69431,
+            "ppid": 69411,
+            "comm": "/Users/cristian/projects/fun/openfon/node_modules/wrangler/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+          },
+          {
+            "pid": 69641,
+            "ppid": 69411,
+            "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+          },
+          {
+            "pid": 69874,
+            "ppid": 66869,
+            "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+          },
+          {
+            "pid": 69891,
+            "ppid": 69874,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 69897,
+            "ppid": 69891,
+            "comm": "/usr/bin/profiles"
+          },
+          {
+            "pid": 69906,
+            "ppid": 69891,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 69907,
+            "ppid": 69891,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 69908,
+            "ppid": 69891,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 69909,
+            "ppid": 69891,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 69914,
+            "ppid": 69891,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 69915,
+            "ppid": 69891,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 69916,
+            "ppid": 69891,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 71057,
+            "ppid": 66869,
+            "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+          },
+          {
+            "pid": 71059,
+            "ppid": 71057,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 71063,
+            "ppid": 71059,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 71064,
+            "ppid": 71059,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 71065,
+            "ppid": 71059,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 71067,
+            "ppid": 71059,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 71068,
+            "ppid": 71059,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 71069,
+            "ppid": 71059,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 71488,
+            "ppid": 71059,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 71491,
+            "ppid": 71059,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 71492,
+            "ppid": 71059,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 71524,
+            "ppid": 71059,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 71525,
+            "ppid": 71059,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 71526,
+            "ppid": 71059,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 71531,
+            "ppid": 71059,
+            "comm": "(Google"
+          },
+          {
+            "pid": 72670,
+            "ppid": 66869,
+            "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+          },
+          {
+            "pid": 72671,
+            "ppid": 72670,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 72676,
+            "ppid": 72671,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 72677,
+            "ppid": 72671,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 72678,
+            "ppid": 72671,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 72681,
+            "ppid": 72671,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 72682,
+            "ppid": 72671,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 72683,
+            "ppid": 72671,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 72693,
+            "ppid": 72671,
+            "comm": "(Google"
+          },
+          {
+            "pid": 73177,
+            "ppid": 66869,
+            "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+          },
+          {
+            "pid": 73178,
+            "ppid": 73177,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 73183,
+            "ppid": 73178,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 73184,
+            "ppid": 73178,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 73185,
+            "ppid": 73178,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 73187,
+            "ppid": 73178,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 73189,
+            "ppid": 73178,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 73190,
+            "ppid": 73178,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 73636,
+            "ppid": 73178,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 73637,
+            "ppid": 73178,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 73638,
+            "ppid": 73178,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 73681,
+            "ppid": 73178,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 73682,
+            "ppid": 73178,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 73683,
+            "ppid": 73178,
+            "comm": "/Applications/Google"
+          }
+        ],
+        "observed_remaining": [],
+        "temp_new_remaining": [
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-k1SIhA"
+        ],
+        "scan": {
+          "utc": "2026-09-14T18:53:35.223648+00:00",
+          "application_processes": [],
+          "reserved_listeners": {},
+          "known_unrelated_preserved": [
+            {
+              "pid": 54328,
+              "ppid": 54317,
+              "comm": "/Users/cristian/Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+            },
+            {
+              "pid": 54317,
+              "ppid": 53707,
+              "comm": "/Users/cristian/projects/fun/linkedin-mcps/linkedin-mcp/.venv/lib/python3.13/site-packages/playwright/driver/node"
+            }
+          ]
+        },
+        "source_after": {
+          "src/studio-api.ts": "801aa8415afaaad6029c8d9fa74d6131f7a99dc38c15e4dfa05cac56712987ff",
+          "web/src/pages/Settings.tsx": "376bd195ec8373c88c11774e5bb95daa643fef298f9b2d456e498002d1fa3a9c",
+          "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+          "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+        }
+      }
+    },
+    "fixed-activation-controls": {
+      "launch": {
+        "utc": "2026-09-14T18:54:12.730207+00:00",
+        "command": [
+          "npx",
+          "--no-install",
+          "vitest",
+          "run",
+          "test/provider-activation-instance.test.ts",
+          "-t",
+          "rejects activation|rejects an assistant configuration edit after activation precheck",
+          "--reporter=verbose"
+        ],
+        "cwd": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc",
+        "source_sha256": {
+          "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+          "web/src/pages/Settings.tsx": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af",
+          "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+          "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+        },
+        "temp_before": [
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-130lwt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-1Bcre3",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-1ZY90s",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-21Szmd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-223lQV",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-2kjrVR",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-2zmkSU",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-4EN04m",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-55WgEg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-6aFIC9",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-7vQ4jZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-7wtK79",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-8Z2l0A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-8pOxvy",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-93C3Uf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-9SMLb7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-9i5pcg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Aes9yM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-CIj3J0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-CRSjHT",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ECj6zX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-EUBPGL",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-EVArOm",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-F96x1e",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-FZn21g",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-GZ9KoZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Htl1zf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-HuaaJI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Hy49ku",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-I9WMQ7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-IRNgVM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-IcnF0L",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Iyy85A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-JUq9AS",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-L7CthQ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LAoEwx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LJBZyp",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LLaO58",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LyNGU8",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-MSrKIw",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-McFxXI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Mg0FYB",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-N3sbFa",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-NmwGJw",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-NslXbZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OC5VPb",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OOxFH1",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OkEAip",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OzJiqU",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-PMQQQi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-PZmNqc",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-QMvWeC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-QqLQ6H",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RFnvGO",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RbhMlC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RjS0Rg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RqO7nL",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-SZCwm1",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-SoMicX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-T3qBdD",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-T8lRI2",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-TBzEdI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-TXUry6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ThDbvb",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V5ScLu",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V9Qq2j",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V9tOB4",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-VD5Lnk",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-YAll5r",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ZZzVuH",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ZxKlzM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-aIfUQt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-axOTyM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-cEG8zd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-chJWXK",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-dS7EwF",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-dVR8HS",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-driy2A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-f0ThBd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-gBv5gg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ggneFc",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-gvvjj7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i0ig5Z",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i6S5jY",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i7qJG0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-iBnwvv",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-iP3Jwg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-jRzmWC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-jTzepC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-k1SIhA",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-kughw5",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-kxMbEx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-lGHi9V",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-lhcKcx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-mH6zC0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-mdvUQ5",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-meftaN",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-nJd9fi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-nzxdGA",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-oEn4Rt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-oKOoGP",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pgPGHg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pt1ONi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pvNfDv",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-r3Hni4",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-r6hef7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-rh6B20",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-s4ZZaP",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-sE46hM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-sr3FAe",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-t64h7U",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-tm1rtz",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ukp65E",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-wGUwpa",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-wnH0w6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xD4dMF",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xgWFEX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xjD5q6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-y4m8ph",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ycOgTf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-znfExP"
+        ],
+        "dependency_snapshot": "/Users/cristian/projects/fun/openfon/node_modules",
+        "environment": {
+          "OPENFON_E2E_PORT": "8812",
+          "OPENFON_E2E_INSPECTOR_PORT": "9252",
+          "PLAYWRIGHT_CHROMIUM_EXECUTABLE": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        }
+      },
+      "exit": {
+        "utc": "2026-09-14T18:54:14.848183+00:00",
+        "exit": 0,
+        "duration_seconds": 2.117,
+        "observed_processes": [
+          {
+            "pid": 80696,
+            "ppid": 78312,
+            "comm": "<defunct>"
+          },
+          {
+            "pid": 80722,
+            "ppid": 80696,
+            "comm": "node"
+          },
+          {
+            "pid": 80723,
+            "ppid": 80722,
+            "comm": "/Users/cristian/projects/fun/openfon/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+          },
+          {
+            "pid": 80724,
+            "ppid": 80722,
+            "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+          }
+        ],
+        "observed_remaining": [],
+        "temp_new_remaining": [],
+        "scan": {
+          "utc": "2026-09-14T18:54:14.810333+00:00",
+          "application_processes": [],
+          "reserved_listeners": {},
+          "known_unrelated_preserved": [
+            {
+              "pid": 54328,
+              "ppid": 54317,
+              "comm": "/Users/cristian/Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+            },
+            {
+              "pid": 54317,
+              "ppid": 53707,
+              "comm": "/Users/cristian/projects/fun/linkedin-mcps/linkedin-mcp/.venv/lib/python3.13/site-packages/playwright/driver/node"
+            }
+          ]
+        },
+        "source_after": {
+          "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+          "web/src/pages/Settings.tsx": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af",
+          "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+          "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+        }
+      }
+    },
+    "worker-types": {
+      "launch": {
+        "utc": "2026-09-14T18:54:15.327452+00:00",
+        "command": [
+          "npx",
+          "--no-install",
+          "tsc",
+          "--noEmit",
+          "-p",
+          "tsconfig.worker.json"
+        ],
+        "cwd": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc",
+        "source_sha256": {
+          "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+          "web/src/pages/Settings.tsx": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af",
+          "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+          "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+        },
+        "temp_before": [
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-130lwt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-1Bcre3",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-1ZY90s",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-21Szmd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-223lQV",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-2kjrVR",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-2zmkSU",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-4EN04m",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-55WgEg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-6aFIC9",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-7vQ4jZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-7wtK79",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-8Z2l0A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-8pOxvy",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-93C3Uf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-9SMLb7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-9i5pcg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Aes9yM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-CIj3J0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-CRSjHT",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ECj6zX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-EUBPGL",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-EVArOm",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-F96x1e",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-FZn21g",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-GZ9KoZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Htl1zf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-HuaaJI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Hy49ku",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-I9WMQ7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-IRNgVM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-IcnF0L",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Iyy85A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-JUq9AS",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-L7CthQ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LAoEwx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LJBZyp",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LLaO58",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LyNGU8",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-MSrKIw",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-McFxXI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Mg0FYB",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-N3sbFa",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-NmwGJw",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-NslXbZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OC5VPb",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OOxFH1",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OkEAip",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OzJiqU",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-PMQQQi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-PZmNqc",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-QMvWeC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-QqLQ6H",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RFnvGO",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RbhMlC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RjS0Rg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RqO7nL",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-SZCwm1",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-SoMicX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-T3qBdD",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-T8lRI2",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-TBzEdI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-TXUry6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ThDbvb",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V5ScLu",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V9Qq2j",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V9tOB4",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-VD5Lnk",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-YAll5r",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ZZzVuH",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ZxKlzM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-aIfUQt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-axOTyM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-cEG8zd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-chJWXK",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-dS7EwF",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-dVR8HS",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-driy2A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-f0ThBd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-gBv5gg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ggneFc",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-gvvjj7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i0ig5Z",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i6S5jY",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i7qJG0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-iBnwvv",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-iP3Jwg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-jRzmWC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-jTzepC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-k1SIhA",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-kughw5",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-kxMbEx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-lGHi9V",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-lhcKcx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-mH6zC0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-mdvUQ5",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-meftaN",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-nJd9fi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-nzxdGA",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-oEn4Rt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-oKOoGP",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pgPGHg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pt1ONi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pvNfDv",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-r3Hni4",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-r6hef7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-rh6B20",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-s4ZZaP",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-sE46hM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-sr3FAe",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-t64h7U",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-tm1rtz",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ukp65E",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-wGUwpa",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-wnH0w6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xD4dMF",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xgWFEX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xjD5q6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-y4m8ph",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ycOgTf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-znfExP"
+        ],
+        "dependency_snapshot": "/Users/cristian/projects/fun/openfon/node_modules",
+        "environment": {
+          "OPENFON_E2E_PORT": "8812",
+          "OPENFON_E2E_INSPECTOR_PORT": "9252",
+          "PLAYWRIGHT_CHROMIUM_EXECUTABLE": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        }
+      },
+      "exit": {
+        "utc": "2026-09-14T18:54:19.093298+00:00",
+        "exit": 0,
+        "duration_seconds": 3.765,
+        "observed_processes": [
+          {
+            "pid": 81482,
+            "ppid": 78312,
+            "comm": "<defunct>"
+          },
+          {
+            "pid": 81516,
+            "ppid": 81482,
+            "comm": "node"
+          }
+        ],
+        "observed_remaining": [],
+        "temp_new_remaining": [],
+        "scan": {
+          "utc": "2026-09-14T18:54:19.056354+00:00",
+          "application_processes": [],
+          "reserved_listeners": {},
+          "known_unrelated_preserved": [
+            {
+              "pid": 54328,
+              "ppid": 54317,
+              "comm": "/Users/cristian/Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+            },
+            {
+              "pid": 54317,
+              "ppid": 53707,
+              "comm": "/Users/cristian/projects/fun/linkedin-mcps/linkedin-mcp/.venv/lib/python3.13/site-packages/playwright/driver/node"
+            }
+          ]
+        },
+        "source_after": {
+          "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+          "web/src/pages/Settings.tsx": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af",
+          "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+          "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+        }
+      }
+    },
+    "web-types": {
+      "launch": {
+        "utc": "2026-09-14T18:54:19.567051+00:00",
+        "command": [
+          "npx",
+          "--no-install",
+          "tsc",
+          "--noEmit",
+          "-p",
+          "web/tsconfig.json"
+        ],
+        "cwd": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc",
+        "source_sha256": {
+          "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+          "web/src/pages/Settings.tsx": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af",
+          "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+          "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+        },
+        "temp_before": [
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-130lwt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-1Bcre3",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-1ZY90s",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-21Szmd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-223lQV",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-2kjrVR",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-2zmkSU",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-4EN04m",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-55WgEg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-6aFIC9",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-7vQ4jZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-7wtK79",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-8Z2l0A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-8pOxvy",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-93C3Uf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-9SMLb7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-9i5pcg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Aes9yM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-CIj3J0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-CRSjHT",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ECj6zX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-EUBPGL",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-EVArOm",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-F96x1e",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-FZn21g",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-GZ9KoZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Htl1zf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-HuaaJI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Hy49ku",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-I9WMQ7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-IRNgVM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-IcnF0L",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Iyy85A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-JUq9AS",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-L7CthQ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LAoEwx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LJBZyp",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LLaO58",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LyNGU8",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-MSrKIw",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-McFxXI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Mg0FYB",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-N3sbFa",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-NmwGJw",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-NslXbZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OC5VPb",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OOxFH1",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OkEAip",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OzJiqU",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-PMQQQi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-PZmNqc",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-QMvWeC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-QqLQ6H",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RFnvGO",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RbhMlC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RjS0Rg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RqO7nL",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-SZCwm1",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-SoMicX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-T3qBdD",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-T8lRI2",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-TBzEdI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-TXUry6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ThDbvb",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V5ScLu",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V9Qq2j",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V9tOB4",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-VD5Lnk",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-YAll5r",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ZZzVuH",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ZxKlzM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-aIfUQt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-axOTyM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-cEG8zd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-chJWXK",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-dS7EwF",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-dVR8HS",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-driy2A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-f0ThBd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-gBv5gg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ggneFc",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-gvvjj7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i0ig5Z",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i6S5jY",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i7qJG0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-iBnwvv",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-iP3Jwg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-jRzmWC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-jTzepC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-k1SIhA",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-kughw5",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-kxMbEx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-lGHi9V",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-lhcKcx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-mH6zC0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-mdvUQ5",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-meftaN",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-nJd9fi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-nzxdGA",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-oEn4Rt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-oKOoGP",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pgPGHg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pt1ONi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pvNfDv",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-r3Hni4",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-r6hef7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-rh6B20",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-s4ZZaP",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-sE46hM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-sr3FAe",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-t64h7U",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-tm1rtz",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ukp65E",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-wGUwpa",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-wnH0w6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xD4dMF",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xgWFEX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xjD5q6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-y4m8ph",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ycOgTf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-znfExP"
+        ],
+        "dependency_snapshot": "/Users/cristian/projects/fun/openfon/node_modules",
+        "environment": {
+          "OPENFON_E2E_PORT": "8812",
+          "OPENFON_E2E_INSPECTOR_PORT": "9252",
+          "PLAYWRIGHT_CHROMIUM_EXECUTABLE": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        }
+      },
+      "exit": {
+        "utc": "2026-09-14T18:54:22.468080+00:00",
+        "exit": 0,
+        "duration_seconds": 2.9,
+        "observed_processes": [
+          {
+            "pid": 81604,
+            "ppid": 78312,
+            "comm": "<defunct>"
+          },
+          {
+            "pid": 81635,
+            "ppid": 81604,
+            "comm": "node"
+          }
+        ],
+        "observed_remaining": [],
+        "temp_new_remaining": [],
+        "scan": {
+          "utc": "2026-09-14T18:54:22.431132+00:00",
+          "application_processes": [],
+          "reserved_listeners": {},
+          "known_unrelated_preserved": [
+            {
+              "pid": 54328,
+              "ppid": 54317,
+              "comm": "/Users/cristian/Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+            },
+            {
+              "pid": 54317,
+              "ppid": 53707,
+              "comm": "/Users/cristian/projects/fun/linkedin-mcps/linkedin-mcp/.venv/lib/python3.13/site-packages/playwright/driver/node"
+            }
+          ]
+        },
+        "source_after": {
+          "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+          "web/src/pages/Settings.tsx": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af",
+          "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+          "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+        }
+      }
+    },
+    "fixed-browser": {
+      "launch": {
+        "utc": "2026-09-14T18:54:22.945816+00:00",
+        "command": [
+          "npx",
+          "--no-install",
+          "playwright",
+          "test",
+          "e2e/settings-load-error.spec.ts",
+          "e2e/settings-save-recovery.spec.ts",
+          "--grep",
+          "(?:accepted\\ automatic\\ settings\\ read\\ clears\\ only\\ an\\ earlier\\ local\\ load\\ failure\\ and\\ retains\\ drafts|superseded\\ local\\ success\\ cannot\\ change\\ the\\ newer\\ load\\ outcome|superseded\\ local\\ failure\\ cannot\\ change\\ the\\ newer\\ load\\ outcome|accepted\\ settings\\ read\\ preserves\\ a\\ newer\\ create\\ refusal\\ with\\ identical\\ error\\ text|accepted\\ settings\\ read\\ preserves\\ a\\ newer\\ rename\\ refusal\\ with\\ identical\\ error\\ text|independent\\ accepted\\ settings\\ read\\ retains\\ confirmed\\ apply\\ display\\ recovery|independent\\ accepted\\ settings\\ read\\ retains\\ confirmed\\ delete\\ display\\ recovery|independent\\ accepted\\ settings\\ read\\ preserves\\ accepted\\-write\\ session\\ recovery\\ and\\ baseline|a failed second settings read retains refresh-only recovery)$",
+          "--workers=1",
+          "--retries=0",
+          "--output=/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/fixed-browser-results",
+          "--reporter=line,json"
+        ],
+        "cwd": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc",
+        "source_sha256": {
+          "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+          "web/src/pages/Settings.tsx": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af",
+          "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+          "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+        },
+        "temp_before": [
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-130lwt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-1Bcre3",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-1ZY90s",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-21Szmd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-223lQV",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-2kjrVR",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-2zmkSU",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-4EN04m",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-55WgEg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-6aFIC9",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-7vQ4jZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-7wtK79",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-8Z2l0A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-8pOxvy",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-93C3Uf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-9SMLb7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-9i5pcg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Aes9yM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-CIj3J0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-CRSjHT",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ECj6zX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-EUBPGL",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-EVArOm",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-F96x1e",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-FZn21g",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-GZ9KoZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Htl1zf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-HuaaJI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Hy49ku",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-I9WMQ7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-IRNgVM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-IcnF0L",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Iyy85A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-JUq9AS",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-L7CthQ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LAoEwx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LJBZyp",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LLaO58",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-LyNGU8",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-MSrKIw",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-McFxXI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-Mg0FYB",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-N3sbFa",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-NmwGJw",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-NslXbZ",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OC5VPb",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OOxFH1",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OkEAip",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-OzJiqU",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-PMQQQi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-PZmNqc",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-QMvWeC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-QqLQ6H",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RFnvGO",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RbhMlC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RjS0Rg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-RqO7nL",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-SZCwm1",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-SoMicX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-T3qBdD",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-T8lRI2",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-TBzEdI",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-TXUry6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ThDbvb",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V5ScLu",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V9Qq2j",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-V9tOB4",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-VD5Lnk",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-YAll5r",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ZZzVuH",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ZxKlzM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-aIfUQt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-axOTyM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-cEG8zd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-chJWXK",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-dS7EwF",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-dVR8HS",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-driy2A",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-f0ThBd",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-gBv5gg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ggneFc",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-gvvjj7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i0ig5Z",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i6S5jY",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-i7qJG0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-iBnwvv",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-iP3Jwg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-jRzmWC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-jTzepC",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-k1SIhA",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-kughw5",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-kxMbEx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-lGHi9V",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-lhcKcx",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-mH6zC0",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-mdvUQ5",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-meftaN",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-nJd9fi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-nzxdGA",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-oEn4Rt",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-oKOoGP",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pgPGHg",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pt1ONi",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pvNfDv",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-r3Hni4",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-r6hef7",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-rh6B20",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-s4ZZaP",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-sE46hM",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-sr3FAe",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-t64h7U",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-tm1rtz",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ukp65E",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-wGUwpa",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-wnH0w6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xD4dMF",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xgWFEX",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-xjD5q6",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-y4m8ph",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-ycOgTf",
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-znfExP"
+        ],
+        "dependency_snapshot": "/Users/cristian/projects/fun/openfon/node_modules",
+        "environment": {
+          "OPENFON_E2E_PORT": "8812",
+          "OPENFON_E2E_INSPECTOR_PORT": "9252",
+          "PLAYWRIGHT_CHROMIUM_EXECUTABLE": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        }
+      },
+      "exit": {
+        "utc": "2026-09-14T18:55:07.945798+00:00",
+        "exit": 0,
+        "duration_seconds": 44.999,
+        "observed_processes": [
+          {
+            "pid": 81741,
+            "ppid": 78312,
+            "comm": "<defunct>"
+          },
+          {
+            "pid": 81765,
+            "ppid": 81741,
+            "comm": "node"
+          },
+          {
+            "pid": 81768,
+            "ppid": 81765,
+            "comm": "/bin/sh"
+          },
+          {
+            "pid": 81769,
+            "ppid": 81768,
+            "comm": "npm"
+          },
+          {
+            "pid": 81801,
+            "ppid": 81769,
+            "comm": "sh"
+          },
+          {
+            "pid": 81802,
+            "ppid": 81801,
+            "comm": "node"
+          },
+          {
+            "pid": 81803,
+            "ppid": 81802,
+            "comm": "/Users/cristian/projects/fun/openfon/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+          },
+          {
+            "pid": 82403,
+            "ppid": 81768,
+            "comm": "node"
+          },
+          {
+            "pid": 82437,
+            "ppid": 82403,
+            "comm": "npm"
+          },
+          {
+            "pid": 82815,
+            "ppid": 82437,
+            "comm": "node"
+          },
+          {
+            "pid": 82849,
+            "ppid": 82815,
+            "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+          },
+          {
+            "pid": 84167,
+            "ppid": 82849,
+            "comm": "(workerd)"
+          },
+          {
+            "pid": 84175,
+            "ppid": 82849,
+            "comm": "(workerd)"
+          },
+          {
+            "pid": 84182,
+            "ppid": 82849,
+            "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+          },
+          {
+            "pid": 84211,
+            "ppid": 82849,
+            "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+          },
+          {
+            "pid": 84443,
+            "ppid": 82403,
+            "comm": "npm"
+          },
+          {
+            "pid": 84680,
+            "ppid": 84443,
+            "comm": "node"
+          },
+          {
+            "pid": 84681,
+            "ppid": 84680,
+            "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+          },
+          {
+            "pid": 84682,
+            "ppid": 84681,
+            "comm": "/Users/cristian/projects/fun/openfon/node_modules/wrangler/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+          },
+          {
+            "pid": 84683,
+            "ppid": 84681,
+            "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+          },
+          {
+            "pid": 84685,
+            "ppid": 84681,
+            "comm": "/Users/cristian/projects/fun/openfon/node_modules/wrangler/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+          },
+          {
+            "pid": 84686,
+            "ppid": 84681,
+            "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+          },
+          {
+            "pid": 84688,
+            "ppid": 81765,
+            "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+          },
+          {
+            "pid": 84690,
+            "ppid": 84688,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 84696,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 84697,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 84698,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 84701,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 84702,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 84703,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 84729,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 84730,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 84731,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 84737,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 84738,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 84739,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 85155,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 85158,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 85159,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 85636,
+            "ppid": 84690,
+            "comm": "(Google"
+          },
+          {
+            "pid": 85637,
+            "ppid": 84690,
+            "comm": "(Google"
+          },
+          {
+            "pid": 85638,
+            "ppid": 84690,
+            "comm": "(Google"
+          },
+          {
+            "pid": 86041,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 86042,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 86044,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 86051,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 86052,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 86053,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 86083,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 86085,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 86086,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 86551,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 86552,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          },
+          {
+            "pid": 86553,
+            "ppid": 84690,
+            "comm": "/Applications/Google"
+          }
+        ],
+        "observed_remaining": [],
+        "temp_new_remaining": [
+          "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-FDud2N"
+        ],
+        "scan": {
+          "utc": "2026-09-14T18:55:07.524885+00:00",
+          "application_processes": [],
+          "reserved_listeners": {},
+          "known_unrelated_preserved": [
+            {
+              "pid": 54328,
+              "ppid": 54317,
+              "comm": "/Users/cristian/Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+            },
+            {
+              "pid": 54317,
+              "ppid": 53707,
+              "comm": "/Users/cristian/projects/fun/linkedin-mcps/linkedin-mcp/.venv/lib/python3.13/site-packages/playwright/driver/node"
+            }
+          ]
+        },
+        "source_after": {
+          "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+          "web/src/pages/Settings.tsx": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af",
+          "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+          "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+        }
+      }
+    }
+  },
+  "api_diagnostics": {
+    "original": [
+      {
+        "initial": "draft",
+        "response": 200,
+        "beforeState": "paused",
+        "afterState": "active",
+        "extraCharges": 1
+      },
+      {
+        "initial": "active",
+        "response": 200,
+        "beforeState": "paused",
+        "afterState": "active",
+        "extraCharges": 1
+      }
+    ],
+    "fixed": [
+      {
+        "initial": "draft",
+        "response": 409,
+        "beforeState": "paused",
+        "afterState": "paused",
+        "extraCharges": 0
+      },
+      {
+        "initial": "active",
+        "response": 409,
+        "beforeState": "paused",
+        "afterState": "paused",
+        "extraCharges": 0
+      }
+    ]
+  },
+  "trace_first_assertions": [
+    {
+      "trace": "original-browser-results/settings-load-error-accept-0adb9-l-with-identical-error-text/trace.zip",
+      "sha256": "3ca98ef0a68d441e62b545ec67b1d31060f0d1915de563cb51d7fb09cb01b32e",
+      "last_expect_before": {
+        "type": "before",
+        "callId": "call@89",
+        "startTime": 47660.031,
+        "title": "Expect \"toHaveCount\"",
+        "class": "Frame",
+        "method": "expect",
+        "params": {
+          "selector": "internal:role=button[name=\"Retry settings refresh\"s]",
+          "expression": "to.have.count",
+          "expectedNumber": 0,
+          "expectedValue": {
+            "value": {
+              "v": "undefined"
+            },
+            "handles": []
+          },
+          "isNot": false,
+          "timeout": 5000
+        },
+        "stepId": "expect@87"
+      },
+      "matching_after": [
+        {
+          "type": "after",
+          "callId": "call@89",
+          "endTime": 52661.779,
+          "error": {
+            "message": "Expect failed",
+            "stack": "ExpectError: Expect failed\n    at _Frame.expect (/Users/cristian/projects/fun/openfon/node_modules/playwright-core/lib/coreBundle.js:24312:17)\n    at _FrameDispatcher.expect (/Users/cristian/projects/fun/openfon/node_modules/playwright-core/lib/coreBundle.js:54886:11)\n    at _ProgressController.run (/Users/cristian/projects/fun/openfon/node_modules/playwright-core/lib/coreBundle.js:12374:27)\n    at DispatcherConnection.dispatch (/Users/cristian/projects/fun/openfon/node_modules/playwright-core/lib/coreBundle.js:19135:27)",
+            "name": "ExpectError"
+          }
+        }
+      ],
+      "fixture_sources": {
+        "src/450049bec1d13366e8119da3051ecf9757f580ca.ts": "a3f83068423ada3ceb043281c8be583611daa58226c7f864dd3d347c83fd4486",
+        "src/51882e27f86f9eff127438a540c8f6f0497207d1.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+      }
+    },
+    {
+      "trace": "original-browser-results/settings-load-error-accept-844f8--failure-and-retains-drafts/trace.zip",
+      "sha256": "2e8710be1b8025c2fb2020bb8d17b682ade71e396ad50b6fe59ef1b56d007990",
+      "last_expect_before": {
+        "type": "before",
+        "callId": "call@74",
+        "startTime": 25473.304,
+        "title": "Expect \"toHaveCount\"",
+        "class": "Frame",
+        "method": "expect",
+        "params": {
+          "selector": "internal:role=alert >> internal:has-text=\"Local load unavailable\"i",
+          "expression": "to.have.count",
+          "expectedNumber": 0,
+          "expectedValue": {
+            "value": {
+              "v": "undefined"
+            },
+            "handles": []
+          },
+          "isNot": false,
+          "timeout": 5000
+        },
+        "stepId": "expect@74"
+      },
+      "matching_after": [
+        {
+          "type": "after",
+          "callId": "call@74",
+          "endTime": 30474.518,
+          "error": {
+            "message": "Expect failed",
+            "stack": "ExpectError: Expect failed\n    at _Frame.expect (/Users/cristian/projects/fun/openfon/node_modules/playwright-core/lib/coreBundle.js:24312:17)\n    at _FrameDispatcher.expect (/Users/cristian/projects/fun/openfon/node_modules/playwright-core/lib/coreBundle.js:54886:11)\n    at _ProgressController.run (/Users/cristian/projects/fun/openfon/node_modules/playwright-core/lib/coreBundle.js:12374:27)\n    at DispatcherConnection.dispatch (/Users/cristian/projects/fun/openfon/node_modules/playwright-core/lib/coreBundle.js:19135:27)",
+            "name": "ExpectError"
+          }
+        }
+      ],
+      "fixture_sources": {
+        "src/450049bec1d13366e8119da3051ecf9757f580ca.ts": "a3f83068423ada3ceb043281c8be583611daa58226c7f864dd3d347c83fd4486",
+        "src/51882e27f86f9eff127438a540c8f6f0497207d1.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+      }
+    },
+    {
+      "trace": "original-browser-results/settings-load-error-accept-917af-l-with-identical-error-text/trace.zip",
+      "sha256": "3507d3b302a70b7547e7c58d99a30414f1228b9eaf6dc65dd84a15dc66273970",
+      "last_expect_before": {
+        "type": "before",
+        "callId": "call@242",
+        "startTime": 39288.307,
+        "title": "Expect \"toHaveCount\"",
+        "class": "Frame",
+        "method": "expect",
+        "params": {
+          "selector": "internal:role=button[name=\"Retry settings refresh\"s]",
+          "expression": "to.have.count",
+          "expectedNumber": 0,
+          "expectedValue": {
+            "value": {
+              "v": "undefined"
+            },
+            "handles": []
+          },
+          "isNot": false,
+          "timeout": 5000
+        },
+        "stepId": "expect@76"
+      },
+      "matching_after": [
+        {
+          "type": "after",
+          "callId": "call@242",
+          "endTime": 44289.123,
+          "error": {
+            "message": "Expect failed",
+            "stack": "ExpectError: Expect failed\n    at _Frame.expect (/Users/cristian/projects/fun/openfon/node_modules/playwright-core/lib/coreBundle.js:24312:17)\n    at _FrameDispatcher.expect (/Users/cristian/projects/fun/openfon/node_modules/playwright-core/lib/coreBundle.js:54886:11)\n    at _ProgressController.run (/Users/cristian/projects/fun/openfon/node_modules/playwright-core/lib/coreBundle.js:12374:27)\n    at DispatcherConnection.dispatch (/Users/cristian/projects/fun/openfon/node_modules/playwright-core/lib/coreBundle.js:19135:27)",
+            "name": "ExpectError"
+          }
+        }
+      ],
+      "fixture_sources": {
+        "src/450049bec1d13366e8119da3051ecf9757f580ca.ts": "a3f83068423ada3ceb043281c8be583611daa58226c7f864dd3d347c83fd4486",
+        "src/51882e27f86f9eff127438a540c8f6f0497207d1.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+      }
+    }
+  ],
+  "cleanup": {
+    "utc": "2026-09-14T18:55:27.537704+00:00",
+    "slot": "Explicit sole8812/9252 RELEASE; all seven authorized commands exited, no active owned runner",
+    "observed_process_count": 139,
+    "observed_remaining": [],
+    "scan": {
+      "utc": "2026-09-14T18:55:27.534748+00:00",
+      "application_processes": [],
+      "reserved_listeners": {},
+      "known_unrelated_preserved": [
+        {
+          "pid": 54328,
+          "ppid": 54317,
+          "comm": "/Users/cristian/Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+        },
+        {
+          "pid": 54317,
+          "ppid": 53707,
+          "comm": "/Users/cristian/projects/fun/linkedin-mcps/linkedin-mcp/.venv/lib/python3.13/site-packages/playwright/driver/node"
+        }
+      ]
+    },
+    "removed_owned_temps": [
+      "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-FDud2N",
+      "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-k1SIhA"
+    ],
+    "owned_temps_remaining": [],
+    "removed_added_dependency_symlink": true,
+    "preserved_dependency": "/Users/cristian/projects/fun/openfon/node_modules",
+    "retained_exact_source_snapshot": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc",
+    "source_sha256": {
+      "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+      "web/src/pages/Settings.tsx": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af",
+      "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+      "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+    },
+    "limits": "750ms process-tree sampling is not exhaustive for short-lived descendants; global application/official/test Chrome and reserved-port scan complements sampled absence"
+  },
+  "limits": [
+    "Original4API failures stop at first status assertion; only two pause diagnostics separately prove overwritten state and extra charge. Later failed-case equality/public/retry assertions not executed.",
+    "Original3browser failures stop at alert/retry count assertion; passed preceding markers/gates identify accepted current reads and mutation messages. Later assertions not claimed.",
+    "Fixed full all-table equality is an executed assertion, not a separately exported raw passing snapshot. No native D1 concurrency.",
+    "Passing browser traces not retained by existing retain-on-failure; original3 failure traces retained. Browser HTTP errors/holds and finite-frame schedules synthetic.",
+    "Same-state pause/ABA intentionally accepted; no full-snapshot/readiness/request-order policy.",
+    "139sampled PIDs is nonexhaustive; retained release scan confirms matching runner/listener vacancy. Two leftover D1 paths manually removed only after processes exited; no standalone MF lifecycle instrumentation."
+  ]
+}

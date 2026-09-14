@@ -1,0 +1,42 @@
+{
+  "utc": "2026-09-14T18:54:19.093298+00:00",
+  "exit": 0,
+  "duration_seconds": 3.765,
+  "observed_processes": [
+    {
+      "pid": 81482,
+      "ppid": 78312,
+      "comm": "<defunct>"
+    },
+    {
+      "pid": 81516,
+      "ppid": 81482,
+      "comm": "node"
+    }
+  ],
+  "observed_remaining": [],
+  "temp_new_remaining": [],
+  "scan": {
+    "utc": "2026-09-14T18:54:19.056354+00:00",
+    "application_processes": [],
+    "reserved_listeners": {},
+    "known_unrelated_preserved": [
+      {
+        "pid": 54328,
+        "ppid": 54317,
+        "comm": "/Users/cristian/Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+      },
+      {
+        "pid": 54317,
+        "ppid": 53707,
+        "comm": "/Users/cristian/projects/fun/linkedin-mcps/linkedin-mcp/.venv/lib/python3.13/site-packages/playwright/driver/node"
+      }
+    ]
+  },
+  "source_after": {
+    "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+    "web/src/pages/Settings.tsx": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af",
+    "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+    "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+  }
+}

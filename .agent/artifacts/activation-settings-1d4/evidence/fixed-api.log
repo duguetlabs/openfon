@@ -1,0 +1,27 @@
+
+ RUN  v5.0.0 /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc
+
+(node:80566) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+stdout | test/activation-state.test.ts > activation refuses a committed pause from captured draft within the same second
+activation-state-diagnostic {"initial":"draft","response":409,"beforeState":"paused","afterState":"paused","extraCharges":0}
+
+stdout | test/activation-state.test.ts > activation refuses a committed pause from captured active within the same second
+activation-state-diagnostic {"initial":"active","response":409,"beforeState":"paused","afterState":"paused","extraCharges":0}
+
+ ✓ test/activation-state.test.ts > activation refuses a committed pause from captured draft within the same second 175ms
+ ✓ test/activation-state.test.ts > activation refuses a committed pause from captured active within the same second 12ms
+ ✓ test/activation-state.test.ts > two activations captured from paused allow the winner and conflict the stale state 9ms
+ ✓ test/activation-state.test.ts > changed-state conflict bypasses activation trigger even when pause spends the final quota unit 8ms
+ ✓ test/activation-state.test.ts > same-state pause is outside the value-equality conflict guarantee 7ms
+ ✓ test/activation-state.test.ts > state ABA remains outside the equality guarantee 7ms
+ ✓ test/activation-state.test.ts > valid current essentials and greeting remain publishable without full-snapshot CAS 7ms
+ ✓ test/activation-state.test.ts > already-active activation retains its timestamp and one accepted charge 6ms
+ ✓ test/activation-state.test.ts > current Unicode-blank essentials still refuse after an initially valid precheck 7ms
+ ✓ test/activation-state.test.ts > accepted-state activation still rolls back atomically at exhausted quota 7ms
+
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+   Start at  20:54:09
+   Duration  2.19s (transform 47%, import 37%, tests 14%, worker 2%)
+

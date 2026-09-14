@@ -1,0 +1,304 @@
+{
+  "utc": "2026-09-14T18:55:07.945798+00:00",
+  "exit": 0,
+  "duration_seconds": 44.999,
+  "observed_processes": [
+    {
+      "pid": 81741,
+      "ppid": 78312,
+      "comm": "<defunct>"
+    },
+    {
+      "pid": 81765,
+      "ppid": 81741,
+      "comm": "node"
+    },
+    {
+      "pid": 81768,
+      "ppid": 81765,
+      "comm": "/bin/sh"
+    },
+    {
+      "pid": 81769,
+      "ppid": 81768,
+      "comm": "npm"
+    },
+    {
+      "pid": 81801,
+      "ppid": 81769,
+      "comm": "sh"
+    },
+    {
+      "pid": 81802,
+      "ppid": 81801,
+      "comm": "node"
+    },
+    {
+      "pid": 81803,
+      "ppid": 81802,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+    },
+    {
+      "pid": 82403,
+      "ppid": 81768,
+      "comm": "node"
+    },
+    {
+      "pid": 82437,
+      "ppid": 82403,
+      "comm": "npm"
+    },
+    {
+      "pid": 82815,
+      "ppid": 82437,
+      "comm": "node"
+    },
+    {
+      "pid": 82849,
+      "ppid": 82815,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    },
+    {
+      "pid": 84167,
+      "ppid": 82849,
+      "comm": "(workerd)"
+    },
+    {
+      "pid": 84175,
+      "ppid": 82849,
+      "comm": "(workerd)"
+    },
+    {
+      "pid": 84182,
+      "ppid": 82849,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 84211,
+      "ppid": 82849,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 84443,
+      "ppid": 82403,
+      "comm": "npm"
+    },
+    {
+      "pid": 84680,
+      "ppid": 84443,
+      "comm": "node"
+    },
+    {
+      "pid": 84681,
+      "ppid": 84680,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    },
+    {
+      "pid": 84682,
+      "ppid": 84681,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/wrangler/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+    },
+    {
+      "pid": 84683,
+      "ppid": 84681,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 84685,
+      "ppid": 84681,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/wrangler/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+    },
+    {
+      "pid": 84686,
+      "ppid": 84681,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@cloudflare/workerd-darwin-arm64/bin/workerd"
+    },
+    {
+      "pid": 84688,
+      "ppid": 81765,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    },
+    {
+      "pid": 84690,
+      "ppid": 84688,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 84696,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 84697,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 84698,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 84701,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 84702,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 84703,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 84729,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 84730,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 84731,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 84737,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 84738,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 84739,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 85155,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 85158,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 85159,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 85636,
+      "ppid": 84690,
+      "comm": "(Google"
+    },
+    {
+      "pid": 85637,
+      "ppid": 84690,
+      "comm": "(Google"
+    },
+    {
+      "pid": 85638,
+      "ppid": 84690,
+      "comm": "(Google"
+    },
+    {
+      "pid": 86041,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 86042,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 86044,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 86051,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 86052,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 86053,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 86083,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 86085,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 86086,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 86551,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 86552,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": 86553,
+      "ppid": 84690,
+      "comm": "/Applications/Google"
+    }
+  ],
+  "observed_remaining": [],
+  "temp_new_remaining": [
+    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-FDud2N"
+  ],
+  "scan": {
+    "utc": "2026-09-14T18:55:07.524885+00:00",
+    "application_processes": [],
+    "reserved_listeners": {},
+    "known_unrelated_preserved": [
+      {
+        "pid": 54328,
+        "ppid": 54317,
+        "comm": "/Users/cristian/Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+      },
+      {
+        "pid": 54317,
+        "ppid": 53707,
+        "comm": "/Users/cristian/projects/fun/linkedin-mcps/linkedin-mcp/.venv/lib/python3.13/site-packages/playwright/driver/node"
+      }
+    ]
+  },
+  "source_after": {
+    "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+    "web/src/pages/Settings.tsx": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af",
+    "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+    "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+  }
+}

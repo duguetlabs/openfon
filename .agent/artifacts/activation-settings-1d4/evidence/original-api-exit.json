@@ -1,0 +1,52 @@
+{
+  "utc": "2026-09-14T18:52:29.061478+00:00",
+  "exit": 1,
+  "duration_seconds": 3.749,
+  "observed_processes": [
+    {
+      "pid": 65362,
+      "ppid": 64583,
+      "comm": "<defunct>"
+    },
+    {
+      "pid": 65466,
+      "ppid": 65362,
+      "comm": "node"
+    },
+    {
+      "pid": 65569,
+      "ppid": 65466,
+      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+    },
+    {
+      "pid": 65691,
+      "ppid": 65466,
+      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+    }
+  ],
+  "observed_remaining": [],
+  "temp_new_remaining": [],
+  "scan": {
+    "utc": "2026-09-14T18:52:29.022565+00:00",
+    "application_processes": [],
+    "reserved_listeners": {},
+    "known_unrelated_preserved": [
+      {
+        "pid": 54328,
+        "ppid": 54317,
+        "comm": "/Users/cristian/Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+      },
+      {
+        "pid": 54317,
+        "ppid": 53707,
+        "comm": "/Users/cristian/projects/fun/linkedin-mcps/linkedin-mcp/.venv/lib/python3.13/site-packages/playwright/driver/node"
+      }
+    ]
+  },
+  "source_after": {
+    "src/studio-api.ts": "801aa8415afaaad6029c8d9fa74d6131f7a99dc38c15e4dfa05cac56712987ff",
+    "web/src/pages/Settings.tsx": "376bd195ec8373c88c11774e5bb95daa643fef298f9b2d456e498002d1fa3a9c",
+    "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+    "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+  }
+}
