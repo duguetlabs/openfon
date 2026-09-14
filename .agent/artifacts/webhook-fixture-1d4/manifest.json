@@ -1,7 +1,15 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "9ba0475ae446937c2ef5d83d7419a574b96535f8b4b8c96e231cf0d6228e78b7",
+    "original_bytes": 4856,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "status": "PREPARED_UNEXECUTED_QA_REQUIRED",
   "base": "1d4b73331353ecacf07b46ce9d186c032a04fc51",
-  "snapshot": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-webhook-fixture-1d4-43nfdlh3",
+  "snapshot": "private-ref:af3a4c2f848b4f98b0e1b967ec88b7ac",
   "assemblyPaths": [
     "test/telnyx-webhook-admission.test.ts"
   ],

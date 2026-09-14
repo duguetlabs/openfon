@@ -1,4 +1,12 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "da275ed5f60d0271d0aa0f7be0907693f7f26875e1f3675acabb9e65567bd38b",
+    "original_bytes": 2397,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "stage": "fixed",
   "command": [
     "npm",
@@ -9,7 +17,7 @@
     "test/telephony-audio.test.ts",
     "--maxWorkers=1"
   ],
-  "cwd": "/private/tmp/openfon-reorder-b770-fifekwmx",
+  "cwd": "private-ref:bd0ad59507f241bc9b89609172e0b527",
   "started": "2026-09-14T04:28:23.948461+00:00",
   "source_before": {
     "src/telnyx-media.ts": "e34f6146cf35e17f3bbc76baec61e2b647f8aa3e668bc8b8146dcd9dc6a59740",

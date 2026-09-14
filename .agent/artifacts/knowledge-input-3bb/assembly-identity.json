@@ -1,4 +1,12 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "da45d6a4f79a9ed3bc397f4e736faa6fa3201edbede8fd517ca5c9944c999e7d",
+    "original_bytes": 3043,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "assembly": "0bba840461d98d9c4888082c0660e8e808a293ee",
   "parent": "3bb6c299e26f25d189b679c18d043586ee4bab68",
   "paths": [
@@ -36,7 +44,7 @@
     "original-browser-results/profile-rename-actions-pro-d80fc-ore-during-and-after-rename/error-context.md": "17746669d18af98fe5c04a1191a41591b846eb7d15c0d4e67039b1136d47e6ba",
     "original-browser-results/profile-rename-actions-pro-d80fc-ore-during-and-after-rename/trace.zip": "5a32a26aaaaacd157417ac6577ab31c5856635dae264e8a32bfc630a9a97c770"
   },
-  "owner_evidence_directory": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/knowledge-input-3bb/validation",
+  "owner_evidence_directory": "private-ref:57482720d3ad4bd3b0b2e379686453e5",
   "qa_source": "2580532",
   "qa_evidence_assembly": "a37c3e6: CLOSED exact0bba840"
 }

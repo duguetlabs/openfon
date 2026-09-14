@@ -3,7 +3,7 @@
 - Sender: root orchestration task 01a09543-75cb-7c52-8c7f-4b5a24ed5c75
 - Intended recipient: openfon-telnyx, Codex CLI gpt-6-astra / medium
 - Reason: explicit user delegation, 2026-09-12
-- Repository path: /private/tmp/openfon-telephony
+- Repository path: private-ref:6d78a76d8cd44b88b2dbf807617c2232
 - Branch: codex/telnyx-inbound
 - Base commit: b730480685b56de0e785a400621459e3896a7fb1 (Telnyx existing branch starts at d616fff)
 - Current commit: verify independently on arrival

@@ -1,306 +1,40 @@
-TAP version 13
-# Subtest: real owned child accepts SIGTERM without exit: wrapper deadline retains state and reports uncertainty
-not ok 1 - real owned child accepts SIGTERM without exit: wrapper deadline retains state and reports uncertainty
-  ---
-  duration_ms: 7582.69675
-  location: '/private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:103:1'
-  failureType: 'testCodeFailure'
-  error: |-
-    Expected values to be strictly equal:
-    + actual - expected
-    
-    + true
-    - undefined
-    
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  actual: true
-  operator: 'strictEqual'
-  stack: |-
-    TestContext.<anonymous> (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:114:12)
-    async Test.run (node:internal/test_runner/test:980:9)
-    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
-  ...
-# {"scope":"real owned wrapper/child; deliberate SIGTERM hold; provider stub","result":{"watchdog":true},"elapsedMs":7503,"wrapperPid":19044,"childPid":19071,"childAlive":true,"stateExists":true,"events":[{"kind":"spawned","pid":19071},{"kind":"ready","pid":19071},{"kind":"forwarded","signal":"SIGTERM","sent":true},{"kind":"received","signal":"SIGTERM"}],"stderr":""}
-# Subtest: real graceful numeric7 exit cancels shutdown and removes state
-ok 2 - real graceful numeric7 exit cancels shutdown and removes state
-  ---
-  duration_ms: 116.908583
-  ...
-# {"scope":"real graceful owned child; provider stub","result":{"code":7,"signal":null},"wrapperPid":19198,"childPid":19199,"events":[{"kind":"spawned","pid":19199},{"kind":"ready","pid":19199},{"kind":"forwarded","signal":"SIGTERM","sent":true},{"kind":"received","signal":"SIGTERM"},{"kind":"worker-exit","code":7,"signal":null},{"kind":"provider-close"},{"kind":"state-removed"}],"stateExists":false}
-# Subtest: real no-PID spawn failure removes state and fails wrapper
-ok 3 - real no-PID spawn failure removes state and fails wrapper
-  ---
-  duration_ms: 37.046
-  ...
-# {"scope":"real ENOENT; provider stub","result":{"code":1,"signal":null},"wrapperPid":19200,"events":[{"kind":"spawned"},{"kind":"worker-error","code":"ENOENT"},{"kind":"state-removed"}],"stateExists":false}
-# Subtest: synthetic live worker error before shutdown retains state
-not ok 4 - synthetic live worker error before shutdown retains state
-  ---
-  duration_ms: 1.001333
-  location: '/private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:186:1'
-  failureType: 'testCodeFailure'
-  error: |-
-    Expected values to be strictly equal:
-    
-    0 !== 1
-    
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  expected: 1
-  actual: 0
-  operator: 'strictEqual'
-  stack: |-
-    retained (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:175:45)
-    TestContext.<anonymous> (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:189:3)
-    Test.runInAsyncScope (node:async_hooks:211:14)
-    Test.run (node:internal/test_runner/test:979:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
-    Test.postRun (node:internal/test_runner/test:1090:19)
-    Test.run (node:internal/test_runner/test:1018:12)
-    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
-  ...
-# {"scope":"synthetic lexical clock/events/exit stub","statuses":[1],"signals":[],"closes":0,"removals":1,"errors":["injected live error"],"timers":[]}
-# Subtest: synthetic forwarding event retains possibly-live state and clears deadline
-not ok 5 - synthetic forwarding event retains possibly-live state and clears deadline
-  ---
-  duration_ms: 0.193916
-  location: '/private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:192:3'
-  failureType: 'testCodeFailure'
-  error: |-
-    Expected values to be strictly equal:
-    
-    0 !== 1
-    
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  expected: 1
-  actual: 0
-  operator: 'strictEqual'
-  stack: |-
-    retained (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:175:45)
-    TestContext.<anonymous> (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:204:5)
-    Test.runInAsyncScope (node:async_hooks:211:14)
-    Test.run (node:internal/test_runner/test:979:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
-    Test.postRun (node:internal/test_runner/test:1090:19)
-    Test.run (node:internal/test_runner/test:1018:12)
-    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
-  ...
-# {"scope":"synthetic lexical clock/events/exit stub","statuses":[1],"signals":["SIGTERM"],"closes":0,"removals":1,"errors":["injected synchronous kill error"],"timers":[]}
-# Subtest: synthetic forwarding throw retains possibly-live state and clears deadline
-not ok 6 - synthetic forwarding throw retains possibly-live state and clears deadline
-  ---
-  duration_ms: 0.591291
-  location: '/private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:192:3'
-  failureType: 'testCodeFailure'
-  error: |-
-    Expected values to be strictly equal:
-    + actual - expected
-    
-    + Error: injected thrown kill error
-    +     at EventEmitter.<anonymous> (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:195:38)
-    +     at worker.kill (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:164:63)
-    +     at EventEmitter.eval (eval at synthetic (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:166:3), <anonymous>:5:14)
-    +     at Object.onceWrapper (node:events:632:28)
-    +     at EventEmitter.emit (node:events:518:28)
-    +     at TestContext.<anonymous> (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:201:18)
-    +     at Test.runInAsyncScope (node:async_hooks:211:14)
-    +     at Test.run (node:internal/test_runner/test:979:25)
-    +     at Test.processPendingSubtests (node:internal/test_runner/test:677:18)
-    +     at Test.postRun (node:internal/test_runner/test:1090:19)
-    - undefined
-    
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  actual:
-  error: 'injected thrown kill error'
-  stack: |-
-    EventEmitter.<anonymous> (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:195:38)
-    worker.kill (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:164:63)
-    EventEmitter.eval (eval at synthetic (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:166:3), <anonymous>:5:14)
-    Object.onceWrapper (node:events:632:28)
-    EventEmitter.emit (node:events:518:28)
-    TestContext.<anonymous> (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:201:18)
-    Test.runInAsyncScope (node:async_hooks:211:14)
-    Test.run (node:internal/test_runner/test:979:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
-    Test.postRun (node:internal/test_runner/test:1090:19)
-  operator: 'strictEqual'
-  stack: |-
-    TestContext.<anonymous> (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:203:12)
-    Test.runInAsyncScope (node:async_hooks:211:14)
-    Test.run (node:internal/test_runner/test:979:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
-    Test.postRun (node:internal/test_runner/test:1090:19)
-    Test.run (node:internal/test_runner/test:1018:12)
-    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
-  ...
-# {"scope":"synthetic lexical clock/events/exit stub","statuses":[],"signals":["SIGTERM"],"closes":0,"removals":0,"errors":[],"timers":[],"thrown":"injected thrown kill error"}
-# Subtest: synthetic forwarding false retains possibly-live state and clears deadline
-not ok 7 - synthetic forwarding false retains possibly-live state and clears deadline
-  ---
-  duration_ms: 0.103208
-  location: '/private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:192:3'
-  failureType: 'testCodeFailure'
-  error: |-
-    Expected values to be strictly deep-equal:
-    + actual - expected
-    
-    + []
-    - [
-    -   1
-    - ]
-    
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  expected:
-    0: 1
-  actual:
-  operator: 'deepStrictEqual'
-  stack: |-
-    retained (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:175:10)
-    TestContext.<anonymous> (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:204:5)
-    Test.runInAsyncScope (node:async_hooks:211:14)
-    Test.run (node:internal/test_runner/test:979:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
-    Test.postRun (node:internal/test_runner/test:1090:19)
-    Test.run (node:internal/test_runner/test:1018:12)
-    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
-  ...
-# {"scope":"synthetic lexical clock/events/exit stub","statuses":[],"signals":["SIGTERM"],"closes":0,"removals":0,"errors":[],"timers":[]}
-# Subtest: synthetic terminal worker error retains failure cleanup
-ok 8 - synthetic terminal worker error retains failure cleanup
-  ---
-  duration_ms: 0.070084
-  ...
-# {"scope":"synthetic lexical clock/events/exit stub","statuses":[1],"signals":[],"closes":0,"removals":1,"errors":["terminal error"],"timers":[]}
-# Subtest: synthetic false forwarding with confirmed numeric exit preserves numeric status and cleanup
-not ok 9 - synthetic false forwarding with confirmed numeric exit preserves numeric status and cleanup
-  ---
-  duration_ms: 0.257709
-  location: '/private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:215:1'
-  failureType: 'testCodeFailure'
-  error: |-
-    Expected values to be strictly deep-equal:
-    + actual - expected
-    
-    + []
-    - [
-    -   7
-    - ]
-    
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  expected:
-    0: 7
-  actual:
-  operator: 'deepStrictEqual'
-  stack: |-
-    TestContext.<anonymous> (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:218:10)
-    Test.runInAsyncScope (node:async_hooks:211:14)
-    Test.run (node:internal/test_runner/test:979:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
-    Test.postRun (node:internal/test_runner/test:1090:19)
-    Test.run (node:internal/test_runner/test:1018:12)
-    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
-  ...
-# {"scope":"synthetic lexical clock/events/exit stub","statuses":[],"signals":["SIGTERM"],"closes":0,"removals":0,"errors":[],"timers":[]}
-# Subtest: synthetic two explicit signals share first budget without automatic third signal
-not ok 10 - synthetic two explicit signals share first budget without automatic third signal
-  ---
-  duration_ms: 0.314542
-  location: '/private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:220:1'
-  failureType: 'testCodeFailure'
-  error: |-
-    Expected values to be strictly equal:
-    
-    0 !== 1
-    
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  expected: 1
-  actual: 0
-  operator: 'strictEqual'
-  stack: |-
-    timer (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:179:28)
-    TestContext.<anonymous> (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:221:82)
-    Test.runInAsyncScope (node:async_hooks:211:14)
-    Test.run (node:internal/test_runner/test:979:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
-    Test.postRun (node:internal/test_runner/test:1090:19)
-    Test.run (node:internal/test_runner/test:1018:12)
-    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
-  ...
-# {"scope":"synthetic lexical clock/events/exit stub","statuses":[],"signals":["SIGTERM"],"closes":0,"removals":0,"errors":[],"timers":[]}
-# Subtest: synthetic matching accepted exit wins and stale timer/error cannot change status or repeat cleanup
-not ok 11 - synthetic matching accepted exit wins and stale timer/error cannot change status or repeat cleanup
-  ---
-  duration_ms: 0.161792
-  location: '/private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:227:1'
-  failureType: 'testCodeFailure'
-  error: |-
-    Expected values to be strictly equal:
-    
-    0 !== 1
-    
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  expected: 1
-  actual: 0
-  operator: 'strictEqual'
-  stack: |-
-    timer (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:179:28)
-    TestContext.<anonymous> (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:228:82)
-    Test.runInAsyncScope (node:async_hooks:211:14)
-    Test.run (node:internal/test_runner/test:979:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
-    Test.postRun (node:internal/test_runner/test:1090:19)
-    Test.run (node:internal/test_runner/test:1018:12)
-    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
-  ...
-# {"scope":"synthetic lexical clock/events/exit stub","statuses":[],"signals":["SIGTERM"],"closes":0,"removals":0,"errors":[],"timers":[]}
-# Subtest: synthetic deadline first retains state despite later confirmed exit
-not ok 12 - synthetic deadline first retains state despite later confirmed exit
-  ---
-  duration_ms: 0.200416
-  location: '/private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:234:1'
-  failureType: 'testCodeFailure'
-  error: |-
-    Expected values to be strictly equal:
-    
-    0 !== 1
-    
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  expected: 1
-  actual: 0
-  operator: 'strictEqual'
-  stack: |-
-    timer (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:179:28)
-    TestContext.<anonymous> (file:///private/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source/scripts/e2e-server-shutdown.test.mjs:235:82)
-    Test.runInAsyncScope (node:async_hooks:211:14)
-    Test.run (node:internal/test_runner/test:979:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:677:18)
-    Test.postRun (node:internal/test_runner/test:1090:19)
-    Test.run (node:internal/test_runner/test:1018:12)
-    process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-    async Test.processPendingSubtests (node:internal/test_runner/test:677:7)
-  ...
-# {"scope":"synthetic lexical clock/events/exit stub","statuses":[],"signals":["SIGTERM"],"closes":0,"removals":0,"errors":[],"timers":[]}
-1..12
-# tests 12
-# suites 0
-# pass 3
-# fail 9
-# cancelled 0
-# skipped 0
-# todo 0
-# duration_ms 7777.916042
+Derived public evidence; not original raw output. Historical hashes identify the privately retained original bytes.
+Original SHA256: 44087075eab9cdd2bd161aafc7fb148fa06db8739ffa735d2af531f79fb27d10
+Original bytes: 15791
+Ordered extracted numeric result fields (not an inferred final result):
+[
+  {
+    "tap_field": "tests",
+    "value": "12"
+  },
+  {
+    "tap_field": "suites",
+    "value": "0"
+  },
+  {
+    "tap_field": "pass",
+    "value": "3"
+  },
+  {
+    "tap_field": "fail",
+    "value": "9"
+  },
+  {
+    "tap_field": "cancelled",
+    "value": "0"
+  },
+  {
+    "tap_field": "skipped",
+    "value": "0"
+  },
+  {
+    "tap_field": "todo",
+    "value": "0"
+  },
+  {
+    "tap_field": "duration_ms",
+    "value": "7777.916042"
+  }
+]
+First-assertion, runtime and cleanup scope remains governed by associated historical validation manifests and original evidence. An empty extraction is unknown, never a passing result. No new or later failed-case assertions are inferred.
+Catalog: .agent/artifacts/metadata-hygiene-49df/derivation.json

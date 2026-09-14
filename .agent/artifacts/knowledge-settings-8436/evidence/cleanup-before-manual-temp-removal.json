@@ -1,4 +1,12 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "549b47260a6a20d88f50cc1f064f09cc821ddbcee911556d95dc5afc26201f02",
+    "original_bytes": 977,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "owned_pids_recorded": [
     61363,
     61379,
@@ -24,8 +32,8 @@
   "reserved_listeners": "",
   "app_processes": [],
   "runner_temp_paths": {
-    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-JG9DZO": true,
-    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/playwright_chromiumdev_profile-WkBwac": false
+    "private-ref:d393a9e6aa2b41238945ccfac7eb963e": true,
+    "private-ref:1c410362f7b74415aa132d3f038525aa": false
   },
   "unrelated_browser": "Existing linkedin-mcp headless browser is outside owner tree and untouched.",
   "sessions": {

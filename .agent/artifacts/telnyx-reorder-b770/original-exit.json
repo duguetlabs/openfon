@@ -1,4 +1,12 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "451c39d789efba84482ca137c5258ee3b82e4aad894c2cfb1fbf0c87462894fd",
+    "original_bytes": 716,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "stage": "original",
   "command": [
     "npm",
@@ -9,7 +17,7 @@
     "reorder-count-negative",
     "--maxWorkers=1"
   ],
-  "cwd": "/private/tmp/openfon-reorder-b770-fifekwmx",
+  "cwd": "private-ref:bd0ad59507f241bc9b89609172e0b527",
   "started": "2026-09-14T04:28:10.295397+00:00",
   "source_sha256": "e466dc5fe9d9651b123dc0b13d7468707756eb66723ab8adbb6d9fe7bba5a188",
   "test_sha256": "b3d59be54ad62b5370ebf25c9d783746e5969e93fccea92b73b978e79387a37c",

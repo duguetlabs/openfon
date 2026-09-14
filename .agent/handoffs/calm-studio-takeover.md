@@ -3,12 +3,12 @@
 - **Sender:** Codex `/root`
 - **Intended recipient:** Next OpenFon Calm Studio agent
 - **Reason:** Cristian requested a durable takeover handoff
-- **Repository path:** `/Users/cristian/projects/fun/openfon`
+- **Repository path:** `private-ref:e15f77645f5b45eb9a17c8c8593580c7`
 - **Branch:** `agent/calm-studio-foundation`
 - **Base commit:** `eb13a19353a4fc9521711443fadada7ffc4588e4`
 - **Current commit:** `4f8ab243367674091bc3beddacdc56f7a82e6bb1` (product head before handoff-document commit)
 - **Working-tree status:** Product files match `origin/agent/calm-studio-foundation`; the local branch will be one documentation-only handoff commit ahead of the remote, with no product-code changes
-- **Applicable AGENTS.md:** `/Users/cristian/.codex/AGENTS.md`; `/Users/cristian/projects/fun/openfon/AGENTS.md`
+- **Applicable AGENTS.md:** `private-ref:f71a571b285a4aeb9e4900c78893f0ef`; `private-ref:970c1d72f8494e7eb1fd8e65b1c9920e`
 - **Read first:** `.agent/current-task.md`; `migrations/0008_calm_studio_foundation.sql`; `src/studio-api.ts`; PR #13
 
 ## Objective

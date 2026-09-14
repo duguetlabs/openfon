@@ -1,1 +1,9 @@
-/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-webhook-fixture-1d4-43nfdlh3
+{
+  "representation": "resource-only snapshot locator; not test output",
+  "original_sha256": "24167a6ae4940d3d25c74f7145374f4e76cd0308026fcbd20ec1acdc18bf3bca",
+  "original_bytes": 86,
+  "private_snapshot_reference": "private-ref:af3a4c2f848b4f98b0e1b967ec88b7ac",
+  "classification": "Original contains one absolute snapshot-directory locator. No test/result totals are present.",
+  "availability": "Historical locator preserved privately; underlying external directory not reverified or claimed recovered.",
+  "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json"
+}

@@ -1,9 +1,17 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "14be7f7fc638984a9169845baa1158e310520ee60e2ee41786d3fa66e5072565",
+    "original_bytes": 21177,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "status": "BOUNDED VALIDATION COMPLETE; sole8812/9252 explicitly RELEASED; final evidence QA and exact4file integration assembly pending",
   "base": "1d4b73331353ecacf07b46ce9d186c032a04fc51",
   "owner_contract_commit": "ccfd3bb60178f5a1bcfa4b02572a27e5097c3be3",
   "contract_qa": "045b3cc",
-  "snapshot": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc",
+  "snapshot": "private-ref:0b10e83e773a4741b1cf7390f037020a",
   "report": {
     "url": "https://github.com/duguetlabs/openfon/pull/16#issuecomment-5668763633",
     "sha256": "486300abef14de12da733a524b129699069259a36545b603661845696b572689"
@@ -244,25 +252,25 @@
         "reserved_listeners": {},
         "known_unrelated_preserved": [
           {
-            "pid": 54328,
-            "ppid": 54317,
-            "comm": "/Users/cristian/Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+            "pid": "private-ref:2b310cac29884a5f94a09aeff7e08dbe",
+            "ppid": "private-ref:28c0f0c91c314ec5b1266e68d062d8a0",
+            "comm": "private-ref:1b7d117a1a624a37a427180a96c221f4"
           },
           {
-            "pid": 54317,
-            "ppid": 53707,
-            "comm": "/Users/cristian/projects/fun/linkedin-mcps/linkedin-mcp/.venv/lib/python3.13/site-packages/playwright/driver/node"
+            "pid": "private-ref:28c0f0c91c314ec5b1266e68d062d8a0",
+            "ppid": "private-ref:eec2f7ab9d1141c1b88eb61d53e7288f",
+            "comm": "private-ref:6dede83197694d6d91e7882042209fe5"
           }
         ]
       },
       "removed_owned_temps": [
-        "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-FDud2N",
-        "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-k1SIhA"
+        "private-ref:fb363427fb8847c8bdd28d9dab9cb9f0",
+        "private-ref:51a99f778c29498395e82e6cefba71a5"
       ],
       "owned_temps_remaining": [],
       "removed_added_dependency_symlink": true,
-      "preserved_dependency": "/Users/cristian/projects/fun/openfon/node_modules",
-      "retained_exact_source_snapshot": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc",
+      "preserved_dependency": "private-ref:0963f9caf3b546528d7bd74095ddb8df",
+      "retained_exact_source_snapshot": "private-ref:0b10e83e773a4741b1cf7390f037020a",
       "source_sha256": {
         "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
         "web/src/pages/Settings.tsx": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af",
@@ -336,9 +344,9 @@
     "committed_text_files": 47,
     "owner_local_trace_files": 3,
     "owner_local_trace_paths": [
-      "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-0adb9-l-with-identical-error-text/trace.zip",
-      "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-844f8--failure-and-retains-drafts/trace.zip",
-      "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-917af-l-with-identical-error-text/trace.zip"
+      "private-ref:0635d958d20a4f4dac3d70913fafc769",
+      "private-ref:dfe9f00bbb5041d78f41394fbfa9daf9",
+      "private-ref:2c8d0243f3b040baa127110957667d74"
     ],
     "all_fifty_hashes": "evidence_sha256; traces retained immutable at original owner paths, never deleted"
   }

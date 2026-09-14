@@ -1,6 +1,14 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "b132b0b9ff5df52c25e25a1804617d176c97573be7db5902a923474282c94c4a",
+    "original_bytes": 2777,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "base": "ddce0bde6c16633541dc65811fbb833865c7af2a",
-  "snapshot": "/tmp/openfon-webhook-leases-ddce-qwinacbe",
+  "snapshot": "private-ref:014c9b6a82b04164a850cadaa90a918d",
   "status": "PREPARED_UNEXECUTED",
   "files": {
     "src/telnyx-routes.ts": {

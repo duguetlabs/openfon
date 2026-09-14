@@ -1,152 +1,27 @@
-
-> openfon@0.1.0 test
-> vitest run --maxWorkers=1 test/telnyx-body.test.ts
-
-
- RUN  v5.0.0 /private/tmp/openfon-webhook-original-8436-_q89sntk
-
- ❯ test/telnyx-body.test.ts (23 tests | 10 failed) 254ms
-   ❯ public Telnyx body acquisition budget (23)
-     × bounds first byte without waiting for EOF 4ms
-     × bounds partial body without waiting for EOF 1ms
-     × bounds trickle without waiting for EOF 2ms
-     × overflow rejects before pending cancellation settles 1ms
-     × overflow rejects before reject cancellation settles 1ms
-     × keeps 413 when a synthetic reader cancel and releaseLock throw synchronously 1ms
-     × ignores synthetic late read EOF after the deadline 1ms
-     × ignores synthetic late read chunk after the deadline 0ms
-     × ignores synthetic late read rejection after the deadline 0ms
-     × bounds synchronous empty chunks without relying on a timer callback 72ms
-
-⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
-
- FAIL  test/telnyx-body.test.ts > public Telnyx body acquisition budget > bounds first byte without waiting for EOF
- FAIL  test/telnyx-body.test.ts > public Telnyx body acquisition budget > bounds partial body without waiting for EOF
- FAIL  test/telnyx-body.test.ts > public Telnyx body acquisition budget > bounds trickle without waiting for EOF
-AssertionError: response observed before fixture disposal: expected undefined to be 408 // Object.is equality
-
-- Expected:
-408
-
-+ Received:
-undefined
-
- ❯ observedStatus test/telnyx-body.test.ts:49:80
-     47|   // via the test runner timeout. Teardown then releases every held pr…
-     48|   expect(result.error).toBeUndefined();
-     49|   expect(result.response?.status, 'response observed before fixture di…
-       |                                                                                ^
-     50|   expect(result.response!.headers.get('Cache-Control')).toBe('no-store…
-     51|   if (status !== 200) expect(await result.response!.json()).toEqual({ …
- ❯ test/telnyx-body.test.ts:102:11
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
-
- FAIL  test/telnyx-body.test.ts > public Telnyx body acquisition budget > overflow rejects before pending cancellation settles
-AssertionError: response observed before fixture disposal: expected undefined to be 413 // Object.is equality
-
-- Expected:
-413
-
-+ Received:
-undefined
-
- ❯ observedStatus test/telnyx-body.test.ts:49:80
-     47|   // via the test runner timeout. Teardown then releases every held pr…
-     48|   expect(result.error).toBeUndefined();
-     49|   expect(result.response?.status, 'response observed before fixture di…
-       |                                                                                ^
-     50|   expect(result.response!.headers.get('Cache-Control')).toBe('no-store…
-     51|   if (status !== 200) expect(await result.response!.json()).toEqual({ …
- ❯ test/telnyx-body.test.ts:111:11
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
-
- FAIL  test/telnyx-body.test.ts > public Telnyx body acquisition budget > overflow rejects before reject cancellation settles
-AssertionError: response observed before fixture disposal: expected 503 to be 413 // Object.is equality
-
-- Expected
-+ Received
-
-- 413
-+ 503
-
- ❯ observedStatus test/telnyx-body.test.ts:49:80
-     47|   // via the test runner timeout. Teardown then releases every held pr…
-     48|   expect(result.error).toBeUndefined();
-     49|   expect(result.response?.status, 'response observed before fixture di…
-       |                                                                                ^
-     50|   expect(result.response!.headers.get('Cache-Control')).toBe('no-store…
-     51|   if (status !== 200) expect(await result.response!.json()).toEqual({ …
- ❯ test/telnyx-body.test.ts:111:11
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
-
- FAIL  test/telnyx-body.test.ts > public Telnyx body acquisition budget > keeps 413 when a synthetic reader cancel and releaseLock throw synchronously
-AssertionError: response observed before fixture disposal: expected 503 to be 413 // Object.is equality
-
-- Expected
-+ Received
-
-- 413
-+ 503
-
- ❯ observedStatus test/telnyx-body.test.ts:49:80
-     47|   // via the test runner timeout. Teardown then releases every held pr…
-     48|   expect(result.error).toBeUndefined();
-     49|   expect(result.response?.status, 'response observed before fixture di…
-       |                                                                                ^
-     50|   expect(result.response!.headers.get('Cache-Control')).toBe('no-store…
-     51|   if (status !== 200) expect(await result.response!.json()).toEqual({ …
- ❯ test/telnyx-body.test.ts:123:11
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
-
- FAIL  test/telnyx-body.test.ts > public Telnyx body acquisition budget > ignores synthetic late read EOF after the deadline
- FAIL  test/telnyx-body.test.ts > public Telnyx body acquisition budget > ignores synthetic late read chunk after the deadline
- FAIL  test/telnyx-body.test.ts > public Telnyx body acquisition budget > ignores synthetic late read rejection after the deadline
-AssertionError: response observed before fixture disposal: expected undefined to be 408 // Object.is equality
-
-- Expected:
-408
-
-+ Received:
-undefined
-
- ❯ observedStatus test/telnyx-body.test.ts:49:80
-     47|   // via the test runner timeout. Teardown then releases every held pr…
-     48|   expect(result.error).toBeUndefined();
-     49|   expect(result.response?.status, 'response observed before fixture di…
-       |                                                                                ^
-     50|   expect(result.response!.headers.get('Cache-Control')).toBe('no-store…
-     51|   if (status !== 200) expect(await result.response!.json()).toEqual({ …
- ❯ test/telnyx-body.test.ts:136:11
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
-
- FAIL  test/telnyx-body.test.ts > public Telnyx body acquisition budget > bounds synchronous empty chunks without relying on a timer callback
-AssertionError: response observed before fixture disposal: expected 200 to be 400 // Object.is equality
-
-- Expected
-+ Received
-
-- 400
-+ 200
-
- ❯ observedStatus test/telnyx-body.test.ts:49:80
-     47|   // via the test runner timeout. Teardown then releases every held pr…
-     48|   expect(result.error).toBeUndefined();
-     49|   expect(result.response?.status, 'response observed before fixture di…
-       |                                                                                ^
-     50|   expect(result.response!.headers.get('Cache-Control')).toBe('no-store…
-     51|   if (status !== 200) expect(await result.response!.json()).toEqual({ …
- ❯ test/telnyx-body.test.ts:157:11
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
-
-
- Test Files  1 failed (1)
-      Tests  10 failed | 13 passed (23)
-   Start at  05:45:41
-   Duration  939ms (transform 40%, import 30%, tests 29%)
-
+Derived public evidence; not original raw output. Historical hashes identify the privately retained original bytes.
+Original SHA256: 121dae1369c3bb8f5496ce20a56fea8623529f4163f5c2818a439fe5335a9dea
+Original bytes: 7108
+Ordered extracted numeric result fields (not an inferred final result):
+[
+  {
+    "vitest_scope": "files",
+    "counts": [
+      {
+        "failed": 1
+      }
+    ]
+  },
+  {
+    "vitest_scope": "tests",
+    "counts": [
+      {
+        "failed": 10
+      },
+      {
+        "passed": 13
+      }
+    ]
+  }
+]
+First-assertion, runtime and cleanup scope remains governed by associated historical validation manifests and original evidence. An empty extraction is unknown, never a passing result. No new or later failed-case assertions are inferred.
+Catalog: .agent/artifacts/metadata-hygiene-49df/derivation.json

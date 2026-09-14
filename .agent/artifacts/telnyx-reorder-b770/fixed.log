@@ -1,13 +1,24 @@
-
-> openfon@0.1.0 test
-> vitest run test/telnyx-reorder-boundary.test.ts test/telnyx-media.test.ts test/telephony-audio.test.ts --maxWorkers=1
-
-
- RUN  v5.0.0 /private/tmp/openfon-reorder-b770-fifekwmx
-
-
- Test Files  3 passed (3)
-      Tests  61 passed (61)
-   Start at  06:28:24
-   Duration  562ms (tests 61%, import 23%, transform 15%, worker 1%)
-
+Derived public evidence; not original raw output. Historical hashes identify the privately retained original bytes.
+Original SHA256: 9e856bd07e4a6e059440bee7ccd7945aa18821b63c36d420afa222c2ad73d8b0
+Original bytes: 348
+Ordered extracted numeric result fields (not an inferred final result):
+[
+  {
+    "vitest_scope": "files",
+    "counts": [
+      {
+        "passed": 3
+      }
+    ]
+  },
+  {
+    "vitest_scope": "tests",
+    "counts": [
+      {
+        "passed": 61
+      }
+    ]
+  }
+]
+First-assertion, runtime and cleanup scope remains governed by associated historical validation manifests and original evidence. An empty extraction is unknown, never a passing result. No new or later failed-case assertions are inferred.
+Catalog: .agent/artifacts/metadata-hygiene-49df/derivation.json

@@ -1,13 +1,27 @@
-
- RUN  v5.0.0 /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-ticket-active-ddce-h5q38d_1
-
-(node:43213) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
- ✓ test/studio-api.test.ts (64 tests | 62 skipped) 43ms
-
- Test Files  1 passed (1)
-      Tests  2 passed | 62 skipped (64)
-   Start at  20:05:24
-   Duration  585ms (import 49%, transform 43%, tests 8%)
-
-JSON report written to /Users/cristian/projects/fun/openfon-worktrees/integration/.agent/artifacts/public-ticket-ddce/validation/studio-report.json
+Derived public evidence; not original raw output. Historical hashes identify the privately retained original bytes.
+Original SHA256: 763ee0dd3ecb1f4186ad50cbbac797f45ffee3351984cb4ae73fef935db24086
+Original bytes: 630
+Ordered extracted numeric result fields (not an inferred final result):
+[
+  {
+    "vitest_scope": "files",
+    "counts": [
+      {
+        "passed": 1
+      }
+    ]
+  },
+  {
+    "vitest_scope": "tests",
+    "counts": [
+      {
+        "passed": 2
+      },
+      {
+        "skipped": 62
+      }
+    ]
+  }
+]
+First-assertion, runtime and cleanup scope remains governed by associated historical validation manifests and original evidence. An empty extraction is unknown, never a passing result. No new or later failed-case assertions are inferred.
+Catalog: .agent/artifacts/metadata-hygiene-49df/derivation.json

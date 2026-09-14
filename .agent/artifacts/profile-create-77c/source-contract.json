@@ -1,10 +1,18 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "ee5aed77dbac4888869ea56bb2b4d5829291c49d99678a5b6966b2db2f69eb78",
+    "original_bytes": 3534,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "status": "Historical exact-source contract, now selected and source-preparation authorized; actual artifact/QA status in profile-create-77c.json",
   "base": "77cde12b99cc63344251dc8bab34256f23216628",
   "owner_head_before_evidence": "992ea62ef4586201ca7c326f55feddf2506040bb",
   "report": {
     "url": "https://github.com/duguetlabs/openfon/pull/16#issuecomment-5659360760",
-    "path": "/Users/cristian/projects/fun/openfon-worktrees/release-audit/test-results/qa-official-77cde12b/original.md",
+    "path": "private-ref:757288f0bb834fb9b7d8a134b1bf0730",
     "sha256": "6d438ab4d60cd0bf8846c96a9b676f9537fef4d02033d2efb089c3286e82f2ad"
   },
   "exact_source_sha256": {

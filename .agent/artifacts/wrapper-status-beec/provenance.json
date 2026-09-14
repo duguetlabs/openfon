@@ -1,6 +1,14 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "937e606695a94541e6a7167fc4ff37489fef076b687e15f0e5666cc4edc4b440",
+    "original_bytes": 6868,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "base": "beec8b70419ddf760b9594b95626f20e1d71d399",
-  "source": "/tmp/openfon-wrapper-status-beec-udebnuoa/source",
+  "source": "private-ref:89bb7663ff674150b31d64adeb2c248e",
   "original_sha256": {
     "scripts/e2e-server.mjs": "b0b296b15a8ed862dc8ea53bb00ce84110e53b525e4f6cf91698174f434fe007",
     "scripts/e2e-server.test.mjs": null
@@ -38,7 +46,7 @@
     "100644 blob 299d13e9a5bc6fe76c0cf6bf6e0214a5991cccb5\tplaywright.config.ts"
   ],
   "validation": "COMPLETE: original13/fixed13 serial actual-tail process-only tests and2syntax checks; no app/npx/workerd/provider/browser/capture execution",
-  "planned_original_command": "E2E_SERVER_SOURCE=/tmp/openfon-wrapper-status-beec-udebnuoa/original/scripts/e2e-server.mjs node --test scripts/e2e-server.test.mjs",
+  "planned_original_command": "private-ref:d12449a9ecc04ea8aa1a576a514288b1",
   "planned_fixed_command": "node --test scripts/e2e-server.test.mjs",
   "test_count": 13,
   "test_contract": "10 actual owned Node wrapper/direct-child cases and3 synthetic failed-forwarding/null-status controls; extracted exact source tail, provider.close stub and real disposable state only. Pre-assertion wrapper/child/forwarding/cleanup diagnostics retained.",
@@ -124,7 +132,7 @@
     "remaining_fixture_directories": [],
     "fixture_roots_scanned": [
       "/tmp",
-      "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T"
+      "private-ref:6e179185accc452d98a8c1881888b9cb"
     ],
     "reserved_listener_check": {
       "exit": 1,

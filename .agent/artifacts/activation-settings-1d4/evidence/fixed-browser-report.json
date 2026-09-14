@@ -1,8 +1,16 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "114d17b00e66342dc3bb2b508e92a8d8323a851090f55ecf7556afaa6ab473f6",
+    "original_bytes": 13501,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "config": {
     "argv": [
-      "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node",
-      "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/node_modules/.bin/playwright",
+      "private-ref:656082253ae943b38ba5975202b555c2",
+      "private-ref:4aa3c5781f094ab08e1602e6ae44477e",
       "test",
       "e2e/settings-load-error.spec.ts",
       "e2e/settings-save-recovery.spec.ts",
@@ -10,11 +18,11 @@
       "(?:accepted\\ automatic\\ settings\\ read\\ clears\\ only\\ an\\ earlier\\ local\\ load\\ failure\\ and\\ retains\\ drafts|superseded\\ local\\ success\\ cannot\\ change\\ the\\ newer\\ load\\ outcome|superseded\\ local\\ failure\\ cannot\\ change\\ the\\ newer\\ load\\ outcome|accepted\\ settings\\ read\\ preserves\\ a\\ newer\\ create\\ refusal\\ with\\ identical\\ error\\ text|accepted\\ settings\\ read\\ preserves\\ a\\ newer\\ rename\\ refusal\\ with\\ identical\\ error\\ text|independent\\ accepted\\ settings\\ read\\ retains\\ confirmed\\ apply\\ display\\ recovery|independent\\ accepted\\ settings\\ read\\ retains\\ confirmed\\ delete\\ display\\ recovery|independent\\ accepted\\ settings\\ read\\ preserves\\ accepted\\-write\\ session\\ recovery\\ and\\ baseline|a failed second settings read retains refresh-only recovery)$",
       "--workers=1",
       "--retries=0",
-      "--output=/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/fixed-browser-results",
+      "private-ref:f43f303f0b2c49079a977e9d22c1a286",
       "--reporter=line,json"
     ],
-    "configFile": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/playwright.config.ts",
-    "rootDir": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e",
+    "configFile": "private-ref:306e14d22a1d46fdad27a295cb697476",
+    "rootDir": "private-ref:f2e48ec5264c4bdcb54471dbaaef8b84",
     "failOnFlakyTests": false,
     "forbidOnly": false,
     "fullyParallel": false,
@@ -30,7 +38,7 @@
     "preserveOutput": "always",
     "projects": [
       {
-        "outputDir": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/fixed-browser-results",
+        "outputDir": "private-ref:ec958be67ff2476eb75e61ec07d5c5ce",
         "repeatEach": 1,
         "retries": 0,
         "metadata": {
@@ -38,7 +46,7 @@
         },
         "id": "",
         "name": "",
-        "testDir": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e",
+        "testDir": "private-ref:f2e48ec5264c4bdcb54471dbaaef8b84",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"

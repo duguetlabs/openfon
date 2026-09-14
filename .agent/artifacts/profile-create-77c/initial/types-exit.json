@@ -1,25 +1,33 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "13a1a7a16f9af002b1401f0ee045701f0c9a10da3f1efaa4b8440a8808539dfa",
+    "original_bytes": 655,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "exit": 0,
   "duration_seconds": 3.624,
   "observed_processes": [
     {
-      "pid": 93283,
-      "ppid": 93028,
+      "pid": "private-ref:604079ec245840bf8b2b665ccc11a76d",
+      "ppid": "private-ref:e25292c9fc0e4897adda84eee8e4a16f",
       "comm": "<defunct>"
     },
     {
-      "pid": 93299,
-      "ppid": 93283,
+      "pid": "private-ref:89b0fef9d178412295712a729c13f475",
+      "ppid": "private-ref:604079ec245840bf8b2b665ccc11a76d",
       "comm": "sh"
     },
     {
-      "pid": 93300,
-      "ppid": 93299,
+      "pid": "private-ref:bc771d367f1d456ea66e4758860e3bb2",
+      "ppid": "private-ref:89b0fef9d178412295712a729c13f475",
       "comm": "node"
     },
     {
-      "pid": 93521,
-      "ppid": 93299,
+      "pid": "private-ref:f123b5a372024a1d972ca7d9720ac7a7",
+      "ppid": "private-ref:89b0fef9d178412295712a729c13f475",
       "comm": "node"
     }
   ],

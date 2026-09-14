@@ -1,4 +1,12 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "f142ae6502731f4ed76a9a3f3ea9ff8faef3f67f6edf471bb7e1a8508136f069",
+    "original_bytes": 2565,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "time": "2026-09-14T18:49:39.917772+00:00",
   "source_hashes": {
     "original/docs/launch/demo/capture-child-deadline.test.mjs": "66c17cc2742b117ef3c4e323f579909a9f10027cab6041358f10b587f81de9bd",

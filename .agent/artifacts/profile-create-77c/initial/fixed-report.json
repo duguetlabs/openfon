@@ -1,8 +1,16 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "7424a2453109209c4223d5c123f243c268a3cc1f156beabf0e74681ae7553553",
+    "original_bytes": 31464,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "config": {
     "argv": [
-      "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node",
-      "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/node_modules/.bin/playwright",
+      "private-ref:656082253ae943b38ba5975202b555c2",
+      "private-ref:ee76baba302743b99ee51947343daf14",
       "test",
       "e2e/profile-create-pending.spec.ts",
       "e2e/profile-rename-actions.spec.ts",
@@ -12,11 +20,11 @@
       "(?:one\\ pending\\ create\\ admits\\ one\\ POST\\ and\\ one\\ persisted\\ id\\ with\\ confirmed\\ no\\-op\\ blur|create\\ acknowledgement\\ preserves\\ later\\ name\\ revision\\ and\\ assistant\\ draft\\ \\(Newer\\ name\\)|create\\ acknowledgement\\ preserves\\ later\\ name\\ revision\\ and\\ assistant\\ draft\\ \\(Created\\ profile\\)|pending\\ create\\ blocks\\ Apply,\\ rename\\ and\\ Settings\\ save\\ until\\ explicit\\ later\\ action|pending\\ Apply\\ blocks\\ create\\ and\\ allows\\ a\\ later\\ explicit\\ create|pending\\ create\\ blocks\\ Delete\\ profile,\\ rename\\ and\\ Settings\\ save\\ until\\ explicit\\ later\\ action|pending\\ Delete\\ profile\\ blocks\\ create\\ and\\ allows\\ a\\ later\\ explicit\\ create|blur\\ then\\ create\\ stays\\ blocked\\ through\\ the\\ final\\ queued\\ rename\\ and\\ requires\\ another\\ click|independent\\ Settings\\ refresh\\ suppresses\\ list\\ dispatch\\ during\\ committed\\ create\\ and\\ preserves\\ drafts|a\\ pre\\-create\\ list\\ response\\ is\\ not\\ adopted\\ while\\ create\\ is\\ pending|a\\ pre\\-create\\ list\\ response\\ cannot\\ remove\\ the\\ acknowledged\\ row\\ after\\ creation\\ settles|refused\\ create\\ preserves\\ newer\\ input\\ and\\ releases\\ admission\\ for\\ one\\ explicit\\ retry|pending\\ Settings\\ save\\ excludes\\ create\\ without\\ changing\\ accepted\\ save\\ stages|Settings\\ retry\\ and\\ create\\ exclude\\ each\\ other\\ \\(create\\ first\\)|Settings\\ retry\\ and\\ create\\ exclude\\ each\\ other\\ \\(retry\\ first\\)|blur\\ then\\ Apply\\ sends\\ no\\ action\\ while\\ rename\\ is\\ pending;\\ explicit\\ later\\ click\\ works|blur\\ then\\ Delete\\ profile\\ sends\\ no\\ action\\ while\\ rename\\ is\\ pending;\\ explicit\\ later\\ click\\ works|confirmed\\ profile\\ apply\\ survives\\ refresh\\ failure\\ and\\ retries\\ reads\\ only|confirmed\\ profile\\ delete\\ survives\\ refresh\\ failure\\ and\\ retries\\ reads\\ only|failed\\ profile\\ rename\\ preserves\\ retry\\ and\\ newer\\ edits\\ \\(newer=true\\))$",
       "--workers=1",
       "--retries=0",
-      "--output=/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/fixed-browser-results",
+      "private-ref:84aec13faf5a48a09140677eae158cd5",
       "--reporter=line,json"
     ],
-    "configFile": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/playwright.config.ts",
-    "rootDir": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e",
+    "configFile": "private-ref:cbb04be4113e403faf42335105ba8613",
+    "rootDir": "private-ref:3c8b9c9355f948d3ac6eebbfa7d89081",
     "failOnFlakyTests": false,
     "forbidOnly": false,
     "fullyParallel": false,
@@ -32,7 +40,7 @@
     "preserveOutput": "always",
     "projects": [
       {
-        "outputDir": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/fixed-browser-results",
+        "outputDir": "private-ref:1c9d8d67ca4941c49508adcbe97ce2ee",
         "repeatEach": 1,
         "retries": 0,
         "metadata": {
@@ -40,7 +48,7 @@
         },
         "id": "",
         "name": "",
-        "testDir": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e",
+        "testDir": "private-ref:3c8b9c9355f948d3ac6eebbfa7d89081",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
@@ -176,9 +184,19 @@
                   "duration": 5892,
                   "error": {
                     "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m0\u001b[39m\nReceived:   \u001b[31m0\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate",
-                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m0\u001b[39m\nReceived:   \u001b[31m0\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:87:47",
+                    "stack": {
+                      "representation": "derived-reported-comparison-fields",
+                      "private_original_ref": "private-ref:0b7e5b42860b421b81aeb285c2ab4992",
+                      "numeric_fields": [
+                        {
+                          "label": "Received",
+                          "value": 0
+                        }
+                      ],
+                      "limits": "Extracted reported numeric comparisons only. Empty list is not a passing result or absence of failure. Full stack stays private; sibling assertion records and historical manifest retain first-assertion attribution."
+                    },
                     "location": {
-                      "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                      "file": "private-ref:77fd7a481644407985163b436b8067c8",
                       "column": 47,
                       "line": 87
                     },
@@ -187,11 +205,11 @@
                   "errors": [
                     {
                       "location": {
-                        "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                        "file": "private-ref:77fd7a481644407985163b436b8067c8",
                         "column": 47,
                         "line": 87
                       },
-                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeGreaterThan\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: > \u001b[32m0\u001b[39m\nReceived:   \u001b[31m0\u001b[39m\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate\n\n  85 |   try {\n  86 |     await mouseClick(page, create(page), true);\n> 87 |     await expect.poll(() => gate.held.length).toBeGreaterThan(0); await frames(page);\n     |                                               ^\n  88 |     // Wait for all observed POST responses to reach the hold, including an original duplicate.\n  89 |     await expect.poll(() => gate.held.length).toBe(postRequests);\n  90 |     // Let every actually sent create settle before the original's first assertion.\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:87:47"
+                      "message": "private-ref:f0cfcbd650a74b93a8efe99d3fee771c"
                     }
                   ],
                   "stdout": [],
@@ -203,16 +221,16 @@
                     {
                       "name": "error-context",
                       "contentType": "text/markdown",
-                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/fixed-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/error-context.md"
+                      "path": "private-ref:e3eb8d3f74664645bfccc0aec889a7cd"
                     },
                     {
                       "name": "trace",
                       "contentType": "application/zip",
-                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z/fixed-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/trace.zip"
+                      "path": "private-ref:930a15cea04a494fa17525392e91d3a7"
                     }
                   ],
                   "errorLocation": {
-                    "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                    "file": "private-ref:77fd7a481644407985163b436b8067c8",
                     "column": 47,
                     "line": 87
                   }

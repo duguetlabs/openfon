@@ -1,6 +1,14 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "b1b2aec957d3a9e5fa1c12873428cff8e6da23cf786a3c300d1355370264222a",
+    "original_bytes": 7677,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "base": "77cde12b99cc63344251dc8bab34256f23216628",
-  "artifact": "/tmp/openfon-capture-deadline-77c-13r_31u1",
+  "artifact": "private-ref:2a081f9b2121440d9258e4ac53425f60",
   "status": "SOURCE ONLY; no node/syntax/test execution",
   "changed_paths": [
     "docs/launch/demo/capture-child.mjs",
@@ -129,12 +137,12 @@
   },
   "prepared_cases": 10,
   "proposed_commands": [
-    "CAPTURE_CHILD_HELPER=/tmp/openfon-capture-deadline-77c-13r_31u1/original/docs/launch/demo/capture-child.mjs node --test docs/launch/demo/capture-child-deadline.test.mjs",
+    "private-ref:d51dc9587f7746938e886e91ea1825d7",
     "node --test docs/launch/demo/capture-child-deadline.test.mjs",
     "node --check docs/launch/demo/capture-child.mjs",
     "node --check docs/launch/demo/capture-child-deadline.test.mjs"
   ],
-  "command_cwd": "/tmp/openfon-capture-deadline-77c-13r_31u1/source",
+  "command_cwd": "private-ref:b5dc379eef654349849910a3de175252",
   "limits": [
     "Two real owned Node process cases; signal-ignoring handler is deliberate, not reproduced npx/workerd stall.",
     "Eight synthetic event/lexical-timer cases; helper function body unchanged except export removal for lexical injection.",

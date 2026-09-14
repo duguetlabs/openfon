@@ -1,11 +1,27 @@
-
- RUN  v5.0.0 /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-input-3bb-1ly77qsf
-
-(node:25375) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-
- Test Files  1 passed (1)
-      Tests  2 passed | 62 skipped (64)
-   Start at  07:06:30
-   Duration  860ms (transform 52%, import 41%, tests 7%)
-
+Derived public evidence; not original raw output. Historical hashes identify the privately retained original bytes.
+Original SHA256: bed3c003e3543fdad26f141c33c4ae947c19a6374741226800ac152dbf8966de
+Original bytes: 423
+Ordered extracted numeric result fields (not an inferred final result):
+[
+  {
+    "vitest_scope": "files",
+    "counts": [
+      {
+        "passed": 1
+      }
+    ]
+  },
+  {
+    "vitest_scope": "tests",
+    "counts": [
+      {
+        "passed": 2
+      },
+      {
+        "skipped": 62
+      }
+    ]
+  }
+]
+First-assertion, runtime and cleanup scope remains governed by associated historical validation manifests and original evidence. An empty extraction is unknown, never a passing result. No new or later failed-case assertions are inferred.
+Catalog: .agent/artifacts/metadata-hygiene-49df/derivation.json

@@ -1,4 +1,12 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "97543f31084138e1e999b3b2f78e77cc074f48601aef48c5db5924df41a8b764",
+    "original_bytes": 3267,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "base": "1d4b73331353ecacf07b46ce9d186c032a04fc51",
   "patchSha256": "9fae38ff11c6fb143c506f098fbccd811419e8dfe48238e831234041d991cb7a",
   "sessions": {

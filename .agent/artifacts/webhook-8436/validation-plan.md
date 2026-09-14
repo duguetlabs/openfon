@@ -1,7 +1,7 @@
 # Telnyx webhook body budget — prepared, unexecuted
 
 Base: `8436ac9c0055123d440c78760f6bc10ee406fe25`.
-Snapshot: `/tmp/openfon-webhook-8436-m8prudc_`.
+Snapshot: `private-ref:ace4eeecb6b84d68b8f92f15cadb23a3`.
 `manifest.json` records the four prepared files, two original production files,
 13 unchanged protected files and patch identity. A full Git blob comparison found
 only the two intended existing source files changed in the extracted base.

@@ -1,6 +1,14 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "360b830874580717193017145e060c26c4f39f80d358d3e04670f2f481e9dcde",
+    "original_bytes": 13134,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "base": "8436ac9c0055123d440c78760f6bc10ee406fe25",
-  "snapshot": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-knowledge-8436-xzd8u0oc",
+  "snapshot": "private-ref:02514acf5c254b7fb4dee970ca44b7aa",
   "status": "Owner bounded validation and QA source/evidence CLOSED; source/fixtures unchanged; sole8812/9252 slot released. Integration four-file assembly identity pending.",
   "source_patch": ".agent/artifacts/knowledge-settings-8436.patch",
   "patch_sha256": "03636f661c3bd766d01a6776c3b48ae49dc7e9622a3cec8b372506d456ca3291",

@@ -1,207 +1,27 @@
-
-> openfon@0.1.0 test
-> vitest run --maxWorkers=1 test/telnyx-webhook-admission.test.ts
-
-
- RUN  v5.0.0 /private/tmp/openfon-webhook-leases-original-ddce-hk5sxf7d
-
- ❯ test/telnyx-webhook-admission.test.ts (15 tests | 13 failed) 672ms
-   ❯ aggregate public webhook lease ownership (15)
-     × rejects request17 before reader, buffer, timer or cancellation allocation 457ms
-     × shares its module budget across separate router registrations 5ms
-     × does not refill on timeout or partial cleanup: consume-first 4ms
-     × does not refill on timeout or partial cleanup: cancel-first 4ms
-     × retains real-stream cancellation work even when cancel resolves the pending read 5ms
-     × permanently quarantines cancellation reject after read settlement 4ms
-     × permanently quarantines cancellation throw after read settlement 4ms
-     × permanently quarantines failed lock release even after successful read and cancellation settlement 6ms
-     × owns allocation failure after getReader with pending cancellation 3ms
-     × owns allocation failure after getReader with reject cancellation 3ms
-     × holds completed signed bodies through durable dispatch fulfill 55ms
-     × holds completed signed bodies through durable dispatch reject 56ms
-     × holds completed bodies through cryptographic verification 55ms
-
-⎯⎯⎯⎯⎯⎯ Failed Tests 13 ⎯⎯⎯⎯⎯⎯⎯
-
- FAIL  test/telnyx-webhook-admission.test.ts > aggregate public webhook lease ownership > rejects request17 before reader, buffer, timer or cancellation allocation
-AssertionError: expected 400 to be 503 // Object.is equality
-
-- Expected
-+ Received
-
-- 503
-+ 400
-
- ❯ probe test/telnyx-webhook-admission.test.ts:53:35
-     51|   const { result, settled } = start(f.request, app); await settled;
-     52|   expect(result.error).toBeUndefined();
-     53|   expect(result.response?.status).toBe(expected);
-       |                                   ^
-     54|   expect(result.response?.headers.get('Cache-Control')).toBe('no-store…
-     55|   if (expected === 503) {
- ❯ test/telnyx-webhook-admission.test.ts:105:5
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/13]⎯
-
- FAIL  test/telnyx-webhook-admission.test.ts > aggregate public webhook lease ownership > shares its module budget across separate router registrations
-AssertionError: expected 400 to be 503 // Object.is equality
-
-- Expected
-+ Received
-
-- 503
-+ 400
-
- ❯ probe test/telnyx-webhook-admission.test.ts:53:35
-     51|   const { result, settled } = start(f.request, app); await settled;
-     52|   expect(result.error).toBeUndefined();
-     53|   expect(result.response?.status).toBe(expected);
-       |                                   ^
-     54|   expect(result.response?.headers.get('Cache-Control')).toBe('no-store…
-     55|   if (expected === 503) {
- ❯ test/telnyx-webhook-admission.test.ts:114:5
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/13]⎯
-
- FAIL  test/telnyx-webhook-admission.test.ts > aggregate public webhook lease ownership > does not refill on timeout or partial cleanup: consume-first
- FAIL  test/telnyx-webhook-admission.test.ts > aggregate public webhook lease ownership > does not refill on timeout or partial cleanup: cancel-first
-AssertionError: expected 400 to be 503 // Object.is equality
-
-- Expected
-+ Received
-
-- 503
-+ 400
-
- ❯ probe test/telnyx-webhook-admission.test.ts:53:35
-     51|   const { result, settled } = start(f.request, app); await settled;
-     52|   expect(result.error).toBeUndefined();
-     53|   expect(result.response?.status).toBe(expected);
-       |                                   ^
-     54|   expect(result.response?.headers.get('Cache-Control')).toBe('no-store…
-     55|   if (expected === 503) {
- ❯ test/telnyx-webhook-admission.test.ts:121:5
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/13]⎯
-
- FAIL  test/telnyx-webhook-admission.test.ts > aggregate public webhook lease ownership > retains real-stream cancellation work even when cancel resolves the pending read
-AssertionError: expected 400 to be 503 // Object.is equality
-
-- Expected
-+ Received
-
-- 503
-+ 400
-
- ❯ probe test/telnyx-webhook-admission.test.ts:53:35
-     51|   const { result, settled } = start(f.request, app); await settled;
-     52|   expect(result.error).toBeUndefined();
-     53|   expect(result.response?.status).toBe(expected);
-       |                                   ^
-     54|   expect(result.response?.headers.get('Cache-Control')).toBe('no-store…
-     55|   if (expected === 503) {
- ❯ test/telnyx-webhook-admission.test.ts:144:5
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/13]⎯
-
- FAIL  test/telnyx-webhook-admission.test.ts > aggregate public webhook lease ownership > permanently quarantines cancellation reject after read settlement
- FAIL  test/telnyx-webhook-admission.test.ts > aggregate public webhook lease ownership > permanently quarantines cancellation throw after read settlement
-AssertionError: expected 400 to be 503 // Object.is equality
-
-- Expected
-+ Received
-
-- 503
-+ 400
-
- ❯ probe test/telnyx-webhook-admission.test.ts:53:35
-     51|   const { result, settled } = start(f.request, app); await settled;
-     52|   expect(result.error).toBeUndefined();
-     53|   expect(result.response?.status).toBe(expected);
-       |                                   ^
-     54|   expect(result.response?.headers.get('Cache-Control')).toBe('no-store…
-     55|   if (expected === 503) {
- ❯ test/telnyx-webhook-admission.test.ts:151:19
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/13]⎯
-
- FAIL  test/telnyx-webhook-admission.test.ts > aggregate public webhook lease ownership > permanently quarantines failed lock release even after successful read and cancellation settlement
-AssertionError: expected 400 to be 503 // Object.is equality
-
-- Expected
-+ Received
-
-- 503
-+ 400
-
- ❯ probe test/telnyx-webhook-admission.test.ts:53:35
-     51|   const { result, settled } = start(f.request, app); await settled;
-     52|   expect(result.error).toBeUndefined();
-     53|   expect(result.response?.status).toBe(expected);
-       |                                   ^
-     54|   expect(result.response?.headers.get('Cache-Control')).toBe('no-store…
-     55|   if (expected === 503) {
- ❯ test/telnyx-webhook-admission.test.ts:159:19
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/13]⎯
-
- FAIL  test/telnyx-webhook-admission.test.ts > aggregate public webhook lease ownership > owns allocation failure after getReader with pending cancellation
- FAIL  test/telnyx-webhook-admission.test.ts > aggregate public webhook lease ownership > owns allocation failure after getReader with reject cancellation
-AssertionError: expected "vi.fn()" to be called 1 times, but got 0 times
- ❯ test/telnyx-webhook-admission.test.ts:185:81
-    183|     vi.stubGlobal('Uint8Array', ByteArray);
-    184|     expect(r.result.response?.status).toBe(503);
-    185|     expect(last.reader.read).not.toHaveBeenCalled(); expect(last.reade…
-       |                                                                                 ^
-    186|     expect(last.reader.releaseLock).toHaveBeenCalledTimes(1);
-    187|     await probe(503);
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/13]⎯
-
- FAIL  test/telnyx-webhook-admission.test.ts > aggregate public webhook lease ownership > holds completed signed bodies through durable dispatch fulfill
- FAIL  test/telnyx-webhook-admission.test.ts > aggregate public webhook lease ownership > holds completed signed bodies through durable dispatch reject
-AssertionError: expected 400 to be 503 // Object.is equality
-
-- Expected
-+ Received
-
-- 503
-+ 400
-
- ❯ probe test/telnyx-webhook-admission.test.ts:53:35
-     51|   const { result, settled } = start(f.request, app); await settled;
-     52|   expect(result.error).toBeUndefined();
-     53|   expect(result.response?.status).toBe(expected);
-       |                                   ^
-     54|   expect(result.response?.headers.get('Cache-Control')).toBe('no-store…
-     55|   if (expected === 503) {
- ❯ test/telnyx-webhook-admission.test.ts:199:46
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/13]⎯
-
- FAIL  test/telnyx-webhook-admission.test.ts > aggregate public webhook lease ownership > holds completed bodies through cryptographic verification
-AssertionError: expected 400 to be 503 // Object.is equality
-
-- Expected
-+ Received
-
-- 503
-+ 400
-
- ❯ probe test/telnyx-webhook-admission.test.ts:53:35
-     51|   const { result, settled } = start(f.request, app); await settled;
-     52|   expect(result.error).toBeUndefined();
-     53|   expect(result.response?.status).toBe(expected);
-       |                                   ^
-     54|   expect(result.response?.headers.get('Cache-Control')).toBe('no-store…
-     55|   if (expected === 503) {
- ❯ test/telnyx-webhook-admission.test.ts:212:5
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/13]⎯
-
-
- Test Files  1 failed (1)
-      Tests  13 failed | 2 passed (15)
-   Start at  20:14:41
-   Duration  902ms (tests 86%, import 9%, transform 4%, worker 1%)
-
+Derived public evidence; not original raw output. Historical hashes identify the privately retained original bytes.
+Original SHA256: 9bdd088622c561fc8a5f30201d1b8ed6d373e9342b45d4e30bc5cf0d70cdf325
+Original bytes: 9240
+Ordered extracted numeric result fields (not an inferred final result):
+[
+  {
+    "vitest_scope": "files",
+    "counts": [
+      {
+        "failed": 1
+      }
+    ]
+  },
+  {
+    "vitest_scope": "tests",
+    "counts": [
+      {
+        "failed": 13
+      },
+      {
+        "passed": 2
+      }
+    ]
+  }
+]
+First-assertion, runtime and cleanup scope remains governed by associated historical validation manifests and original evidence. An empty extraction is unknown, never a passing result. No new or later failed-case assertions are inferred.
+Catalog: .agent/artifacts/metadata-hygiene-49df/derivation.json

@@ -1,6 +1,14 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "0c12c2358ee6c575e168ec844cbbb30869b8847eda69f68dfef996701d518a4d",
+    "original_bytes": 4434,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "base": "ddce0bde6c16633541dc65811fbb833865c7af2a",
-  "snapshot": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-ticket-active-ddce-h5q38d_1",
+  "snapshot": "private-ref:d715b4c0c06e4cc29ebf93488ea290d4",
   "status": "SOURCE_EVIDENCE_ASSEMBLY_CLOSED",
   "files": {
     "src/index.ts": {

@@ -5,7 +5,7 @@
 - **Branch:** work landed on `main`; this file was found untracked on `agent/calm-studio-foundation` (unrelated PR #13) and archived without changing its task content
 - **Base commit:** `eb13a19`
 - **Last updated:** 2026-09-06
-- **Applicable AGENTS.md:** `/Users/cristian/projects/fun/openfon/AGENTS.md`
+- **Applicable AGENTS.md:** `private-ref:970c1d72f8494e7eb1fd8e65b1c9920e`
 - **Read first:** `bench/realtime/COMPLETENESS.md`, `bench/quality/COMPLETENESS.md`, `docs/research/realtime-latency-2026-08.md`, `docs/research/voice-engine-quality-2026-08.md`
 
 ## Objective

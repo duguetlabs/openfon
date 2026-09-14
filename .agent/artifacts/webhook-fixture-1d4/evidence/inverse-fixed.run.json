@@ -1,9 +1,17 @@
 {
-  "pid": 45104,
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "3004a1af0a9d8f4e1dc36aa8a0b861761c38feb265607bc4e8ba63851ed717b2",
+    "original_bytes": 507,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "pid": "private-ref:bd930bd51a24451d9e5c2878b50f1d6f",
   "start": "2026-09-14T18:40:35.305167+00:00",
   "end": "2026-09-14T18:40:39.223424+00:00",
   "exit": 0,
-  "cwd": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-fixture-inverse-fixed-1d4-hbm5xjxt",
+  "cwd": "private-ref:34eae2234fd7437c940b7bfc7fae19ec",
   "command": [
     "npx",
     "vitest",

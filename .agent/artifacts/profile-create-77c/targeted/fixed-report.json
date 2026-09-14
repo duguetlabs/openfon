@@ -1,19 +1,27 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "b50c280ba7f6f58769f28212f893948c472c927165fbb8faa0dd3124b0881947",
+    "original_bytes": 4113,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "config": {
     "argv": [
-      "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node",
-      "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/node_modules/.bin/playwright",
+      "private-ref:656082253ae943b38ba5975202b555c2",
+      "private-ref:ee76baba302743b99ee51947343daf14",
       "test",
       "e2e/profile-create-pending.spec.ts",
       "--grep",
       "one pending create admits one POST and one persisted id with confirmed no-op blur$",
       "--workers=1",
       "--retries=0",
-      "--output=/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/targeted-duplicate-20260914T055049Z/fixed-browser-results",
+      "private-ref:cb02c062718d4830b0942165792960fc",
       "--reporter=line,json"
     ],
-    "configFile": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/playwright.config.ts",
-    "rootDir": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e",
+    "configFile": "private-ref:cbb04be4113e403faf42335105ba8613",
+    "rootDir": "private-ref:3c8b9c9355f948d3ac6eebbfa7d89081",
     "failOnFlakyTests": false,
     "forbidOnly": false,
     "fullyParallel": false,
@@ -29,7 +37,7 @@
     "preserveOutput": "always",
     "projects": [
       {
-        "outputDir": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/targeted-duplicate-20260914T055049Z/fixed-browser-results",
+        "outputDir": "private-ref:1986c368148d49ee918a10e7a79d5966",
         "repeatEach": 1,
         "retries": 0,
         "metadata": {
@@ -37,7 +45,7 @@
         },
         "id": "",
         "name": "",
-        "testDir": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e",
+        "testDir": "private-ref:3c8b9c9355f948d3ac6eebbfa7d89081",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"

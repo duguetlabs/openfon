@@ -1,91 +1,27 @@
-
- RUN  v5.0.0 /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-ticket-active-ddce-h5q38d_1
-
-(node:41831) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-stdout | test/public-ticket-active-race.test.ts > [ticket-race-negative] refuses a target changed before INSERT: paused
-ticket-race-diagnostic {"change":"paused","status":200,"reached":true,"calls":[{"id":"a9d21666-7b8d-432c-a44a-f4bcb85632df","assistant_id":"target"}],"dispatches":0}
-
-stdout | test/public-ticket-active-race.test.ts > [ticket-race-negative] refuses a target changed before INSERT: draft
-ticket-race-diagnostic {"change":"draft","status":200,"reached":true,"calls":[{"id":"2191786e-e853-4302-bc87-22429a4281e9","assistant_id":"target"}],"dispatches":0}
-
-stderr | test/public-ticket-active-race.test.ts > [ticket-race-negative] refuses a target changed before INSERT: deleted
-Error: FOREIGN KEY constraint failed
-    at SqliteStatement.run (/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-ticket-active-ddce-h5q38d_1/test/sqlite-d1.ts:40:37)
-    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-ticket-active-ddce-h5q38d_1/src/index.ts:1248:6
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)
-    at dispatch (file:///Users/cristian/projects/fun/openfon/node_modules/hono/dist/compose.js:22:17)
-    at dispatch (file:///Users/cristian/projects/fun/openfon/node_modules/hono/dist/compose.js:22:17)
-    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-ticket-active-ddce-h5q38d_1/src/index.ts:295:3
-    at dispatch (file:///Users/cristian/projects/fun/openfon/node_modules/hono/dist/compose.js:22:17)
-    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-ticket-active-ddce-h5q38d_1/src/index.ts:281:3
-    at dispatch (file:///Users/cristian/projects/fun/openfon/node_modules/hono/dist/compose.js:22:17)
-    at file:///Users/cristian/projects/fun/openfon/node_modules/hono/dist/hono-base.js:308:25 {
-  code: 'ERR_SQLITE_ERROR',
-  errcode: 787,
-  errstr: 'constraint failed'
-}
-
-stdout | test/public-ticket-active-race.test.ts > [ticket-race-negative] refuses a target changed before INSERT: deleted
-ticket-race-diagnostic {"change":"deleted","status":500,"reached":true,"calls":[],"dispatches":0}
-
- ❯ test/public-ticket-active-race.test.ts (10 tests | 3 failed) 93ms
-   × [ticket-race-negative] refuses a target changed before INSERT: paused 30ms
-   × [ticket-race-negative] refuses a target changed before INSERT: draft 7ms
-   × [ticket-race-negative] refuses a target changed before INSERT: deleted 10ms
-   ✓ refuses an initially unavailable target: paused 7ms
-   ✓ refuses an initially unavailable target: draft 7ms
-   ✓ refuses an initially unavailable target: deleted 6ms
-   ✓ creates one active claim-aware live ticket without dispatching a session 6ms
-   ✓ retains exhausted-day429 and performs no ticket write 7ms
-   ✓ permits a name edit while the selected target remains active 6ms
-   ✓ retains WebSocket refusal when pause follows successful insertion 6ms
-
-⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
-
- FAIL  test/public-ticket-active-race.test.ts > [ticket-race-negative] refuses a target changed before INSERT: paused
- FAIL  test/public-ticket-active-race.test.ts > [ticket-race-negative] refuses a target changed before INSERT: draft
-AssertionError: expected 200 to be 404 // Object.is equality
-
-- Expected
-+ Received
-
-- 404
-+ 200
-
- ❯ test/public-ticket-active-race.test.ts:62:27
-     60|   console.log('ticket-race-diagnostic', JSON.stringify({ change, statu…
-     61|     reached: boundary.reached(), calls: calls().map(row => ({ id: row.…
-     62|   expect(response.status).toBe(404);
-       |                           ^
-     63|   expect(boundary.reached()).toBe(true);
-     64|   expect(await response.json()).toEqual({ error: 'Unknown or unavailab…
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
-
- FAIL  test/public-ticket-active-race.test.ts > [ticket-race-negative] refuses a target changed before INSERT: deleted
-AssertionError: expected 500 to be 404 // Object.is equality
-
-- Expected
-+ Received
-
-- 404
-+ 500
-
- ❯ test/public-ticket-active-race.test.ts:62:27
-     60|   console.log('ticket-race-diagnostic', JSON.stringify({ change, statu…
-     61|     reached: boundary.reached(), calls: calls().map(row => ({ id: row.…
-     62|   expect(response.status).toBe(404);
-       |                           ^
-     63|   expect(boundary.reached()).toBe(true);
-     64|   expect(await response.json()).toEqual({ error: 'Unknown or unavailab…
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
-
-
- Test Files  1 failed (1)
-      Tests  3 failed | 7 passed (10)
-   Start at  20:05:15
-   Duration  836ms (transform 49%, import 37%, tests 13%, worker 1%)
-
-JSON report written to /Users/cristian/projects/fun/openfon-worktrees/integration/.agent/artifacts/public-ticket-ddce/validation/original-report.json
+Derived public evidence; not original raw output. Historical hashes identify the privately retained original bytes.
+Original SHA256: 2acd5140c2ffcb937e89229181b4c8d1a14dd13f98e3d943e9a6bbab5fdf389b
+Original bytes: 5123
+Ordered extracted numeric result fields (not an inferred final result):
+[
+  {
+    "vitest_scope": "files",
+    "counts": [
+      {
+        "failed": 1
+      }
+    ]
+  },
+  {
+    "vitest_scope": "tests",
+    "counts": [
+      {
+        "failed": 3
+      },
+      {
+        "passed": 7
+      }
+    ]
+  }
+]
+First-assertion, runtime and cleanup scope remains governed by associated historical validation manifests and original evidence. An empty extraction is unknown, never a passing result. No new or later failed-case assertions are inferred.
+Catalog: .agent/artifacts/metadata-hygiene-49df/derivation.json

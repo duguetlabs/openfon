@@ -1,4 +1,12 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "ea658962d424bb43581cab903aef582f3d9df938278bfa8c029040fccce12617",
+    "original_bytes": 2545,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "assembly": "78cbbde35dfc5a9d72248db1cda7adc14657edc1",
   "parent": "5c4255be2df33bf7d082737e672d98119b7980b5",
   "paths": [
@@ -22,15 +30,15 @@
   "owner_local_trace_references": {
     "original-browser-results/settings-load-error-accept-0adb9-l-with-identical-error-text/trace.zip": {
       "sha256": "3ca98ef0a68d441e62b545ec67b1d31060f0d1915de563cb51d7fb09cb01b32e",
-      "owner_path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-0adb9-l-with-identical-error-text/trace.zip"
+      "owner_path": "private-ref:0635d958d20a4f4dac3d70913fafc769"
     },
     "original-browser-results/settings-load-error-accept-844f8--failure-and-retains-drafts/trace.zip": {
       "sha256": "2e8710be1b8025c2fb2020bb8d17b682ade71e396ad50b6fe59ef1b56d007990",
-      "owner_path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-844f8--failure-and-retains-drafts/trace.zip"
+      "owner_path": "private-ref:dfe9f00bbb5041d78f41394fbfa9daf9"
     },
     "original-browser-results/settings-load-error-accept-917af-l-with-identical-error-text/trace.zip": {
       "sha256": "3507d3b302a70b7547e7c58d99a30414f1228b9eaf6dc65dd84a15dc66273970",
-      "owner_path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-917af-l-with-identical-error-text/trace.zip"
+      "owner_path": "private-ref:2c8d0243f3b040baa127110957667d74"
     }
   },
   "status": "Source/evidence/exact4file assembly CLOSED QA6a4a966",

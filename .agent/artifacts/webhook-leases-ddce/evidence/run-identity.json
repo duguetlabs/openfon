@@ -1,7 +1,15 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "304e71df1e55090d27aaaed254c5d9df563a60ee2f94c8f8aeb5034d58393d12",
+    "original_bytes": 2812,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "base": "ddce0bde6c16633541dc65811fbb833865c7af2a",
-  "fixed": "/tmp/openfon-webhook-leases-ddce-qwinacbe",
-  "original": "/tmp/openfon-webhook-leases-original-ddce-hk5sxf7d",
+  "fixed": "private-ref:014c9b6a82b04164a850cadaa90a918d",
+  "original": "private-ref:7e24b9cdd98c4d61afae91cd7b06cc63",
   "manifestSha256": "ab66282c745c75911cd94aab1bf98d4257a531425419af1dd8177810ab39f912",
   "patchSha256": "1dc6fc61d41cf0a7af5a78c07be61474f947521053bdfd3ea452defe7064a1e4",
   "files": {

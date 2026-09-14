@@ -45,13 +45,13 @@ Launch and verify agents, create desktop Telnyx task, record IDs, install recurr
 
 | Workstream | Owner | Branch | Worktree | State |
 |---|---|---|---|---|
-| telnyx | openfon-telnyx | `codex/telnyx-inbound` | /private/tmp/openfon-telephony | Prepared |
-| asterisk | openfon-asterisk | `codex/asterisk-integration` | /Users/cristian/projects/fun/openfon-worktrees/asterisk | Prepared |
-| presets | openfon-presets | `codex/provider-presets` | /Users/cristian/projects/fun/openfon-worktrees/provider-presets | Prepared |
-| realtime | openfon-realtime | `codex/realtime-providers` | /Users/cristian/projects/fun/openfon-worktrees/realtime-providers | Prepared |
-| integration | openfon-integration | `codex/integrated-release` | /Users/cristian/projects/fun/openfon-worktrees/integration | Prepared |
-| launch | openfon-launch | `codex/launch-kit` | /Users/cristian/projects/fun/openfon-worktrees/launch-kit | Prepared |
-| qa | openfon-qa | `codex/release-audit` | /Users/cristian/projects/fun/openfon-worktrees/release-audit | Prepared |
+| telnyx | openfon-telnyx | `codex/telnyx-inbound` | private-ref:6d78a76d8cd44b88b2dbf807617c2232 | Prepared |
+| asterisk | openfon-asterisk | `codex/asterisk-integration` | private-ref:2c36a45cf8e741bb81e7a5854f4cf447 | Prepared |
+| presets | openfon-presets | `codex/provider-presets` | private-ref:e8fc3e85bf6842178fcf3cf86c3dd9b9 | Prepared |
+| realtime | openfon-realtime | `codex/realtime-providers` | private-ref:5ecff2d1f80d44bbbc89f1212bcd0398 | Prepared |
+| integration | openfon-integration | `codex/integrated-release` | private-ref:2db36db90f4f4c9ca0dc07cd6288d499 | Prepared |
+| launch | openfon-launch | `codex/launch-kit` | private-ref:379e5fe98fe84cfc8efdabc25ad7e235 | Prepared |
+| qa | openfon-qa | `codex/release-audit` | private-ref:bcbd5721093747e992b07389d0e0c94c | Prepared |
 
 ## Files changed
 Only root coordination documents in this dispatch; previous user research untouched. Each agent records its own changes in .agent/workstreams/<role>.md.

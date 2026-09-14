@@ -1,6 +1,6 @@
 # OpenFon coordinated implementation rules
 
-The user explicitly requested separate Codex CLI agents using gpt-6-astra at medium reasoning in Herdr workspace openfon (w1), plus a desktop agent for Telnyx web setup. Root is the orchestrator at /Users/cristian/projects/fun/openfon and owns only the shared current-task/manifest.
+The user explicitly requested separate Codex CLI agents using gpt-6-astra at medium reasoning in Herdr workspace openfon (w1), plus a desktop agent for Telnyx web setup. Root is the orchestrator at private-ref:e15f77645f5b45eb9a17c8c8593580c7 and owns only the shared current-task/manifest.
 
 Read the root AGENTS.md, .agent/current-task.md, your handoff, and .agent/decisions/open-source-provider-and-launch-strategy.md. Strategy is Proposed except the user explicitly authorized Telnyx completion, Asterisk integration, alternative provider presets and delegation of the remaining release work. Preserve existing source and user research. Do not silently change default providers.
 

@@ -1,254 +1,27 @@
-
- RUN  v5.0.0 /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-input-3bb-1ly77qsf
-
-(node:20700) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-stdout | test/knowledge-input-boundaries.test.ts > detail rejects oversized valid2052 before cursor decode and pagination SQL
-cursor boundary {
-  route: 'detail',
-  length: 2052,
-  status: 400,
-  decodes: 1,
-  pageQueries: 0
-}
-
-stdout | test/knowledge-input-boundaries.test.ts > detail rejects oversized malformed2049 before cursor decode and pagination SQL
-cursor boundary {
-  route: 'detail',
-  length: 2049,
-  status: 400,
-  decodes: 1,
-  pageQueries: 0
-}
-
-stdout | test/knowledge-input-boundaries.test.ts > items rejects oversized valid2052 before cursor decode and pagination SQL
-cursor boundary {
-  route: 'items',
-  length: 2052,
-  status: 400,
-  decodes: 1,
-  pageQueries: 0
-}
-
-stdout | test/knowledge-input-boundaries.test.ts > items rejects oversized malformed2049 before cursor decode and pagination SQL
-cursor boundary {
-  route: 'items',
-  length: 2049,
-  status: 400,
-  decodes: 1,
-  pageQueries: 0
-}
-
-stdout | test/knowledge-input-boundaries.test.ts > calls rejects oversized valid2052 before cursor decode and pagination SQL
-cursor boundary {
-  route: 'calls',
-  length: 2052,
-  status: 200,
-  decodes: 1,
-  pageQueries: 1
-}
-
-stdout | test/knowledge-input-boundaries.test.ts > calls rejects oversized malformed2049 before cursor decode and pagination SQL
-cursor boundary {
-  route: 'calls',
-  length: 2049,
-  status: 400,
-  decodes: 1,
-  pageQueries: 0
-}
-
- ❯ test/knowledge-input-boundaries.test.ts (41 tests | 22 failed) 335ms
-   × detail rejects oversized valid2052 before cursor decode and pagination SQL 75ms
-   × detail rejects oversized malformed2049 before cursor decode and pagination SQL 9ms
-   × items rejects oversized valid2052 before cursor decode and pagination SQL 6ms
-   × items rejects oversized malformed2049 before cursor decode and pagination SQL 7ms
-   × calls rejects oversized valid2052 before cursor decode and pagination SQL 7ms
-   × calls rejects oversized malformed2049 before cursor decode and pagination SQL 6ms
-   × put-kind rejects supplied invalid string "" without companion edits or charges 7ms
-   × put-kind rejects supplied invalid string "NOTE" without companion edits or charges 6ms
-   × put-kind rejects supplied invalid string "note " without companion edits or charges 6ms
-   × put-kind rejects supplied invalid string "document" without companion edits or charges 6ms
-   × put-kind invalid strings precede exhausted quota while valid requests remain429 6ms
-   × put-status rejects supplied invalid string "" without companion edits or charges 6ms
-   × put-status rejects supplied invalid string "ACTIVE" without companion edits or charges 6ms
-   × put-status rejects supplied invalid string "active " without companion edits or charges 6ms
-   × put-status rejects supplied invalid string "published" without companion edits or charges 7ms
-   × put-status invalid strings precede exhausted quota while valid requests remain429 6ms
-   × post-status rejects supplied invalid string "" without companion edits or charges 6ms
-   × post-status rejects supplied invalid string "ACTIVE" without companion edits or charges 6ms
-   × post-status rejects supplied invalid string "active " without companion edits or charges 6ms
-   × post-status rejects supplied invalid string "published" without companion edits or charges 5ms
-   × post-status invalid strings precede exhausted quota while valid requests remain429 6ms
-   × reports PUT kind before status when both supplied strings are invalid 6ms
-
-⎯⎯⎯⎯⎯⎯ Failed Tests 22 ⎯⎯⎯⎯⎯⎯⎯
-
- FAIL  test/knowledge-input-boundaries.test.ts > detail rejects oversized valid2052 before cursor decode and pagination SQL
- FAIL  test/knowledge-input-boundaries.test.ts > items rejects oversized valid2052 before cursor decode and pagination SQL
-AssertionError: expected "atob" to not be called at all, but actually been called 1 times
-
-Received:
-
-  1st atob call:
-
-    Array [
-      "WyJkcmFmdHwyMDI2LTA5LTE0IDEyOjAwOjAwIiwieHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eCJd",
+Derived public evidence; not original raw output. Historical hashes identify the privately retained original bytes.
+Original SHA256: 649c22b2e526569ef84924e07acbf04e0374a5c0b7a1926e537b1c928a7fd705
+Original bytes: 17468
+Ordered extracted numeric result fields (not an inferred final result):
+[
+  {
+    "vitest_scope": "files",
+    "counts": [
+      {
+        "failed": 1
+      }
     ]
-
-
-Number of calls: 1
-
- ❯ test/knowledge-input-boundaries.test.ts:64:33
-     62|     // valid long call cursors formerly return200. Do not mistake stat…
-     63|     console.info('cursor boundary', { route, length: raw.length, statu…
-     64|     expect(observed.decode).not.toHaveBeenCalled(); expect(observed.pa…
-       |                                 ^
-     65|     expect(response.status).toBe(400);
-     66|     expect(await response.json()).toEqual({ error: route === 'calls' ?…
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/22]⎯
-
- FAIL  test/knowledge-input-boundaries.test.ts > detail rejects oversized malformed2049 before cursor decode and pagination SQL
- FAIL  test/knowledge-input-boundaries.test.ts > items rejects oversized malformed2049 before cursor decode and pagination SQL
- FAIL  test/knowledge-input-boundaries.test.ts > calls rejects oversized malformed2049 before cursor decode and pagination SQL
-AssertionError: expected "atob" to not be called at all, but actually been called 1 times
-
-Received:
-
-  1st atob call:
-
-    Array [
-      "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!===",
+  },
+  {
+    "vitest_scope": "tests",
+    "counts": [
+      {
+        "failed": 22
+      },
+      {
+        "passed": 19
+      }
     ]
-
-
-Number of calls: 1
-
- ❯ test/knowledge-input-boundaries.test.ts:64:33
-     62|     // valid long call cursors formerly return200. Do not mistake stat…
-     63|     console.info('cursor boundary', { route, length: raw.length, statu…
-     64|     expect(observed.decode).not.toHaveBeenCalled(); expect(observed.pa…
-       |                                 ^
-     65|     expect(response.status).toBe(400);
-     66|     expect(await response.json()).toEqual({ error: route === 'calls' ?…
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/22]⎯
-
- FAIL  test/knowledge-input-boundaries.test.ts > calls rejects oversized valid2052 before cursor decode and pagination SQL
-AssertionError: expected "atob" to not be called at all, but actually been called 1 times
-
-Received:
-
-  1st atob call:
-
-    Array [
-      "WyIyMDI2LTA5LTE0IDEyOjAwOjAwIiwieHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eCJd",
-    ]
-
-
-Number of calls: 1
-
- ❯ test/knowledge-input-boundaries.test.ts:64:33
-     62|     // valid long call cursors formerly return200. Do not mistake stat…
-     63|     console.info('cursor boundary', { route, length: raw.length, statu…
-     64|     expect(observed.decode).not.toHaveBeenCalled(); expect(observed.pa…
-       |                                 ^
-     65|     expect(response.status).toBe(400);
-     66|     expect(await response.json()).toEqual({ error: route === 'calls' ?…
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/22]⎯
-
- FAIL  test/knowledge-input-boundaries.test.ts > put-kind rejects supplied invalid string "" without companion edits or charges
- FAIL  test/knowledge-input-boundaries.test.ts > put-kind rejects supplied invalid string "NOTE" without companion edits or charges
- FAIL  test/knowledge-input-boundaries.test.ts > put-kind rejects supplied invalid string "note " without companion edits or charges
- FAIL  test/knowledge-input-boundaries.test.ts > put-kind rejects supplied invalid string "document" without companion edits or charges
- FAIL  test/knowledge-input-boundaries.test.ts > put-status rejects supplied invalid string "" without companion edits or charges
- FAIL  test/knowledge-input-boundaries.test.ts > put-status rejects supplied invalid string "ACTIVE" without companion edits or charges
- FAIL  test/knowledge-input-boundaries.test.ts > put-status rejects supplied invalid string "active " without companion edits or charges
- FAIL  test/knowledge-input-boundaries.test.ts > put-status rejects supplied invalid string "published" without companion edits or charges
-AssertionError: expected 200 to be 400 // Object.is equality
-
-- Expected
-+ Received
-
-- 400
-+ 200
-
- ❯ test/knowledge-input-boundaries.test.ts:122:29
-    120|   it.each(invalid)(`${lane} rejects supplied invalid string %j without…
-    121|     const before = snapshot(), response = await enumWrite(lane, value);
-    122|     expect(response.status).toBe(400); expect(await response.text()).t…
-       |                             ^
-    123|     expect(snapshot()).toEqual(before);
-    124|   });
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/22]⎯
-
- FAIL  test/knowledge-input-boundaries.test.ts > put-kind invalid strings precede exhausted quota while valid requests remain429
- FAIL  test/knowledge-input-boundaries.test.ts > put-status invalid strings precede exhausted quota while valid requests remain429
- FAIL  test/knowledge-input-boundaries.test.ts > post-status invalid strings precede exhausted quota while valid requests remain429
-AssertionError: expected 429 to be 400 // Object.is equality
-
-- Expected
-+ Received
-
-- 400
-+ 429
-
- ❯ test/knowledge-input-boundaries.test.ts:143:55
-    141|     db.exec("UPDATE rate_counters SET count=500 WHERE bucket='knowledg…
-    142|     const before = snapshot();
-    143|     expect((await enumWrite(lane, 'invalid')).status).toBe(400); expec…
-       |                                                       ^
-    144|     expect((await enumWrite(lane, lane === 'put-kind' ? 'note' : 'draf…
-    145|   });
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/22]⎯
-
- FAIL  test/knowledge-input-boundaries.test.ts > post-status rejects supplied invalid string "" without companion edits or charges
- FAIL  test/knowledge-input-boundaries.test.ts > post-status rejects supplied invalid string "ACTIVE" without companion edits or charges
- FAIL  test/knowledge-input-boundaries.test.ts > post-status rejects supplied invalid string "active " without companion edits or charges
- FAIL  test/knowledge-input-boundaries.test.ts > post-status rejects supplied invalid string "published" without companion edits or charges
-AssertionError: expected 201 to be 400 // Object.is equality
-
-- Expected
-+ Received
-
-- 400
-+ 201
-
- ❯ test/knowledge-input-boundaries.test.ts:122:29
-    120|   it.each(invalid)(`${lane} rejects supplied invalid string %j without…
-    121|     const before = snapshot(), response = await enumWrite(lane, value);
-    122|     expect(response.status).toBe(400); expect(await response.text()).t…
-       |                             ^
-    123|     expect(snapshot()).toEqual(before);
-    124|   });
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/22]⎯
-
- FAIL  test/knowledge-input-boundaries.test.ts > reports PUT kind before status when both supplied strings are invalid
-AssertionError: expected 200 to be 400 // Object.is equality
-
-- Expected
-+ Received
-
-- 400
-+ 200
-
- ❯ test/knowledge-input-boundaries.test.ts:184:27
-    182|   const before = snapshot();
-    183|   const response = await request('/api/me/knowledge/items/item', { kin…
-    184|   expect(response.status).toBe(400); expect(await response.text()).toC…
-       |                           ^
-    185|   expect(snapshot()).toEqual(before);
-    186| });
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/22]⎯
-
-
- Test Files  1 failed (1)
-      Tests  22 failed | 19 passed (41)
-   Start at  07:04:33
-   Duration  1.13s (transform 39%, tests 34%, import 26%, worker 1%)
-
+  }
+]
+First-assertion, runtime and cleanup scope remains governed by associated historical validation manifests and original evidence. An empty extraction is unknown, never a passing result. No new or later failed-case assertions are inferred.
+Catalog: .agent/artifacts/metadata-hygiene-49df/derivation.json

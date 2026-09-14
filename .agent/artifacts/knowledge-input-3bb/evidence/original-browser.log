@@ -1,71 +1,20 @@
-[WebServer] (node:21470) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
-[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
-
-[WebServer] (node:21693) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
-[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
-
-[WebServer] (node:21694) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
-[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
-
-[WebServer] (node:21721) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
-[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
-
-[WebServer] (node:22327) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
-[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
-
-[WebServer] ▲ [WARNING] Scheduled Workers are not automatically triggered during local development.
-[WebServer] 
-[WebServer]   To manually trigger a scheduled event, run:
-[WebServer]     curl "http://localhost:8812/cdn-cgi/local/scheduled"
-[WebServer]   For more details, see https://developers.cloudflare.com/workers/configuration/cron-triggers/#test-cron-triggers-locally
-[WebServer] 
-[WebServer] 
-
-
-Running 1 test using 1 worker
-
-(node:22359) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
-(Use `node --trace-warnings ...` to show where the warning was created)
-
-
-(node:22359) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
-(Use `node --trace-warnings ...` to show where the warning was created)
-
-
-[1/1] e2e/profile-rename-actions.spec.ts:131:1 › profile action retry guidance stays visible before during and after rename
-  1) e2e/profile-rename-actions.spec.ts:131:1 › profile action retry guidance stays visible before during and after rename 
-
-    Error: expect(locator).toBeVisible() failed
-
-    Locator: getByText('If you click Apply or Delete profile while a name is saving, click it again after saving finishes.', { exact: true })
-    Expected: visible
-    Timeout: 5000ms
-    Error: element(s) not found
-
-    Call log:
-      - Expect "toBeVisible" getByText('If you click Apply or Delete profile while a name is saving, click it again after saving finishes.', { exact: true }) with timeout 5000ms
-      - waiting for getByText('If you click Apply or Delete profile while a name is saving, click it again after saving finishes.', { exact: true })
-
-
-      133 |   const guidance = page.getByText('If you click Apply or Delete profile while a name is saving, click it again after saving finishes.', { exact: true });
-      134 |   try {
-    > 135 |     await expect(guidance).toBeVisible();
-          |                            ^
-      136 |     const input = rows(page).first().locator('input');
-      137 |     await input.fill('Guided rename'); await input.blur();
-      138 |     await expect.poll(() => gate.held.length).toBe(1);
-        at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-input-3bb-1ly77qsf/e2e/profile-rename-actions.spec.ts:135:28
-
-    Error Context: test-results/input-3bb-validation/original-browser-results/profile-rename-actions-pro-d80fc-ore-during-and-after-rename/error-context.md
-
-    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
-    test-results/input-3bb-validation/original-browser-results/profile-rename-actions-pro-d80fc-ore-during-and-after-rename/trace.zip
-    Usage:
-
-        npx playwright show-trace test-results/input-3bb-validation/original-browser-results/profile-rename-actions-pro-d80fc-ore-during-and-after-rename/trace.zip
-
-    ────────────────────────────────────────────────────────────────────────────────────────────────
-
-
-  1 failed
-    e2e/profile-rename-actions.spec.ts:131:1 › profile action retry guidance stays visible before during and after rename 
+{
+  "representation": "derived public evidence; not original raw output",
+  "original_sha256": "a67a3b8eb2d66dad7b4e3d9ade6b10075d1fff071c8699fea633e514f4e43a74",
+  "original_bytes": 4320,
+  "matching_result_summary": {
+    "repository_path": ".agent/artifacts/knowledge-input-3bb/manifest.json",
+    "relative_link": "../manifest.json",
+    "json_pointer": "/actual_validation/original_browser",
+    "summary_original_sha256": "292cd3c573a6ffbacd549fa1da0952a5c6f6dc53a57fb312387aed278a353197",
+    "association": "Matching original log SHA256 explicitly appears in this summary."
+  },
+  "reported_result_from_summary": {
+    "exit": 1,
+    "failed": 1,
+    "limits": "Expected first missing persistent-guidance assertion,5s locator timeout; later pending/settled checks not reached. Trace/context retained; no fixture failure. Finally restored fixed application source after awaited process exit and vacancy."
+  },
+  "limits": "Result is copied from the named historical result-summary field, not inferred from empty log extraction. Consult the full linked summary for first-assertion, exit, fixture, runtime and cleanup limitations. Failed cases establish only assertions reached; no new run or later assertion success is claimed. Historical hashes identify privately retained originals; public summary projections have separate identities in the derivation catalog.",
+  "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+  "result_projection": "Exact named result-summary fields, excluding command, tool-session and log-location metadata. Full source summary and its original hash remain linked."
+}

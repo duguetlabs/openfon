@@ -1,27 +1,35 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "70e63a18dbf8404f9c2006787e01be0512296197a6118406c000f8f07149771c",
+    "original_bytes": 1608,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "utc": "2026-09-14T18:52:29.061478+00:00",
   "exit": 1,
   "duration_seconds": 3.749,
   "observed_processes": [
     {
-      "pid": 65362,
-      "ppid": 64583,
+      "pid": "private-ref:a737b0ef0f83463798e70ae3669553e7",
+      "ppid": "private-ref:84a10c0e0d314ce991b27c2abc1d2a95",
       "comm": "<defunct>"
     },
     {
-      "pid": 65466,
-      "ppid": 65362,
+      "pid": "private-ref:bf643fd032a840959c0eed8ff52f7b7a",
+      "ppid": "private-ref:a737b0ef0f83463798e70ae3669553e7",
       "comm": "node"
     },
     {
-      "pid": 65569,
-      "ppid": 65466,
-      "comm": "/Users/cristian/projects/fun/openfon/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+      "pid": "private-ref:592ce5bccc234c2d9710002589883f8b",
+      "ppid": "private-ref:bf643fd032a840959c0eed8ff52f7b7a",
+      "comm": "private-ref:07687e8f399a4b67bf8fdc83b7e5bc5e"
     },
     {
-      "pid": 65691,
-      "ppid": 65466,
-      "comm": "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node"
+      "pid": "private-ref:9e5c4dac5d1442ebb825d8efb12fa0f6",
+      "ppid": "private-ref:bf643fd032a840959c0eed8ff52f7b7a",
+      "comm": "private-ref:656082253ae943b38ba5975202b555c2"
     }
   ],
   "observed_remaining": [],
@@ -32,14 +40,14 @@
     "reserved_listeners": {},
     "known_unrelated_preserved": [
       {
-        "pid": 54328,
-        "ppid": 54317,
-        "comm": "/Users/cristian/Library/Caches/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+        "pid": "private-ref:2b310cac29884a5f94a09aeff7e08dbe",
+        "ppid": "private-ref:28c0f0c91c314ec5b1266e68d062d8a0",
+        "comm": "private-ref:1b7d117a1a624a37a427180a96c221f4"
       },
       {
-        "pid": 54317,
-        "ppid": 53707,
-        "comm": "/Users/cristian/projects/fun/linkedin-mcps/linkedin-mcp/.venv/lib/python3.13/site-packages/playwright/driver/node"
+        "pid": "private-ref:28c0f0c91c314ec5b1266e68d062d8a0",
+        "ppid": "private-ref:eec2f7ab9d1141c1b88eb61d53e7288f",
+        "comm": "private-ref:6dede83197694d6d91e7882042209fe5"
       }
     ]
   },

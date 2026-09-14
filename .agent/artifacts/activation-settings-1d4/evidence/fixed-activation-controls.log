@@ -1,34 +1,27 @@
-
- RUN  v5.0.0 /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc
-
-(node:80724) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
- ↓ test/provider-activation-instance.test.ts > refuses activation of preserved draft custom model after direct and instance OpenAI switches
- ↓ test/provider-activation-instance.test.ts > refuses activation of preserved paused custom model after direct and instance OpenAI switches
- ↓ test/provider-activation-instance.test.ts > rejects a retained incompatible voice without requiring provider credentials for compatible activation
- ↓ test/provider-activation-instance.test.ts > keeps custom activation semantics and foreign-workspace privacy
- ↓ test/provider-activation-instance.test.ts > keeps kataleptic activation semantics and foreign-workspace privacy
- ↓ test/provider-activation-instance.test.ts > keeps instance activation semantics and foreign-workspace privacy
- ↓ test/provider-activation-instance.test.ts > keeps pipeline activation semantics and foreign-workspace privacy
- ↓ test/provider-activation-instance.test.ts > keeps activation quota refusal atomic for a compatible candidate
- ↓ test/provider-activation-instance.test.ts > rejects a submitted realtime instance secret without saving accompanying changes
- ↓ test/provider-activation-instance.test.ts > rejects a submitted stt instance secret without saving accompanying changes
- ↓ test/provider-activation-instance.test.ts > reports absent operator credentials despite historical unused instance keys, then clears those keys on save
- ↓ test/provider-activation-instance.test.ts > reports actual kataleptic instance key precedence and STT operator key
- ↓ test/provider-activation-instance.test.ts > reports actual openai instance key precedence and STT operator key
- ↓ test/provider-activation-instance.test.ts > reports actual custom instance key precedence and STT operator key
- ↓ test/provider-activation-instance.test.ts > never reuses historical instance realtime keys for an explicit provider
- ↓ test/provider-activation-instance.test.ts > never reuses historical instance stt keys for an explicit provider
- ↓ test/provider-activation-instance.test.ts > does not report or borrow operator keys for explicit providers without their own keys
- ✓ test/provider-activation-instance.test.ts > rejects activation when existing custom provider changes after compatibility check 32ms
- ✓ test/provider-activation-instance.test.ts > rejects activation when missing provider changes after compatibility check 10ms
- ✓ test/provider-activation-instance.test.ts > rejects activation if its checked provider row disappears 9ms
- ✓ test/provider-activation-instance.test.ts > rejects an assistant configuration edit after activation precheck ({"engine":"pipeline"}) 9ms
- ✓ test/provider-activation-instance.test.ts > rejects an assistant configuration edit after activation precheck ({"realtime_model":"new-custom-model"}) 8ms
- ✓ test/provider-activation-instance.test.ts > rejects an assistant configuration edit after activation precheck ({"realtime_voice":"new-custom-voice"}) 8ms
-
- Test Files  1 passed (1)
-      Tests  6 passed | 17 skipped (23)
-   Start at  20:54:13
-   Duration  785ms (import 57%, transform 32%, tests 11%)
-
+Derived public evidence; not original raw output. Historical hashes identify the privately retained original bytes.
+Original SHA256: e0fba351f8f7c23072290b90e5ac7eb03fd5cb92e53845e8a2da38f870d6ab58
+Original bytes: 3414
+Ordered extracted numeric result fields (not an inferred final result):
+[
+  {
+    "vitest_scope": "files",
+    "counts": [
+      {
+        "passed": 1
+      }
+    ]
+  },
+  {
+    "vitest_scope": "tests",
+    "counts": [
+      {
+        "passed": 6
+      },
+      {
+        "skipped": 17
+      }
+    ]
+  }
+]
+First-assertion, runtime and cleanup scope remains governed by associated historical validation manifests and original evidence. An empty extraction is unknown, never a passing result. No new or later failed-case assertions are inferred.
+Catalog: .agent/artifacts/metadata-hygiene-49df/derivation.json

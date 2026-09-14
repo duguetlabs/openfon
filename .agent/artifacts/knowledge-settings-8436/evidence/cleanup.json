@@ -1,4 +1,12 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "4b40e89cd7b437ab3d226ed8b3259e77d1d89d97d073efe4df6c1ee9b1ed4aad",
+    "original_bytes": 1631,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "owned_pids_recorded": [
     61363,
     61379,
@@ -24,9 +32,9 @@
   "reserved_listeners": "",
   "app_processes": [],
   "runner_temp_paths": {
-    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-JG9DZO": false,
-    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/playwright_chromiumdev_profile-WkBwac": false,
-    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-8wrx3n": false
+    "private-ref:d393a9e6aa2b41238945ccfac7eb963e": false,
+    "private-ref:1c410362f7b74415aa132d3f038525aa": false,
+    "private-ref:7ad6e5c27d3940c1a5fc4914354a0201": false
   },
   "unrelated_browser": "Existing linkedin-mcp headless browser is outside owner tree and untouched.",
   "sessions": {

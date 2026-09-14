@@ -1,15 +1,23 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "53dcae0a288bb37fd581773106a4f8e159e80be8845f27d35c84085c88c18d85",
+    "original_bytes": 616,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "name": "original",
   "command": [
-    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-ticket-active-ddce-h5q38d_1/node_modules/.bin/vitest",
+    "private-ref:5178b4213dc04dbbbdd134a33c1682d8",
     "run",
     "test/public-ticket-active-race.test.ts",
     "--reporter=default",
     "--reporter=json",
-    "--outputFile=/Users/cristian/projects/fun/openfon-worktrees/integration/.agent/artifacts/public-ticket-ddce/validation/original-report.json"
+    "private-ref:48f590d0e1c14180811d8f4c5fbaa8bf"
   ],
-  "cwd": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-ticket-active-ddce-h5q38d_1",
-  "pid": 41820,
+  "cwd": "private-ref:d715b4c0c06e4cc29ebf93488ea290d4",
+  "pid": "private-ref:743cf3905d2b4b66840699ac54057a8d",
   "exit": 1,
   "started": "2026-09-14T18:05:15.033287+00:00",
   "elapsed_seconds": 1.69

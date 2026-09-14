@@ -1,19 +1,22 @@
-{"kind":"source-identity","identity":{"src/telnyx-routes.ts":"2dcd65d69143331b6451d81a5161268d7e6e78cfc831fe05af50be5be300e4e9","src/telnyx-webhook.ts":"a11e106d55bd1c931c5dd49229f898166fa1eca5b3aa7499a032fa1bf9307b11","scripts/telnyx-webhook-body-smoke.mjs":"9f72687219dce66c46c84424984b4c174722b44ef0a804e8945bc1576abdf7cc"},"observationMs":7000}
-{"kind":"runtime-ready","host":"127.0.0.1","port":"8810"}
-{"kind":"observation","name":"no-first-byte","attribution":"HTTP-upload-to-public-workerd","outcome":{"kind":"pending-response-observed","observationMs":7000,"elapsedMs":7001.851000000001},"trace":[{"kind":"entered","name":"no-first-byte","at":1789357573386}]}
-{"kind":"case-failure","name":"no-first-byte","error":"application response within finite observation\n+ actual - expected\n\n+ 'pending-response-observed'\n- 'response'\n"}
-{"kind":"observation","name":"partial-no-eof","attribution":"HTTP-upload-to-public-workerd","outcome":{"kind":"pending-response-observed","observationMs":7000,"elapsedMs":7000.795333},"trace":[{"kind":"entered","name":"partial-no-eof","at":1789357580385}]}
-{"kind":"case-failure","name":"partial-no-eof","error":"application response within finite observation\n+ actual - expected\n\n+ 'pending-response-observed'\n- 'response'\n"}
-{"kind":"observation","name":"trickle-no-eof","attribution":"HTTP-upload-to-public-workerd","outcome":{"kind":"pending-response-observed","observationMs":7000,"elapsedMs":7001.46925},"trace":[{"kind":"entered","name":"trickle-no-eof","at":1789357587386}]}
-{"kind":"case-failure","name":"trickle-no-eof","error":"application response within finite observation\n+ actual - expected\n\n+ 'pending-response-observed'\n- 'response'\n"}
-{"kind":"observation","name":"overflow-no-eof","attribution":"HTTP-upload-to-public-workerd","outcome":{"kind":"response","status":413,"cache":"no-store","body":"{\"error\":\"Invalid carrier webhook\"}","elapsedMs":7.751415999999153},"trace":[{"kind":"entered","name":"overflow-no-eof","at":1789357594389},{"kind":"response","name":"overflow-no-eof","at":1789357594393,"status":413,"cancelCalls":0}]}
-{"kind":"observation","name":"signed-complete","attribution":"HTTP-upload-to-public-workerd","outcome":{"kind":"response","status":200,"cache":"no-store","body":"{\"received\":true}","elapsedMs":10.839749999999185},"trace":[{"kind":"entered","name":"signed-complete","at":1789357594396},{"kind":"dispatch","name":"signed-complete"},{"kind":"response","name":"signed-complete","at":1789357594405,"status":200,"cancelCalls":0}]}
-{"kind":"observation","name":"invalid-signature","attribution":"HTTP-upload-to-public-workerd","outcome":{"kind":"response","status":401,"cache":"no-store","body":"{\"error\":\"Invalid carrier webhook\"}","elapsedMs":3.315500000000611},"trace":[{"kind":"entered","name":"invalid-signature","at":1789357594407},{"kind":"response","name":"invalid-signature","at":1789357594408,"status":401,"cancelCalls":0}]}
-{"kind":"observation","name":"wrong-application","attribution":"HTTP-upload-to-public-workerd","outcome":{"kind":"response","status":403,"cache":"no-store","body":"{\"error\":\"Unexpected carrier application\"}","elapsedMs":3.220584000002418},"trace":[{"kind":"entered","name":"wrong-application","at":1789357594411},{"kind":"response","name":"wrong-application","at":1789357594412,"status":403,"cancelCalls":0}]}
-{"kind":"observation","name":"durable-refusal","attribution":"HTTP-upload-to-public-workerd","outcome":{"kind":"response","status":503,"cache":"no-store","body":"{\"error\":\"Carrier event could not be accepted\"}","elapsedMs":2.49854200000118},"trace":[{"kind":"entered","name":"durable-refusal","at":1789357594414},{"kind":"dispatch","name":"durable-refusal"},{"kind":"response","name":"durable-refusal","at":1789357594415,"status":503,"cancelCalls":0}]}
-{"kind":"observation","name":"synthetic-cancel-pending","attribution":"instrumented-workerd-JS-stream","outcome":{"kind":"response","status":500,"body":"Error: The Workers runtime canceled this request because it detected that your Worker's code had hung and would never generate a response. Refer to: https://developers.cloudflare.com/workers/observability/errors/\n    at async Object.fetch (file:///Users/cristian/projects/fun/openfon/node_modules/miniflare/dist/src/workers/core/entry.worker.js:5216:22)","elapsedMs":4.3356669999993755},"trace":[{"kind":"entered","name":"synthetic-cancel-pending","at":1789357594417}]}
-{"kind":"case-failure","name":"synthetic-cancel-pending","error":"Expected values to be strictly equal:\n\n500 !== 413\n"}
-{"kind":"observation","name":"synthetic-cancel-reject","attribution":"instrumented-workerd-JS-stream","outcome":{"kind":"response","status":503,"cache":"no-store","body":"{\"error\":\"Carrier event could not be accepted\"}","elapsedMs":1.8338330000005953},"trace":[{"kind":"entered","name":"synthetic-cancel-reject","at":1789357594422},{"kind":"response","name":"synthetic-cancel-reject","at":1789357594422,"status":503,"cancelCalls":1}]}
-{"kind":"case-failure","name":"synthetic-cancel-reject","error":"Expected values to be strictly equal:\n\n503 !== 413\n"}
-{"kind":"cleanup","runtimeDisposed":true,"clientsRemaining":0,"cleanupErrors":[]}
-{"kind":"summary","passes":["overflow-no-eof","signed-complete","invalid-signature","wrong-application","durable-refusal"],"failures":[{"name":"no-first-byte","error":"application response within finite observation\n+ actual - expected\n\n+ 'pending-response-observed'\n- 'response'\n"},{"name":"partial-no-eof","error":"application response within finite observation\n+ actual - expected\n\n+ 'pending-response-observed'\n- 'response'\n"},{"name":"trickle-no-eof","error":"application response within finite observation\n+ actual - expected\n\n+ 'pending-response-observed'\n- 'response'\n"},{"name":"synthetic-cancel-pending","error":"Expected values to be strictly equal:\n\n500 !== 413\n"},{"name":"synthetic-cancel-reject","error":"Expected values to be strictly equal:\n\n503 !== 413\n"}],"fixtureFailure":null}
+{
+  "representation": "derived public evidence; not original raw output",
+  "original_sha256": "a8398a53d00962a1355d3cc9f0fde1e6ade57200274854b0fc30c62d7f4f653a",
+  "original_bytes": 6019,
+  "matching_result_summary": {
+    "repository_path": ".agent/artifacts/webhook-8436/evidence/validation.json",
+    "relative_link": "validation.json",
+    "json_pointer": "/results/originalNative",
+    "summary_original_sha256": "3f44008c3d2290163b373b5c55f43a24054302af09bdcee07ee3a6e5d152c378",
+    "association": "Matching original log SHA256 explicitly appears in this summary."
+  },
+  "reported_result_from_summary": {
+    "passed": 5,
+    "failed": 5,
+    "exit": 1,
+    "fixtureFailure": null,
+    "classification": "3 HTTP pending at7s; synthetic pending cancellation runtime500; synthetic rejected cancellation app503"
+  },
+  "limits": "Result is copied from the named historical result-summary field, not inferred from empty log extraction. Consult the full linked summary for first-assertion, exit, fixture, runtime and cleanup limitations. Failed cases establish only assertions reached; no new run or later assertion success is claimed. Historical hashes identify privately retained originals; public summary projections have separate identities in the derivation catalog.",
+  "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+  "result_projection": "Exact named result-summary fields, excluding command, tool-session and log-location metadata. Full source summary and its original hash remain linked."
+}

@@ -1,4 +1,12 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "268c05e9055276541c6f6979eaeb6ede959e49213df42c005f8e683ecaba2c57",
+    "original_bytes": 2603,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "original": {
     "title": "one pending create admits one POST and one persisted id with confirmed no-op blur",
     "status": "failed",
@@ -41,7 +49,7 @@
       "one pending create admits one POST and one persisted id with confirmed no-op blur$",
       "--workers=1",
       "--retries=0",
-      "--output=/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/targeted-duplicate-20260914T055049Z/original-browser-results",
+      "private-ref:c932678a656d4b4eb3dde689ab14167e",
       "--reporter=line,json"
     ]
   },
@@ -83,7 +91,7 @@
       "one pending create admits one POST and one persisted id with confirmed no-op blur$",
       "--workers=1",
       "--retries=0",
-      "--output=/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/targeted-duplicate-20260914T055049Z/fixed-browser-results",
+      "private-ref:cb02c062718d4830b0942165792960fc",
       "--reporter=line,json"
     ]
   }

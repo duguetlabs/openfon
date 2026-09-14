@@ -1,7 +1,7 @@
 # Exact ddce webhook leases — source prepared, not executed
 
 Base: `ddce0bde6c16633541dc65811fbb833865c7af2a`.
-Snapshot: `/tmp/openfon-webhook-leases-ddce-qwinacbe`.
+Snapshot: `private-ref:014c9b6a82b04164a850cadaa90a918d`.
 Manifest records the four-file patch, the original route, 13 protected files,
 and unchanged prior webhook constants/tests/native harness. Comparing all 912
 existing Git blobs found only `src/telnyx-routes.ts` changed. The lease module,

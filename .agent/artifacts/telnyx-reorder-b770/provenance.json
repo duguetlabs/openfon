@@ -1,15 +1,23 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "618107566599298c83d701907bc7c6cbc87d2174cc0bea9695643cdca5ad4be3",
+    "original_bytes": 3992,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "base": "b7700fa4ead7ed88c625d146e7e8eaa63d7143cf",
   "source_commit": "dce30c0207d9b99175881c3f9c78eee1c0596195",
   "status": "VALIDATED owner delivery; QA evidence/assembly pending",
-  "fixture": "/private/tmp/openfon-reorder-b770-fifekwmx",
+  "fixture": "private-ref:bd0ad59507f241bc9b89609172e0b527",
   "report": "https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658922189",
   "patch_sha256": "6b1e3e56514ffa069402ff652ea3c4657a7c0f74beb0b9aa5dfa4d4c10b223f2",
   "files": {
     "src/telnyx-media.ts": "e34f6146cf35e17f3bbc76baec61e2b647f8aa3e668bc8b8146dcd9dc6a59740",
     "test/telnyx-reorder-boundary.test.ts": "b3d59be54ad62b5370ebf25c9d783746e5969e93fccea92b73b978e79387a37c"
   },
-  "original_module": "/private/tmp/openfon-reorder-b770-fifekwmx-original-telnyx-media.ts",
+  "original_module": "private-ref:a46d8a4347d1415fa6f4fe0aade98b4a",
   "original_sha256": "e466dc5fe9d9651b123dc0b13d7468707756eb66723ab8adbb6d9fe7bba5a188",
   "protected_unchanged": {
     "src/call-session.ts": "8c884f8a6f39d7db83b22ff40eb9d0233436eb0391866b0701a7a09c2d18b413",
@@ -26,7 +34,7 @@
   "prepared_original_filter": "reorder-count-negative",
   "prepared_original_cases": 2,
   "prepared_validation": "Only after sole grant: original tagged two negatives (preserve actual results), restore fixed source, new boundary file plus existing telnyx-media and telephony-audio, Worker/web types. No native/browser/control/CallSession/old audio suites.",
-  "evidence_directory": "/private/tmp/openfon-reorder-b770-fifekwmx/validation-65xmn08f",
+  "evidence_directory": "private-ref:fc54250fb073468682a1f0a5676b40f3",
   "final_source_commit": "dce30c0207d9b99175881c3f9c78eee1c0596195",
   "results": {
     "original": {

@@ -1,6 +1,14 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "004c1bb7df0a2b612638f243026ea16f81502605622162719eebe80c6c8a5cee",
+    "original_bytes": 8612,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "base": "1d4b73331353ecacf07b46ce9d186c032a04fc51",
-  "artifact": "/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q",
+  "artifact": "private-ref:599f7fb3a39448eb8db9e40612d192c9",
   "status": "SOURCE ONLY; no node/syntax/tests/runtime",
   "changed_paths": [
     "scripts/e2e-server.mjs",
@@ -141,12 +149,12 @@
   },
   "prepared_cases": 12,
   "proposed_commands": [
-    "E2E_SERVER_SOURCE=/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/original/scripts/e2e-server.mjs node --test scripts/e2e-server-shutdown.test.mjs",
+    "private-ref:b90c3fe3506245859cb2c013d9cf2558",
     "node --test scripts/e2e-server-shutdown.test.mjs",
     "node --check scripts/e2e-server.mjs",
     "node --check scripts/e2e-server-shutdown.test.mjs"
   ],
-  "command_cwd": "/tmp/openfon-wrapper-shutdown-1d4-k6qwvo3q/source",
+  "command_cwd": "private-ref:88fafd86e1f5437691747af766d6ce42",
   "limits": [
     "3 real owned process cases: deliberately held signal, graceful numeric7, no-PID ENOENT. No actual npx/workerd or provider.",
     "9 synthetic lexical-timer/event/exit-stub cases: failed signal causes are injected, not OS evidence.",

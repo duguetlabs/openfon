@@ -5,7 +5,7 @@
 - **Branch:** `agent/calm-studio-foundation`
 - **Base commit:** `eb13a19353a4fc9521711443fadada7ffc4588e4` (`origin/main`, verified 2026-09-06)
 - **Last updated:** 2026-09-06T01:21:14+02:00
-- **Applicable AGENTS.md:** `/Users/cristian/.codex/AGENTS.md`; `/Users/cristian/projects/fun/openfon/AGENTS.md`
+- **Applicable AGENTS.md:** `private-ref:f71a571b285a4aeb9e4900c78893f0ef`; `private-ref:970c1d72f8494e7eb1fd8e65b1c9920e`
 - **Read first:** `.agent/handoffs/calm-studio-takeover.md`; `migrations/0008_calm_studio_foundation.sql`; `src/studio-api.ts`; `.agent/archive/current-task-2026-09-06.md` only if resuming the separate voice-engine workstream
 
 ## Objective

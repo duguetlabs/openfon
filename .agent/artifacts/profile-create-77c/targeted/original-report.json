@@ -1,19 +1,27 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "c123bf1363c14b7448cb88afe430f4292c7db94701ed6f121a4c992d01adb449",
+    "original_bytes": 8110,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "config": {
     "argv": [
-      "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node",
-      "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/node_modules/.bin/playwright",
+      "private-ref:656082253ae943b38ba5975202b555c2",
+      "private-ref:ee76baba302743b99ee51947343daf14",
       "test",
       "e2e/profile-create-pending.spec.ts",
       "--grep",
       "one pending create admits one POST and one persisted id with confirmed no-op blur$",
       "--workers=1",
       "--retries=0",
-      "--output=/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/targeted-duplicate-20260914T055049Z/original-browser-results",
+      "private-ref:c932678a656d4b4eb3dde689ab14167e",
       "--reporter=line,json"
     ],
-    "configFile": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/playwright.config.ts",
-    "rootDir": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e",
+    "configFile": "private-ref:cbb04be4113e403faf42335105ba8613",
+    "rootDir": "private-ref:3c8b9c9355f948d3ac6eebbfa7d89081",
     "failOnFlakyTests": false,
     "forbidOnly": false,
     "fullyParallel": false,
@@ -29,7 +37,7 @@
     "preserveOutput": "always",
     "projects": [
       {
-        "outputDir": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/targeted-duplicate-20260914T055049Z/original-browser-results",
+        "outputDir": "private-ref:99e7f70ac3584216bdab54a3be5d17a6",
         "repeatEach": 1,
         "retries": 0,
         "metadata": {
@@ -37,7 +45,7 @@
         },
         "id": "",
         "name": "",
-        "testDir": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e",
+        "testDir": "private-ref:3c8b9c9355f948d3ac6eebbfa7d89081",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
@@ -97,9 +105,23 @@
                   "duration": 4878,
                   "error": {
                     "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m1\u001b[39m\nReceived: \u001b[31m2\u001b[39m",
-                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m1\u001b[39m\nReceived: \u001b[31m2\u001b[39m\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:96:18",
+                    "stack": {
+                      "representation": "derived-reported-comparison-fields",
+                      "private_original_ref": "private-ref:40e9344361d74b3fb3e1b72ad37dc43d",
+                      "numeric_fields": [
+                        {
+                          "label": "Expected",
+                          "value": 1
+                        },
+                        {
+                          "label": "Received",
+                          "value": 2
+                        }
+                      ],
+                      "limits": "Extracted reported numeric comparisons only. Empty list is not a passing result or absence of failure. Full stack stays private; sibling assertion records and historical manifest retain first-assertion attribution."
+                    },
                     "location": {
-                      "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                      "file": "private-ref:77fd7a481644407985163b436b8067c8",
                       "column": 18,
                       "line": 96
                     },
@@ -108,11 +130,11 @@
                   "errors": [
                     {
                       "location": {
-                        "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                        "file": "private-ref:77fd7a481644407985163b436b8067c8",
                         "column": 18,
                         "line": 96
                       },
-                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m1\u001b[39m\nReceived: \u001b[31m2\u001b[39m\n\n  94 |     const saved = await persisted(page, path);\n  95 |     console.log('create-duplicate-diagnostic', JSON.stringify({ sent, saved: saved.map(p => ({ id: p.id, name: p.name })), listReads }));\n> 96 |     expect(sent).toBe(1);\n     |                  ^\n  97 |     expect(saved.filter(p => p.name === 'Created profile')).toHaveLength(1);\n  98 |     expect(listReads).toBe(0);\n  99 |     await expect(page.getByText('Profile saved.', { exact: true })).toBeVisible();\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts:96:18"
+                      "message": "private-ref:1080a9c77dfc4fbaa1ec8075416b423f"
                     }
                   ],
                   "stdout": [
@@ -128,16 +150,16 @@
                     {
                       "name": "error-context",
                       "contentType": "text/markdown",
-                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/targeted-duplicate-20260914T055049Z/original-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/error-context.md"
+                      "path": "private-ref:f59b71de123045d4898db9069c3d350d"
                     },
                     {
                       "name": "trace",
                       "contentType": "application/zip",
-                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/targeted-duplicate-20260914T055049Z/original-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/trace.zip"
+                      "path": "private-ref:11db618c683f45168e3799e0db39aa4a"
                     }
                   ],
                   "errorLocation": {
-                    "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-create-77c-5759t49g/e2e/profile-create-pending.spec.ts",
+                    "file": "private-ref:77fd7a481644407985163b436b8067c8",
                     "column": 18,
                     "line": 96
                   }

@@ -1,6 +1,14 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "ba98abf8243e274d9f7da1a0aad82c454ecacffade6c0a46069fb7e13b1fc9dc",
+    "original_bytes": 4416,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "base": "8436ac9c0055123d440c78760f6bc10ee406fe25",
-  "fixture": "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-onboarding-8436-ch1y7w34",
+  "fixture": "private-ref:1ef85b024d2343c68ccd49b23aa56f2f",
   "files": {
     "web/src/pages/Onboarding.tsx": {
       "original": "dba91e38e346acef3faecc86640d8e78c4cd16551642a61e5029c8d4ca884a76",

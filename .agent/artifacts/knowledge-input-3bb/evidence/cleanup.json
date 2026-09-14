@@ -1,27 +1,35 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "989bc79a88af7b32461ac95eb65b5d985a0e3d164e78bf82827832a6da8346aa",
+    "original_bytes": 1045,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "app_processes": [],
   "reserved_listeners": "",
   "captured_pids": [
-    21412,
-    21428,
-    21442,
-    21694,
-    21721,
-    21748,
-    21749
+    "private-ref:18e3c25a041d420d8cdba117df0c5a81",
+    "private-ref:9a1bfdfb939d4d9996259284772ada84",
+    "private-ref:04b0f749a24947ca97b02166fefec8dc",
+    "private-ref:005b780f924e495eb9ecfe6e299333ed",
+    "private-ref:870f7c5fcddb4d458858796432721d9e",
+    "private-ref:a1b178c2c0404ac0a77d8c25fe045d97",
+    "private-ref:17a807e55a784421891669110ed2007c"
   ],
   "captured_pids_remaining": [],
   "capture_limit": "Original tree captured during startup only; fixed tree scan occurred after exit. Fresh global executable/app scan and awaited session exits are final cleanup evidence, not exhaustive recorded child-PID inventory.",
   "new_e2e_temp_paths": [
-    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-DEhdR8",
-    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pY7UGQ"
+    "private-ref:650f760448834ac799fc5eb0aabb4c0e",
+    "private-ref:ac842885752141ee908de6f5df0ccadd"
   ],
   "temp_attribution": "Compared with pre-run directory inventory during sole slot; no other app runners active.",
   "unrelated_processes": "Unrelated browser/MCP processes untouched.",
   "test_chrome_processes": [],
   "removed_owned_e2e_temp_paths": [
-    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-DEhdR8",
-    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-pY7UGQ"
+    "private-ref:650f760448834ac799fc5eb0aabb4c0e",
+    "private-ref:ac842885752141ee908de6f5df0ccadd"
   ],
   "removed_paths_still_exist": []
 }

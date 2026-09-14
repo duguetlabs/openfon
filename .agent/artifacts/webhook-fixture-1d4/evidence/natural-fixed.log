@@ -1,9 +1,27 @@
-
- RUN  v5.0.0 /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-webhook-fixture-1d4-43nfdlh3
-
-
- Test Files  1 passed (1)
-      Tests  3 passed | 12 skipped (15)
-   Start at  20:40:52
-   Duration  893ms (tests 92%, transform 4%, import 4%)
-
+Derived public evidence; not original raw output. Historical hashes identify the privately retained original bytes.
+Original SHA256: ef2b4d7e3d0a99b1e733d95500bd7ec233fa3e50e0588b459517a2a75c785f8a
+Original bytes: 255
+Ordered extracted numeric result fields (not an inferred final result):
+[
+  {
+    "vitest_scope": "files",
+    "counts": [
+      {
+        "passed": 1
+      }
+    ]
+  },
+  {
+    "vitest_scope": "tests",
+    "counts": [
+      {
+        "passed": 3
+      },
+      {
+        "skipped": 12
+      }
+    ]
+  }
+]
+First-assertion, runtime and cleanup scope remains governed by associated historical validation manifests and original evidence. An empty extraction is unknown, never a passing result. No new or later failed-case assertions are inferred.
+Catalog: .agent/artifacts/metadata-hygiene-49df/derivation.json

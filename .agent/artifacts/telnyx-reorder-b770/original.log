@@ -1,45 +1,27 @@
-
-> openfon@0.1.0 test
-> vitest run test/telnyx-reorder-boundary.test.ts -t reorder-count-negative --maxWorkers=1
-
-
- RUN  v5.0.0 /private/tmp/openfon-reorder-b770-fifekwmx
-
- ❯ test/telnyx-reorder-boundary.test.ts (20 tests | 2 failed | 18 skipped) 8ms
-   ❯ Telnyx count-bound input recovery without byte-budget expansion (20)
-     × [reorder-count-negative] drains ten ahead packets when the expected chunk arrives (ready=true) 6ms
-     × [reorder-count-negative] drains ten ahead packets when the expected chunk arrives (ready=false) 1ms
-
-⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
-
- FAIL  test/telnyx-reorder-boundary.test.ts > Telnyx count-bound input recovery without byte-budget expansion > [reorder-count-negative] drains ten ahead packets when the expected chunk arrives (ready=true)
- FAIL  test/telnyx-reorder-boundary.test.ts > Telnyx count-bound input recovery without byte-budget expansion > [reorder-count-negative] drains ten ahead packets when the expected chunk arrives (ready=false)
-AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
-
-Received:
-
-  1st vi.fn() call:
-
-    Array [
-      "invalid_carrier_frame",
+Derived public evidence; not original raw output. Historical hashes identify the privately retained original bytes.
+Original SHA256: adbc198ba4e7190ab23cd1b367537a10d9bbd403386b17487bc033a869221fa4
+Original bytes: 1841
+Ordered extracted numeric result fields (not an inferred final result):
+[
+  {
+    "vitest_scope": "files",
+    "counts": [
+      {
+        "failed": 1
+      }
     ]
-
-
-Number of calls: 1
-
- ❯ test/telnyx-reorder-boundary.test.ts:66:25
-     64|     vi.advanceTimersByTime(99);
-     65|     await f.receive(media(1));
-     66|     expect(f.onEnd).not.toHaveBeenCalled();
-       |                         ^
-     67|     expect(f.state.reorder.size).toBe(0); expect(f.state.reorderBytes)…
-     68|     expect(f.state.nextChunk).toBe(12); expect(f.state.gap).toBeUndefi…
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
-
-
- Test Files  1 failed (1)
-      Tests  2 failed | 18 skipped (20)
-   Start at  06:28:11
-   Duration  195ms (transform 52%, import 31%, tests 9%, worker 8%)
-
+  },
+  {
+    "vitest_scope": "tests",
+    "counts": [
+      {
+        "failed": 2
+      },
+      {
+        "skipped": 18
+      }
+    ]
+  }
+]
+First-assertion, runtime and cleanup scope remains governed by associated historical validation manifests and original evidence. An empty extraction is unknown, never a passing result. No new or later failed-case assertions are inferred.
+Catalog: .agent/artifacts/metadata-hygiene-49df/derivation.json

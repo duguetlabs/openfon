@@ -1,4 +1,12 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "d7982cdc7711876d308cd15ec119c6e3bb5dc80259177ed1b325c2ae40920e4f",
+    "original_bytes": 519,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "utc": "2026-09-14T05:53:02.432102+00:00",
   "application_test_chrome_official": [],
   "owned_pids_remaining": [],
@@ -8,8 +16,8 @@
     54317
   ],
   "removed_owned_temps": [
-    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-FbclzS",
-    "/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-e2e-mwW1G8"
+    "private-ref:a4574380132d4202bfe130b889ffb52c",
+    "private-ref:f255108d9a4c407daaa86f8e2f354a9d"
   ],
   "removed_paths_still_exist": [],
   "observed_process_count": 63,

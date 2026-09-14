@@ -1,17 +1,25 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "dcd125536906cb23c9489c2fcd81768960af08cb441652c61c9bf73f394686f6",
+    "original_bytes": 28172,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "config": {
     "argv": [
-      "/Users/cristian/.nvm/versions/node/v22.14.0/bin/node",
-      "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/node_modules/.bin/playwright",
+      "private-ref:656082253ae943b38ba5975202b555c2",
+      "private-ref:4aa3c5781f094ab08e1602e6ae44477e",
       "test",
       "e2e/settings-load-error.spec.ts",
       "--workers=1",
       "--retries=0",
-      "--output=/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results",
+      "private-ref:7f3ca8498b5a4fbd962e977a0f6a8ea6",
       "--reporter=line,json"
     ],
-    "configFile": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/playwright.config.ts",
-    "rootDir": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e",
+    "configFile": "private-ref:306e14d22a1d46fdad27a295cb697476",
+    "rootDir": "private-ref:f2e48ec5264c4bdcb54471dbaaef8b84",
     "failOnFlakyTests": false,
     "forbidOnly": false,
     "fullyParallel": false,
@@ -27,7 +35,7 @@
     "preserveOutput": "always",
     "projects": [
       {
-        "outputDir": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results",
+        "outputDir": "private-ref:947d5bb5812e45859db55cc3273af2d8",
         "repeatEach": 1,
         "retries": 0,
         "metadata": {
@@ -35,7 +43,7 @@
         },
         "id": "",
         "name": "",
-        "testDir": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e",
+        "testDir": "private-ref:f2e48ec5264c4bdcb54471dbaaef8b84",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
@@ -94,10 +102,24 @@
                   "status": "failed",
                   "duration": 8652,
                   "error": {
-                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveCount\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('alert').filter({ hasText: 'Local load unavailable' })\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveCount\" getByRole('alert').filter({ hasText: 'Local load unavailable' }) with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('alert').filter({ hasText: 'Local load unavailable' })\u001b[22m\n\u001b[2m    14 × locator resolved to 1 element\u001b[22m\n\u001b[2m       - unexpected value \"1\"\u001b[22m\n",
-                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveCount\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('alert').filter({ hasText: 'Local load unavailable' })\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveCount\" getByRole('alert').filter({ hasText: 'Local load unavailable' }) with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('alert').filter({ hasText: 'Local load unavailable' })\u001b[22m\n\u001b[2m    14 × locator resolved to 1 element\u001b[22m\n\u001b[2m       - unexpected value \"1\"\u001b[22m\n\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e/settings-load-error.spec.ts:70:55",
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveCount\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('alert').filter({ hasText: 'Local load unavailable' })\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveCount\" getByRole('alert').filter({ hasText: 'Local load unavailable' }) with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('alert').filter({ hasText: 'Local load unavailable' })\u001b[22m\n\u001b[2m    14 \u00d7 locator resolved to 1 element\u001b[22m\n\u001b[2m       - unexpected value \"1\"\u001b[22m\n",
+                    "stack": {
+                      "representation": "derived-reported-comparison-fields",
+                      "private_original_ref": "private-ref:26c914b4344543ff8f269017420365a0",
+                      "numeric_fields": [
+                        {
+                          "label": "Expected",
+                          "value": 0
+                        },
+                        {
+                          "label": "Received",
+                          "value": 1
+                        }
+                      ],
+                      "limits": "Extracted reported numeric comparisons only. Empty list is not a passing result or absence of failure. Full stack stays private; sibling assertion records and historical manifest retain first-assertion attribution."
+                    },
                     "location": {
-                      "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e/settings-load-error.spec.ts",
+                      "file": "private-ref:6a38e305b56f4349b16d85ab8ff478b7",
                       "column": 55,
                       "line": 70
                     },
@@ -106,11 +128,11 @@
                   "errors": [
                     {
                       "location": {
-                        "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e/settings-load-error.spec.ts",
+                        "file": "private-ref:6a38e305b56f4349b16d85ab8ff478b7",
                         "column": 55,
                         "line": 70
                       },
-                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveCount\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('alert').filter({ hasText: 'Local load unavailable' })\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveCount\" getByRole('alert').filter({ hasText: 'Local load unavailable' }) with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('alert').filter({ hasText: 'Local load unavailable' })\u001b[22m\n\u001b[2m    14 × locator resolved to 1 element\u001b[22m\n\u001b[2m       - unexpected value \"1\"\u001b[22m\n\n\n  68 |   await expect.poll(() => reads.delivered.includes(4)).toBe(true);\n  69 |   console.log('settings-load-diagnostic', JSON.stringify({ reads: reads.reads, delivered: reads.delivered, loadAlerts: await alert(page, 'Local load unavailable').count() }));\n> 70 |   await expect(alert(page, 'Local load unavailable')).toHaveCount(0);\n     |                                                       ^\n  71 |   await expect(retrySettings(page)).toHaveCount(0);\n  72 |   await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Newer unsaved business draft');\n  73 |   expect((await (await page.request.get('/api/me/business')).json()).name).toBe('Load ownership workshop');\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e/settings-load-error.spec.ts:70:55"
+                      "message": "private-ref:ca2ba4d59b1341b78fa87d7992205cb4"
                     }
                   ],
                   "stdout": [
@@ -126,16 +148,16 @@
                     {
                       "name": "error-context",
                       "contentType": "text/markdown",
-                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-844f8--failure-and-retains-drafts/error-context.md"
+                      "path": "private-ref:5bd544abd00d4cd095f44c8c66881f28"
                     },
                     {
                       "name": "trace",
                       "contentType": "application/zip",
-                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-844f8--failure-and-retains-drafts/trace.zip"
+                      "path": "private-ref:dfe9f00bbb5041d78f41394fbfa9daf9"
                     }
                   ],
                   "errorLocation": {
-                    "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e/settings-load-error.spec.ts",
+                    "file": "private-ref:6a38e305b56f4349b16d85ab8ff478b7",
                     "column": 55,
                     "line": 70
                   }
@@ -235,10 +257,24 @@
                   "status": "failed",
                   "duration": 7855,
                   "error": {
-                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveCount\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('button', { name: 'Retry settings refresh', exact: true })\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveCount\" getByRole('button', { name: 'Retry settings refresh', exact: true }) with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Retry settings refresh', exact: true })\u001b[22m\n\u001b[2m    14 × locator resolved to 1 element\u001b[22m\n\u001b[2m       - unexpected value \"1\"\u001b[22m\n",
-                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveCount\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('button', { name: 'Retry settings refresh', exact: true })\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveCount\" getByRole('button', { name: 'Retry settings refresh', exact: true }) with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Retry settings refresh', exact: true })\u001b[22m\n\u001b[2m    14 × locator resolved to 1 element\u001b[22m\n\u001b[2m       - unexpected value \"1\"\u001b[22m\n\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e/settings-load-error.spec.ts:141:41",
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveCount\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('button', { name: 'Retry settings refresh', exact: true })\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveCount\" getByRole('button', { name: 'Retry settings refresh', exact: true }) with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Retry settings refresh', exact: true })\u001b[22m\n\u001b[2m    14 \u00d7 locator resolved to 1 element\u001b[22m\n\u001b[2m       - unexpected value \"1\"\u001b[22m\n",
+                    "stack": {
+                      "representation": "derived-reported-comparison-fields",
+                      "private_original_ref": "private-ref:490b67fa5a7746dabf07996901917667",
+                      "numeric_fields": [
+                        {
+                          "label": "Expected",
+                          "value": 0
+                        },
+                        {
+                          "label": "Received",
+                          "value": 1
+                        }
+                      ],
+                      "limits": "Extracted reported numeric comparisons only. Empty list is not a passing result or absence of failure. Full stack stays private; sibling assertion records and historical manifest retain first-assertion attribution."
+                    },
                     "location": {
-                      "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e/settings-load-error.spec.ts",
+                      "file": "private-ref:6a38e305b56f4349b16d85ab8ff478b7",
                       "column": 41,
                       "line": 141
                     },
@@ -247,11 +283,11 @@
                   "errors": [
                     {
                       "location": {
-                        "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e/settings-load-error.spec.ts",
+                        "file": "private-ref:6a38e305b56f4349b16d85ab8ff478b7",
                         "column": 41,
                         "line": 141
                       },
-                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveCount\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('button', { name: 'Retry settings refresh', exact: true })\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveCount\" getByRole('button', { name: 'Retry settings refresh', exact: true }) with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Retry settings refresh', exact: true })\u001b[22m\n\u001b[2m    14 × locator resolved to 1 element\u001b[22m\n\u001b[2m       - unexpected value \"1\"\u001b[22m\n\n\n  139 |       await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Accepted after mutation error');\n  140 |       await expect(alert(page, 'Same ownership message')).toBeVisible();\n> 141 |       await expect(retrySettings(page)).toHaveCount(0);\n      |                                         ^\n  142 |       await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Newer draft after refusal');\n  143 |       if (mutation === 'create') await expect(page.getByPlaceholder(/Save current setup as/)).toHaveValue('Retained create draft');\n  144 |       expect(writes).toBe(1);\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e/settings-load-error.spec.ts:141:41"
+                      "message": "private-ref:ba45e06c83cb4f62a04ab7d8024b0cef"
                     }
                   ],
                   "stdout": [],
@@ -263,16 +299,16 @@
                     {
                       "name": "error-context",
                       "contentType": "text/markdown",
-                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-917af-l-with-identical-error-text/error-context.md"
+                      "path": "private-ref:cd92d42a3c8143548c2ba99f17399b81"
                     },
                     {
                       "name": "trace",
                       "contentType": "application/zip",
-                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-917af-l-with-identical-error-text/trace.zip"
+                      "path": "private-ref:2c8d0243f3b040baa127110957667d74"
                     }
                   ],
                   "errorLocation": {
-                    "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e/settings-load-error.spec.ts",
+                    "file": "private-ref:6a38e305b56f4349b16d85ab8ff478b7",
                     "column": 41,
                     "line": 141
                   }
@@ -304,10 +340,24 @@
                   "status": "failed",
                   "duration": 6673,
                   "error": {
-                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveCount\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('button', { name: 'Retry settings refresh', exact: true })\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveCount\" getByRole('button', { name: 'Retry settings refresh', exact: true }) with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Retry settings refresh', exact: true })\u001b[22m\n\u001b[2m    14 × locator resolved to 1 element\u001b[22m\n\u001b[2m       - unexpected value \"1\"\u001b[22m\n",
-                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveCount\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('button', { name: 'Retry settings refresh', exact: true })\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveCount\" getByRole('button', { name: 'Retry settings refresh', exact: true }) with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Retry settings refresh', exact: true })\u001b[22m\n\u001b[2m    14 × locator resolved to 1 element\u001b[22m\n\u001b[2m       - unexpected value \"1\"\u001b[22m\n\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e/settings-load-error.spec.ts:141:41",
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveCount\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('button', { name: 'Retry settings refresh', exact: true })\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveCount\" getByRole('button', { name: 'Retry settings refresh', exact: true }) with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Retry settings refresh', exact: true })\u001b[22m\n\u001b[2m    14 \u00d7 locator resolved to 1 element\u001b[22m\n\u001b[2m       - unexpected value \"1\"\u001b[22m\n",
+                    "stack": {
+                      "representation": "derived-reported-comparison-fields",
+                      "private_original_ref": "private-ref:490b67fa5a7746dabf07996901917667",
+                      "numeric_fields": [
+                        {
+                          "label": "Expected",
+                          "value": 0
+                        },
+                        {
+                          "label": "Received",
+                          "value": 1
+                        }
+                      ],
+                      "limits": "Extracted reported numeric comparisons only. Empty list is not a passing result or absence of failure. Full stack stays private; sibling assertion records and historical manifest retain first-assertion attribution."
+                    },
                     "location": {
-                      "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e/settings-load-error.spec.ts",
+                      "file": "private-ref:6a38e305b56f4349b16d85ab8ff478b7",
                       "column": 41,
                       "line": 141
                     },
@@ -316,11 +366,11 @@
                   "errors": [
                     {
                       "location": {
-                        "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e/settings-load-error.spec.ts",
+                        "file": "private-ref:6a38e305b56f4349b16d85ab8ff478b7",
                         "column": 41,
                         "line": 141
                       },
-                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveCount\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('button', { name: 'Retry settings refresh', exact: true })\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveCount\" getByRole('button', { name: 'Retry settings refresh', exact: true }) with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Retry settings refresh', exact: true })\u001b[22m\n\u001b[2m    14 × locator resolved to 1 element\u001b[22m\n\u001b[2m       - unexpected value \"1\"\u001b[22m\n\n\n  139 |       await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Accepted after mutation error');\n  140 |       await expect(alert(page, 'Same ownership message')).toBeVisible();\n> 141 |       await expect(retrySettings(page)).toHaveCount(0);\n      |                                         ^\n  142 |       await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Newer draft after refusal');\n  143 |       if (mutation === 'create') await expect(page.getByPlaceholder(/Save current setup as/)).toHaveValue('Retained create draft');\n  144 |       expect(writes).toBe(1);\n    at /private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e/settings-load-error.spec.ts:141:41"
+                      "message": "private-ref:ba45e06c83cb4f62a04ab7d8024b0cef"
                     }
                   ],
                   "stdout": [],
@@ -332,16 +382,16 @@
                     {
                       "name": "error-context",
                       "contentType": "text/markdown",
-                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-0adb9-l-with-identical-error-text/error-context.md"
+                      "path": "private-ref:1960d793f4ea4b638f0c3a2ccaab37ff"
                     },
                     {
                       "name": "trace",
                       "contentType": "application/zip",
-                      "path": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/activation-settings-1d4/validation-20260914T185223Z/original-browser-results/settings-load-error-accept-0adb9-l-with-identical-error-text/trace.zip"
+                      "path": "private-ref:0635d958d20a4f4dac3d70913fafc769"
                     }
                   ],
                   "errorLocation": {
-                    "file": "/private/var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-presets-state-load-1d4-mxwq7eqc/e2e/settings-load-error.spec.ts",
+                    "file": "private-ref:6a38e305b56f4349b16d85ab8ff478b7",
                     "column": 41,
                     "line": 141
                   }

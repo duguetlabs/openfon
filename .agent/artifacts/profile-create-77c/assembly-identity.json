@@ -1,4 +1,12 @@
 {
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "59567b461918bcb46ab62542b7c385baf98311d3c6ef4dcf9769492ab7384f59",
+    "original_bytes": 9675,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
   "head": "26e4387e1eace02d1e6cc2b1d035d2723829197f",
   "parent": "a4e1640156a468ac2ea3614d6a97c99ff234009c",
   "source_base": "77cde12b99cc63344251dc8bab34256f23216628",
@@ -91,8 +99,8 @@
     }
   },
   "owner_evidence_directories": {
-    "initial": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/validation-20260914T053715Z",
-    "targeted": "/Users/cristian/projects/fun/openfon-worktrees/provider-presets/test-results/profile-create-77c/targeted-duplicate-20260914T055049Z"
+    "initial": "private-ref:5b047f515ffd4b60b755a678aa5c94bf",
+    "targeted": "private-ref:055b9d6fb411405780885d4594116de3"
   },
   "qa": "CLOSED 5ae745e: exact source/evidence/combined assembly; no runtime repeated"
 }

@@ -3,7 +3,7 @@
 - Sender: root orchestration task 01a09543-75cb-7c52-8c7f-4b5a24ed5c75
 - Intended recipient: openfon-asterisk, Codex CLI gpt-6-astra / medium
 - Reason: explicit user delegation, 2026-09-12
-- Repository path: /Users/cristian/projects/fun/openfon-worktrees/asterisk
+- Repository path: private-ref:2c36a45cf8e741bb81e7a5854f4cf447
 - Branch: codex/asterisk-integration
 - Base commit: b730480685b56de0e785a400621459e3896a7fb1 (Telnyx existing branch starts at d616fff)
 - Current commit: verify independently on arrival

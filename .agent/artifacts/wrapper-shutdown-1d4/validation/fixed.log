@@ -1,82 +1,40 @@
-TAP version 13
-# Subtest: real owned child accepts SIGTERM without exit: wrapper deadline retains state and reports uncertainty
-ok 1 - real owned child accepts SIGTERM without exit: wrapper deadline retains state and reports uncertainty
-  ---
-  duration_ms: 5084.747208
-  ...
-# {"scope":"real owned wrapper/child; deliberate SIGTERM hold; provider stub","result":{"code":1,"signal":null},"elapsedMs":5018,"wrapperPid":20138,"childPid":20139,"childAlive":true,"stateExists":true,"events":[{"kind":"spawned","pid":20139},{"kind":"ready","pid":20139},{"kind":"forwarded","signal":"SIGTERM","sent":true},{"kind":"received","signal":"SIGTERM"},{"kind":"provider-close"}],"stderr":"E2E shutdown incomplete: no exit within 5000ms after SIGTERM; worker PID 20139; exit is unconfirmed; retained state: /var/folders/kj/9pvjxfy558g7mmhm9cdf3rsm0000gn/T/openfon-wrapper-shutdown-d9cgn9/state\\n"}
-# Subtest: real graceful numeric7 exit cancels shutdown and removes state
-ok 2 - real graceful numeric7 exit cancels shutdown and removes state
-  ---
-  duration_ms: 106.195125
-  ...
-# {"scope":"real graceful owned child; provider stub","result":{"code":7,"signal":null},"wrapperPid":21007,"childPid":21008,"events":[{"kind":"spawned","pid":21008},{"kind":"ready","pid":21008},{"kind":"forwarded","signal":"SIGTERM","sent":true},{"kind":"received","signal":"SIGTERM"},{"kind":"worker-exit","code":7,"signal":null},{"kind":"provider-close"},{"kind":"state-removed"}],"stateExists":false}
-# Subtest: real no-PID spawn failure removes state and fails wrapper
-ok 3 - real no-PID spawn failure removes state and fails wrapper
-  ---
-  duration_ms: 49.39925
-  ...
-# {"scope":"real ENOENT; provider stub","result":{"code":1,"signal":null},"wrapperPid":21009,"events":[{"kind":"spawned"},{"kind":"worker-error","code":"ENOENT"},{"kind":"provider-close"},{"kind":"state-removed"}],"stateExists":false}
-# Subtest: synthetic live worker error before shutdown retains state
-ok 4 - synthetic live worker error before shutdown retains state
-  ---
-  duration_ms: 0.410167
-  ...
-# {"scope":"synthetic lexical clock/events/exit stub","statuses":[1],"signals":[],"closes":1,"removals":0,"errors":["E2E shutdown incomplete: injected live error; worker PID 12345; exit is unconfirmed; retained state: synthetic-D1-state"],"timers":[]}
-# Subtest: synthetic forwarding event retains possibly-live state and clears deadline
-ok 5 - synthetic forwarding event retains possibly-live state and clears deadline
-  ---
-  duration_ms: 0.368083
-  ...
-# {"scope":"synthetic lexical clock/events/exit stub","statuses":[1],"signals":["SIGTERM"],"closes":1,"removals":0,"errors":["E2E shutdown incomplete: injected synchronous kill error; worker PID 12345; exit is unconfirmed; retained state: synthetic-D1-state"],"timers":[{"ms":5000,"cleared":true}]}
-# Subtest: synthetic forwarding throw retains possibly-live state and clears deadline
-ok 6 - synthetic forwarding throw retains possibly-live state and clears deadline
-  ---
-  duration_ms: 0.159167
-  ...
-# {"scope":"synthetic lexical clock/events/exit stub","statuses":[1],"signals":["SIGTERM"],"closes":1,"removals":0,"errors":["E2E shutdown incomplete: injected thrown kill error; worker PID 12345; exit is unconfirmed; retained state: synthetic-D1-state"],"timers":[{"ms":5000,"cleared":true}]}
-# Subtest: synthetic forwarding false retains possibly-live state and clears deadline
-ok 7 - synthetic forwarding false retains possibly-live state and clears deadline
-  ---
-  duration_ms: 0.170875
-  ...
-# {"scope":"synthetic lexical clock/events/exit stub","statuses":[1],"signals":["SIGTERM"],"closes":1,"removals":0,"errors":["E2E shutdown incomplete: could not forward SIGTERM; worker PID 12345; exit is unconfirmed; retained state: synthetic-D1-state"],"timers":[{"ms":5000,"cleared":true}]}
-# Subtest: synthetic terminal worker error retains failure cleanup
-ok 8 - synthetic terminal worker error retains failure cleanup
-  ---
-  duration_ms: 0.084583
-  ...
-# {"scope":"synthetic lexical clock/events/exit stub","statuses":[1],"signals":[],"closes":1,"removals":1,"errors":["terminal error"],"timers":[]}
-# Subtest: synthetic false forwarding with confirmed numeric exit preserves numeric status and cleanup
-ok 9 - synthetic false forwarding with confirmed numeric exit preserves numeric status and cleanup
-  ---
-  duration_ms: 0.300708
-  ...
-# {"scope":"synthetic lexical clock/events/exit stub","statuses":[7],"signals":["SIGTERM"],"closes":1,"removals":1,"errors":[],"timers":[{"ms":5000,"cleared":true}]}
-# Subtest: synthetic two explicit signals share first budget without automatic third signal
-ok 10 - synthetic two explicit signals share first budget without automatic third signal
-  ---
-  duration_ms: 0.320417
-  ...
-# {"scope":"synthetic lexical clock/events/exit stub","statuses":[],"signals":["SIGTERM"],"closes":0,"removals":0,"errors":[],"timers":[{"ms":5000,"cleared":false}]}
-# Subtest: synthetic matching accepted exit wins and stale timer/error cannot change status or repeat cleanup
-ok 11 - synthetic matching accepted exit wins and stale timer/error cannot change status or repeat cleanup
-  ---
-  duration_ms: 0.113875
-  ...
-# {"scope":"synthetic lexical clock/events/exit stub","statuses":[],"signals":["SIGTERM"],"closes":0,"removals":0,"errors":[],"timers":[{"ms":5000,"cleared":false}]}
-# Subtest: synthetic deadline first retains state despite later confirmed exit
-ok 12 - synthetic deadline first retains state despite later confirmed exit
-  ---
-  duration_ms: 0.106458
-  ...
-# {"scope":"synthetic lexical clock/events/exit stub","statuses":[],"signals":["SIGTERM"],"closes":0,"removals":0,"errors":[],"timers":[{"ms":5000,"cleared":false}]}
-1..12
-# tests 12
-# suites 0
-# pass 12
-# fail 0
-# cancelled 0
-# skipped 0
-# todo 0
-# duration_ms 5278.917708
+Derived public evidence; not original raw output. Historical hashes identify the privately retained original bytes.
+Original SHA256: a7ba1e3def9ef05f0597f174e5f93b07ca92182f466af6b56f6ed651724aac8d
+Original bytes: 5780
+Ordered extracted numeric result fields (not an inferred final result):
+[
+  {
+    "tap_field": "tests",
+    "value": "12"
+  },
+  {
+    "tap_field": "suites",
+    "value": "0"
+  },
+  {
+    "tap_field": "pass",
+    "value": "12"
+  },
+  {
+    "tap_field": "fail",
+    "value": "0"
+  },
+  {
+    "tap_field": "cancelled",
+    "value": "0"
+  },
+  {
+    "tap_field": "skipped",
+    "value": "0"
+  },
+  {
+    "tap_field": "todo",
+    "value": "0"
+  },
+  {
+    "tap_field": "duration_ms",
+    "value": "5278.917708"
+  }
+]
+First-assertion, runtime and cleanup scope remains governed by associated historical validation manifests and original evidence. An empty extraction is unknown, never a passing result. No new or later failed-case assertions are inferred.
+Catalog: .agent/artifacts/metadata-hygiene-49df/derivation.json
