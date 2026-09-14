@@ -5,7 +5,11 @@ import { EventEmitter, once } from 'node:events';
 import { readFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { observeCaptureChild } from './capture-child.mjs';
+import { pathToFileURL } from 'node:url';
+
+// Select only the helper for exact original/fixed comparison; never import capture.
+const { observeCaptureChild } = await import(process.env.CAPTURE_CHILD_HELPER
+  ? pathToFileURL(process.env.CAPTURE_CHILD_HELPER).href : new URL('./capture-child.mjs', import.meta.url).href);
 
 // Read only the literal final cleanup body. Never import capture.mjs: doing so
 // would start the browser/app/capture workflow. The override preserves exact
@@ -122,7 +126,8 @@ test('early real spawn error is stored without premature rejection and surfaces 
 // Synthetic event controls cover conditions difficult to induce portably with
 // real OS children; they are not represented as real kill failures or exits.
 function controlledChild(kill) {
-  return Object.assign(new EventEmitter(), { exitCode: null, signalCode: null, killed: false, kill });
+  // Synthetic PID metadata only; kill below is a stub, never an OS signal.
+  return Object.assign(new EventEmitter(), { pid: 12345, exitCode: null, signalCode: null, killed: false, kill });
 }
 
 for (const mode of ['event', 'throw']) {
@@ -193,4 +198,96 @@ test('synthetic killed flag is not treated as confirmed exit', async () => {
     assert.equal(exitSeen, true);
     assert.equal(h.removed(), true);
   } finally { h.dispose(); }
+});
+
+// Real owned OS child, but both prior errors are explicitly injected by the
+// test. This proves helper hardening, not a normal capture-path error producer.
+test('live owned child with injected prior errors exits before first error is rethrown', async t => {
+  const child = spawn(process.execPath, ['-e', "process.stdout.write('ready\\n'); setInterval(() => {}, 1000)"],
+    { stdio: ['ignore', 'pipe', 'pipe'] });
+  const h = harness(child);
+  const first = new Error('synthetic first prior error');
+  const later = new Error('synthetic later prior error');
+  const events = [];
+  let kills = 0;
+  const originalKill = child.kill.bind(child);
+  child.kill = signal => { kills++; events.push(`signal:${signal}`); return originalKill(signal); };
+  child.once('exit', () => events.push('exit'));
+  try {
+    await bounded(once(child.stdout, 'data'));
+    child.emit('error', first);
+    child.emit('error', later);
+    assert.equal(child.exitCode, null);
+    assert.equal(child.signalCode, null);
+    let failure;
+    try { await h.run(); } catch (error) { failure = error; events.push('rejected'); }
+    t.diagnostic(JSON.stringify({ scope: 'real child, injected errors', kills, events,
+      exitCode: child.exitCode, signalCode: child.signalCode, firstErrorPreserved: failure === first }));
+    assert.equal(kills, 1);
+    assert.equal(child.signalCode, 'SIGTERM');
+    assert.ok(events.indexOf('exit') >= 0 && events.indexOf('exit') < events.indexOf('rejected'));
+    assert.equal(failure, first);
+    assert.equal(h.removed(), true);
+    await assert.rejects(h.stop(), error => error === first);
+    assert.equal(kills, 1, 'repeated cleanup does not retry termination');
+  } finally { h.dispose(); await reap(child); }
+});
+
+test('injected prior error followed by real natural exit is rethrown without signal', async () => {
+  const child = realChild("process.send('ready'); process.on('message', () => process.exit(0))");
+  const h = harness(child);
+  const error = new Error('synthetic prior error before natural exit');
+  try {
+    await bounded(once(child, 'message'));
+    child.emit('error', error);
+    const exited = once(child, 'exit');
+    child.send('exit');
+    await bounded(exited);
+    child.kill = () => { throw new Error('must not signal terminal child'); };
+    await assert.rejects(h.run(), actual => actual === error);
+    assert.equal(h.removed(), true);
+  } finally { h.dispose(); await reap(child); }
+});
+
+for (const mode of ['event', 'throw']) {
+  test(`synthetic new kill ${mode} failure preserves prior error and unconfirmed termination`, async () => {
+    const prior = new Error('synthetic prior error');
+    const failure = new Error(`synthetic new kill ${mode} failure`);
+    let kills = 0;
+    let exited = false;
+    const child = controlledChild(function () {
+      kills++;
+      if (mode === 'throw') throw failure;
+      this.emit('error', failure);
+      return false;
+    });
+    const h = harness(child);
+    child.once('exit', () => { exited = true; });
+    try {
+      child.emit('error', prior);
+      let observed;
+      try { await h.run(); } catch (error) { observed = error; }
+      assert.equal(kills, 1);
+      assert.ok(observed instanceof AggregateError);
+      assert.deepEqual(observed.errors, [prior, failure]);
+      assert.match(observed.message, /exit is unconfirmed/);
+      assert.equal(exited, false);
+      assert.equal(child.exitCode, null);
+      assert.equal(child.signalCode, null);
+      assert.equal(h.removed(), true);
+      await assert.rejects(h.stop(), error => error === observed);
+      assert.equal(kills, 1, 'failed termination is not retried');
+    } finally { h.dispose(); child.emit('exit', null, 'SIGTERM'); }
+  });
+}
+
+test('synthetic refused signal without an error event reports uncertainty promptly', async () => {
+  const child = controlledChild(() => false);
+  const h = harness(child);
+  try {
+    await assert.rejects(h.run(), /SIGTERM was not sent; exit is unconfirmed/);
+    assert.equal(child.exitCode, null);
+    assert.equal(child.signalCode, null);
+    assert.equal(h.removed(), true);
+  } finally { h.dispose(); child.emit('exit', null, 'SIGTERM'); }
 });
