@@ -14,8 +14,13 @@ import {
   CompatibilitySessionCoordinator,
   loadCompatibilitySession,
   SIGN_OUT_UNCONFIRMED_MESSAGE,
+  SIGN_OUT_STORAGE_UNKNOWN_MESSAGE,
+  SIGN_OUT_LOCAL_CLEANUP_MESSAGE,
+  SignOutRecoveryError,
+  type SignOutRecovery,
   type CompatibilitySessionSnapshot,
 } from './session-load';
+import { browserLogoutIntentStorage } from './logout-intent';
 import { confirmDiscardUnsaved } from './unsaved-edits';
 import { studioSetupPending } from './session-gate';
 
@@ -29,6 +34,7 @@ interface Session {
   signOut: () => Promise<void>;
   signOutPending: boolean;
   signOutWarning: string | null;
+  signOutLocalRecovery: boolean;
 }
 
 const SessionCtx = createContext<Session>({
@@ -41,6 +47,7 @@ const SessionCtx = createContext<Session>({
   signOut: async () => {},
   signOutPending: false,
   signOutWarning: null,
+  signOutLocalRecovery: false,
 });
 export const useSession = () => useContext(SessionCtx);
 
@@ -53,7 +60,8 @@ export default function App() {
   const [firstAssistantReady, setFirstAssistantReady] = useState(false);
   const [signOutPending, setSignOutPending] = useState(false);
   const [signOutWarning, setSignOutWarning] = useState<string | null>(null);
-  const sessionCoordinator = useRef(new CompatibilitySessionCoordinator());
+  const [signOutLocalRecovery, setSignOutLocalRecovery] = useState(false);
+  const [sessionCoordinator] = useState(() => new CompatibilitySessionCoordinator(browserLogoutIntentStorage));
   const hasSession = useRef(false);
 
   const clearSession = useCallback(() => {
@@ -75,38 +83,46 @@ export default function App() {
     setWorkspaceReady(snapshot.workspaceReady);
     setFirstAssistant(snapshot.firstAssistant);
     setFirstAssistantReady(snapshot.firstAssistantReady);
-    // A confirmed authenticated refresh (including login/signup) supersedes a
-    // previous unconfirmed logout attempt.
+    // The coordinator checked durable intent before loading and publishing.
     setSignOutPending(false);
     setSignOutWarning(null);
+    setSignOutLocalRecovery(false);
     setLoading(false);
   }, []);
 
+  const showRecovery = useCallback((recovery: SignOutRecovery) => {
+    clearSession();
+    setSignOutPending(recovery === 'pending');
+    setSignOutLocalRecovery(recovery === 'local');
+    setSignOutWarning(recovery === 'pending' ? null : recovery === 'local'
+      ? SIGN_OUT_LOCAL_CLEANUP_MESSAGE : recovery === 'unknown'
+        ? SIGN_OUT_STORAGE_UNKNOWN_MESSAGE : SIGN_OUT_UNCONFIRMED_MESSAGE);
+    setLoading(false);
+  }, [clearSession]);
+
   const refresh = useCallback(async () => {
-    await sessionCoordinator.current.refresh(loadCompatibilitySession, publishSession, error => {
+    await sessionCoordinator.refresh(loadCompatibilitySession, publishSession, error => {
       // A temporary post-save read failure does not invalidate the authenticated
       // snapshot. Let the saving page report recovery without losing its state.
       if (!hasSession.current || (error instanceof ApiError && (error.status === 401 || error.status === 403))) clearSession();
       setSignOutPending(false);
       setLoading(false);
       throw error;
-    });
-  }, [clearSession, publishSession]);
+    }, showRecovery);
+  }, [clearSession, publishSession, sessionCoordinator, showRecovery]);
 
   const signOut = useCallback(() => {
     setSignOutPending(true);
-    return sessionCoordinator.current.signOut(api.logout, {
+    return sessionCoordinator.signOut(api.logout, {
       clearLocal: clearSession,
       confirmed: () => {
         setSignOutPending(false);
         setSignOutWarning(null);
+        setSignOutLocalRecovery(false);
       },
-      failed: () => {
-        setSignOutPending(false);
-        setSignOutWarning(SIGN_OUT_UNCONFIRMED_MESSAGE);
-      },
+      failed: error => showRecovery(error instanceof SignOutRecoveryError ? error.recovery : 'unconfirmed'),
     });
-  }, [clearSession]);
+  }, [clearSession, sessionCoordinator, showRecovery]);
 
   useEffect(() => {
     void refresh().catch(() => {}); // Initial signed-out/unavailable load has no saving page.
@@ -132,6 +148,7 @@ export default function App() {
         signOut,
         signOutPending,
         signOutWarning,
+        signOutLocalRecovery,
       }}
     >
       <Routes>

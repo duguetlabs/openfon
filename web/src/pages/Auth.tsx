@@ -13,7 +13,7 @@ export default function AuthPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [authConfirmed, setAuthConfirmed] = useState(false);
-  const { refresh, signOut, signOutPending, signOutWarning } = useSession();
+  const { refresh, signOut, signOutPending, signOutWarning, signOutLocalRecovery } = useSession();
   const nav = useNavigate();
   const authLocked = authSubmissionBlocked(signOutPending, Boolean(signOutWarning));
 
@@ -114,7 +114,8 @@ export default function AuthPage() {
                   });
                 }}
               >
-                {signOutPending ? 'Retrying sign-out…' : 'Retry sign-out'}
+                {signOutLocalRecovery ? (signOutPending ? 'Retrying cleanup…' : 'Retry local cleanup')
+                  : signOutPending ? 'Retrying sign-out…' : 'Retry sign-out'}
               </button>
             </div>
           )}
@@ -125,7 +126,7 @@ export default function AuthPage() {
               role="status"
               aria-live="polite"
             >
-              {SIGN_OUT_PENDING_MESSAGE}
+              {signOutLocalRecovery ? 'Finishing local sign-out cleanup. No server request is being repeated.' : SIGN_OUT_PENDING_MESSAGE}
             </p>
           )}
           <fieldset
