@@ -1,0 +1,104 @@
+{
+  "state": "SOURCE_AGREEMENTS_RETAINED_LOGOUT_CORRECTION_ASSEMBLED",
+  "source_head": "49cbf52e631e3091539859a3ab7c8514db79c19b",
+  "current_closure": ".agent/artifacts/official-c865-source-contracts/review-closure.json",
+  "prior_source_only_phase": {
+    "state": "ALL_SOURCE_CONTRACTS_QA_AGREED_NO_PREPARATION",
+    "at": "2026-09-15T08:05:26.252177+00:00",
+    "head": "c865e06d23f35c7217151536dda859868ebf8f3a",
+    "pF": {
+      "owner_commit": "0179776",
+      "contract_sha256": "964117c5f1b70231a657c9ba7c27ef15928e39864b318be4361b1ca56b01fb2c",
+      "source_sha256": "66332c8917af8d1cec66a5a5163a4702d3f3f895469cebe14cd049643ac785d7",
+      "source_count": 10,
+      "QA": "e0607d9",
+      "disposition": "Qualified decline; explicit pause command linearization, no captured-state/newest-intent promise; CAS would change admission policy and miss same-state/ABA.",
+      "limits": "Activation/PUT asymmetry,quota/existence/point-in-time/UI/read-recovery and ongoing-call limits retained."
+    },
+    "pG": {
+      "owner_commit": "a6d33fe7e81c4166c6a9e5d98f812f7d8fefc331",
+      "current_section_sha256": "9025260c98a585bc697ac40822e81921c19d458456adb9ddba8167f956b6c79f",
+      "source_records": [
+        {
+          "path": "src/call-session.ts",
+          "sha256": "8c884f8a6f39d7db83b22ff40eb9d0233436eb0391866b0701a7a09c2d18b413",
+          "bytes": 109017
+        },
+        {
+          "path": "src/realtime-output.ts",
+          "sha256": "b0174aa67bbd646915c66136c69d211da6b36b480c065b84d2a3f72a75304c6d",
+          "bytes": 5600
+        },
+        {
+          "path": "web/src/voice.ts",
+          "sha256": "9783d4bc29e2a62048fa543423c6b7da368b596e334403755d3f3a531ea05636",
+          "bytes": 19068
+        },
+        {
+          "path": "web/src/pages/Widget.tsx",
+          "sha256": "cde3e8eca7c283773160e70c85a391b1ef1ed7a48681c788bed8c2e75bce717a",
+          "bytes": 12146
+        },
+        {
+          "path": "web/src/pages/Studio.tsx",
+          "sha256": "23ebbb9cae00b8640609dd0947f5fdc8f50d0fb5b3a5f75779bacb2982a8be8e",
+          "bytes": 41107
+        },
+        {
+          "path": "src/asterisk-media.ts",
+          "sha256": "89b7448be299211ec7a016e96b4cdc0be58b4640f7cf501780c9888f1be2a583",
+          "bytes": 9713
+        },
+        {
+          "path": "src/asterisk-control.ts",
+          "sha256": "f6e314bf97f70de409a0af56640bc73585a202a785f6377337183a39ac1a24d9",
+          "bytes": 14926
+        },
+        {
+          "path": "src/telnyx-media.ts",
+          "sha256": "e34f6146cf35e17f3bbc76baec61e2b647f8aa3e668bc8b8146dcd9dc6a59740",
+          "bytes": 17217
+        },
+        {
+          "path": "src/media-output-debt.ts",
+          "sha256": "c64be7586ab4b804fcb7158144e322a95061f0504fe080052475b1fabba8c5a4",
+          "bytes": 1127
+        },
+        {
+          "path": "docs/realtime-output-bounds.md",
+          "sha256": "c52618717b7ed7b8e93059566a7c4a2e18db7f057e5f31c0ca863d5e850fb1ed",
+          "bytes": 7218
+        },
+        {
+          "path": "test/voice-client.test.ts",
+          "sha256": "7fd2717c8ebcab5169abc33bd47345faf56040a3d31e2a9e5b568fbb4b6f9418",
+          "bytes": 12798
+        },
+        {
+          "path": "test/realtime-output.test.ts",
+          "sha256": "3bc917c1775c93b584680bbd7f0dc5f4e2fc4d34ce19a95d1ac7d586fbb4f182",
+          "bytes": 3282
+        },
+        {
+          "path": "test/call-session.test.ts",
+          "sha256": "375fd7ff8be609e36317262ffbc9bcf226fcf516e6402e6d104579238feaadec",
+          "bytes": 155466
+        },
+        {
+          "path": "test/asterisk-receipt-transition.test.ts",
+          "sha256": "85291aba48edd08c21c34d7635242598f066b1cccf1f4ddbce7f49537ab82dba",
+          "bytes": 6417
+        }
+      ],
+      "QA": "b6d1493",
+      "disposition": "Proposed qualified missing-shipped-ACK premise decline; one-way announcement, matched-client deployment required, legacy client limitation/debt bounds retained."
+    },
+    "integration": {
+      "contract_sha256": "44eee3d505285ca78df943df7a5436875bcd74903edc7436ce1fcb60788d329a",
+      "QA": "219aa6d",
+      "logout": "Residual failed-revocation/reload-cookie risk supported; tab-scoped persistence mitigation only proposed, not security clearance or preparation selection.",
+      "required_boundaries": ".agent/artifacts/official-c865-source-contracts/qa-boundaries.json"
+    },
+    "limits": "All work source-only; no app/fixture/runtime/newreview/grant or duplicate owner assignment."
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "state": "NEW_CURRENT_CHECKPOINT_ONLY_NO_METADATA_TRANSFORMATION",
+  "source_head": "49cbf52e631e3091539859a3ab7c8514db79c19b",
+  "path": ".agent/workstreams/integration.md",
+  "before": {
+    "sha256": "4b6358a8cd62ccff041abe91cdbdb4adf40478c88d9ebc9be86f7356848cd4fc",
+    "bytes": 271939
+  },
+  "candidate": {
+    "sha256": "196582218c301342e8aecc2ab202eecde42f8123f048dddc18747fbf488d9019",
+    "bytes": 276013
+  },
+  "insertion_bytes": 4101,
+  "heading_before": "## CURRENT STATUS \u2014 scoped f265 corrections closed; publication gates pending",
+  "heading_after": "## Historical f265 correction/publication checkpoint",
+  "preservation": "Remove exactly the new leading block and restore one old heading to recover every prior byte. All historical text/opaque references remain. No new opacity/private-value operation.",
+  "historical_suffix_after_first_heading": {
+    "sha256": "fd00c2453514ca856f524f41eeb10370edde604e6c4a44a77ab03c56f61c2a0e",
+    "bytes": 271834
+  },
+  "catalog": {
+    "path": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "before": {
+      "sha256": "0a93417843f3c1b752c2e7f793c72ec6df581336566b6e8ce3ed438aa646f143",
+      "bytes": 234459
+    },
+    "candidate": {
+      "sha256": "3f7db32b6fbc274abdcb295d11e6049fbe7047f0dacafa6e11f94faa73a64201",
+      "bytes": 234478
+    },
+    "only_prior_fields": {
+      "current_public_sha256": "4b6358a8cd62ccff041abe91cdbdb4adf40478c88d9ebc9be86f7356848cd4fc",
+      "current_public_bytes": 271939,
+      "current_identity_lineage": ".agent/artifacts/metadata-residual-f265/lineage.json"
+    }
+  },
+  "prior_lineage": ".agent/artifacts/metadata-residual-f265/lineage.json",
+  "old_hash_consumers": {
+    "current": "Only derivation current fields updated.",
+    "historical": [
+      ".agent/artifacts/publication-f265a1f/metadata-residual-candidate-manifest.json",
+      ".agent/artifacts/publication-f265a1f/metadata-residual-assembly.json",
+      ".agent/artifacts/metadata-residual-f265/lineage.json",
+      ".agent/artifacts/logout-intent-c865/protected.json",
+      ".agent/artifacts/logout-intent-c865/superseded/b2b53a19/protected.json"
+    ],
+    "rule": "Historical acceptance/assembly/protected-baseline hashes remain unchanged; new finalization manifest uses the old hash as a precondition."
+  }
+}

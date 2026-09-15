@@ -1,0 +1,104 @@
+{
+  "state": "SOURCE_EVIDENCE_EXACT_ASSEMBLY_CLOSED_PUBLICATION_GATES_PENDING",
+  "source_head": "49cbf52e631e3091539859a3ab7c8514db79c19b",
+  "parent": "c865e06d23f35c7217151536dda859868ebf8f3a",
+  "source_fixture_QA": "03d39bd",
+  "evidence_QA": "68ff8cf",
+  "assembly_QA": "f25560a",
+  "accepted_manifest": {
+    "sha256": "8a18a4387b7392e574e7563d1f75a60701bf22d2b2fd7c57f17ae080cea4bade",
+    "bytes": 4193
+  },
+  "accepted_patch": {
+    "sha256": "cc758ac9936f6fbffff8843a1ef2b1cbf3d09e2b083fd9aa1abddecd0b8f658e",
+    "bytes": 41922
+  },
+  "assembly_receipt": {
+    "sha256": "b95ebda2556514695a01ef2a6fa9913d3cb53ef7323c59a1ba7031d46ea60d5f",
+    "bytes": 2075
+  },
+  "targets": [
+    {
+      "path": "web/src/logout-intent.ts",
+      "original": null,
+      "committed_tested": {
+        "sha256": "6531376e51c3a814fcd8d6d8aa94de0e500e415919e2c4b7b0ba64f622d108cf",
+        "bytes": 1567
+      }
+    },
+    {
+      "path": "web/src/session-load.ts",
+      "original": {
+        "sha256": "134a9f64968302007ae2a50ac1934afdf9f87d84d99360d66e1e47dae8e4ed53",
+        "bytes": 3631
+      },
+      "committed_tested": {
+        "sha256": "4e6c19ac6309b9ac238c0c80dbe83e80df4e6d538e1e42a3ace7b63a822401c4",
+        "bytes": 7841
+      }
+    },
+    {
+      "path": "web/src/App.tsx",
+      "original": {
+        "sha256": "50c487e550a0c5940e2714d5800e6a9c877ad5e41a3be4a8b01787e11cf8db16",
+        "bytes": 9090
+      },
+      "committed_tested": {
+        "sha256": "b78f72f6758ec147cdbfc72140fa8cf1a3681258d8a6ad50c11e8f52d30306d1",
+        "bytes": 10005
+      }
+    },
+    {
+      "path": "web/src/pages/Auth.tsx",
+      "original": {
+        "sha256": "174c8dac5f11e51e6ccf35cfba67a1a25887af2cf09b93daf886ce8fad230d48",
+        "bytes": 9472
+      },
+      "committed_tested": {
+        "sha256": "a3ebd0040a43d1d9e743b7138c75e0fcd6b3a870651d5c000c733e9390574ec1",
+        "bytes": 9700
+      }
+    },
+    {
+      "path": "test/logout-intent.test.ts",
+      "original": null,
+      "committed_tested": {
+        "sha256": "41d1f268f3f81dd44d074513fb570c824780990cef692da06ad25c2586830f3c",
+        "bytes": 12832
+      }
+    },
+    {
+      "path": "e2e/logout-intent.spec.ts",
+      "original": null,
+      "committed_tested": {
+        "sha256": "571037dcba55ead9c84d3cd3831ce759f53cb2f66a283b14fe6bf7ae63a456f6",
+        "bytes": 9707
+      }
+    },
+    {
+      "path": "docs/logout-recovery.md",
+      "original": null,
+      "committed_tested": {
+        "sha256": "adb6a25f49a2839493ee9ffed0de661012c214ab6bba37dc43bce9ad09752e89",
+        "bytes": 4010
+      }
+    }
+  ],
+  "protected": {
+    "count": 1234,
+    "source_inventory": {
+      "sha256": "ea536a9859ea0c1ed701c2ad13efa90c9e86a7d913fa6ef0beb7370789ac7c57",
+      "bytes": 233345
+    },
+    "result": "All other parent/HEAD tree entries unchanged; protected working bytes verified by QA."
+  },
+  "validation_summary": {
+    "sha256": "8875c2d1e9682c461945731c4dbd408cba205403f14636f8fdccb8348a23b4d1",
+    "bytes": 5516
+  },
+  "actual": "Five serial commands once, exits1/0/0/1/0. Original7FAIL15SKIP; fixed22new+6retainedPASS/webtypesPASS; originalChrome2FAIL/fixedChrome8PASS. No retry.",
+  "raw_evidence": "77catalogued attempt items include original logs/reports/traces and derived orchestration/identity/cleanup/trace inventory, plus final catalog. Three exact private controller/grant/proposal copies and their separate catalog are additional preparation provenance, not extra runs and not recatalogued by assembly QA. Exact original/candidate/superseded preparation retained privately; all seven current source files are available directly at source_head.",
+  "release": "2026-09-15T08:47:03.984903+00:00;111sampled absent/nonexhaustive, scoped/reserved0. No wrapper-disposal receipts. Two owned D1 states archived before directory removal following descriptor/process checks.",
+  "limits": "Same-tab UI mitigation; no server/API/schema change, global/direct-API/new-context/stolen-cookie protection, cancellation of in-flight requests or universal restart/storage availability guarantee. Confirmation lost after BOTH confirmation persistence and removal failure may be explicitly retried after reload; live-known/durable confirmation never automatically repeats. Newer-owner conflict stays local-only until current owner recovers.",
+  "history": "QA777e0c5 held first source candidate b2b53a19 for a live known-confirmation/failed-replacement bug. Revised8a18 resolves it and adds3controls; no runtime ran on the held candidate. Superseded preparation remains unchanged. Source/fixture/validation/assembly receipts identify their own phases; historical QA-pending fields are not the current state."
+}
