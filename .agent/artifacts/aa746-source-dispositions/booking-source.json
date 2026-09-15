@@ -1,0 +1,39 @@
+{
+  "base": "aa7467566662a4c43b54563226e78abeb575dc2d",
+  "report_url": "https://github.com/duguetlabs/openfon/pull/16#issuecomment-5658817846",
+  "original_report_sha256": "73d2523d2dcc02b369c988deaaad518fe8ff2b3eefe8ede55ce744a05f8464a8",
+  "status": "Source-only qualified decline under current precedence; independent QA agrees no ordinary exact-current mixed-outcome producer established. Conditional display suppression is real; no changed display policy selected.",
+  "exact_source_sha256": {
+    "src/call-session.ts": "8c884f8a6f39d7db83b22ff40eb9d0233436eb0391866b0701a7a09c2d18b413",
+    "src/prompt.ts": "5090d3d61ab63b96f4a622738986ba66f2db6d2fde43a03968b03e7ae781a251",
+    "web/src/api.ts": "a737158ee2d5fc69a22876555fedf8243480a9b1ea459b14ac3175269a9f5188",
+    "web/src/pages/CallDetail.tsx": "d60364f9a4536dcb1157cea4a7250ea115609bc9d3d68dd7b148eea099c360a6",
+    "web/src/pages/Dashboard.tsx": "e19ea958b5aa1559ab43adeb6cccf58b679d01424db16646c88e0b701b1d0257",
+    "src/studio-api.ts": "bf0fa99b2087a2aaa53b7432bf5ea1cc577e4802608f7c76bf6780980b0f58f9",
+    "src/index.ts": "2497393f1c491097f8d033825a42dd70cdac19b37e7d288e1967c9b210af1629",
+    "src/asterisk-control.ts": "f6e314bf97f70de409a0af56640bc73585a202a785f6377337183a39ac1a24d9",
+    "src/telnyx-control.ts": "213038b7acd1660664014ad2067ca01d770097f6ba02ce8bc638e186658b4f32",
+    "migrations/0008_calm_studio_foundation.sql": "203a7c136fb7508bf383de4f3ae9ca844dbbb1f70a551dd04f508ffdee0d79cb",
+    "test/call-summary.test.ts": "7c66d4124b177f49f4459e6fc97d59bff6202bd7781dc34a3ab598b0c94f8b43",
+    "test/call-message.test.ts": "fdbd093528affb5c8e2a1ece2219037aac3db2d62f48b8b056d0fb02003b9e39",
+    "test/studio-api.test.ts": "190804f0f073eaae9e4448e857058a48134bcfca7fccc863d9942386d4c371ed"
+  },
+  "evidence": {
+    "producer": "src/call-session.ts95-103 tests nonblank string message;2051-2061 explicitly prioritizes failure, then real message_taken, then booking_requested for booking intent, else answered;2075-2095 persists content/outcome together and preserves Telnyx failure.",
+    "renderer": "web/src/pages/CallDetail.tsx48-49 uses takenMessage first and suppresses booking card when real message exists;75-96 renders message content or booking contact. The report is conditionally correct for an explicit booking_requested row containing a real message: its booking card is suppressed.",
+    "helpers": "web/src/api.ts110-138 parses contact separately, takenMessage requires trimmed nonblank message, bookingRequestContact accepts booking_requested or null outcome plus booking intent.",
+    "prompt": "src/prompt.ts243-249 defines message as the message the caller left or null, not arbitrary appointment details.",
+    "other_writers": "Migration0008:187 adds nullable outcome with no booking backfill. CallSession1932/1947 salvage fills content using COALESCE without writing outcome; Asterisk212 preserves outcome or marks failed; Telnyx223 marks failed. No supported ordinary producer of booking_requested with a real message identified.",
+    "other_consumers": "Studio overview1412 independently counts booking intent; call filtering accepts intent. Legacy Dashboard44 counts real takenMessage values. Intent and primary outcome are separate dimensions.",
+    "existing_tests": "call-summary tests separately cover contact-only booking/null or whitespace messages and real callback message; call-message tests cover parsed contacts, historical null-outcome booking fallback and nonbooking refusal; studio-api metrics test covers distinct contact-only booking and message rows. Source inspected only, not rerun."
+  },
+  "disposition": "Retain intentional real-message precedence. The reported booking_requested plus real-message row is not established through supported current producers; no application correction proposed under unchanged product policy.",
+  "limits": [
+    "Arbitrary manual/historical rows can contain inconsistent outcome and message combinations; no universal impossibility or data constraint claimed.",
+    "Historical null-outcome plus booking intent can coexist with a real message; current renderer intentionally gives the real message precedence.",
+    "No dedicated test was identified asserting booking intent plus nonempty message through finalizer and renderer together; existing separate tests are not that proof.",
+    "No live calls, provider inference, runtime, tests, types, browser, source edits or classification-policy change.",
+    "Recovery/failed rows can retain useful message content independently from terminal outcome; this review does not redefine failure presentation.",
+    "Showing an explicit booking outcome alongside a real message would be a separately selected display policy; preserve message/contact content, failure and nonbooking handling, and legacy null-outcome precedence. No automatic finalizer or metrics change."
+  ]
+}

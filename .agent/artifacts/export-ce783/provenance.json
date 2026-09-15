@@ -1,0 +1,93 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "b06590272c2bb0fda154a84ad6211a6a48a4e4e76b2d038bc64b0511ca46ce97",
+    "original_bytes": 3409,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "base": "ce7830cfdf8ac33f2973da2e79b635aee37f9ea4",
+  "files": {
+    "src/account-api.ts": {
+      "original_sha256": "ed644f19a5348be956d98d1c25808b97b9c4717246aac2158afd5c185d539ad2",
+      "fixed_sha256": "7bef9c2210a3c6c5a2a78629eeca5a3e3342976449af3002a19953679926e1bc"
+    },
+    "test/account-api.test.ts": {
+      "original_sha256": "843a3d4e52df4138504ee3228e0f46449b85c260d4cf001c82de7ca2905d642f",
+      "fixed_sha256": "59b0f51f64e84cb3288b89c3526834e3bd89955e61e53adbc96d162930ded60a"
+    }
+  },
+  "status": "validated; sole slot released; QA final evidence/assembly pending",
+  "limits": [
+    "Node production handler with SQLite; injected SQL-result boundary only for nullable payload and post-serialization budgets",
+    "Existing export rate charge excluded from otherwise full DB equality",
+    "Historical15 userinfo and current HTTP PUT query routes distinct; no generic path/free-text secret scrub"
+  ],
+  "patch_sha256": "bebfc9caa0fd23a4026f86ee7da9a370a4ccd7eb5c41697ff82220683d0dcfc0",
+  "fixture_correction": "QA source-only caught wrong provider request keys before any execution; use baseUrl/apiKey and assert stored pair before export. No original failure claimed.",
+  "results": {
+    "original": {
+      "failed": 9,
+      "passed": 1,
+      "skipped": 39,
+      "exit": 1,
+      "duration_ms": 978,
+      "limits": "Historical case stops at first agent URL assertion; current PUT case passes persisted pair assertion then stops at export URL. Later forbidden-content/all-field/DB-equality assertions not reached on failed originals. Unicode original is normalization behavior, not an allocation failure. Two output-limit negatives inject SQL results."
+    },
+    "fixed": {
+      "passed": 62,
+      "files": 2,
+      "exit": 0,
+      "duration_s": 3.14
+    },
+    "types": {
+      "worker": "PASS",
+      "web": "PASS",
+      "exit": 0
+    },
+    "cleanup": "Both orchestration sessions exited; fresh process/listener scan vacant; no native/browser or Miniflare started."
+  },
+  "evidence": {
+    "types.log": {
+      "sha256": "75c97ba8f32dd032ee1e1293129c6bbdd2ff33c240a3223d4b150e23ab19ee29",
+      "bytes": 104
+    },
+    "fixed-exit.json": {
+      "sha256": "e89df0eae5ec7db81135aed16463968955c578bcc4f2ec43172eff351f080c17",
+      "bytes": 17
+    },
+    "fixed-account-api.ts": {
+      "sha256": "7bef9c2210a3c6c5a2a78629eeca5a3e3342976449af3002a19953679926e1bc",
+      "bytes": 17237
+    },
+    "fixed.log": {
+      "sha256": "256b576eb15a7dd64a27024888050291d162b35f325e1ebe6d9fdd1d96a83d4d",
+      "bytes": 462
+    },
+    "original-account-api.ts": {
+      "sha256": "ed644f19a5348be956d98d1c25808b97b9c4717246aac2158afd5c185d539ad2",
+      "bytes": 15606
+    },
+    "original-exit.json": {
+      "sha256": "5cc319f54b05a38799195a491c303aa686eab7caccfdbbf1e8b8c07405cb7392",
+      "bytes": 17
+    },
+    "original-account-api.test.ts": {
+      "sha256": "843a3d4e52df4138504ee3228e0f46449b85c260d4cf001c82de7ca2905d642f",
+      "bytes": 32128
+    },
+    "types-exit.json": {
+      "sha256": "e89df0eae5ec7db81135aed16463968955c578bcc4f2ec43172eff351f080c17",
+      "bytes": 17
+    },
+    "original.log": {
+      "sha256": "0dbc174f935661b26c99351c18197a647698d9a582f131012421107dd6a0de58",
+      "bytes": 9416
+    },
+    "export-ce783.patch": {
+      "sha256": "bebfc9caa0fd23a4026f86ee7da9a370a4ccd7eb5c41697ff82220683d0dcfc0",
+      "bytes": 12869
+    }
+  }
+}

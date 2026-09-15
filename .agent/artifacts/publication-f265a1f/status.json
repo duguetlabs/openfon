@@ -1,0 +1,144 @@
+{
+  "state": "RESIDUAL_METADATA_DOCUMENTATION_CHECKPOINT",
+  "at": "2026-09-15T07:25:27.099968+00:00",
+  "source_head": "30ba767e9e9e89328fc952ebb429d5da5fbe71f0",
+  "published_head": "f265a1f11780c7ad1f6359eadec8e018a90f3ac3",
+  "gateway_assembly_QA": "9c2e822",
+  "metadata_assembly_QA": "8875343",
+  "review_closure": ".agent/artifacts/official-f265-source-contracts/review-closure.json",
+  "review_closure_sha256": "2e475dcc773868982ca91bde39420c10882473a4a3c54839ed2e27a0a96531a0",
+  "disposition_sha256": "1b913ec5f7eb442815b0fd923f6e15a161120b69bad481f091b22a0bd9b1f72c",
+  "grants": "All consumed/released; no new runtime or official grant",
+  "next": "Actual residual metadata candidate/consumer QA and exact assembly closure, then normal publication/readbacks/close-reopen/fresh CI and separately granted unchanged latest-head review.",
+  "prior_coordination_snapshot": {
+    "state": "GATEWAY_ASSEMBLY_CLOSED_METADATA_ASSEMBLY_COMMITTED_QA_PENDING",
+    "head": "f265a1f11780c7ad1f6359eadec8e018a90f3ac3",
+    "prior_remote_head": "d101ff8e8558f3d953c8876f495d5e26cddd6cc7",
+    "branch": "codex/integrated-release",
+    "QA": "14e6d2b",
+    "application_count": 214,
+    "body_sha256": "18b8e7a62515becbfc7a3f1541b81760abe2bf9a260f1bf402be087ab098a85f",
+    "disposition_sha256": "812b9960dbcde44967c13cf535d1b06bec57f2b7a6287dcd414ee6d0b8e93b1c",
+    "disposition_prior_matches": 0,
+    "scope": "Published f265 frozen; distinct scoped-PATH review complete/published/released. Source-only eight-finding assessment selected with existing owners; no remaining grant.",
+    "push": "normal success",
+    "body_readback": "exact",
+    "disposition_comment": 5675196934,
+    "disposition_url": "https://github.com/duguetlabs/openfon/pull/16#issuecomment-5675196934",
+    "disposition_readback": "exact",
+    "at": "2026-09-15T06:49:25.911664+00:00",
+    "close_reopen": "exactly one completed pair; OPEN/head/ref/body readback exact",
+    "CI": [
+      {
+        "id": 34932571197,
+        "jobs": {
+          "browser": "success",
+          "bench-realtime": "success",
+          "bench-scoring": "success",
+          "check": "success",
+          "deploy": "skipped"
+        }
+      },
+      {
+        "id": 34932618256,
+        "jobs": {
+          "browser": "success",
+          "bench-realtime": "success",
+          "check": "success",
+          "bench-scoring": "success",
+          "deploy": "skipped"
+        }
+      }
+    ],
+    "official_grant": "Original4e2failedconsumed/released; new6cd005d6consumed once/complete/released. No remaining grant.",
+    "official_failure": {
+      "QA_commit": "4e5acec",
+      "completion_sha256": "bc0dc7bc20d2455a6983159d77be82436661f716a4e7f3b9735623a2863182f3",
+      "launcher_exit": 0,
+      "elapsed_seconds": 19.603,
+      "reviewer_exit_reported": 1,
+      "reviewer_stderr_bytes_reported": 2926,
+      "reviewer_stderr": "Contents not retained by unchanged launcher; cause unestablished",
+      "review_artifact": false,
+      "publication": false,
+      "coverage": "No new coverage or model-call count established; prior432/430/417 remain historical",
+      "private_records_verified": 10,
+      "private_catalog_sha256": "c8d5451338a677e0ca76a01e749ce2c6a04067bd69deb5ea2227938ae1dc028f",
+      "release": "2026-09-15T05:34:28.858908Z",
+      "release_scope": "Launcher exited/observed absent; retained scoped app/official/uv0 and reserved0; point-in-time/nonexhaustive."
+    },
+    "next": "Existing QA exact metadata4 assembly then final safe documentation/disposition QA. Published f265 unchanged; no runtime/review grant.",
+    "recovery": {
+      "plan_sha256": "5607f903cf241ca7e72119a5449461aad9236789cc41ed1d0ef065b79940062e",
+      "script_sha256": "09939b461b9640dc7697d74b8e445bb3b9b9bcf873d313f48bf14fe0add95a43",
+      "validation_sha256": "8857b28935a2075c06607febd0def8004ba921741d0e2957b029f016ffdc551b",
+      "commands": 4,
+      "exit_codes": [
+        69,
+        1,
+        0,
+        0
+      ],
+      "release": "EXPLICIT_RELEASED",
+      "interpretation": "Current-env Git/GitPython failure reproduced and scoped PATH pair passed; original cause unproved"
+    },
+    "new_attempt_plan": {
+      "sha256": "9d6d1be5b6ab37744f18a5025adbf636db87da963a562ea22bc7c0c9a6f00389",
+      "attempt_id": "f265-path-prefix-1",
+      "environment": "Fresh same-launch-context QA os.environ.copy; only child PATH prefixed. Current baseline Python resolved/pinned before prefix; integration captured PATH never replayed.",
+      "grant": "Consumed once; complete/published/explicitly released. Historical plan retained.",
+      "predecessor_sha256": "eb94b261aa0094f6f04422a0bc40f14691c39611821f428f434a2e0a1d87a3cf",
+      "grant_sha256": "6cd005d6f2eefcc1e453cd4fc95fb9aaf2d1bed256c18489bdda96acc594b4c1"
+    },
+    "official_result": {
+      "attempt_id": "f265-path-prefix-1",
+      "QA": "c243b45",
+      "completion_sha256": "1d15d8a2dc83f688d7be8759c499801f33e06490c4d6b9ced107eb3880c2abb2",
+      "comment": 5675555931,
+      "fullbody_sha256": "eb4efa218290eff8ef72866e6dc723a29c8a686b9b6edc37eea5c74038c44c43",
+      "original_sha256": "137c116caa75e4e9abd33df406847116eb156a48a7a1b60a42e42eac22d0d0ad",
+      "runtime_seconds": 146.1,
+      "launcher_seconds": 149.344,
+      "calls": 8,
+      "chunks": 8,
+      "tokens": 1325877,
+      "ai_seconds": 97.4,
+      "coverage": "497omissions=50listed+447more; prior432/430/417historical",
+      "private_records_verified": 20,
+      "state": "Complete/published unchanged/explicitly released06:07:27Z",
+      "findings": "Security concerns plus8focus titles remain unadjudicated; no clearance"
+    },
+    "source_contract": "source-contracts.md",
+    "source_assessment": "source-assessment-status.json",
+    "gateway_grant_sha256": "828daed0b93fc8fa7b5c1cf5097c860363b7b50163ca9c6cc520e2f39f3cb9b7",
+    "metadata_candidate_manifest": "d17117b0dbc7a3664a00b9065b6831244f6019398db5c8bb93639ae9c136a78d",
+    "gateway_release": {
+      "at": "2026-09-15T06:41:59.064521+00:00",
+      "state": "SOLE_SLOT_EXPLICITLY_RELEASED",
+      "all_five_command_exits": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "owned_link_removed": true,
+      "sampled_process_count": 16,
+      "sampled_remaining": 0,
+      "scoped_process_matches": 0,
+      "reserved_listeners": 0,
+      "nonexhaustive": true,
+      "native_cleanup": "Unmodified script reached PASS and exited zero through finally: Miniflare dispose and temp removal awaited; carrier close attempted with its existing swallowed-error limit. No universal transport/context teardown claim."
+    },
+    "local_head": "cd38b611b408184535c2afde3a5889c77aafbd7b",
+    "published_head": "f265a1f11780c7ad1f6359eadec8e018a90f3ac3"
+  },
+  "prior_snapshot_role": "Historical phase state; preserve receipt facts, current state is top-level.",
+  "final27_assembly_QA": "7242238",
+  "residual_metadata": {
+    "classification_QA": "668cb70",
+    "lineage": ".agent/artifacts/metadata-residual-f265/lineage.json",
+    "scope": "Two fields/five substitutions/three current documents; four historical artifacts unchanged.",
+    "clearance": "None; latest-head security AND major review remains required."
+  }
+}

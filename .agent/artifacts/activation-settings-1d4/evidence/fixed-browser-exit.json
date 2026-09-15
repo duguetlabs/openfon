@@ -1,0 +1,312 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "a87c70406b972aff4390ceaf384a49d6a9945df937e0e2904c913c76cf541c46",
+    "original_bytes": 6559,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "utc": "2026-09-14T18:55:07.945798+00:00",
+  "exit": 0,
+  "duration_seconds": 44.999,
+  "observed_processes": [
+    {
+      "pid": "private-ref:baa9e20c1edd4a67b1cbc0f7a505145c",
+      "ppid": "private-ref:84ee902f1636480abd0207ff2c0f3cdd",
+      "comm": "<defunct>"
+    },
+    {
+      "pid": "private-ref:6b808fc9f56c40b38f60e6929334e231",
+      "ppid": "private-ref:baa9e20c1edd4a67b1cbc0f7a505145c",
+      "comm": "node"
+    },
+    {
+      "pid": "private-ref:cb40f9e3969b40e39d4f083e269875ba",
+      "ppid": "private-ref:6b808fc9f56c40b38f60e6929334e231",
+      "comm": "/bin/sh"
+    },
+    {
+      "pid": "private-ref:c0a67bbb82cb4c8183afd1a3e960c445",
+      "ppid": "private-ref:cb40f9e3969b40e39d4f083e269875ba",
+      "comm": "npm"
+    },
+    {
+      "pid": "private-ref:0c6c2108b9c0422a88f5df5eb85c0cbf",
+      "ppid": "private-ref:c0a67bbb82cb4c8183afd1a3e960c445",
+      "comm": "sh"
+    },
+    {
+      "pid": "private-ref:ae2f2f16e6ad4c10b53ae6056df2c2b2",
+      "ppid": "private-ref:0c6c2108b9c0422a88f5df5eb85c0cbf",
+      "comm": "node"
+    },
+    {
+      "pid": "private-ref:000c08edc90b4fd982c68f14acc23c66",
+      "ppid": "private-ref:ae2f2f16e6ad4c10b53ae6056df2c2b2",
+      "comm": "private-ref:07687e8f399a4b67bf8fdc83b7e5bc5e"
+    },
+    {
+      "pid": "private-ref:22be293199da47ae95ded629fb52d660",
+      "ppid": "private-ref:cb40f9e3969b40e39d4f083e269875ba",
+      "comm": "node"
+    },
+    {
+      "pid": "private-ref:98a943720d7747a99a9781af742c8ac4",
+      "ppid": "private-ref:22be293199da47ae95ded629fb52d660",
+      "comm": "npm"
+    },
+    {
+      "pid": "private-ref:b392447bd6394aad82701f9204570684",
+      "ppid": "private-ref:98a943720d7747a99a9781af742c8ac4",
+      "comm": "node"
+    },
+    {
+      "pid": "private-ref:22038597ac6649a8853c8df338d45d15",
+      "ppid": "private-ref:b392447bd6394aad82701f9204570684",
+      "comm": "private-ref:656082253ae943b38ba5975202b555c2"
+    },
+    {
+      "pid": "private-ref:de12f84854ef40d4b44bd804763fec12",
+      "ppid": "private-ref:22038597ac6649a8853c8df338d45d15",
+      "comm": "(workerd)"
+    },
+    {
+      "pid": "private-ref:22f43066ebe04d64809b77838669f5b6",
+      "ppid": "private-ref:22038597ac6649a8853c8df338d45d15",
+      "comm": "(workerd)"
+    },
+    {
+      "pid": "private-ref:fc199f802f7f46ae81dfa438d98a30bc",
+      "ppid": "private-ref:22038597ac6649a8853c8df338d45d15",
+      "comm": "private-ref:66c8759a7bfd47ab95ddbf5572d4646f"
+    },
+    {
+      "pid": "private-ref:ef4f11df44864b27b35945f3795ce9d4",
+      "ppid": "private-ref:22038597ac6649a8853c8df338d45d15",
+      "comm": "private-ref:66c8759a7bfd47ab95ddbf5572d4646f"
+    },
+    {
+      "pid": "private-ref:6073c7c7e8d14165bdc7a6d61738cc58",
+      "ppid": "private-ref:22be293199da47ae95ded629fb52d660",
+      "comm": "npm"
+    },
+    {
+      "pid": "private-ref:225bbc80ac1140dba1f8ee915721890d",
+      "ppid": "private-ref:6073c7c7e8d14165bdc7a6d61738cc58",
+      "comm": "node"
+    },
+    {
+      "pid": "private-ref:a880927e29c94dbb8df7071f5fa11e93",
+      "ppid": "private-ref:225bbc80ac1140dba1f8ee915721890d",
+      "comm": "private-ref:656082253ae943b38ba5975202b555c2"
+    },
+    {
+      "pid": "private-ref:8142e3a861124bb38c4fe8094ba94b57",
+      "ppid": "private-ref:a880927e29c94dbb8df7071f5fa11e93",
+      "comm": "private-ref:5ee79bb3fe494a48b7c5ff198f82e31f"
+    },
+    {
+      "pid": "private-ref:94a2a65de93e4d63a8b7a4e6d7cb09af",
+      "ppid": "private-ref:a880927e29c94dbb8df7071f5fa11e93",
+      "comm": "private-ref:66c8759a7bfd47ab95ddbf5572d4646f"
+    },
+    {
+      "pid": "private-ref:455b530da61e453cab6c4ca631ecca9f",
+      "ppid": "private-ref:a880927e29c94dbb8df7071f5fa11e93",
+      "comm": "private-ref:5ee79bb3fe494a48b7c5ff198f82e31f"
+    },
+    {
+      "pid": "private-ref:e8a2e747b4754cec9c7f2fb7d348602d",
+      "ppid": "private-ref:a880927e29c94dbb8df7071f5fa11e93",
+      "comm": "private-ref:66c8759a7bfd47ab95ddbf5572d4646f"
+    },
+    {
+      "pid": "private-ref:c56677cb58924c9497c638ab8dc41679",
+      "ppid": "private-ref:6b808fc9f56c40b38f60e6929334e231",
+      "comm": "private-ref:656082253ae943b38ba5975202b555c2"
+    },
+    {
+      "pid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "ppid": "private-ref:c56677cb58924c9497c638ab8dc41679",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:835f28beb1bc47449927c69f0f283889",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:369eec39d97746b09cf149092de16bb8",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:d60ce8461cb24468bd8c8859ff33686c",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:9ad479f6f989486b9f7a402eda955f1e",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:05aef5b95a034a06a28922cbb33402c3",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:574f2e57749e4d6a8a4a55688b6a96ea",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:ee7af7afb26a4573984dd1f2cfcf9e3b",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:a7826d0dd10343a1b32641374fb4c85e",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:161233a26ba2405d99c0a1d54f24be38",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:f97d7ad0ce9a4b3a8378313f19e9f11d",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:41a73929a55545078cf6d05fc8fcf508",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:ca94f418fc6642ca95c23fa0b81ae27c",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:ae47e1ae36ec4244bf23196f30ecf847",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:362420d5d9f24e62bde8fed8e6a5b360",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:5058e3291a9e467882b7036a9b6634a7",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:5e10899c502945d9b817a413b7129577",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "(Google"
+    },
+    {
+      "pid": "private-ref:8893d745fff744ad9798e34e3fad52c1",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "(Google"
+    },
+    {
+      "pid": "private-ref:d5dd66f54351454b8b86c8775850aad3",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "(Google"
+    },
+    {
+      "pid": "private-ref:fff7252deae143d5a69e6d4ac7f87b2f",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:75e375c408104b97b53b62a15a2c69ec",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:c02347f8987044b591f023dbaeb488a2",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:414de36e090e4ab69b7deb83d3603e38",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:3b06774674404ae08f98943990f46edd",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:024d06198c8e4be6844eeac00c2dabe3",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:7cac8544846f42199ac5b9b07b897557",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:993f0f362dd54a4b83a75678c9f720ca",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:38592144abc64362bf46fc7bf599469d",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:9fadc8300ce64feeab935a7b32d56bea",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:741793c1ee3747ca880e7ff43d508082",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    },
+    {
+      "pid": "private-ref:03341c965d5048c29d36735042676e6e",
+      "ppid": "private-ref:cefb25173d8f4a9b89b52832fb3153f5",
+      "comm": "/Applications/Google"
+    }
+  ],
+  "observed_remaining": [],
+  "temp_new_remaining": [
+    "private-ref:fb363427fb8847c8bdd28d9dab9cb9f0"
+  ],
+  "scan": {
+    "utc": "2026-09-14T18:55:07.524885+00:00",
+    "application_processes": [],
+    "reserved_listeners": {},
+    "known_unrelated_preserved": [
+      {
+        "pid": "private-ref:2b310cac29884a5f94a09aeff7e08dbe",
+        "ppid": "private-ref:28c0f0c91c314ec5b1266e68d062d8a0",
+        "comm": "private-ref:1b7d117a1a624a37a427180a96c221f4"
+      },
+      {
+        "pid": "private-ref:28c0f0c91c314ec5b1266e68d062d8a0",
+        "ppid": "private-ref:eec2f7ab9d1141c1b88eb61d53e7288f",
+        "comm": "private-ref:6dede83197694d6d91e7882042209fe5"
+      }
+    ]
+  },
+  "source_after": {
+    "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+    "web/src/pages/Settings.tsx": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af",
+    "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+    "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+  }
+}

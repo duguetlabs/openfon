@@ -1,0 +1,64 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "cd49c1b56de8e4b4cb07c20397708917b4e171f263bff5d6a7edfd0617041ca7",
+    "original_bytes": 2944,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "base": "beec8b70419ddf760b9594b95626f20e1d71d399",
+  "fixture": "private-ref:2da23c28504a48d8b908a440d7abfadc",
+  "files": {
+    "src/account-api.ts": {
+      "original": "7bef9c2210a3c6c5a2a78629eeca5a3e3342976449af3002a19953679926e1bc",
+      "fixed": "ba040d9af67ba3340f994ab4184dfe67831f999bda1f0dfc20d06cfecfb3ecbe"
+    },
+    "test/account-api.test.ts": {
+      "original": "59b0f51f64e84cb3288b89c3526834e3bd89955e61e53adbc96d162930ded60a",
+      "fixed": "147938d73b4c2ebe3fab80bb6cc8c038d6462d23b071fca672fc3b8eb18bef99"
+    },
+    "web/src/pages/Account.tsx": {
+      "original": "316bacfae161f046834c0a5ce95111997621188a449a8f1ac4468a22afe1016e",
+      "fixed": "61ede90a67ffb4c5041c7f600f2f4cda27db52c1d378e1165c1fe7b6a348dfaf"
+    }
+  },
+  "patch": "c30d39ac41a018d058a193988a764e2c760463c781de1c1456cbe9ffd3ef32b9",
+  "validation": {
+    "original": "8FAIL/9PASS/39skip; 1.37s, exit1. Historical first-field and five individually targeted path cases fail at URL assertion; current HTTP stored pair asserted before exported path mismatch; ordinary/Unicode endpoint omission is selected policy negative. No setup failures; failed tests do not reach later DB assertions.",
+    "fixed": "69PASS/2files3.33s exit0; Worker/web types exit0. All source unchanged.",
+    "limits": "Node production handler+SQLite; historical1..15 snapshots separate from current HTTP persisted endpoint. Null/unexpected-type and output-budget tests inject SQL result. No native/browser/provider/descendant/CI claim. DB equality exempts existing export-rate bucket.",
+    "release": "session66535 exited0; fresh process/listener scan no runner or reserved listeners; sole slot RELEASED."
+  },
+  "fixture_correction": "QA source caught five pre-barrier profile seeds using all migrations; before any runner, renamed these cases to existing historical1..15 prefix. Current HTTP PUT retains all migrations. Prior source/test/patch retained; no setup negative claimed.",
+  "evidence": {
+    "original.log": {
+      "sha256": "d87fd725c4fbdcc1f705bf5f5a68f3d4d900172c9fb675a6a5045a017c9cd205",
+      "size": 6484
+    },
+    "fixed.log": {
+      "sha256": "24ead584904d1b0c279779921c104854354937a81e7e98cb21476e201bf8f396",
+      "size": 516
+    },
+    "types.log": {
+      "sha256": "75c97ba8f32dd032ee1e1293129c6bbdd2ff33c240a3223d4b150e23ab19ee29",
+      "size": 104
+    },
+    "exits.json": {
+      "sha256": "eb041d247089627bfaa7253db8e8132017c091acc00ef54ce0bcfc17997b2caf",
+      "size": 566
+    },
+    "export-beec.patch": {
+      "sha256": "c30d39ac41a018d058a193988a764e2c760463c781de1c1456cbe9ffd3ef32b9",
+      "size": 15278
+    },
+    "pre-review-test.ts": {
+      "sha256": "11de2420869ec39a916804467c0cfa05a1e568ccdb1dcaf5e92059b9d6b28a03",
+      "size": 41940
+    },
+    "pre-review.patch": {
+      "sha256": "3148f998b16cf7d13e5a50a544a63803a6268cc89a5b9951c0389f017391ce6b",
+      "size": 15246
+    }
+  }
+}

@@ -1,0 +1,47 @@
+[WebServer] (node:81802) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:82371) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:82403) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:82437) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:84443) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] ▲ [WARNING] Scheduled Workers are not automatically triggered during local development.
+[WebServer] 
+[WebServer]   To manually trigger a scheduled event, run:
+[WebServer]     curl "http://localhost:8812/cdn-cgi/local/scheduled"
+[WebServer]   For more details, see https://developers.cloudflare.com/workers/configuration/cron-triggers/#test-cron-triggers-locally
+[WebServer] 
+[WebServer] 
+
+
+Running 9 tests using 1 worker
+
+(node:84688) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+(node:84688) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/9] e2e/settings-load-error.spec.ts:58:1 › accepted automatic settings read clears only an earlier local load failure and retains drafts
+e2e/settings-load-error.spec.ts:58:1 › accepted automatic settings read clears only an earlier local load failure and retains drafts
+settings-load-diagnostic {"reads":4,"delivered":[1,2,3,4],"loadAlerts":0}
+
+[2/9] e2e/settings-load-error.spec.ts:77:3 › superseded local success cannot change the newer load outcome
+[3/9] e2e/settings-load-error.spec.ts:77:3 › superseded local failure cannot change the newer load outcome
+[4/9] e2e/settings-load-error.spec.ts:111:3 › accepted settings read preserves a newer create refusal with identical error text
+[5/9] e2e/settings-load-error.spec.ts:111:3 › accepted settings read preserves a newer rename refusal with identical error text
+[6/9] e2e/settings-load-error.spec.ts:150:3 › independent accepted settings read retains confirmed apply display recovery
+[7/9] e2e/settings-load-error.spec.ts:150:3 › independent accepted settings read retains confirmed delete display recovery
+[8/9] e2e/settings-load-error.spec.ts:181:1 › independent accepted settings read preserves accepted-write session recovery and baseline
+[9/9] e2e/settings-save-recovery.spec.ts:152:1 › a failed second settings read retains refresh-only recovery
+  9 passed (41.3s)

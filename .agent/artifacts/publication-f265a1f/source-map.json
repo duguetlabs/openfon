@@ -1,0 +1,140 @@
+{
+  "head": "f265a1f11780c7ad1f6359eadec8e018a90f3ac3",
+  "original_sha256": "137c116caa75e4e9abd33df406847116eb156a48a7a1b60a42e42eac22d0d0ad",
+  "comment": 5675555931,
+  "scope": "Source-only contracts; no application/fixture preparation, runtime or official grant",
+  "files": [
+    {
+      "path": "src/call-session.ts",
+      "sha256": "8c884f8a6f39d7db83b22ff40eb9d0233436eb0391866b0701a7a09c2d18b413",
+      "bytes": 109017,
+      "committed_working_equal": true
+    },
+    {
+      "path": "src/providers.ts",
+      "sha256": "8a3b941f17d9d7250cde355b46ed10a90e9bdbc63b85ab14fb012fe50edb5fe7",
+      "bytes": 22076,
+      "committed_working_equal": true
+    },
+    {
+      "path": "src/realtime-providers.ts",
+      "sha256": "341f5dd8e9e825d36d75aac4fd6afcbbf94190811fa02a20c530fba8529c375e",
+      "bytes": 4712,
+      "committed_working_equal": true
+    },
+    {
+      "path": "src/preset-budgets.ts",
+      "sha256": "ce11ac81fae7bc37fe8b69f98aee1229cabced06dea654bd1499660cfff3f252",
+      "bytes": 5350,
+      "committed_working_equal": true
+    },
+    {
+      "path": "src/studio-api.ts",
+      "sha256": "d9266a3bc150dd79379a0b7996aeb60799cfa4713b1fbab1fa55cc9f41ea2b99",
+      "bytes": 101566,
+      "committed_working_equal": true
+    },
+    {
+      "path": "src/telnyx-routes.ts",
+      "sha256": "2351a3bcdca548785d439ae32be2cdfb64be6148e1d1c03a681281b8b2d73c41",
+      "bytes": 8299,
+      "committed_working_equal": true
+    },
+    {
+      "path": "src/telnyx-control.ts",
+      "sha256": "00a3ae80f7c3f79e700a58e58548d8e70f4410b0eea175c0e860e12e9fee845c",
+      "bytes": 25052,
+      "committed_working_equal": true
+    },
+    {
+      "path": "web/src/pages/Onboarding.tsx",
+      "sha256": "b096119ad9d18e36990d0f4363305f664fd5574afe9df8b5e09005e9eff38916",
+      "bytes": 16479,
+      "committed_working_equal": true
+    },
+    {
+      "path": "web/src/pages/Auth.tsx",
+      "sha256": "174c8dac5f11e51e6ccf35cfba67a1a25887af2cf09b93daf886ce8fad230d48",
+      "bytes": 9472,
+      "committed_working_equal": true
+    },
+    {
+      "path": "web/src/App.tsx",
+      "sha256": "50c487e550a0c5940e2714d5800e6a9c877ad5e41a3be4a8b01787e11cf8db16",
+      "bytes": 9090,
+      "committed_working_equal": true
+    },
+    {
+      "path": "web/src/session-load.ts",
+      "sha256": "134a9f64968302007ae2a50ac1934afdf9f87d84d99360d66e1e47dae8e4ed53",
+      "bytes": 3631,
+      "committed_working_equal": true
+    },
+    {
+      "path": "web/src/session-gate.ts",
+      "sha256": "67cdb0d2d8de8ee807d3a2e2c0f434702daac8329032979b0d699cf524e4669d",
+      "bytes": 1506,
+      "committed_working_equal": true
+    },
+    {
+      "path": "vitest.config.ts",
+      "sha256": "530bd3ae03a17ef1b60d63ca7bbceaa4231acf82ae4876151083c0e9c402e519",
+      "bytes": 132,
+      "committed_working_equal": true
+    },
+    {
+      "path": "tsconfig.worker.json",
+      "sha256": "6f1b4cebf4e7ff46b73e2592b01f50d02cb18a2cdfdcb2b0bea413f2199edb05",
+      "bytes": 351,
+      "committed_working_equal": true
+    },
+    {
+      "path": "web/tsconfig.json",
+      "sha256": "057b68f3b622b565c8b242b4150178b1c81cb239ca949adc560fa3a8c2b2a365",
+      "bytes": 346,
+      "committed_working_equal": true
+    },
+    {
+      "path": "playwright.config.ts",
+      "sha256": "8bf932054f22bcc09fa30fed1f3d03b33b82a37282cd26d7cca117b206bdf0d9",
+      "bytes": 718,
+      "committed_working_equal": true
+    },
+    {
+      "path": "vite.config.ts",
+      "sha256": "ffdfcaaf8fa02cf9fed6ec887f06667019b53a33b6a5a034043974e62e954ed2",
+      "bytes": 468,
+      "committed_working_equal": true
+    },
+    {
+      "path": "package.json",
+      "sha256": "baf608b541ac2f7667ec07e062975ac66d08b4201245412c0207e5951942b233",
+      "bytes": 1320,
+      "committed_working_equal": true
+    },
+    {
+      "path": "wrangler.jsonc",
+      "sha256": "0b23bfd315e432d084dec890c163228330c9528149b9bc7f9f36c15657a578ee",
+      "bytes": 2534,
+      "committed_working_equal": true
+    },
+    {
+      "path": ".agent/workstreams/integration.md",
+      "sha256": "6f53c9fa980491e0cfe6de6d9a66260233d219ad3102a23ba80116d7f9a46236",
+      "bytes": 264926,
+      "committed_working_equal": true
+    },
+    {
+      "path": ".agent/artifacts/activation-settings-1d4/fixed-studio-api.txt",
+      "sha256": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+      "bytes": 101685,
+      "committed_working_equal": true
+    },
+    {
+      "path": ".agent/artifacts/telnyx-reason-49df/prepared/test/telnyx-control.test.ts",
+      "sha256": "e72ab0cafde73700880f7483b3076e70c21edf54d3a7787cb015ae3c1587a7c9",
+      "bytes": 61703,
+      "committed_working_equal": true
+    }
+  ]
+}

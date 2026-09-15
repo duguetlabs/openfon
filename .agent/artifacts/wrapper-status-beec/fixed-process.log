@@ -1,0 +1,40 @@
+Derived public evidence; not original raw output. Historical hashes identify the privately retained original bytes.
+Original SHA256: a176502aaea7b32eea1815af4ba343d9a0145463e0020da293bc15ab6b7e109b
+Original bytes: 5185
+Ordered extracted numeric result fields (not an inferred final result):
+[
+  {
+    "tap_field": "tests",
+    "value": "13"
+  },
+  {
+    "tap_field": "suites",
+    "value": "0"
+  },
+  {
+    "tap_field": "pass",
+    "value": "13"
+  },
+  {
+    "tap_field": "fail",
+    "value": "0"
+  },
+  {
+    "tap_field": "cancelled",
+    "value": "0"
+  },
+  {
+    "tap_field": "skipped",
+    "value": "0"
+  },
+  {
+    "tap_field": "todo",
+    "value": "0"
+  },
+  {
+    "tap_field": "duration_ms",
+    "value": "613.2165"
+  }
+]
+First-assertion, runtime and cleanup scope remains governed by associated historical validation manifests and original evidence. An empty extraction is unknown, never a passing result. No new or later failed-case assertions are inferred.
+Catalog: .agent/artifacts/metadata-hygiene-49df/derivation.json

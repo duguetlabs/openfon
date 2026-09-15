@@ -1,0 +1,98 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "97543f31084138e1e999b3b2f78e77cc074f48601aef48c5db5924df41a8b764",
+    "original_bytes": 3267,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "base": "1d4b73331353ecacf07b46ce9d186c032a04fc51",
+  "patchSha256": "9fae38ff11c6fb143c506f098fbccd811419e8dfe48238e831234041d991cb7a",
+  "sessions": {
+    "inverse-original": 87523,
+    "inverse-fixed": 1202,
+    "natural-fixed": 31383
+  },
+  "results": {
+    "inverse-original": {
+      "exit": 1,
+      "failed": 3,
+      "skipped": 12,
+      "durationMs": 6380,
+      "classification": "Expected finite wrong-owner assertions undefined vs200/503/401 after owner15 matched responses; no setup/body/test timeout or cleanup failure observed; later refill assertions unclaimed"
+    },
+    "inverse-fixed": {
+      "exit": 0,
+      "passed": 3,
+      "skipped": 12,
+      "durationMs": 3230
+    },
+    "natural-fixed": {
+      "exit": 0,
+      "passed": 3,
+      "skipped": 12,
+      "durationMs": 893
+    }
+  },
+  "release": "All three command processes exited, temporary validation snapshots/symlink removed, natural prepared snapshot restored, fresh scans empty. SOLE SLOT RELEASED.",
+  "limits": "Instrumented inverse original-algorithm fixture proof, not exact historical CI replay or exclusive cause. Real crypto in dispatch; mocked verify in crypto-held. Prior207/native2PASS2UNAVAILABLE and failed1468/1 vs passed1469 CI unchanged. No types/native/other suites/retries/source edits.",
+  "evidence": {
+    "inverse-fixed.exit": {
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    "inverse-fixed.log": {
+      "sha256": "3bdd63a2dd1c46500d5e29d0f94fb780bd396de1e82977b22853ba9ed79f4d4e",
+      "bytes": 261
+    },
+    "inverse-fixed.run.json": {
+      "sha256": "3004a1af0a9d8f4e1dc36aa8a0b861761c38feb265607bc4e8ba63851ed717b2",
+      "bytes": 507
+    },
+    "inverse-original.exit": {
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "bytes": 2
+    },
+    "inverse-original.log": {
+      "sha256": "fc82c8bed6d275b79d2486561e98e37269077cbd20e225b7983e81a187bb4eeb",
+      "bytes": 7334
+    },
+    "inverse-original.run.json": {
+      "sha256": "e91290be7fa267a591ff4f02741bb02fae19e52d329bda19fc6e2af5d9b7159a",
+      "bytes": 510
+    },
+    "natural-fixed.exit": {
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    "natural-fixed.log": {
+      "sha256": "ef2b4d7e3d0a99b1e733d95500bd7ec233fa3e50e0588b459517a2a75c785f8a",
+      "bytes": 255
+    },
+    "natural-fixed.run.json": {
+      "sha256": "1ca5ca73f886b1f23808a3d03be0dd68d8249628d9ac3222d028f50d6ee03238",
+      "bytes": 501
+    },
+    "original-observations.json": {
+      "sha256": "05da11471b96a70eb86260b0932bfac7c662961992736711da091ecc26041777",
+      "bytes": 6249
+    },
+    "preflight.json": {
+      "sha256": "74785860e76b202d190fc0c0a8b4eec57159143e0fd858b33a09a9e3c0d5def9",
+      "bytes": 127
+    },
+    "release-scan.json": {
+      "sha256": "c2b51f1d757524d01ae6b11bead24a1559916527748e686c5f7c390be1d6be3e",
+      "bytes": 1055
+    },
+    "run-identity.json": {
+      "sha256": "e94ff60abb13324deca3d2f7c2e3de56523f3516a848afe353e8c79aa52228e4",
+      "bytes": 1157
+    },
+    "source-after.json": {
+      "sha256": "43bbe9e60a43993c0d0f19f53a16a666ecaa94c296ed2125ed91e0fe66d0797b",
+      "bytes": 645
+    }
+  }
+}

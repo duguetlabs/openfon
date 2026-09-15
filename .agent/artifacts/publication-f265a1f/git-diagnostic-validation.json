@@ -1,0 +1,169 @@
+{
+  "state": "FOUR_SELECTED_DIAGNOSTICS_COMPLETE_RELEASED_INDEPENDENT_QA_PENDING",
+  "head": "f265a1f11780c7ad1f6359eadec8e018a90f3ac3",
+  "plan_sha256": "5607f903cf241ca7e72119a5449461aad9236789cc41ed1d0ef065b79940062e",
+  "script_sha256": "09939b461b9640dc7697d74b8e445bb3b9b9bcf873d313f48bf14fe0add95a43",
+  "source_QA": "dc83e3a",
+  "commands": [
+    {
+      "label": "baseline-git-version",
+      "exit_code": 69,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "411522ec89779639df259fa9f595942811c505c31bc2eb85696023376304b203",
+      "stdout_bytes": 0,
+      "stderr_bytes": 178
+    },
+    {
+      "label": "baseline-gitpython-import",
+      "exit_code": 1,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "00ddef6c6178f240eb8ff73d360dfa7c567e47ac26cf7607f1e9317f42018509",
+      "stdout_bytes": 0,
+      "stderr_bytes": 2436
+    },
+    {
+      "label": "prefixed-git-version",
+      "exit_code": 0,
+      "stdout_sha256": "2aa6da9ca331dc6de6fe72460146b9d1ebc22c8df24f3eb2a4c4f7c3c41b93ca",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 35,
+      "stderr_bytes": 0
+    },
+    {
+      "label": "prefixed-gitpython-import",
+      "exit_code": 0,
+      "stdout_sha256": "36b7fc71fbaf9e01df12e0eff369cf427b3f0854854255bb534e7e5655c36873",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 48,
+      "stderr_bytes": 0
+    }
+  ],
+  "controller_seconds": 1.417,
+  "result": "Baseline current PATH: git-version exit69/Xcode-license stderr178bytes; isolated GitPython import exit1/2436bytes with license/Git.refresh/version/Failed-to-initialize trace. Scoped CommandLineTools PATH prefix: git-version exit0 (2.54.0 Apple Git-157), isolated GitPython3.1.59 import exit0/git_oktrue, both stderr0.",
+  "environment": "Only PATH differs between two credential-free projections of current integration environment. DEVELOPER_DIR omitted as launcher; no credentials/Git/Python overrides. Historical QA PATH not established.",
+  "limits": "Current isolated-S explicit-site Git/GitPython reproduction; no full reviewer/PR-Agent import or network inference. Original2926stderr unavailable; neither content nor original cause proved. No original model-call/coverage inference.",
+  "preflight": "Initial load-average threshold assertion stopped before diagnostic execution; current CPU idle25percent and empty scans supported short serial run; root clarified no hard load-average gate. Earlier initial scan not retained, incident transcript-derived.",
+  "release": {
+    "state": "EXPLICIT_RELEASED",
+    "at": "2026-09-15T05:53:36.596310+00:00",
+    "four_comparison_commands_exited": true,
+    "controller_exit": 0,
+    "sampled_processes_absent": 4,
+    "sampling": "250ms nonexhaustive",
+    "application_official_uv_diagnostic_matches": 0,
+    "reserved_listeners": 0,
+    "runtime522_and_directGit_unchanged": true,
+    "application214_unchanged": true,
+    "cleanup": "No dependency link/install/global/license/source/settings/wrapper change or process termination performed",
+    "official_retry": "Not granted; prior failed official grant remains consumed"
+  },
+  "private_records": [
+    {
+      "name": "comparison/baseline-git-version.receipt.json",
+      "sha256": "e80c664ad7e0f5207a2e0ae201bd14b5fde763ab92070250bbc8d52978a2d1fd",
+      "bytes": 393
+    },
+    {
+      "name": "comparison/baseline-git-version.stderr",
+      "sha256": "411522ec89779639df259fa9f595942811c505c31bc2eb85696023376304b203",
+      "bytes": 178
+    },
+    {
+      "name": "comparison/baseline-git-version.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "name": "comparison/baseline-gitpython-import.receipt.json",
+      "sha256": "3adc1436372df3ac45e2c99865db223e725f8918156b66f5c1b76f6caf88e240",
+      "bytes": 896
+    },
+    {
+      "name": "comparison/baseline-gitpython-import.stderr",
+      "sha256": "00ddef6c6178f240eb8ff73d360dfa7c567e47ac26cf7607f1e9317f42018509",
+      "bytes": 2436
+    },
+    {
+      "name": "comparison/baseline-gitpython-import.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "name": "comparison/catalog.json",
+      "sha256": "51ff143854c89bfc8b09a68e60ff84ea52243e259e2db8a71c6b6ccdc5189c78",
+      "bytes": 2313
+    },
+    {
+      "name": "comparison/environment-private.json",
+      "sha256": "5360918b9f6ad9619d6eb883103ad97ad239ba79dace73cd074e98b08d22220e",
+      "bytes": 2980
+    },
+    {
+      "name": "comparison/prefixed-git-version.receipt.json",
+      "sha256": "30d91050981ffee18b1ac0c51a65a2adf0e79e414bb09b160840af89a8a3a78b",
+      "bytes": 391
+    },
+    {
+      "name": "comparison/prefixed-git-version.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "name": "comparison/prefixed-git-version.stdout",
+      "sha256": "2aa6da9ca331dc6de6fe72460146b9d1ebc22c8df24f3eb2a4c4f7c3c41b93ca",
+      "bytes": 35
+    },
+    {
+      "name": "comparison/prefixed-gitpython-import.receipt.json",
+      "sha256": "83ed4abe380f9eecc4d43766b01d3d9edc050ce017bd6c273fede1591ac4cd5e",
+      "bytes": 894
+    },
+    {
+      "name": "comparison/prefixed-gitpython-import.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "name": "comparison/prefixed-gitpython-import.stdout",
+      "sha256": "36b7fc71fbaf9e01df12e0eff369cf427b3f0854854255bb534e7e5655c36873",
+      "bytes": 48
+    },
+    {
+      "name": "comparison/summary-private.json",
+      "sha256": "454cfea342fd7727deda7713b65d3b1997b2d8444490b34b583b27159fe4dc77",
+      "bytes": 3118
+    },
+    {
+      "name": "controller-receipt.json",
+      "sha256": "16135312453380931e767046a58a7bf10e8f5aeff0dcca2279fb4215a5b01e46",
+      "bytes": 479
+    },
+    {
+      "name": "controller.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "name": "controller.stdout",
+      "sha256": "485e93bb84d0cfca907a815c26a72258025214d4397b58490f978f4171589791",
+      "bytes": 103
+    },
+    {
+      "name": "postflight.json",
+      "sha256": "fb15a522dbd8eb7c76129e928e2565e7afb57939dae8ec9cd97f5106d4830ad9",
+      "bytes": 217835
+    },
+    {
+      "name": "preflight.json",
+      "sha256": "c21340d098fb7198357fd88d17c24eeb8ab2387f5008f39a007944ced856a697",
+      "bytes": 221209
+    },
+    {
+      "name": "release.json",
+      "sha256": "6f51e13830e5b7513fdc9e0151629cfc5a69ba9b9ce458d9c2bf6948aecd670f",
+      "bytes": 579
+    }
+  ],
+  "private_catalog_sha256": "2ffc38e5572e148770015cf689c7db5be431f5a024d39b67989dd2dedaefd8e1",
+  "next": "Existing QA actual evidence review. No official retry,settings/wrapper/PATH-global change or new inference granted."
+}

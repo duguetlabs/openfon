@@ -1,0 +1,66 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "ab66282c745c75911cd94aab1bf98d4257a531425419af1dd8177810ab39f912",
+    "original_bytes": 3176,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "base": "ddce0bde6c16633541dc65811fbb833865c7af2a",
+  "snapshot": "private-ref:014c9b6a82b04164a850cadaa90a918d",
+  "status": "PREPARED_UNEXECUTED",
+  "files": {
+    "src/telnyx-routes.ts": {
+      "baseSha256": "2719a06b2c1ca1d951943685792cc03b08689304073be6b13c664d5a600c6770",
+      "preparedSha256": "2351a3bcdca548785d439ae32be2cdfb64be6148e1d1c03a681281b8b2d73c41",
+      "bytes": 8299
+    },
+    "src/telnyx-webhook-admission.ts": {
+      "baseSha256": null,
+      "preparedSha256": "fc043545b374aa6b6d378faf64a51006df6bfb9ebc752535dcaa62807c777e24",
+      "bytes": 1925
+    },
+    "test/telnyx-webhook-admission.test.ts": {
+      "baseSha256": null,
+      "preparedSha256": "13656346a7cc67bf39015b3ba791f403baed0e997d959d98c48aad45db76aa36",
+      "bytes": 12909
+    },
+    "scripts/telnyx-webhook-admission-smoke.mjs": {
+      "baseSha256": null,
+      "preparedSha256": "74ca3bddbb182240ac333bfa0d9df61bf4d386c84e4cef83c6fb1e531df65b00",
+      "bytes": 13439
+    }
+  },
+  "protected": {
+    "src/index.ts": "2497393f1c491097f8d033825a42dd70cdac19b37e7d288e1967c9b210af1629",
+    "src/call-session.ts": "8c884f8a6f39d7db83b22ff40eb9d0233436eb0391866b0701a7a09c2d18b413",
+    "src/telnyx-control.ts": "213038b7acd1660664014ad2067ca01d770097f6ba02ce8bc638e186658b4f32",
+    "src/telnyx-admission.ts": "259de6b3f8eb3d6787e1d6a7bce2e23fbca461fdcaf90a357ef1486335b2bc63",
+    "src/telnyx-media.ts": "e34f6146cf35e17f3bbc76baec61e2b647f8aa3e668bc8b8146dcd9dc6a59740",
+    "src/telnyx-media-admission.ts": "7bb30b1b06467197dac366e357d9f4687fbdd46b38048fe159663e59a881f265",
+    "src/asterisk-control.ts": "f6e314bf97f70de409a0af56640bc73585a202a785f6377337183a39ac1a24d9",
+    "src/asterisk-media.ts": "89b7448be299211ec7a016e96b4cdc0be58b4640f7cf501780c9888f1be2a583",
+    "src/provider-response.ts": "7dba2fa2361876a813580fe1fb4d1b45b1ec42525977a52a2ba469e21db09bad",
+    "test/call-session.test.ts": "7435aa9e536147439b3e5a7c420f8cd05883248364511c7d722116ecfa9af5a2",
+    "test/telnyx-control.test.ts": "a206d723ee2cd6a4a0adebbc0a9630cb19a6ce2c16151876692f5bd96b08e515",
+    "test/telnyx-webhook.test.ts": "1bb49b27e9788f0a6ad338a57b7675a1258fafb551a3efea62b2a45b1e68eca5",
+    "wrangler.jsonc": "0b23bfd315e432d084dec890c163228330c9528149b9bc7f9f36c15657a578ee"
+  },
+  "priorWebhook": {
+    "src/telnyx-webhook.ts": "fba2355f23073ae5fdaa2ae4f4d056cb4e27dca67c49dad18c7f3c15d66a97e5",
+    "test/telnyx-body.test.ts": "b011204d5a0ba4d337a81d60c6af0f45ecf06aa77e1ba3042b9ee8077d16147d",
+    "scripts/telnyx-webhook-body-smoke.mjs": "9f72687219dce66c46c84424984b4c174722b44ef0a804e8945bc1576abdf7cc"
+  },
+  "existingFileCount": 912,
+  "existingChanges": [
+    "src/telnyx-routes.ts"
+  ],
+  "patchSha256": "1dc6fc61d41cf0a7af5a78c07be61474f947521053bdfd3ea452defe7064a1e4",
+  "preReview": {
+    "fixtureSha256": "4a54a6195e818bdd33c551057c961ea3381d69d38ce101120cedd38b78b3a3cf",
+    "patchSha256": "8a6052717f652558cf50a14e95f032506480f09369d2b2141455e13dedad5dcc",
+    "manifestSha256": "b132b0b9ff5df52c25e25a1804617d176c97573be7db5902a923474282c94c4a",
+    "reason": "QA76a25da literal missing closing brace; source-only discovery, no observed execution failure."
+  }
+}

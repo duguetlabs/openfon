@@ -1,0 +1,58 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "2edcd048a89bd6afb50938298f2525cb145929d30f4446bad1f08ac80e861c60",
+    "original_bytes": 3505,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "base": "1d4b73331353ecacf07b46ce9d186c032a04fc51",
+  "source_manifest_sha256": "004c1bb7df0a2b612638f243026ea16f81502605622162719eebe80c6c8a5cee",
+  "patch_sha256": "cec5836362daf3153e74c93351d4cd36ec6af95fe059b13129b13626200cec4d",
+  "results": {
+    "original": {
+      "pass": 3,
+      "fail": 9,
+      "exit": 1,
+      "duration_ms": 7777.916042
+    },
+    "fixed": {
+      "pass": 12,
+      "fail": 0,
+      "exit": 0,
+      "duration_ms": 5278.917708
+    },
+    "syntax-wrapper": {
+      "exit": 0
+    },
+    "syntax-test": {
+      "exit": 0
+    }
+  },
+  "attribution": [
+    "Original real case1 fails first watchdog assertion true versus undefined. Preassertion7503ms, SIGTERM senttrue/receipt, childAlive/stateExists true, no worker exit/error/provider-close/state-removal event, empty stderr.",
+    "Fixed real case1 wrapper code1 after5018ms, childAlive/stateExists true, accepted/received SIGTERM, provider-close stub event and explicit PID/state/exit-unconfirmed diagnostic; no worker exit/error/state-removal. Test-only reap occurs afterward.",
+    "Original controls2/3/8 pass: real graceful numeric7, real noPID ENOENT, synthetic terminal-error cleanup.",
+    "Original synthetic4/5 fail first provider-close count0vs1; diagnostics record state removal1 but later retained-state assertions not reached. Case6 fails thrown-error-vs-undefined before retention; case7 fails no status vs1; case9 fails no status vs7.",
+    "Original synthetic10..12 fail first missing-timer0vs1; later second-signal/expiry/race assertions not executed. Fixed full assertions pass, although cases10..12 diagnostics deliberately capture first-request state before later assertions.",
+    "Three real process fixtures use exact lifecycle tail, deliberate held-signal child, provider-close stub and real directory (not D1 engine). Nine synthetic lexical clock/events/exit-stub controls do not prove real failed-signal producer.",
+    "No injected provider.close/rm exceptions tested; adjacent cleanup-exception behavior has source review only.",
+    "No actual npx/workerd/capture/browser/provider/types/native/inference, old10/15/13 replay, descendant cleanup/whole-command/earlier-browser guarantee.",
+    "No edits/retries during runs; protected27 are base Git identities and fixture has no copied recordings."
+  ],
+  "release": "Sole slot RELEASED after all four commands and observed14PIDs exited, fresh matching process/reserved-listener/temp scans empty.",
+  "evidence_sha256": {
+    "after.json": "f142ae6502731f4ed76a9a3f3ea9ff8faef3f67f6edf471bb7e1a8508136f069",
+    "before.json": "3f4ae00334ef2c506ab1c1e4c4446d948ad028f788fb4fb6bc2848165afac30a",
+    "diagnostics.json": "f31041ab30f6d46bff2aa0ef243b88dc27d3b13ef1f3b8733d70064aa68913d3",
+    "fixed-command.json": "82e5d6fdee5e86a2498b2708bd350ee498070e9db93d839932de4c3056c25241",
+    "fixed.log": "a7ba1e3def9ef05f0597f174e5f93b07ca92182f466af6b56f6ed651724aac8d",
+    "original-command.json": "22613e2ba89c520b06351c28ab0df0e9c33cdb60e4f69dd19ee8abf7d2fc60c1",
+    "original.log": "44087075eab9cdd2bd161aafc7fb148fa06db8739ffa735d2af531f79fb27d10",
+    "syntax-test-command.json": "24b27320f6bd7144089a823753a629fe7a2607f7c95b05ccbcc82c173f2520f8",
+    "syntax-test.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "syntax-wrapper-command.json": "e20fa29d3f6509302d3ea156b565532b7a3c11bc224d1f002c5ee97cad1d5d5d",
+    "syntax-wrapper.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

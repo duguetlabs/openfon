@@ -22,12 +22,64 @@ interface Faq {
   a: string;
 }
 
-function parse<T>(json: string, fallback: T): T {
+export interface PromptKnowledgeItem {
+  kind: 'faq' | 'service' | 'note';
+  title: string;
+  question: string;
+  answer: string;
+  content: string;
+}
+
+function parseRows<T>(json: string, valid: (value: unknown) => value is T): T[] {
   try {
-    return JSON.parse(json) as T;
+    const value: unknown = JSON.parse(json);
+    return Array.isArray(value) ? value.filter(valid) : [];
   } catch {
-    return fallback;
+    return [];
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function optionalString(value: unknown): boolean {
+  return value === undefined || typeof value === 'string';
+}
+
+function isHours(value: unknown): value is Hours {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.day === 'string' &&
+    typeof value.open === 'string' &&
+    typeof value.close === 'string' &&
+    (value.closed === undefined || typeof value.closed === 'boolean')
+  );
+}
+
+function isClosure(value: unknown): value is Closure {
+  return isRecord(value) && typeof value.date === 'string' && optionalString(value.reason);
+}
+
+function isService(value: unknown): value is Service {
+  return (
+    isRecord(value) &&
+    typeof value.name === 'string' &&
+    Boolean(value.name.trim()) &&
+    optionalString(value.price) &&
+    optionalString(value.duration) &&
+    optionalString(value.notes)
+  );
+}
+
+function isFaq(value: unknown): value is Faq {
+  return (
+    isRecord(value) &&
+    typeof value.q === 'string' &&
+    Boolean(value.q.trim()) &&
+    typeof value.a === 'string' &&
+    Boolean(value.a.trim())
+  );
 }
 
 // LLMs cannot reliably map dates to weekdays, so pre-compute a calendar:
@@ -54,16 +106,26 @@ export function buildCalendar(hours: Hours[], closures: Closure[], now: Date, ti
   return lines.join('\n');
 }
 
-export function buildSystemPrompt(biz: Business, settings: AgentSettings, now: Date): string {
-  const hours = parse<Hours[]>(biz.hours_json, []);
-  const services = parse<Service[]>(biz.services_json, []);
-  const faqs = parse<Faq[]>(biz.faqs_json, []);
+export function buildSystemPrompt(
+  biz: Business,
+  settings: AgentSettings,
+  now: Date,
+  knowledge?: PromptKnowledgeItem[]
+): string {
+  const hours = parseRows(biz.hours_json, isHours);
+  const services: Service[] = knowledge
+    ? knowledge.filter((item) => item.kind === 'service').map((item) => ({ name: item.title, notes: item.content }))
+    : parseRows(biz.services_json, isService);
+  const faqs = knowledge
+    ? knowledge.filter((item) => item.kind === 'faq').map((item) => ({ q: item.question, a: item.answer }))
+    : parseRows(biz.faqs_json, isFaq);
+  const notes = knowledge?.filter((item) => item.kind === 'note') ?? [];
 
   const hoursText = hours.length
     ? hours.map((h) => `${h.day}: ${h.closed ? 'CLOSED' : `${h.open}–${h.close}`}`).join('\n')
     : 'Not specified.';
   const closedDays = hours.filter((h) => h.closed).map((h) => h.day);
-  const closures = parse<Closure[]>(biz.closures_json ?? '[]', []);
+  const closures = parseRows(biz.closures_json ?? '[]', isClosure);
   let calendarText = '';
   try {
     calendarText = buildCalendar(hours, closures, now, biz.timezone || 'UTC');
@@ -89,6 +151,9 @@ export function buildSystemPrompt(biz: Business, settings: AgentSettings, now: D
         .join('\n')
     : 'Not specified.';
   const faqText = faqs.length ? faqs.map((f) => `Q: ${f.q}\nA: ${f.a}`).join('\n\n') : 'None provided.';
+  const notesText = notes.length
+    ? notes.map((item) => `- ${item.title ? `${item.title}: ` : ''}${item.content}`).join('\n')
+    : 'None provided.';
 
   return `You are ${settings.agent_name}, the phone receptionist for ${biz.name}. You are ${settings.persona}. You are on a live voice call with a caller — your replies are spoken aloud.
 
@@ -114,6 +179,9 @@ ${servicesText}
 
 FAQ:
 ${faqText}
+
+OTHER APPROVED KNOWLEDGE:
+${notesText}
 
 BEHAVIOR:
 - Answer questions using only the facts above. If you don't know, say so and offer to take a message.
@@ -157,8 +225,10 @@ const VOCAB_CARRIERS: Record<string, string> = {
   ru: 'Телефонный звонок по поводу: ',
 };
 
-export function sttVocab(biz: Business, settings: AgentSettings): string {
-  const services = parse<Service[]>(biz.services_json, []).map((s) => s.name);
+export function sttVocab(biz: Business, settings: AgentSettings, knowledge?: PromptKnowledgeItem[]): string {
+  const services = knowledge
+    ? knowledge.filter((item) => item.kind === 'service').map((item) => item.title)
+    : parseRows(biz.services_json, isService).map((s) => s.name);
   const parts = [biz.name, settings.agent_name, ...services, biz.address];
   const carrier = VOCAB_CARRIERS[settings.language] ?? VOCAB_CARRIERS.en;
   return (carrier + parts.filter(Boolean).join(', ')).slice(0, 400);

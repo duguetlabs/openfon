@@ -1,0 +1,22 @@
+{
+  "selected_at": "2026-09-15T04:59:32.399204+00:00",
+  "status": "SOURCE_FIXTURE_PREPARATION_ONLY_NO_RUNTIME",
+  "QA_basis": "bb4ccc8",
+  "published_head": "d101ff8e8558f3d953c8876f495d5e26cddd6cc7",
+  "integration_head": "f82a656aeb4ab2d25580fb43e1ce52c709eaca7f",
+  "runtime": "No parser/import/tests/types/native/browser/provider/inference/dependency action or shared source application. Actual artifact QA and separate bounded selection required.",
+  "owner": "existing presets owner",
+  "contract_sha256": "b6a822c2a9a0eaf2c6de9075019ad0809bb10e8409430969bc917cd832c4ba3e",
+  "current_contract_sha256": "d937cef248f5d155eb8dc41c08ba2e5b9d9f23884951a9f5a854165ece442228",
+  "contract_lineage": "56f9f80 changes only historical Piper slot sentence; substantive d60c7cd contract unchanged, exact diff inspected",
+  "candidate_base": "exact current f82a656; preserve all four closed PUT targets",
+  "scope": [
+    "Only four adjacent POST response reads in src/studio-api.ts: collection,item,draft-from-turn,engine-preset",
+    "INSERT RETURNING in one-statement batch for collection/item/draft; first INSERT RETURNING in unchanged full preset pair; await full batch before201",
+    "New bounded API/native fixtures; exact count/argv proposal before runtime; no adapter/migration/UI/ack-only PUT/Apply/assistant CREATE changes",
+    "Retain collection same-name409; item/draft conditional+1 retry; preset+2/398final/399read-only; foundation baseline and ownership/default/source-reference/credential-empty mirror semantics",
+    "Capture original first failures/full persisted state/explicit retry before assertion; actual returned rows/defaults; route quotas; meaningful earlier foundation baseline",
+    "Novel native returned rows/batch shapes plus row-dependent late mirror execution fault and quota-before-batch second-insert rollback/full snapshots"
+  ],
+  "exclusions": "No new zero-row409,mirror gating,deduplication,policy,transport-loss idempotency or broad/browser/closed PUT/CREATE/0021 replay; patch only, no stale handlers."
+}

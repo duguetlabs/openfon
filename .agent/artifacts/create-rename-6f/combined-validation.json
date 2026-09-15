@@ -1,0 +1,96 @@
+{
+  "status": "COMPLETE_EXPLICIT_RELEASED",
+  "head": "e47ea7b5778b0459d7440c5161e282820e3c88d9",
+  "QA_assembly": "571d65c",
+  "command": [
+    "npx",
+    "--no-install",
+    "vitest",
+    "run",
+    "test/account-api.test.ts",
+    "test/activation-state.test.ts",
+    "test/assistant-budget.test.ts",
+    "test/assistant-create-provider-race.test.ts",
+    "test/assistant-lost-update.test.ts",
+    "test/assistant-provider-compatibility.test.ts",
+    "test/asterisk-control.test.ts",
+    "test/asterisk-credentials.test.ts",
+    "test/asterisk-route-security.test.ts",
+    "test/call-filters.test.ts",
+    "test/call-knowledge.test.ts",
+    "test/call-session.test.ts",
+    "test/engine-preset-providers.test.ts",
+    "test/knowledge-budget.test.ts",
+    "test/knowledge-concurrency.test.ts",
+    "test/knowledge-input-boundaries.test.ts",
+    "test/knowledge-tenant-guards.test.ts",
+    "test/legacy-activation.test.ts",
+    "test/legacy-profile-engine.test.ts",
+    "test/preset-budget.test.ts",
+    "test/preset-concurrency.test.ts",
+    "test/provider-activation-instance.test.ts",
+    "test/provider-credential-barrier.test.ts",
+    "test/provider-draft-snapshot.test.ts",
+    "test/provider-foundation-repair.test.ts",
+    "test/provider-presets.test.ts",
+    "test/provider-switch-runtime.test.ts",
+    "test/provider-write-races.test.ts",
+    "test/public-ticket-active-race.test.ts",
+    "test/studio-api.test.ts",
+    "test/telnyx-admission.test.ts",
+    "test/telnyx-control.test.ts",
+    "test/test-call-cancellation.test.ts",
+    "test/voice-catalog.test.ts",
+    "--maxWorkers=1",
+    "--reporter=verbose"
+  ],
+  "actual_summary": [
+    "Test Files  34 passed (34)",
+    "Tests  979 passed (979)",
+    "Duration  16.44s (tests 82%, import 12%, transform 5%)"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 20.799,
+  "existing_consumer_files": 34,
+  "source_paths_unchanged": 209,
+  "observed_process_count": 33,
+  "observed_processes_absent": true,
+  "sampling_limit": "250ms nonexhaustive command descendant sampling",
+  "final_application_official_matches": 0,
+  "final_reserved_listeners": 0,
+  "released_at": "2026-09-14T22:22:29.466653+00:00",
+  "private_evidence": [
+    {
+      "role": "preflight.json",
+      "sha256": "4a3b8de32697310fa072ca8f3d849d50759efbe70cc2eeb71de0071c433f8676",
+      "bytes": 83
+    },
+    {
+      "role": "launch.json",
+      "sha256": "a12c0a0dacbe1640780c84fa0b930a86a3a177b2626288e479672b6735835e78",
+      "bytes": 1614
+    },
+    {
+      "role": "stdout.log",
+      "sha256": "18fae4fa47ff3b011b27fed5a761f1f05721e6f1505c8ef1488cb0e532767b21",
+      "bytes": 277726
+    },
+    {
+      "role": "stderr.log",
+      "sha256": "1ba2ce85d72b94c9cb538ea5eac5d802c2b7cc8340dd1c95df5332ee3bf407c2",
+      "bytes": 109366
+    },
+    {
+      "role": "exit.json",
+      "sha256": "959c0087b1f74331a71e024d1d4cf763ea04d0b1098951b1b8f6ad58b25c9b7d",
+      "bytes": 667
+    },
+    {
+      "role": "release.json",
+      "sha256": "c425a107daf1b5680fc8a841d5fe276f33e03370884184e901a111fbc4351bdc",
+      "bytes": 539
+    }
+  ],
+  "reuse": "Owner new8/types/native5/browser8 retained without replay",
+  "limits": "One34direct-consumer fixed-source run; no exhaustive dynamic/future consumer, native/HTTP/provider or original/fixed replay claim. No source edits/retry/timeout increase."
+}

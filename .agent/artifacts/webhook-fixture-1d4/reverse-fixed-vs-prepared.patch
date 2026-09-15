@@ -1,0 +1,34 @@
+--- a/test/telnyx-webhook-admission.test.ts
++++ b/test/telnyx-webhook-admission.test.ts
+@@ -120,9 +120,29 @@
+ }
+ 
+ async function startSignedBatch<T>(fixtures: SignedFixture<T>[], boundary: ReturnType<typeof signedBoundary<T>>) {
+-  const owners = fixtures.map(f => ({ ...f, ...start(f.request) }));
+-  await boundary.wait(16);
++  // Instrumented schedule, not natural HTTP/crypto completion timing.
++  const controllers: ReadableStreamDefaultController<Uint8Array>[] = [];
++  const startedAt = Date.now();
++  const owners = fixtures.map(f => {
++    const body = new ReadableStream<Uint8Array>({ start(controller) {
++      controllers.push(controller);
++      cleanup.push(() => { try { controller.error(Error('reverse fixture cleanup')); } catch {} });
++    } });
++    const request = new Request(f.request.url, { method: 'POST', headers: f.request.headers, body, duplex: 'half' } as RequestInit);
++    return { ...f, ...start(request) };
++  });
+   expectAllHeld(owners);
++  for (let index = 15; index >= 0; index--) {
++    // Explicitly fail a missed schedule; never extend the existing body budget.
++    expect(Date.now() - startedAt).toBeLessThan(5000);
++    controllers[index].enqueue(fixtures[index].body); controllers[index].close();
++    await boundary.wait(16 - index);
++    expect(Date.now() - startedAt).toBeLessThan(5000);
++    expect(boundary.ids[15 - index]).toBe(fixtures[index].id);
++    expectAllHeld(owners);
++  }
++  expect(boundary.ids).toEqual(fixtures.map(f => f.id).reverse());
++  expect(vi.getTimerCount()).toBe(0);
+   return owners;
+ }
+ 

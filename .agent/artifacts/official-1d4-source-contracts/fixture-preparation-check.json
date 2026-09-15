@@ -1,0 +1,34 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "1478fd5c2e28ddee6ac5821f5917d0aa73fb5ad58b128c58886bf0f63df80263",
+    "original_bytes": 1073,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "base": "1d4b73331353ecacf07b46ce9d186c032a04fc51",
+  "owner_commit": "05d102b",
+  "artifact_manifest_sha256": "9ba0475ae446937c2ef5d83d7419a574b96535f8b4b8c96e231cf0d6228e78b7",
+  "verified_artifact_files": [
+    "README.md",
+    "base-file-hashes.json",
+    "ci/failed-check.log",
+    "ci/passed-check.log",
+    "correction.patch",
+    "original/test/telnyx-webhook-admission.test.ts",
+    "prepared/test/telnyx-webhook-admission.test.ts",
+    "reverse-fixed-vs-prepared.patch",
+    "reverse-fixed.patch",
+    "reverse-original-algorithm.patch",
+    "reverse-original-vs-reverse-fixed.patch",
+    "snapshot.txt",
+    "variants/reverse-fixed/test/telnyx-webhook-admission.test.ts",
+    "variants/reverse-original-algorithm/test/telnyx-webhook-admission.test.ts"
+  ],
+  "protected_working_matches": 19,
+  "current_original_match": true,
+  "natural_patch_apply_check": "PASS",
+  "execution": "None; no source application, syntax/import/tests/types/native",
+  "qa_actual_review": "Accepted QA045b3cc; subsequent runtime is separately granted in integration checkpoint"
+}

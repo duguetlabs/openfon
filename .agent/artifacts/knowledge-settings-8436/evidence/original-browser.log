@@ -1,0 +1,22 @@
+{
+  "representation": "derived public evidence; not original raw output",
+  "original_sha256": "deb6319e1faa8947b50cf231358d51327d787070cee397c17b742c14243629b2",
+  "original_bytes": 6553,
+  "matching_result_summary": {
+    "repository_path": ".agent/artifacts/knowledge-settings-8436/knowledge-settings-8436.json",
+    "relative_link": "../knowledge-settings-8436.json",
+    "json_pointer": "/actual_validation/original_browser",
+    "summary_original_sha256": "360b830874580717193017145e060c26c4f39f80d358d3e04670f2f481e9dcde",
+    "association": "Matching original log SHA256 explicitly appears in this summary."
+  },
+  "reported_result_from_summary": {
+    "exit": 1,
+    "failures": 2,
+    "workers": 1,
+    "retries": 0,
+    "diagnostic": "Both real blur-click traces reached held rename then failed first request-count assertion: expected0/actual1 Apply or Delete request. Later response/persisted-state assertions not reached. Traces/error contexts retained."
+  },
+  "limits": "Result is copied from the named historical result-summary field, not inferred from empty log extraction. Consult the full linked summary for first-assertion, exit, fixture, runtime and cleanup limitations. Failed cases establish only assertions reached; no new run or later assertion success is claimed. Historical hashes identify privately retained originals; public summary projections have separate identities in the derivation catalog.",
+  "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+  "result_projection": "Exact named result-summary fields, excluding command, tool-session and log-location metadata. Full source summary and its original hash remain linked."
+}

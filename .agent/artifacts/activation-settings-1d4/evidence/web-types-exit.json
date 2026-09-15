@@ -1,0 +1,50 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "11e59cfbbd5d44b69346e98a950f348496e2fe57205616f8c3443b64e03957e9",
+    "original_bytes": 1329,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "utc": "2026-09-14T18:54:22.468080+00:00",
+  "exit": 0,
+  "duration_seconds": 2.9,
+  "observed_processes": [
+    {
+      "pid": "private-ref:397766e6bbd64d3a8816454f208e0fa0",
+      "ppid": "private-ref:84ee902f1636480abd0207ff2c0f3cdd",
+      "comm": "<defunct>"
+    },
+    {
+      "pid": "private-ref:b79b7105b54942d386b93aec8bf960a5",
+      "ppid": "private-ref:397766e6bbd64d3a8816454f208e0fa0",
+      "comm": "node"
+    }
+  ],
+  "observed_remaining": [],
+  "temp_new_remaining": [],
+  "scan": {
+    "utc": "2026-09-14T18:54:22.431132+00:00",
+    "application_processes": [],
+    "reserved_listeners": {},
+    "known_unrelated_preserved": [
+      {
+        "pid": "private-ref:2b310cac29884a5f94a09aeff7e08dbe",
+        "ppid": "private-ref:28c0f0c91c314ec5b1266e68d062d8a0",
+        "comm": "private-ref:1b7d117a1a624a37a427180a96c221f4"
+      },
+      {
+        "pid": "private-ref:28c0f0c91c314ec5b1266e68d062d8a0",
+        "ppid": "private-ref:eec2f7ab9d1141c1b88eb61d53e7288f",
+        "comm": "private-ref:6dede83197694d6d91e7882042209fe5"
+      }
+    ]
+  },
+  "source_after": {
+    "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+    "web/src/pages/Settings.tsx": "37b7fd4d772771eb3aeb4be200a05309ccfe24ddba7b7221564728b8f7ee98af",
+    "test/activation-state.test.ts": "52f8f849bf5014f1c26f32a7a2963f6eb7c1a1f0f44064f8c91108c36ef60afd",
+    "e2e/settings-load-error.spec.ts": "235255463298604a0f8a4ef8a77d63e0e8aae7c282482d311828c840dd512179"
+  }
+}

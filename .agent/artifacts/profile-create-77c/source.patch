@@ -1,0 +1,210 @@
+--- a/web/src/pages/Settings.tsx
++++ b/web/src/pages/Settings.tsx
+@@ -64,6 +64,7 @@
+   const [agent, setAgent] = useState<Agent | null>(null);
+   const [saved, setSaved] = useState('');
+   const [saving, setSaving] = useState(false);
++  const savingOperation = useRef<{ kind: 'create' | 'profile' | 'settings' } | null>(null);
+   const [error, setError] = useState('');
+   const [refreshFailed, setRefreshFailed] = useState(false);
+   const [profiles, setProfiles] = useState<EngineProfile[]>([]);
+@@ -72,6 +73,7 @@
+   const profileListGeneration = useRef(0);
+   const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
+   const [newProfileName, setNewProfileName] = useState('');
++  const newProfileNameVersion = useRef(0);
+   const [profileRenamePending, setProfileRenamePending] = useState(false);
+   const profileSavedNames = useRef(new Map<string, string>());
+   const profileEditVersion = useRef(new Map<string, number>());
+@@ -82,6 +84,20 @@
+   const settingsRead = useRef<Promise<boolean> | null>(null);
+   const mounted = useRef(true);
+   useEffect(() => { mounted.current = true; return () => { mounted.current = false; settingsReadGeneration.current++; }; }, []);
++
++  function beginSaving(kind: 'create' | 'profile' | 'settings') {
++    // React's pending render is not the admission boundary for another handler.
++    if (saving || savingOperation.current) return null;
++    const operation = { kind };
++    savingOperation.current = operation;
++    setSaving(true);
++    return operation;
++  }
++  function finishSaving(operation: NonNullable<typeof savingOperation.current>) {
++    if (savingOperation.current !== operation) return;
++    savingOperation.current = null;
++    setSaving(false);
++  }
+ 
+   function readSettings() {
+     const run = ++settingsReadGeneration.current;
+@@ -132,10 +148,12 @@
+     }));
+     for (const row of rows) profileSavedNames.current.set(row.id, row.name);
+   }
++  function creatingProfile() { return savingOperation.current?.kind === 'create'; }
+   async function loadProfiles(id: string) {
++    if (creatingProfile()) return false;
+     const run = ++profileListGeneration.current;
+     const rows = await api.profiles(id);
+-    if (run !== profileListGeneration.current) return false;
++    if (creatingProfile() || run !== profileListGeneration.current) return false;
+     acceptProfiles(rows);
+     return true;
+   }
+@@ -165,8 +183,10 @@
+   }
+   async function profileAction(action: () => Promise<unknown>, message: string, deletedId?: string) {
+     // Blur registers its rename before the following click, even before a render.
+-    if (saving || profileRefreshPending || profileRenameRequests.current.size > 0) return;
+-    setSaving(true); setError(''); mutationGeneration.current++; profileListGeneration.current++;
++    if (profileRefreshPending || profileRenameRequests.current.size > 0) return;
++    const operation = beginSaving('profile');
++    if (!operation) return;
++    setError(''); mutationGeneration.current++; profileListGeneration.current++;
+     try {
+       await action();
+       mutationGeneration.current++; profileListGeneration.current++;
+@@ -175,7 +195,7 @@
+       setSaved(message); setProfileRefreshPending(true);
+       await refreshProfileDisplay();
+     } catch (err) { setError(err instanceof Error ? err.message : 'Profile change failed'); }
+-    finally { setSaving(false); }
++    finally { finishSaving(operation); }
+   }
+ 
+   if (!biz || !agent) return <div>
+@@ -191,8 +211,8 @@
+   const dirty = businessDirty || assistantDirty;
+ 
+   async function retryRefresh() {
+-    if (saving) return;
+-    setSaving(true);
++    const operation = beginSaving('settings');
++    if (!operation) return;
+     setError('');
+     try {
+       await refresh();
+@@ -200,15 +220,16 @@
+       setSaved('Settings refreshed.');
+     } catch (err) {
+       setError(`Refreshing settings failed: ${err instanceof Error ? err.message : 'Request failed'}`);
+-    } finally { setSaving(false); }
++    } finally { finishSaving(operation); }
+   }
+ 
+   async function save() {
+-    if (saving || profileRefreshPending || !dirty) return;
++    if (profileRefreshPending || !dirty) return;
++    const operation = beginSaving('settings');
++    if (!operation) return;
+     // An effect read started before this mutation cannot supersede an accepted
+     // stage, even if its response arrives before the final refresh completes.
+     mutationGeneration.current++;
+-    setSaving(true);
+     setError('');
+     setSaved('');
+     let stage: 'business' | 'assistant' | 'refresh' = 'business';
+@@ -241,10 +262,11 @@
+       setError(stage === 'assistant' ? `Business changes were saved. Assistant save failed: ${detail}`
+         : stage === 'refresh' ? `Business and assistant changes were saved, but refreshing the page data failed: ${detail}`
+         : `Business save failed; assistant changes were not submitted: ${detail}`);
+-    } finally { setSaving(false); }
++    } finally { finishSaving(operation); }
+   }
+ 
+   async function renameProfile(id: string, name: string) {
++    if (savingOperation.current || profileRefreshPending) return;
+     const edit = { name, version: profileEditVersion.current.get(id) };
+     // Serialize per profile so each queued edit uses the last acknowledged name,
+     // never a draft captured while an earlier request was still pending.
+@@ -274,6 +296,42 @@
+     } finally {
+       profileRenameRequests.current.delete(id);
+       setProfileRenamePending(profileRenameRequests.current.size > 0);
++    }
++  }
++
++  async function createProfile() {
++    if (!newProfileName.trim() || profileRefreshPending || profileRenameRequests.current.size > 0) return;
++    const operation = beginSaving('create');
++    if (!operation) return;
++    const nameVersion = newProfileNameVersion.current;
++    const workspaceId = biz!.id;
++    const payload = {
++      name: newProfileName.trim(),
++      engine: agent!.engine, realtime_model: agent!.realtime_model,
++      realtime_voice: agent!.realtime_voice, language: agent!.language,
++      voice: agent!.voice, llm_base_url: agent!.llm_base_url,
++      llm_api_key: agent!.llm_api_key, llm_model: agent!.llm_model,
++    };
++    profileListGeneration.current++;
++    setError(''); setSaved('');
++    try {
++      const profile = await api.createProfile(workspaceId, payload);
++      const previousName = profileSavedNames.current.get(profile.id);
++      profileSavedNames.current.set(profile.id, profile.name);
++      setProfiles(current => {
++        const draft = current.find(row => row.id === profile.id);
++        const accepted = draft && previousName !== undefined && draft.name !== previousName
++          ? { ...profile, name: draft.name } : profile;
++        return [...current.filter(row => row.id !== profile.id), accepted];
++      });
++      setNewProfileName(current => newProfileNameVersion.current === nameVersion ? '' : current);
++      setSaved('Profile saved.');
++      // Confirm from the returned row without adding a post-create refresh.
++    } catch (err) {
++      setError(err instanceof Error ? err.message : 'Could not save profile');
++    } finally {
++      profileListGeneration.current++;
++      finishSaving(operation);
+     }
+   }
+ 
+@@ -520,34 +578,14 @@
+               className={`${inputClassSm} flex-1 px-3.5 py-2`}
+               placeholder='Save current setup as… e.g. "Realtime HD English (Emma)"'
+               value={newProfileName}
+-              onChange={(e) => setNewProfileName(e.target.value)}
++              onChange={(e) => { newProfileNameVersion.current++; setNewProfileName(e.target.value); }}
+             />
+             <Button
+               variant="ghost"
+-              disabled={!newProfileName.trim() || saving || profileRefreshPending}
+-              onClick={() =>
+-                void api
+-                  .createProfile(biz.id, {
+-                    name: newProfileName.trim(),
+-                    engine: agent.engine,
+-                    realtime_model: agent.realtime_model,
+-                    realtime_voice: agent.realtime_voice,
+-                    language: agent.language,
+-                    voice: agent.voice,
+-                    llm_base_url: agent.llm_base_url,
+-                    llm_api_key: agent.llm_api_key,
+-                    llm_model: agent.llm_model,
+-                  })
+-                  .then((p) => {
+-                    profileListGeneration.current++;
+-                    setProfiles(current => [...current, p]);
+-                    setNewProfileName('');
+-                    setError('');
+-                  })
+-                  .catch((err) => setError(err instanceof Error ? err.message : 'Could not save profile'))
+-              }
++              disabled={!newProfileName.trim() || saving || profileRefreshPending || profileRenamePending}
++              onClick={() => void createProfile()}
+             >
+-              Save profile
++              {saving && savingOperation.current?.kind === 'create' ? 'Saving profile…' : 'Save profile'}
+             </Button>
+           </div>
+         </Card>
+@@ -642,7 +680,7 @@
+         <div className="flex items-center gap-3">
+           {saved && <span role="status" className="text-sm font-semibold text-ok">{saved}</span>}
+           {error && <span role="alert" className="text-sm text-rose">{error}</span>}
+-          {profileRefreshPending && <Button variant="ghost" disabled={saving} onClick={() => { if (saving) return; setSaving(true); void refreshProfileDisplay().finally(() => setSaving(false)); }}>Retry profile refresh</Button>}
++          {profileRefreshPending && <Button variant="ghost" disabled={saving} onClick={() => { const operation = beginSaving('settings'); if (!operation) return; void refreshProfileDisplay().finally(() => finishSaving(operation)); }}>Retry profile refresh</Button>}
+           {refreshFailed && <Button variant="ghost" disabled={saving} onClick={() => void retryRefresh()}>Retry settings refresh</Button>}
+           <Button disabled={saving || profileRefreshPending || !dirty} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</Button>
+         </div>

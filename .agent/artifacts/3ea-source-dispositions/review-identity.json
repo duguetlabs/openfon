@@ -1,0 +1,16 @@
+{
+  "reviewed_head": "3ea3ad184f8bde0609a0f38c9fdaafde4fa3793d",
+  "original_comment": "5659080383",
+  "original_body_sha256": "5332c2c1f66b1a16bd796ad449c9265ead7a1fd037dc4b2504c014b5588e2645",
+  "original_artifact_sha256": "53d7c5c2f0c40645877024053dffb4fad62c5523ea2d4ec9b339df3e9b57c603",
+  "public_dispositions": [
+    "5659120203",
+    "5659143122"
+  ],
+  "retention": "Original unchanged public report retained at its URL and privately by QA/owner; no quoted copy or removal patch added here. Current document cleanup does not erase public history.",
+  "ci_runs": [
+    34806427611,
+    34806414705
+  ],
+  "ci_result": "Both required four jobs PASS; deployment skipped. Remote1403/59files19.93s plus types/build; no new local application run."
+}

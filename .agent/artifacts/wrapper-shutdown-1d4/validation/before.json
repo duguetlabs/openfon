@@ -1,0 +1,30 @@
+{
+  "time": "2026-09-14T18:48:32.987060+00:00",
+  "source_hashes": {
+    "original/docs/launch/demo/capture-child-deadline.test.mjs": "66c17cc2742b117ef3c4e323f579909a9f10027cab6041358f10b587f81de9bd",
+    "original/docs/launch/demo/capture-child.mjs": "2962cb0248cb4fb6b9eafc1e41c980160b867ae61c2b34f8df8019642869bc77",
+    "original/docs/launch/demo/capture-child.test.mjs": "95a37355448e78c368906fd79c478453448ded8630636852b4708ef878933983",
+    "original/docs/launch/demo/capture.mjs": "eda6e38ed72dbc0e5a09c74574af0562bdfb27af7625b78d5263abcf9dbd4a26",
+    "original/scripts/e2e-server.mjs": "c49ead380644097a395af5c325d298e2a6ff7b3bfa4fa6ab0f679844ea359c60",
+    "original/scripts/e2e-server.test.mjs": "b4e864a1d287922c6047d4d0093224a0a808dbed4f5a171dcc000602cec7002a",
+    "source/docs/launch/demo/capture-child-deadline.test.mjs": "66c17cc2742b117ef3c4e323f579909a9f10027cab6041358f10b587f81de9bd",
+    "source/docs/launch/demo/capture-child.mjs": "2962cb0248cb4fb6b9eafc1e41c980160b867ae61c2b34f8df8019642869bc77",
+    "source/docs/launch/demo/capture-child.test.mjs": "95a37355448e78c368906fd79c478453448ded8630636852b4708ef878933983",
+    "source/docs/launch/demo/capture.mjs": "eda6e38ed72dbc0e5a09c74574af0562bdfb27af7625b78d5263abcf9dbd4a26",
+    "source/scripts/e2e-server-shutdown.test.mjs": "a1e30296c8cc6914efce18a1e6aefff9ffa14340d19ee3897fe5fb0f6a24f6c7",
+    "source/scripts/e2e-server.mjs": "97407ac683a1c259749447125873ef78782484d5f5bdc63ca51c887db9da61da",
+    "source/scripts/e2e-server.test.mjs": "b4e864a1d287922c6047d4d0093224a0a808dbed4f5a171dcc000602cec7002a"
+  },
+  "patch_sha256": "cec5836362daf3153e74c93351d4cd36ec6af95fe059b13129b13626200cec4d",
+  "process_scan": {
+    "code": 1,
+    "stdout": "",
+    "stderr": ""
+  },
+  "listeners": {
+    "code": 1,
+    "stdout": "",
+    "stderr": ""
+  },
+  "temporary_directories": []
+}

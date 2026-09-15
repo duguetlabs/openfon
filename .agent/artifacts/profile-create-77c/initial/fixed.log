@@ -1,0 +1,23 @@
+{
+  "representation": "derived public evidence; not original raw output",
+  "original_sha256": "c32a229579ef99733569b40293da52e874b2518405c664a19c4edaf24fac1ccd",
+  "original_bytes": 7721,
+  "matching_result_summary": {
+    "repository_path": ".agent/artifacts/profile-create-77c/manifest.json",
+    "relative_link": "../manifest.json",
+    "json_pointer": "/actual_validation/fixed",
+    "summary_original_sha256": "07881be5c10451ebda33a7d2da4a4612a9f61cb2d6f566dda69cb0df79c65993",
+    "association": "Matching original log SHA256 explicitly appears in this summary."
+  },
+  "reported_result_from_summary": {
+    "exit": 1,
+    "cases": 20,
+    "passed": 19,
+    "fixture_failures": 1,
+    "duration_ms": 58813.079,
+    "limits": "14 new plus5 named companions pass; duplicate case remains pre-POST fixture timeout. No retries/source edits."
+  },
+  "limits": "Result is copied from the named historical result-summary field, not inferred from empty log extraction. Consult the full linked summary for first-assertion, exit, fixture, runtime and cleanup limitations. Failed cases establish only assertions reached; no new run or later assertion success is claimed. Historical hashes identify privately retained originals; public summary projections have separate identities in the derivation catalog.",
+  "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+  "result_projection": "Exact named result-summary fields, excluding command, tool-session and log-location metadata. Full source summary and its original hash remain linked."
+}

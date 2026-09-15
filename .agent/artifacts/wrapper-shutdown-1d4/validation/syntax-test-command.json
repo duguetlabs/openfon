@@ -1,0 +1,21 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "24b27320f6bd7144089a823753a629fe7a2607f7c95b05ccbcc82c173f2520f8",
+    "original_bytes": 369,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "argv": [
+    "node",
+    "--check",
+    "scripts/e2e-server-shutdown.test.mjs"
+  ],
+  "cwd": "private-ref:88fafd86e1f5437691747af766d6ce42",
+  "pid": "private-ref:a1b178c2c0404ac0a77d8c25fe045d97",
+  "started": "2026-09-14T18:49:08.342497+00:00",
+  "finished": "2026-09-14T18:49:08.364103+00:00",
+  "exit_code": 0,
+  "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

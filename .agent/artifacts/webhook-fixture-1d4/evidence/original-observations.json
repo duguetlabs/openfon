@@ -1,0 +1,314 @@
+[
+  {
+    "arrivalOrder": [
+      "lease-fixture-15",
+      "lease-fixture-14",
+      "lease-fixture-13",
+      "lease-fixture-12",
+      "lease-fixture-11",
+      "lease-fixture-10",
+      "lease-fixture-9",
+      "lease-fixture-8",
+      "lease-fixture-7",
+      "lease-fixture-6",
+      "lease-fixture-5",
+      "lease-fixture-4",
+      "lease-fixture-3",
+      "lease-fixture-2",
+      "lease-fixture-1",
+      "lease-fixture-0"
+    ],
+    "releasedId": "lease-fixture-15",
+    "awaitedId": "lease-fixture-0",
+    "responses": [
+      {
+        "id": "lease-fixture-0",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-1",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-2",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-3",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-4",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-5",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-6",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-7",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-8",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-9",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-10",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-11",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-12",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-13",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-14",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-15",
+        "status": 200,
+        "error": null
+      }
+    ]
+  },
+  {
+    "arrivalOrder": [
+      "lease-fixture-15",
+      "lease-fixture-14",
+      "lease-fixture-13",
+      "lease-fixture-12",
+      "lease-fixture-11",
+      "lease-fixture-10",
+      "lease-fixture-9",
+      "lease-fixture-8",
+      "lease-fixture-7",
+      "lease-fixture-6",
+      "lease-fixture-5",
+      "lease-fixture-4",
+      "lease-fixture-3",
+      "lease-fixture-2",
+      "lease-fixture-1",
+      "lease-fixture-0"
+    ],
+    "releasedId": "lease-fixture-15",
+    "awaitedId": "lease-fixture-0",
+    "responses": [
+      {
+        "id": "lease-fixture-0",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-1",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-2",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-3",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-4",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-5",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-6",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-7",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-8",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-9",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-10",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-11",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-12",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-13",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-14",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-15",
+        "status": 503,
+        "error": null
+      }
+    ]
+  },
+  {
+    "arrivalOrder": [
+      "lease-fixture-15",
+      "lease-fixture-14",
+      "lease-fixture-13",
+      "lease-fixture-12",
+      "lease-fixture-11",
+      "lease-fixture-10",
+      "lease-fixture-9",
+      "lease-fixture-8",
+      "lease-fixture-7",
+      "lease-fixture-6",
+      "lease-fixture-5",
+      "lease-fixture-4",
+      "lease-fixture-3",
+      "lease-fixture-2",
+      "lease-fixture-1",
+      "lease-fixture-0"
+    ],
+    "releasedId": "lease-fixture-15",
+    "awaitedId": "lease-fixture-0",
+    "responses": [
+      {
+        "id": "lease-fixture-0",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-1",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-2",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-3",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-4",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-5",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-6",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-7",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-8",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-9",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-10",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-11",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-12",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-13",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-14",
+        "status": null,
+        "error": null
+      },
+      {
+        "id": "lease-fixture-15",
+        "status": 401,
+        "error": null
+      }
+    ]
+  }
+]

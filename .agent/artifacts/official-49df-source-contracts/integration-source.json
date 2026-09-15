@@ -1,0 +1,45 @@
+{
+  "head": "49df6fc2a5edc0f75a8c922e0178fa6269276f24",
+  "review_comment": 5669260419,
+  "review_body_sha256": "9e68390dd48c33b28a425d8459ac9de53fad28e5359a870c38cb591996121719",
+  "scope": "Read-only source contracts; no application changes or runtime. Safe repository-relative paths and hashes only.",
+  "committed_working_sha256": {
+    "src/account-api.ts": "ba040d9af67ba3340f994ab4184dfe67831f999bda1f0dfc20d06cfecfb3ecbe",
+    "src/index.ts": "7d21900e2bc6ace0af34c9b0b4f745eeb0f3285249f469575fd7eb6b31e5e9d4",
+    "src/studio-api.ts": "8d517cb1a4a934b0eba445586fd218de66d56eb403c250766db1fcd557516347",
+    "migrations/0001_init.sql": "14d6ffa48d6f8db76de9aa6f66e3ff92cf5452a9ce0d6e0a439590f988b1d0cd",
+    "migrations/0020_browser_ticket_claim.sql": "3c205cc454e588d3b87c11e1e51001c5d42a55747c893ee5d86203bfe550b5ee",
+    "src/telnyx-routes.ts": "2351a3bcdca548785d439ae32be2cdfb64be6148e1d1c03a681281b8b2d73c41",
+    "src/telnyx-webhook.ts": "fba2355f23073ae5fdaa2ae4f4d056cb4e27dca67c49dad18c7f3c15d66a97e5",
+    "src/telnyx-webhook-admission.ts": "fc043545b374aa6b6d378faf64a51006df6bfb9ebc752535dcaa62807c777e24",
+    "test/telnyx-webhook.test.ts": "1bb49b27e9788f0a6ad338a57b7675a1258fafb551a3efea62b2a45b1e68eca5",
+    "test/telnyx-webhook-admission.test.ts": "5f8f69d108d2ac91d503a0948672d285bc47372d1b405bf77e6db6c0375e3d18",
+    "scripts/telnyx-webhook-body-smoke.mjs": "9f72687219dce66c46c84424984b4c174722b44ef0a804e8945bc1576abdf7cc",
+    "scripts/telnyx-webhook-admission-smoke.mjs": "74ca3bddbb182240ac333bfa0d9df61bf4d386c84e4cef83c6fb1e531df65b00",
+    "vitest.config.ts": "530bd3ae03a17ef1b60d63ca7bbceaa4231acf82ae4876151083c0e9c402e519",
+    "tsconfig.worker.json": "6f1b4cebf4e7ff46b73e2592b01f50d02cb18a2cdfdcb2b0bea413f2199edb05",
+    "src/telnyx-control.ts": "213038b7acd1660664014ad2067ca01d770097f6ba02ce8bc638e186658b4f32",
+    "src/telnyx-admission.ts": "259de6b3f8eb3d6787e1d6a7bce2e23fbca461fdcaf90a357ef1486335b2bc63"
+  },
+  "same_as_1d4_receipt": {
+    "src/account-api.ts": true,
+    "src/index.ts": true,
+    "src/studio-api.ts": false,
+    "migrations/0001_init.sql": true,
+    "migrations/0020_browser_ticket_claim.sql": true,
+    "test/telnyx-webhook-admission.test.ts": false,
+    "vitest.config.ts": true,
+    "tsconfig.worker.json": true
+  },
+  "contracts": {
+    "unsafe_deletion": "NULL premise excluded under applied 0001 and 0020 constraints; default old writer marker is 0, only two current issuers opt into 1, connected claim precedes DO. No remote schema/corrupt-row proof.",
+    "inert_changes": "Actual registered route includes bounded body/deadline and imported scalar lease helper. Actual discovered unit files and explicit native harness files are shipped. Archived patch is retained provenance, not sole implementation. Historical runtime counts retain separate source attribution.",
+    "misclassification": "Second post-connect boolean eligibility refusal is currently caught as media_bridge_failed. Proposed local allowlisted reason only; no arbitrary Error.message promotion or lifecycle changes. Independent QA/selection pending."
+  },
+  "metadata_inventory": {
+    "tracked_artifact_files": 385,
+    "structured_absolute_fields_files": 103,
+    "structured_absolute_fields": 3040,
+    "limits": "Leading absolute JSON values/keys only; excludes embedded prose/log/process metadata. No exhaustive privacy or secret scan. No remediation or history erasure."
+  }
+}

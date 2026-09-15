@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { chatComplete, LlmConfigError, resolveLlm, sameLlmEndpoint, validateLlmBaseUrl } from '../src/providers';
+import {
+  chatComplete,
+  LlmConfigError,
+  resolveLlm,
+  sameLlmEndpoint,
+  synthesize,
+  transcribe,
+  validateLlmBaseUrl,
+} from '../src/providers';
 import type { AgentSettings, Env } from '../src/types';
 
 // Only the LLM fields matter here; the rest of Env/AgentSettings is stubbed.
@@ -197,14 +205,18 @@ describe('chatComplete', () => {
   it('does not follow redirects, so the validated URL is the one that gets called', async () => {
     // The endpoint checks only ever see the saved URL; following a 302 would
     // let a host that passed them hand the request to an internal address.
-    const fetchStub = vi.fn(async () => new Response('', { status: 302, headers: { location: 'http://169.254.169.254/' } }));
+    const secretLocation = 'https://redirect.example/callback?token=location-secret';
+    const fetchStub = vi.fn(async () => new Response('', { status: 302, headers: { location: secretLocation } }));
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.stubGlobal('fetch', fetchStub);
     await expect(chatComplete(cfg, [{ role: 'user', content: 'hi' }])).rejects.toThrow(/redirects are not followed/);
     expect(fetchStub).toHaveBeenCalledTimes(1);
     expect((fetchStub.mock.calls[0] as unknown as [string, RequestInit])[1].redirect).toBe('manual');
-    // The target is logged, never thrown: these errors surface on a public
-    // socket, and it can name an internal host or a signed URL.
-    await expect(chatComplete(cfg, [{ role: 'user', content: 'hi' }])).rejects.not.toThrow(/169\.254/);
+    const logged = JSON.stringify(errorLog.mock.calls);
+    expect(logged).toContain('target redacted');
+    expect(logged).not.toContain(secretLocation);
+    expect(logged).not.toContain('location-secret');
+    errorLog.mockRestore();
   });
 
   it('appends the endpoint path to every shape of base URL', async () => {
@@ -231,6 +243,42 @@ describe('chatComplete', () => {
     const body = JSON.stringify({ choices: [{ message: { content: 'Good morning.' } }] });
     vi.stubGlobal('fetch', vi.fn(async () => new Response(body, { status: 200 })));
     await expect(chatComplete(cfg, [{ role: 'user', content: 'hi' }])).resolves.toBe('Good morning.');
+  });
+
+  it('never copies an upstream error body that reflects a credential', async () => {
+    const reflected = `invalid bearer ${cfg.apiKey}`;
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(reflected, { status: 401 })));
+    const error = await chatComplete(cfg, [{ role: 'user', content: 'hi' }]).catch((value: unknown) => value);
+    expect(String(error)).toContain('LLM error 401');
+    expect(String(error)).not.toContain(reflected);
+    expect(String(error)).not.toContain(cfg.apiKey);
+  });
+});
+
+describe('voice provider errors', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('redacts reflected STT and TTS credentials', async () => {
+    const secret = 'voice-key-never-log';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(`reflected ${secret}`, { status: 401 })));
+    const voiceEnv = {
+      DEFAULT_STT_BASE_URL: 'https://speech.example/v1',
+      DEFAULT_STT_MODEL: 'stt',
+      DEFAULT_STT_API_KEY: secret,
+      DEFAULT_TTS_PROVIDER: 'azure',
+      DEFAULT_TTS_VOICE: 'en-US-AvaNeural',
+      AZURE_SPEECH_KEY: secret,
+      AZURE_SPEECH_REGION: 'westeurope',
+    } as unknown as Env;
+    const sttError = await transcribe(voiceEnv, new ArrayBuffer(1), 'audio/wav').catch((value: unknown) => value);
+    expect(String(sttError)).toContain('STT error 401');
+    expect(String(sttError)).not.toContain(secret);
+
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(synthesize(voiceEnv, 'Hello', 'en-US-AvaNeural')).resolves.toBeNull();
+    expect(JSON.stringify(errorLog.mock.calls)).toContain('provider response redacted');
+    expect(JSON.stringify(errorLog.mock.calls)).not.toContain(secret);
+    errorLog.mockRestore();
   });
 });
 
@@ -274,5 +322,45 @@ describe('sameLlmEndpoint', () => {
   it('ignores the fragment', () => {
     // fetch never sends it, so it cannot change where the call lands.
     expect(sameLlmEndpoint('https://api.example.com/v1#x', 'https://api.example.com/v1')).toBe(true);
+  });
+});
+
+
+describe('STT endpoint path construction', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('uses the workspace STT base path and credential without falling back to instance settings', async () => {
+    const request = vi.fn(async () => new Response(JSON.stringify({ text: 'ok' })));
+    vi.stubGlobal('fetch', request);
+    await transcribe({ DEFAULT_STT_BASE_URL: 'https://instance.example/v1', DEFAULT_STT_API_KEY: 'instance-test-key' } as Env,
+      new ArrayBuffer(2), 'audio/wav', undefined, {
+        stt_provider: 'custom', stt_base_url: 'https://speech.example/proxy/chat/completions/v1',
+        stt_api_key: 'workspace-test-key', stt_model: 'workspace-model',
+      });
+    const [url, init] = request.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://speech.example/proxy/chat/completions/v1/audio/transcriptions');
+    expect(init.headers).toEqual({ Authorization: 'Bearer workspace-test-key' });
+    expect(init.redirect).toBe('manual');
+    expect((init.body as FormData).get('model')).toBe('workspace-model');
+  });
+  it.each([
+    ['https://speech.example/v1', 'https://speech.example/v1/audio/transcriptions'],
+    ['https://speech.example/proxy/chat/completions/v1/', 'https://speech.example/proxy/chat/completions/v1/audio/transcriptions'],
+    ['https://speech.example/chat/completions/chat/completions///', 'https://speech.example/chat/completions/chat/completions/audio/transcriptions'],
+    ['https://speech.example/v1/?target=/chat/completions#route', 'https://speech.example/v1/audio/transcriptions?target=/chat/completions#route'],
+    ['https://speech.example/proxy/chat%2Fcompletions/v1', 'https://speech.example/proxy/chat%2Fcompletions/v1/audio/transcriptions'],
+  ])('appends only the transcription suffix to %s', async (base, expected) => {
+    const request = vi.fn(async () => new Response(JSON.stringify({ text: ' hello ', language: 'en' })));
+    vi.stubGlobal('fetch', request);
+    const voiceEnv = { DEFAULT_STT_BASE_URL: base, DEFAULT_STT_API_KEY: 'test-stt-key', DEFAULT_STT_MODEL: 'test-stt-model' } as Env;
+    await expect(transcribe(voiceEnv, new Uint8Array([1, 2]).buffer, 'audio/wav', 'Northwheel'))
+      .resolves.toMatchObject({ text: 'hello', language: 'en' });
+    expect(request).toHaveBeenCalledOnce();
+    const [url, init] = request.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(expected);
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual({ Authorization: 'Bearer test-stt-key' });
+    expect((init.body as FormData).get('model')).toBe('test-stt-model');
+    expect((init.body as FormData).get('prompt')).toBe('Northwheel');
+    expect((init.body as FormData).get('file')).toBeInstanceOf(Blob);
   });
 });

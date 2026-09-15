@@ -1,0 +1,130 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "3f44008c3d2290163b373b5c55f43a24054302af09bdcee07ee3a6e5d152c378",
+    "original_bytes": 4109,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "base": "8436ac9c0055123d440c78760f6bc10ee406fe25",
+  "patchSha256": "76f9a2fe32b9fe74acd4d79f2b582e7f8f1d37b8f427eb498a5057c6562ee2c5",
+  "sourceUnchanged": {
+    "original": {
+      "files": {
+        "src/telnyx-routes.ts": "2dcd65d69143331b6451d81a5161268d7e6e78cfc831fe05af50be5be300e4e9",
+        "src/telnyx-webhook.ts": "a11e106d55bd1c931c5dd49229f898166fa1eca5b3aa7499a032fa1bf9307b11",
+        "test/telnyx-body.test.ts": "b011204d5a0ba4d337a81d60c6af0f45ecf06aa77e1ba3042b9ee8077d16147d",
+        "scripts/telnyx-webhook-body-smoke.mjs": "9f72687219dce66c46c84424984b4c174722b44ef0a804e8945bc1576abdf7cc"
+      },
+      "protectedUnchanged": 13
+    },
+    "fixed": {
+      "files": {
+        "src/telnyx-routes.ts": "2719a06b2c1ca1d951943685792cc03b08689304073be6b13c664d5a600c6770",
+        "src/telnyx-webhook.ts": "fba2355f23073ae5fdaa2ae4f4d056cb4e27dca67c49dad18c7f3c15d66a97e5",
+        "test/telnyx-body.test.ts": "b011204d5a0ba4d337a81d60c6af0f45ecf06aa77e1ba3042b9ee8077d16147d",
+        "scripts/telnyx-webhook-body-smoke.mjs": "9f72687219dce66c46c84424984b4c174722b44ef0a804e8945bc1576abdf7cc"
+      },
+      "protectedUnchanged": 13
+    }
+  },
+  "results": {
+    "originalUnit": {
+      "actualCases": 23,
+      "passed": 13,
+      "failed": 10,
+      "exit": 1,
+      "durationMs": 939,
+      "countCorrection": "Grant said26; accepted unchanged file contains23 cases."
+    },
+    "originalNative": {
+      "passed": 5,
+      "failed": 5,
+      "exit": 1,
+      "fixtureFailure": null,
+      "classification": "3 HTTP pending at7s; synthetic pending cancellation runtime500; synthetic rejected cancellation app503"
+    },
+    "fixedUnit": {
+      "passed": 192,
+      "files": 3,
+      "exit": 0,
+      "durationMs": 1540
+    },
+    "workerTypes": {
+      "exit": 0
+    },
+    "fixedNative": {
+      "passed": 10,
+      "failed": 0,
+      "exit": 0,
+      "deadlineResponseMs": [
+        5036.067416,
+        5011.460791,
+        5012.441292
+      ]
+    }
+  },
+  "runnerSessions": {
+    "originalUnit": 3847,
+    "originalNative": 81334,
+    "fixedUnit": 95671,
+    "workerTypes": 85094,
+    "fixedNative": 35828
+  },
+  "release": "All sessions exited; both MF disposed/zero clients/no cleanup errors; fresh reserved listener/application runner scan empty. Sole slot RELEASED.",
+  "evidence": {
+    "after-source-identity.json": {
+      "sha256": "0fc45ca792d06f2244f59b64641f85e426759f3b76da52c96d587613604b7a4c",
+      "bytes": 970
+    },
+    "fixed-native.exit": {
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    "fixed-native.log": {
+      "sha256": "36f1c39c340f9635dbc9f8c919120927370c9348d983e6d12121c14d54bbda33",
+      "bytes": 4897
+    },
+    "fixed-unit.exit": {
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    "fixed-unit.log": {
+      "sha256": "468495a5757f2a77cee8717a88bbc77826b1bdf74f64d3fe6ffc3532ffd9d144",
+      "bytes": 497
+    },
+    "original-native.exit": {
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "bytes": 2
+    },
+    "original-native.log": {
+      "sha256": "a8398a53d00962a1355d3cc9f0fde1e6ade57200274854b0fc30c62d7f4f653a",
+      "bytes": 6019
+    },
+    "original-unit.exit": {
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "bytes": 2
+    },
+    "original-unit.log": {
+      "sha256": "121dae1369c3bb8f5496ce20a56fea8623529f4163f5c2818a439fe5335a9dea",
+      "bytes": 7108
+    },
+    "release-scan.json": {
+      "sha256": "5e7203c87d952f28bed917bda330386a6b6cac92debafe83a3e704051904cdd8",
+      "bytes": 207
+    },
+    "run-identity.json": {
+      "sha256": "73888dbfafbd7a9a34b4f99a54b6dec9e6870f4f632fb07c9616698c64cc1ec1",
+      "bytes": 2413
+    },
+    "worker-types.exit": {
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    "worker-types.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

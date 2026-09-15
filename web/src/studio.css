@@ -1,0 +1,45 @@
+.studio-title{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:32px}.studio-title h1{font-size:clamp(28px,4vw,42px);letter-spacing:-.045em;font-weight:600;line-height:1.15;color:var(--color-ink)}.studio-title p:not(.studio-eyebrow){margin-top:12px;color:var(--color-ink-soft);max-width:620px}.studio-title select{width:auto}.studio-eyebrow{font:11px monospace;letter-spacing:.16em;color:var(--color-ink-faint);margin-bottom:12px}.studio-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.studio-grid h2,.studio-grid h3{font-weight:600;font-size:19px}.studio-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.studio-stats p,.studio-muted{font-size:13px;color:var(--color-ink-soft)}.studio-stats strong{display:block;font-size:34px;letter-spacing:-.05em;margin-top:10px}.studio-actions{display:flex;align-items:center;flex-wrap:wrap;gap:16px;margin:22px 0}.studio-actions a,.studio-link{color:var(--color-iris);font-size:14px;font-weight:600}.studio-link{display:block;margin-top:14px}.studio-heading{font-size:23px;font-weight:600;margin-bottom:18px;letter-spacing:-.025em}.studio-description{margin:16px 0;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}.studio-between{display:flex;align-items:center;justify-content:space-between;gap:16px}.studio-badge{display:inline-block;border:1px solid var(--color-line);border-radius:50px;padding:4px 9px;font-size:11px;white-space:nowrap;color:var(--color-ink-soft)}.studio-create{display:flex;align-items:flex-end;gap:12px;margin-bottom:28px}.studio-create>.field{flex:1}.studio-create button{margin-bottom:1px}.studio-fields{display:grid;gap:20px}.studio-check{display:flex;align-items:center;gap:9px;font-size:14px}.studio-check input{accent-color:var(--color-iris);width:16px;height:16px}.studio-notice{padding:14px 18px;border:1px solid var(--color-line);border-radius:12px;margin-bottom:22px;background:#eaf5ed;color:#1f5730;font-size:14px}.studio-error{background:#fff0ef;color:#912d34}.studio-call-list{border:1px solid var(--color-line);border-radius:16px;background:var(--color-surface);overflow:hidden}.studio-call-list:empty{display:none}.studio-call-list>a{display:flex;align-items:center;gap:14px;padding:20px;border-bottom:1px solid var(--color-line)}.studio-call-list>a:last-child{border-bottom:0}.studio-call-list>a:hover{background:var(--color-wash-iris)}.studio-call-list>a>div{flex:1;min-width:0}.studio-call-list strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}.studio-call-list p{font-size:12px;color:var(--color-ink-soft);margin-top:6px}.studio-filters{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:24px}.studio-filters>form{display:flex;align-items:flex-end;gap:8px;flex:2;min-width:250px}.studio-filters>form>.field{flex:1}.studio-filters>label{flex:1;min-width:140px;font-size:12px}.studio-transcript{height:330px;overflow:auto;display:flex;flex-direction:column;gap:18px;margin:20px 0}.studio-transcript strong{font:11px monospace;text-transform:uppercase;color:var(--color-iris)}.studio-transcript p{font-size:14px;line-height:1.7;white-space:pre-wrap}.studio-compose{display:flex;gap:8px}.studio-nav{display:flex;gap:4px;flex-wrap:wrap}.studio-shell-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px}.studio-shell-main{max-width:1180px!important}.studio-grid fieldset,fieldset.studio-grid{border:0;padding:0;min-width:0}button:disabled{cursor:not-allowed}.studio-filters select,.studio-fields select{margin-top:6px}@media(max-width:760px){.studio-grid{grid-template-columns:1fr}.studio-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.studio-title{align-items:flex-start;flex-direction:column}.studio-call-list .studio-badge{max-width:95px;white-space:normal}.studio-create{flex-wrap:wrap}.studio-shell-header{padding-inline:16px!important}.studio-nav{width:100%;overflow:auto;flex-wrap:nowrap;padding-bottom:4px}.studio-nav a{white-space:nowrap;font-size:12px}.studio-compose button{padding-inline:12px}}@media(prefers-reduced-motion:reduce){.studio-shell-main *{animation:none!important;transition:none!important}}
+
+/* A quieter working surface using the public site's ink, cobalt, and paper. */
+.studio-theme {
+  --color-base: #f5f3e9;
+  --color-surface: #fffefa;
+  --color-wash-iris: #eceffc;
+  --color-wash-rose: #fff0ec;
+  --color-ink: #222b25;
+  --color-ink-soft: #566056;
+  --color-ink-faint: #667064;
+  --color-iris: #233fca;
+  --color-iris-deep: #1a309f;
+  --color-rose: #aa3b32;
+  --color-line: #dedfd3;
+  --color-line-strong: #c6cabc;
+  --color-midnight: #172564;
+  --shadow-raise: 0 1px 2px #222b2508, 0 12px 32px -16px #222b2520;
+}
+.studio-theme.atmosphere::before,
+.studio-theme .atmosphere::before { background: linear-gradient(#eeeee280, transparent 380px); }
+.studio-theme :focus-visible { outline: 2px solid #233fca; outline-offset: 4px; }
+.studio-shell-header > a svg circle { fill: #233fca; }
+.studio-shell-header nav a[aria-current="page"] { box-shadow: inset 0 -2px #233fca; background: #e9ecfa; }
+.studio-theme .studio-stats > div { border-radius: 8px; box-shadow: 3px 3px 0 #e5e5d9; }
+.studio-theme .studio-stats strong { color: #233fca; }
+.studio-theme .studio-stats p { font: 10px var(--font-mono); text-transform: uppercase; letter-spacing: .07em; }
+.studio-skip { position: fixed; top: -100px; left: 20px; padding: 12px 18px; color: white; background: #233fca; z-index: 100; border-radius: 4px; }
+.studio-skip:focus { top: 12px; }
+.studio-theme .auth-brand { background: #233fca; }
+.auth-brand h1 { font-family: var(--font-sans); letter-spacing: -.045em; }
+.auth-brand h1 em { font-family: var(--font-display); color: #f6a578; }
+.auth-brand h1 { font-size: clamp(38px, 4.5vw, 65px); }
+.auth-brand .text-\[\#B5A8F5\] { color: #f6a578; }
+.auth-layout .auth-brand > div[style] { opacity: .3; }
+.studio-loading { display: flex; align-items: center; gap: 12px; min-height: 110px; font-size: 14px; color: var(--color-ink-soft); }
+.studio-retry { margin-top: 12px; }
+@media(max-width:760px) {
+  .studio-shell-header .studio-nav { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 4px; overflow: visible; padding-bottom: 0; }
+  .studio-shell-header .studio-nav a,.studio-shell-header .studio-nav button { margin: 0; padding: 10px 3px; text-align: center; font-size: 11px; border-radius: 5px; }
+  .studio-shell-main { padding-top: 28px; }
+  .auth-brand { min-height: auto; }
+  .auth-brand > div.py-16 { padding-top: 35px; padding-bottom: 35px; }
+  .auth-brand h1 { font-size: 40px; }
+}

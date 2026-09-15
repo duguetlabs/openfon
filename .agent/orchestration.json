@@ -1,0 +1,90 @@
+{
+  "_public_evidence": {
+    "base": "49df6fc2a5edc0f75a8c922e0178fa6269276f24",
+    "representation": "derived historical publication copy; live root routing remains separately owned",
+    "original_sha256": "98e54028b65fd58aa596342890e47787ab40020ebb326bc8d7803c98d8cddd7e",
+    "private_reference_mapping": "persistent random IDs; private mapping retained"
+  },
+  "updated_at": "2026-09-12T11:28:54.423162+00:00",
+  "orchestrator_thread": "01a09543-75cb-7c52-8c7f-4b5a24ed5c75",
+  "workspace_id": "w1",
+  "workspace_label": "openfon",
+  "base_commit": "b730480685b56de0e785a400621459e3896a7fb1",
+  "agents": [
+    {
+      "role": "telnyx",
+      "name": "openfon-telnyx",
+      "label": "Telnyx implementation",
+      "worktree": "private-ref:6d78a76d8cd44b88b2dbf807617c2232",
+      "branch": "codex/telnyx-inbound",
+      "handoff": "private-ref:b4b662384c13484e8f10431334305ede",
+      "state": "prepared",
+      "pane_id": null
+    },
+    {
+      "role": "asterisk",
+      "name": "openfon-asterisk",
+      "label": "Asterisk integration",
+      "worktree": "private-ref:2c36a45cf8e741bb81e7a5854f4cf447",
+      "branch": "codex/asterisk-integration",
+      "handoff": "private-ref:9967758bcdee4317923b0f65284c1e12",
+      "state": "prepared",
+      "pane_id": null
+    },
+    {
+      "role": "presets",
+      "name": "openfon-presets",
+      "label": "Provider presets",
+      "worktree": "private-ref:e8fc3e85bf6842178fcf3cf86c3dd9b9",
+      "branch": "codex/provider-presets",
+      "handoff": "private-ref:72abd7a59e4d444da874664013d55b7c",
+      "state": "prepared",
+      "pane_id": null
+    },
+    {
+      "role": "realtime",
+      "name": "openfon-realtime",
+      "label": "Independent realtime provider",
+      "worktree": "private-ref:5ecff2d1f80d44bbbc89f1212bcd0398",
+      "branch": "codex/realtime-providers",
+      "handoff": "private-ref:597bb2d49fc9455d86f2b534a7e154d3",
+      "state": "prepared",
+      "pane_id": null
+    },
+    {
+      "role": "integration",
+      "name": "openfon-integration",
+      "label": "Release integration and existing fixes",
+      "worktree": "private-ref:2db36db90f4f4c9ca0dc07cd6288d499",
+      "branch": "codex/integrated-release",
+      "handoff": "private-ref:2b5c469c022648958a73b71f2774c411",
+      "state": "prepared",
+      "pane_id": null
+    },
+    {
+      "role": "launch",
+      "name": "openfon-launch",
+      "label": "Launch and onboarding kit",
+      "worktree": "private-ref:379e5fe98fe84cfc8efdabc25ad7e235",
+      "branch": "codex/launch-kit",
+      "handoff": "private-ref:059feebd68674af9b28efc9bb2768bd3",
+      "state": "prepared",
+      "pane_id": null
+    },
+    {
+      "role": "qa",
+      "name": "openfon-qa",
+      "label": "Independent release audit",
+      "worktree": "private-ref:bcbd5721093747e992b07389d0e0c94c",
+      "branch": "codex/release-audit",
+      "handoff": "private-ref:b999e89009ab409fa7f22c4f81e73d13",
+      "state": "prepared",
+      "pane_id": null
+    }
+  ],
+  "desktop_task": {
+    "client_thread_id": "client-new-thread:9ba82b0a-ecb6-4b86-a795-136ead42345b",
+    "host_id": "local",
+    "state": "creating"
+  }
+}

@@ -1,0 +1,154 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "b1b2aec957d3a9e5fa1c12873428cff8e6da23cf786a3c300d1355370264222a",
+    "original_bytes": 7677,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "base": "77cde12b99cc63344251dc8bab34256f23216628",
+  "artifact": "private-ref:2a081f9b2121440d9258e4ac53425f60",
+  "status": "SOURCE ONLY; no node/syntax/test execution",
+  "changed_paths": [
+    "docs/launch/demo/capture-child.mjs",
+    "docs/launch/demo/capture-child-deadline.test.mjs"
+  ],
+  "patch_sha256": "8e69db2dd251cb482f594cb56a521b4f51ca9f15ebd2bb20de9542c5895635bf",
+  "original": {
+    "docs/launch/demo/capture-child.mjs": "ed968bb6c843a46fa97c838337bf6f23d39263ea341ed63bbce07aa6fc95c190",
+    "docs/launch/demo/capture-child.test.mjs": "95a37355448e78c368906fd79c478453448ded8630636852b4708ef878933983",
+    "docs/launch/demo/capture.mjs": "eda6e38ed72dbc0e5a09c74574af0562bdfb27af7625b78d5263abcf9dbd4a26",
+    "scripts/e2e-server.mjs": "c49ead380644097a395af5c325d298e2a6ff7b3bfa4fa6ab0f679844ea359c60"
+  },
+  "fixed": {
+    "docs/launch/demo/capture-child-deadline.test.mjs": "66c17cc2742b117ef3c4e323f579909a9f10027cab6041358f10b587f81de9bd",
+    "docs/launch/demo/capture-child.mjs": "2962cb0248cb4fb6b9eafc1e41c980160b867ae61c2b34f8df8019642869bc77",
+    "docs/launch/demo/capture-child.test.mjs": "95a37355448e78c368906fd79c478453448ded8630636852b4708ef878933983",
+    "docs/launch/demo/capture.mjs": "eda6e38ed72dbc0e5a09c74574af0562bdfb27af7625b78d5263abcf9dbd4a26",
+    "scripts/e2e-server.mjs": "c49ead380644097a395af5c325d298e2a6ff7b3bfa4fa6ab0f679844ea359c60"
+  },
+  "protected_git_records": {
+    "docs/launch/demo/README.md": {
+      "blob": "31a1ce94a4ef0dfdfc350257ceb1d2918779349f",
+      "sha256": "fa9a7cdf7a8ab9c78c3e7080fc7597226f3e6519a2d28f3b4f1a92793ca5fb85"
+    },
+    "docs/launch/demo/audible-script.md": {
+      "blob": "cb0db09a034f92b1d0200b6e1518ebf50cd8e889",
+      "sha256": "2a8d53ee1ae9a653a032d06f6d90f48d0c3a4e5168f8e6730efa95dd975019b1"
+    },
+    "docs/launch/demo/audible/README.md": {
+      "blob": "5a7e079a065b2ebaf1b5e3d872173fce6bcb75ad",
+      "sha256": "c2fbe9f4eb5989e55511e1d13484ba32a9163c722d9d0292baa819e6275303a9"
+    },
+    "docs/launch/demo/audible/capture.json": {
+      "blob": "10417f3fa12ce5d6958a0a7435ee7c2f5e30aa62",
+      "sha256": "42e2ccac79bfdacd2abedda027d188e918592dea9b95f695e6c8c1a0b700a49d"
+    },
+    "docs/launch/demo/audible/northwheel-original-audio.flac": {
+      "blob": "ea8973f2340b61f4375b72a229205591baec6817",
+      "sha256": "c5cbb049b190eabcd7fd92ec0233d6184b6269b074ebbb654e84c30ee213ad8f"
+    },
+    "docs/launch/demo/audible/northwheel-staging-call.mp4": {
+      "blob": "77d14541785fcdc318ca52508483b29a2e829325",
+      "sha256": "bb24d5cdffffa17fa5e2a68c830959a8d30e9672236447fe43ed604a041c2c6e"
+    },
+    "docs/launch/demo/audible/poster.png": {
+      "blob": "db7fd61596792e11bbb51bfd94bdfb30cafc2570",
+      "sha256": "32e95718be2433306d633efd91f85d21f9ab83b2f528d05a94b0a29f2143699b"
+    },
+    "docs/launch/demo/audible/result.json": {
+      "blob": "6a228ef1ab6e5eafb6013f9354848ecf94b793ac",
+      "sha256": "e5c3506c11a73adb24138cb4fadf58b40b486b17aa2db4b9e386f980b11b6ad2"
+    },
+    "docs/launch/demo/capture-child.test.mjs": {
+      "blob": "87c418a7988c580db6db2c9ec8ee999024c21cb4",
+      "sha256": "95a37355448e78c368906fd79c478453448ded8630636852b4708ef878933983"
+    },
+    "docs/launch/demo/capture-harness.md": {
+      "blob": "37ec9a36e03ea05d5742603c4f9a2e06052ecb83",
+      "sha256": "47ca496fac4e10bd88050930c89fe9314843b825e4a5cdce48eeb3192fbfa719"
+    },
+    "docs/launch/demo/capture-sequence.mjs": {
+      "blob": "7b91bd9332cfefb5a8e1ea836ddfd066c2c76a9f",
+      "sha256": "85c5e282cba1e248c541750d4b79edcf0938f0bf561704ea4270b060c95e2f4d"
+    },
+    "docs/launch/demo/capture-sequence.test.mjs": {
+      "blob": "28b57cda778eb9c1d50a956e4264d91fb987e4e8",
+      "sha256": "135c5db6f275140d84e68abc6f44a8a871dd4d3bb6a31eae6d443d60a6c78bf5"
+    },
+    "docs/launch/demo/capture.json": {
+      "blob": "f4c7d05ad9780777a25be8e799b657adfb5af153",
+      "sha256": "c82e7d13580e4a26c7b856a227341f6c839f43fe48c4d1dd6358354799e03814"
+    },
+    "docs/launch/demo/capture.mjs": {
+      "blob": "d52545a2e0f2afe66c6381d2582bdaad5994bddc",
+      "sha256": "eda6e38ed72dbc0e5a09c74574af0562bdfb27af7625b78d5263abcf9dbd4a26"
+    },
+    "docs/launch/demo/corrected/README.md": {
+      "blob": "358497e3fb48badcaf5d9c31eeb1a98f60e2bb97",
+      "sha256": "a328a3a227113ae4c90bd2c80fb11791f5cbc1cbc3cd56f355c4b08a363b6631"
+    },
+    "docs/launch/demo/corrected/corrected-capture.json": {
+      "blob": "c2b76167af37069bafb6b16042e8f7f8efb46320",
+      "sha256": "0aca22e1cdb4da086544e0647f63aa4d61bcdff6fc51014b313c987f8d60b83c"
+    },
+    "docs/launch/demo/corrected/corrected-poster.png": {
+      "blob": "fdc9ee80fc78cd26efd81b8198f1ac5ee5e38b3e",
+      "sha256": "74ee8abcfee249575159d4a539e09a67474bcef5ad6652ee5c0b38b1e1fee93b"
+    },
+    "docs/launch/demo/corrected/corrected-result.json": {
+      "blob": "b4dd8dfe86c4d0f33838fbcee1e79d9ab5bf822a",
+      "sha256": "91dfcf3ce4776399a40b580322e898c2d31ab34ef250f016fe57bd653b728bc3"
+    },
+    "docs/launch/demo/corrected/northwheel-corrected-original-audio.flac": {
+      "blob": "2d916d105919c7aab18b5b0dde5dbb898cb0071d",
+      "sha256": "a0eec8ab11e8c0486098912337160a4cfacb052e3d5ab94650f56b241007c9d8"
+    },
+    "docs/launch/demo/corrected/northwheel-corrected-staging-call.mp4": {
+      "blob": "1a24fd33a7367bfba24a533b25a24f8e7ccb5219",
+      "sha256": "fe9dfedbfd83524046ca6ae632eaae75bd06c73cb2c2c40d0de458c6c627e075"
+    },
+    "docs/launch/demo/corrected/verified-fixture.json": {
+      "blob": "7e84aa5bfbbfd0f37771989596d669232a06155f",
+      "sha256": "9a8ca5f8c5dd342458c91cebe00121f87a370b37e29afc7c78d3e4d8bd48cca3"
+    },
+    "docs/launch/demo/openfon-walkthrough.mp4": {
+      "blob": "28346905081df6bddfcfa1b704ed9aa6ff59a93e",
+      "sha256": "8a29a6d228565dd618bc251ca6f6d8922c69c77679a3e17ffa4783d6696ac8aa"
+    },
+    "docs/launch/demo/poster.png": {
+      "blob": "d966d0edb27c2d41183e786165d534ae89b5dba4",
+      "sha256": "58c5a8d129a562410e887a9854b86c9e377f3929a9fd82f56e8b6bef772c6867"
+    },
+    "scripts/e2e-server.mjs": {
+      "blob": "cdeb1dd83ec5138d1f113e6f5a96db412f9c9cbf",
+      "sha256": "c49ead380644097a395af5c325d298e2a6ff7b3bfa4fa6ab0f679844ea359c60"
+    },
+    "scripts/e2e-server.test.mjs": {
+      "blob": "139e8e0e1ca89df6410ac0b0106ab62b701b8004",
+      "sha256": "b4e864a1d287922c6047d4d0093224a0a808dbed4f5a171dcc000602cec7002a"
+    }
+  },
+  "new_path_absent_at_base": "docs/launch/demo/capture-child-deadline.test.mjs",
+  "checks": {
+    "exact_base_apply_check": "PASS",
+    "two_file_reconstruction": "PASS"
+  },
+  "prepared_cases": 10,
+  "proposed_commands": [
+    "private-ref:d51dc9587f7746938e886e91ea1825d7",
+    "node --test docs/launch/demo/capture-child-deadline.test.mjs",
+    "node --check docs/launch/demo/capture-child.mjs",
+    "node --check docs/launch/demo/capture-child-deadline.test.mjs"
+  ],
+  "command_cwd": "private-ref:b5dc379eef654349849910a3de175252",
+  "limits": [
+    "Two real owned Node process cases; signal-ignoring handler is deliberate, not reproduced npx/workerd stall.",
+    "Eight synthetic event/lexical-timer cases; helper function body unchanged except export removal for lexical injection.",
+    "Real deadline 5000ms, test-only watchdog 7500ms and SIGKILL reaping only own children.",
+    "Capture cleanup extracted, browser.close stub; no capture import/execution.",
+    "Original 15 cases unchanged and not proposed for repeat.",
+    "Existing wrapper-directory rm retained despite unconfirmed exit; no D1/provider/descendant/command-exit/earlier-browser bound."
+  ]
+}

@@ -1,0 +1,115 @@
+{
+  "state": "INTEGRATION_VERIFIED_UNCHANGED_NEW_ORIGINAL_AND_RELEASE",
+  "head": "f265a1f11780c7ad1f6359eadec8e018a90f3ac3",
+  "attempt_id": "f265-path-prefix-1",
+  "QA": "c243b45",
+  "completion_sha256": "1d15d8a2dc83f688d7be8759c499801f33e06490c4d6b9ced107eb3880c2abb2",
+  "catalog_sha256": "b1c3c42ca961415d29a8bcb9dd79058a9cff580f0f4ef7808b2e58141b7ba56b",
+  "records": [
+    {
+      "name": "comment-readback.json",
+      "bytes": 18547,
+      "sha256": "bd13d175d7865f776ab1f6021022121d28d93a815e1c705991f325727afb57ca"
+    },
+    {
+      "name": "completion-provenance.json",
+      "bytes": 3681,
+      "sha256": "1d15d8a2dc83f688d7be8759c499801f33e06490c4d6b9ced107eb3880c2abb2"
+    },
+    {
+      "name": "environment-private.json",
+      "bytes": 2902,
+      "sha256": "1ee1d35f5191c9188a75a1544f24ffbcccd079f66eead501c981b55d5215a1eb"
+    },
+    {
+      "name": "launch-provenance.json",
+      "bytes": 2233,
+      "sha256": "4fcae4e64acaa9ffb172ce288754577fa25741ff493b27682a89f8b259aff444"
+    },
+    {
+      "name": "launch-start.json",
+      "bytes": 332,
+      "sha256": "c4dd8d7613563f59b961aabf81f484b550bb3fa04812a183a27b250ef7f84c9a"
+    },
+    {
+      "name": "launcher-exit.json",
+      "bytes": 224,
+      "sha256": "ccb3122bd7765670c232e9c09928985e1f589f548eacfcb541d9c00134317e5b"
+    },
+    {
+      "name": "launcher-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "launcher-stdout.log",
+      "bytes": 331,
+      "sha256": "51a0c17bbc98fff43af7638fbb3a72cfec158ced5ca015fd2f0e66eaa3b21b1d"
+    },
+    {
+      "name": "original.md",
+      "bytes": 14955,
+      "sha256": "137c116caa75e4e9abd33df406847116eb156a48a7a1b60a42e42eac22d0d0ad"
+    },
+    {
+      "name": "postrelease-listeners.txt",
+      "bytes": 1698,
+      "sha256": "0c79d3737da98ccc51dc2219186106bfe26a94676e027db6007d88a5a93813e8"
+    },
+    {
+      "name": "postrelease-process-scan.txt",
+      "bytes": 218184,
+      "sha256": "eecea2f901527a29d828524be737b7afe80c95263080c7ec017db5fea4323972"
+    },
+    {
+      "name": "prelaunch-listeners.txt",
+      "bytes": 1698,
+      "sha256": "0c79d3737da98ccc51dc2219186106bfe26a94676e027db6007d88a5a93813e8"
+    },
+    {
+      "name": "prelaunch-process-scan.txt",
+      "bytes": 216987,
+      "sha256": "c669188e584d464f7c6353886996530a5112678af92a21c87c4786c5175bfdd8"
+    },
+    {
+      "name": "prepublication.json",
+      "bytes": 1600,
+      "sha256": "b7967a30cec58dee916b11c282ef8455004bbb09652db41ffad927196211856f"
+    },
+    {
+      "name": "publication.json",
+      "bytes": 320,
+      "sha256": "284ca0cdd83ce4d24471c5c32bc2164e5cb047d0e34f4d8fbef3f32959140715"
+    },
+    {
+      "name": "publisher-exit.json",
+      "bytes": 222,
+      "sha256": "33ce4ccc79c82595328e5435bf0de18dcf8ff9b2b8dad69fd2c0d606688f1909"
+    },
+    {
+      "name": "publisher-start.json",
+      "bytes": 234,
+      "sha256": "8273aa7662d7d92d192a20dc2435bcc0ecb9ce997c9395eb7a0d95e8f51e8c3e"
+    },
+    {
+      "name": "publisher-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "publisher-stdout.log",
+      "bytes": 321,
+      "sha256": "a1be28446b657dff99c1c1b6fae81df7b4bead96af3348a6501f6865d96d7a79"
+    },
+    {
+      "name": "review.json",
+      "bytes": 16715,
+      "sha256": "91ac028f3bad34ac53f6f7814d9b186014a98d81ab4ea3baec6ec91a9b42f03a"
+    }
+  ],
+  "original_sha256": "137c116caa75e4e9abd33df406847116eb156a48a7a1b60a42e42eac22d0d0ad",
+  "fullbody_sha256": "eb4efa218290eff8ef72866e6dc723a29c8a686b9b6edc37eea5c74038c44c43",
+  "original_suffix_exact": true,
+  "old_failed_ten_records_unchanged": true,
+  "limits": "No cause proof for discarded prior2926stderr; scoped current environment only,rebuilt132/no oldbinary limits.497omissions/unadjudicated findings/no clearance. Scoped release scans nonexhaustive; no new execution."
+}

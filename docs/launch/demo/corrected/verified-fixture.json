@@ -1,0 +1,71 @@
+{
+  "verifiedAt": "2026-09-12T12:24:06.158Z",
+  "localDayTime": "Saturday, 12 September 2026 at 14:24:06 CEST",
+  "business": {
+    "name": "Northwheel Bicycle Workshop",
+    "description": "Fictional Northwheel Bicycle Workshop. Weekly hours: Monday\u2013Friday 09:00\u201317:00; Saturday 09:00\u201314:00; Sunday closed. Puncture repairs and basic bicycle servicing. Repair timing requires staff confirmation. No information about espresso-machine repairs.",
+    "timezone": "Europe/Vienna",
+    "hours_json": "[{\"day\":\"Monday\",\"open\":\"09:00\",\"close\":\"17:00\",\"closed\":false},{\"day\":\"Tuesday\",\"open\":\"09:00\",\"close\":\"17:00\",\"closed\":false},{\"day\":\"Wednesday\",\"open\":\"09:00\",\"close\":\"17:00\",\"closed\":false},{\"day\":\"Thursday\",\"open\":\"09:00\",\"close\":\"17:00\",\"closed\":false},{\"day\":\"Friday\",\"open\":\"09:00\",\"close\":\"17:00\",\"closed\":false},{\"day\":\"Saturday\",\"open\":\"09:00\",\"close\":\"14:00\",\"closed\":false},{\"day\":\"Sunday\",\"open\":\"09:00\",\"close\":\"17:00\",\"closed\":true}]",
+    "services_json": "[{\"name\":\"Puncture repairs\",\"notes\":\"Repair timing requires staff confirmation.\"},{\"name\":\"Basic bicycle servicing\",\"notes\":\"Repair timing requires staff confirmation.\"}]",
+    "faqs_json": "[{\"q\":\"What are your Saturday opening hours?\",\"a\":\"Saturday opening hours are 09:00\u201314:00 in Europe/Vienna. Being past closing time does not change these regular hours.\"},{\"q\":\"Can you guarantee a repair today?\",\"a\":\"No. Repair timing must be confirmed by staff.\"},{\"q\":\"Do you repair vintage espresso machines?\",\"a\":\"We have no information about espresso-machine repairs; do not claim that service is available.\"}]",
+    "closures_json": "[]"
+  },
+  "assistant": {
+    "name": "Northwheel fictional AI front desk",
+    "state": "draft",
+    "engine": "realtime",
+    "realtime_model": "gpt-realtime-2",
+    "realtime_voice": "",
+    "llm_model": "llama-3.3-70b",
+    "greeting": "Hello, this is Northwheel\u2019s AI assistant. I can answer workshop questions or take a message for the team.",
+    "custom_instructions": "This is an approved fictional Northwheel demo. Use the canonical business hours and approved knowledge. Saturday regular hours are 09:00\u201314:00 Europe/Vienna; if the current time is after14:00, distinguish closed now from normally open Saturday. Repair timing requires staff confirmation; never guarantee same-day repair. No espresso-machine repair information. Capture requests for staff without confirming appointments or transfers. Keep each spoken reply to one brief sentence unless clarification is necessary. Caller may decline contact details; do not invent them."
+  },
+  "knowledge": [
+    {
+      "kind": "faq",
+      "status": "active",
+      "title": "",
+      "question": "What are your Saturday opening hours?",
+      "answer": "Saturday opening hours are 09:00\u201314:00 in Europe/Vienna. Being past closing time does not change these regular hours.",
+      "content": ""
+    },
+    {
+      "kind": "faq",
+      "status": "active",
+      "title": "",
+      "question": "Can you guarantee a repair today?",
+      "answer": "No. Repair timing must be confirmed by staff.",
+      "content": ""
+    },
+    {
+      "kind": "faq",
+      "status": "active",
+      "title": "",
+      "question": "Do you repair vintage espresso machines?",
+      "answer": "We have no information about espresso-machine repairs; do not claim that service is available.",
+      "content": ""
+    },
+    {
+      "kind": "service",
+      "status": "active",
+      "title": "Puncture repairs",
+      "question": "",
+      "answer": "",
+      "content": "Repair timing requires staff confirmation."
+    },
+    {
+      "kind": "service",
+      "status": "active",
+      "title": "Basic bicycle servicing",
+      "question": "",
+      "answer": "",
+      "content": "Repair timing requires staff confirmation."
+    }
+  ],
+  "expected": {
+    "regularSaturdayHours": "09:00\u201314:00 Europe/Vienna; closed now if asked after14:00",
+    "repairGuarantee": "No, staff confirmation required",
+    "unknown": "No information; no invented service",
+    "message": "Alex Example requests repair timing; declines phone; normalized caller_phone null/absent, not string null"
+  }
+}

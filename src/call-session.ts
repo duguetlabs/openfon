@@ -1,3 +1,5 @@
+import { normalizeCallerPhone } from './contact';
+import { RealtimeOutputBudget, RealtimeOutputError, RealtimeAudioReceipts, MAX_UNRECEIVED_AUDIO_BYTES } from './realtime-output';
 // CallSession Durable Object: one instance per live call.
 // Owns the WebSocket to the caller's browser and runs the voice loop:
 //   caller audio -> STT -> LLM -> TTS -> caller.
@@ -12,8 +14,13 @@
 //   server JSON  {type:"agent_text", text}      agent reply text (always sent)
 //   server BINARY <mp3>                         spoken version of the last agent_text (azure mode)
 //   server JSON  {type:"thinking"} | {type:"error", message} | {type:"ended"}
-import type { Env, Business, AgentSettings, ChatMessage } from './types';
+import type { Env, Business, AgentSettings, ChatMessage, ProviderSettings } from './types';
+import { resolveRealtime, realtimeConnection, realtimeCapabilities } from './realtime-providers';
+import type { RealtimeConfig } from './realtime-providers';
 import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './prompt';
+import type { PromptKnowledgeItem } from './prompt';
+import { loadCallKnowledge } from './call-knowledge';
+import { parseRealtimeMessage, decodeRealtimeAudio, RealtimeInputError, transcriptBytes, MAX_TRANSCRIPT_FIELD_BYTES, MAX_CALL_TRANSCRIPT_BYTES, MAX_REALTIME_AUDIO_BYTES } from './realtime-input';
 import { chatComplete, detectLang, isFarewell, isVocabEcho, LlmConfigError, normalizeLang, piperVoiceFor, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
 
 // WebSocket binary payloads vary by runtime: ArrayBuffer, ArrayBufferView, or Blob.
@@ -37,11 +44,19 @@ function b64encode(buf: ArrayBuffer): string {
   return btoa(s);
 }
 
-function b64decode(s: string): ArrayBuffer {
-  const bin = atob(s);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out.buffer;
+interface UpstreamMessage {
+  type: string;
+  delta?: string;
+  response_id?: unknown;
+  response?: { id?: unknown };
+  item_id?: string;
+  content_index?: number;
+  transcript?: string;
+  language?: string;
+  item?: { type?: string; name?: string };
+  name?: string;
+  session?: SessionConfig;
+  error?: { type?: unknown; code?: unknown; event_id?: unknown; message?: unknown };
 }
 
 interface SummaryResult {
@@ -77,9 +92,21 @@ function parseSummary(raw: string): SummaryResult {
   return { summary: cleaned.slice(0, 200) || null };
 }
 
+function messageJsonHasRealMessage(messageJson: string | null): boolean {
+  if (!messageJson) return false;
+  try {
+    const parsed = JSON.parse(messageJson) as { message?: unknown };
+    return typeof parsed.message === 'string' && Boolean(parsed.message.trim());
+  } catch {
+    return false;
+  }
+}
+
 interface CallRow {
   id: string;
   business_id: string;
+  assistant_id: string | null;
+  channel: string;
   status: string;
   started_at: string;
 }
@@ -105,49 +132,42 @@ const SERVER_VAD: TurnDetection = { type: 'server_vad', threshold: 0.7, prefix_p
 // update.
 type SessionConfig = Record<string, unknown>;
 
-// The trade, so it does not get re-litigated from half the evidence — all of it
-// in docs/research/realtime-latency-2026-08.md § "Follow-up: is the splitting
-// the brain or the turn detector?":
+// Evidence: docs/research/realtime-latency-2026-08.md and
+// docs/research/realtime-21-2026-08.md. Evaluate observed tail latency as well
+// as medians before changing a detector; a null median does not establish
+// equivalent latency distributions.
 //
-//   * `server_vad` splits a caller's utterance at a clause pause on
-//     gpt-realtime tiers — 10 of 10 turns, against 0 of 10 for the same brain
-//     and serving stack on a semantic detector (exact McNemar p = 0.00195).
-//     Inaudibly: the fragment's response is cancelled before any audio goes
-//     out, so the caller hears nothing and the model answers a sentence
-//     fragment as a complete turn, billing a discarded response each time.
-//   * OpenAI's `semantic_vad` fixes that and costs too much for a phone call:
-//     end-of-turn p50 1189 ms against server VAD's 736, and a **p90 of
-//     4512 ms**. The engine-only delta is −87 ms and null, so the whole penalty
-//     is the detector deciding, not the model thinking.
-//   * Azure's semantic detector is genuinely free — 707 ms p50, the tightest
-//     spread of any arm measured, 0/10 splits. It is only reachable through
-//     Voice Live, and Kataleptic exposes no tier that pairs Voice Live with a
-//     gpt-realtime brain. That combination is the actual fix and it is not
-//     currently purchasable.
+// In the 72-turn split experiment, gpt-realtime-2, 2.1, and 2.1-mini each split
+// 12/12 clause-pause utterances under server VAD, versus HD's 0/12. Cancelled
+// fragment responses consume provider work even when callers hear no audio.
+// OpenAI semantic VAD eliminated observed splits on 2 and 2.1, but only reduced
+// mini to 4/12. It is a mitigation on mini, not a demonstrated fix.
 //
-// So: the splitting is real and stays, because every available remedy is worse
-// than the defect. Revisit when a Voice Live + gpt-realtime tier exists.
-// Two detectors with opposite latency profiles both get called "semantic VAD";
-// collapsing them is how this nearly shipped the 4.5 s tail.
+// OpenAI semantic VAD also produced multi-second observed end-of-turn tails:
+// speech_stopped_ms p90 was 4512 ms on 2 and 4442 ms on 2.1. Both measured tails
+// are undesirable for this application. These unmatched samples (n=10 and 20)
+// do not establish equivalence or independence from the underlying model.
 //
-// The whole gpt-realtime family behaves the same way, so none of this is
-// specific to one model id (72-turn run, all controls verified): 2, 2.1 and
-// 2.1-mini all split **12/12** under `server_vad`, against HD's 0/12. Semantic
-// VAD takes 2.1 to 0/12 (Holm p = 0.00293) but only takes **2.1-mini to 4/12**
-// (Holm p = 0.02344) — still one turn in three, with the detector confirmed
-// echoed back on all 12. On mini the semantic detector is a mitigation, not a
-// fix, which counts against that tier as a default on its own, before latency
-// is even considered.
+// Azure semantic VAD is a separate detector. The later Voice Live arms showed
+// narrow observed distributions (end-of-turn p50 731-732 ms, p90 738-785 ms)
+// and 0/12 observed splits with gpt-realtime. These small samples do not rule
+// out rare tails. At the time of those measurements, the gateway offered no
+// Voice Live tier pairing this detector with a gpt-realtime brain. Recheck
+// availability and measure tail latency before adopting that configuration.
+//
+// Keep the tuned server detector: its observed splitting is currently preferred
+// to OpenAI semantic VAD's measured latency cost. The session echo verification
+// below is required to confirm that the provider actually applied the choice.
 const TURN_DETECTION_BY_TIER: Record<string, TurnDetection> = {
   // Splits 12/12 under server_vad. Left on it anyway — see the trade above.
   'gpt-realtime-2': SERVER_VAD,
-  // 12/12 too, and semantic VAD would take it to 0/12 — the one tier where the
-  // detector is a clean fix. Still server VAD pending the latency block: if 2.1
-  // carries gpt-realtime-2's 4512 ms p90 end-of-turn tail, fixing the splitting
-  // does not pay for it. One line to flip when those numbers land.
+  // Semantic VAD eliminated observed splits (12/12 -> 0/12), but the paired
+  // TTFA median +106 ms hid a p90 +3490 ms (n=20). End-of-turn p90 was 4442 ms
+  // versus server VAD's 805 ms. Retain server VAD based on that observed tail;
+  // the null median alone is not evidence that semantic VAD is cheap.
   'gpt-realtime-2.1': SERVER_VAD,
-  // 12/12, and semantic VAD only gets it to 4/12. Nothing available fixes this
-  // tier, so the detector choice is not what decides it.
+  // Semantic VAD left 4/12 splits and measured TTFA p90 5123 ms. It did not
+  // eliminate splitting in this sample, and it added an undesirable tail.
   'gpt-realtime-2.1-mini': SERVER_VAD,
   // Does not split (0/10), and semantic VAD measured *worse* on this brain
   // (strict success 0.333 -> 0.259, pass^3 0.222 -> 0.111, TTFA p95 +133 ms;
@@ -198,7 +218,13 @@ export class CallSession implements DurableObject {
   private callId = '';
   private biz: Business | null = null;
   private settings: AgentSettings | null = null;
+  // Undefined is deliberate: a mixed-version call row with no assistant_id
+  // must keep using the legacy services/FAQs stored on the business. An
+  // assistant with zero active attached items sets this to [], which is a real
+  // and authoritative empty knowledge set.
+  private knowledge: PromptKnowledgeItem[] | undefined;
   private history: ChatMessage[] = [];
+  private persistedTranscriptBytes = 0;
   private busy = false;
   private ended = false; // stop handling caller messages
   private finalized = false; // the call row has been written; gates retries
@@ -206,10 +232,12 @@ export class CallSession implements DurableObject {
   // Computed once and reused across finalize retries, so a failed row write
   // does not re-bill summarization.
   private summarized: { summary: string | null; intent: string | null; messageJson: string | null } | null = null;
+  private nativeGreeting: { ready: Promise<boolean>; resolve: (ok: boolean) => void; frames: ArrayBuffer[]; bytes: number; failed: boolean } | null = null;
   private starting: Promise<void> | null = null; // in-flight or completed start
   private announced = false; // `ready` sent: the session exists, retries are off
   private lang = 'en'; // follows the caller; starts as the business default
   private mode: 'pipeline' | 'realtime' = 'pipeline';
+  private requiresCarrierAudio = false;
   private upstream: WebSocket | null = null; // realtime engine connection
   private failure: string | null = null; // owner-facing reason, stored as the call's summary
 
@@ -257,11 +285,14 @@ export class CallSession implements DurableObject {
       // one layer out: no socket was the first half, no orphaned row is this.
       console.error(`call ${this.callId}: could not arm the watchdog; retiring the row`, err);
       await this.env.DB.prepare(
-        `UPDATE calls SET status = 'failed', ended_at = ?, summary = ? WHERE id = ? AND status = 'active'`
+        `UPDATE calls SET status = 'failed', ended_at = ?, summary = ?, outcome = 'failed',
+          failure_code = 'watchdog_unavailable', failure_message = ?
+         WHERE id = ? AND status = 'active'`
       )
         .bind(
           CallSession.sqlTime(Date.now()),
           'Call failed: the call could not be started.',
+          'The call watchdog could not be started.',
           this.callId
         )
         .run()
@@ -322,17 +353,79 @@ export class CallSession implements DurableObject {
     void this.finalize().catch((e) => console.error('finalize after failure failed', e));
   }
 
+  private async loadSettings(businessId: string, assistantId: string | null): Promise<void> {
+    if (assistantId) {
+      this.settings = await this.env.DB.prepare(
+        `SELECT
+          assistants.business_id,
+          assistants.name AS agent_name,
+          assistants.greeting,
+          assistants.persona,
+          assistants.language,
+          assistants.voice,
+          assistants.take_messages,
+          assistants.custom_instructions,
+          COALESCE(provider_settings.llm_base_url, '') AS llm_base_url,
+          COALESCE(provider_settings.llm_api_key, '') AS llm_api_key,
+          COALESCE(NULLIF(assistants.llm_model, ''), provider_settings.llm_model, '') AS llm_model,
+          provider_settings.realtime_provider,
+          provider_settings.realtime_base_url,
+          provider_settings.realtime_api_key,
+          provider_settings.stt_provider,
+          provider_settings.stt_base_url,
+          provider_settings.stt_api_key,
+          provider_settings.stt_model,
+          assistants.engine,
+          assistants.realtime_model,
+          assistants.realtime_voice
+         FROM assistants
+         LEFT JOIN provider_settings ON provider_settings.business_id = assistants.business_id
+         WHERE assistants.id = ? AND assistants.business_id = ?`
+      )
+        .bind(assistantId, businessId)
+        .first<AgentSettings>();
+      this.knowledge = await loadCallKnowledge(this.env.DB, assistantId, businessId);
+    }
+    // Compatibility for a call row created before 0008 or during a mixed-version
+    // rollout. Migration 0008 backfills assistant_id, but an old worker can
+    // still insert a NULL until the new worker takes traffic.
+    if (!this.settings) {
+      this.settings = await this.env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?')
+        .bind(businessId)
+        .first<AgentSettings>();
+      const workspace = await this.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
+        .bind(businessId).first<ProviderSettings>();
+      if (this.settings && workspace) {
+        this.settings = { ...this.settings,
+          llm_base_url: workspace.llm_base_url,
+          llm_api_key: workspace.llm_api_key,
+          llm_model: this.settings.llm_model || workspace.llm_model || '',
+          realtime_provider: workspace.realtime_provider,
+          realtime_base_url: workspace.realtime_base_url,
+          realtime_api_key: workspace.realtime_api_key,
+          stt_provider: workspace.stt_provider, stt_base_url: workspace.stt_base_url,
+          stt_api_key: workspace.stt_api_key, stt_model: workspace.stt_model,
+        };
+      }
+      this.knowledge = undefined;
+    }
+  }
+
   private async loadCall(): Promise<void> {
-    const call = await this.env.DB.prepare('SELECT id, business_id, status, started_at FROM calls WHERE id = ?')
+    const call = await this.env.DB.prepare('SELECT id, business_id, assistant_id, status, started_at, channel FROM calls WHERE id = ?')
       .bind(this.callId)
       .first<CallRow>();
     if (!call || call.status !== 'active') throw new Error('call not found or not active');
+    const budget = await this.env.DB.prepare('SELECT COALESCE(SUM(length(CAST(text AS BLOB))), 0) AS bytes FROM call_turns WHERE call_id = ?')
+      .bind(this.callId).first<{ bytes: number }>();
+    this.persistedTranscriptBytes = budget?.bytes ?? 0;
+    // Persisted admission decides capabilities; a client cannot opt into another
+    // channel using a query parameter or WebSocket message.
+    this.requiresCarrierAudio = call.channel === 'telnyx' || call.channel === 'asterisk';
     this.biz = await this.env.DB.prepare('SELECT * FROM businesses WHERE id = ?')
       .bind(call.business_id)
       .first<Business>();
-    this.settings = await this.env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?')
-      .bind(call.business_id)
-      .first<AgentSettings>();
+    await this.loadSettings(call.business_id, call.assistant_id);
     if (!this.biz || !this.settings) throw new Error('business not configured');
   }
 
@@ -340,6 +433,7 @@ export class CallSession implements DurableObject {
     if (this.ended) return;
     this.lastActivity = Date.now(); // feeds the idle watchdog
     if (typeof ev.data !== 'string') {
+      if (this.nativeGreeting) return; // carrier input cannot overtake the native greeting
       const audio = await toArrayBuffer(ev.data);
       if (this.mode === 'realtime') {
         this.sendUpstream({ type: 'input_audio_buffer.append', audio: b64encode(audio) });
@@ -348,8 +442,14 @@ export class CallSession implements DurableObject {
       }
       return;
     }
-    const msg = JSON.parse(ev.data) as { type: string; text?: string; contentType?: string };
+    const msg = JSON.parse(ev.data) as { type: string; text?: string; contentType?: string; id?: unknown };
     switch (msg.type) {
+      case 'audio_received':
+        try {
+          this.audioReceipts.acknowledge(msg.id, Date.now());
+          this.armAudioReceiptDeadline();
+        } catch { this.failRealtimeOutput(); }
+        break;
       case 'start':
         await this.handleStart();
         break;
@@ -404,7 +504,7 @@ export class CallSession implements DurableObject {
     // would file a call that ran perfectly well as failed — and a working call
     // disappearing from the owner's counts gives them nothing to notice.
     this.failure = null;
-    this.send({ type: 'ready', ...payload });
+    this.send({ type: 'ready', ...payload, ...(payload.mode === 'realtime' ? { audioReceipts: true } : {}) });
   }
 
   private async runStart(): Promise<void> {
@@ -421,6 +521,7 @@ export class CallSession implements DurableObject {
     // caller mid-conversation (realtime calls would only notice at summary time).
     try {
       resolveLlm(this.env, this.settings);
+      if (this.settings?.engine === 'realtime') this.realtimeConfig = resolveRealtime(this.env, this.settings);
     } catch (err) {
       if (!(err instanceof LlmConfigError)) throw err;
       // The diagnostic is for the owner, not the caller: it can name the
@@ -438,17 +539,27 @@ export class CallSession implements DurableObject {
       await this.finalize();
       return;
     }
+    if (this.requiresCarrierAudio && this.settings!.engine !== 'realtime') {
+      await this.failCarrierAudio('Telephone calls require a realtime assistant.');
+      return;
+    }
     // Armed only once the call is actually going ahead — nothing to watch over
     // a call that is being torn down at pickup.
     await this.armWatchdog();
     if (this.ended) return;
     this.lang = this.settings!.language in SUPPORTED_LANGUAGES ? this.settings!.language : 'en';
     const greeting = defaultGreeting(this.biz!, this.settings!);
-    const systemPrompt = buildSystemPrompt(this.biz!, this.settings!, new Date());
+    const systemPrompt = buildSystemPrompt(this.biz!, this.settings!, new Date(), this.knowledge);
 
     if (this.settings!.engine === 'realtime') {
+      this.history = [{ role: 'system', content: systemPrompt }];
+      if (this.requiresCarrierAudio && this.engineGreets()) {
+        let resolve!: (ok: boolean) => void;
+        const ready = new Promise<boolean>(done => { resolve = done; });
+        this.nativeGreeting = { ready, resolve, frames: [], bytes: 0, failed: false };
+      }
       const ok = await this.startRealtime(systemPrompt, greeting).catch((err) => {
-        console.error('realtime engine failed, falling back to pipeline:', err);
+        console.error('realtime engine startup failed: provider details redacted');
         return false;
       });
       if (this.ended) {
@@ -461,37 +572,83 @@ export class CallSession implements DurableObject {
         if (this.engineGreets()) {
           // Engine speaks the greeting in its own voice; the greeting text and
           // transcript turn arrive through the normal event stream.
-          this.history = [{ role: 'system', content: systemPrompt }];
           const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-          this.sendReady({ mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
+          const pending = this.nativeGreeting;
+          if (pending) {
+            // Config acknowledgement is not evidence of generated greeting
+            // audio. Bound the wait; hangup also wakes it through closeUpstream.
+            const timer = setTimeout(() => pending.resolve(false), 5000);
+            const hasAudio = await pending.ready;
+            clearTimeout(timer);
+            this.nativeGreeting = null;
+            if (this.ended) return;
+            if (!hasAudio || pending.failed) {
+              await this.failCarrierAudio('The realtime provider did not produce usable greeting audio.');
+              return;
+            }
+            // The carrier releases buffered input on ready. Queue the first
+            // PCM immediately afterward, with no await or event-loop gap.
+            this.sendReady({ mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
+            try { for (const audio of pending.frames) this.sendRealtimeAudio(audio); }
+            catch { this.failRealtimeOutput(); }
+          } else {
+            this.sendReady({ mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
+          }
           return;
         }
+        if (this.requiresCarrierAudio && !(this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY)) {
+          await this.failCarrierAudio('This realtime tier requires server speech synthesis for telephone greetings.');
+          return;
+        }
+        this.reserveTranscript(greeting);
         this.history = [
           { role: 'system', content: systemPrompt },
           { role: 'assistant', content: greeting },
         ];
         const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
-        this.sendReady({ mode: 'realtime', ttsMode, greeting, engine: engineLabel });
+        if (!this.requiresCarrierAudio) this.sendReady({ mode: 'realtime', ttsMode, greeting, engine: engineLabel });
         await this.saveTurn('agent', greeting);
         // The greeting is ours, not the model's: synthesize it deterministically
         // and stream it as PCM so it matches the realtime audio path.
         const voice = voiceForReply(this.env, this.lang, this.settings!.language, this.settings!.voice || '');
         const audio = await synthesize(this.env, greeting, voice, 'pcm24');
+        if (this.ended) return; // caller hung up while synthesis was pending
+        // Carrier adapters admit one PCM24 frame of at most ten seconds.
+        // Reject before ready instead of releasing input or bursting split
+        // frames into their bounded playback queues. Browser audio is unchanged.
+        if (this.requiresCarrierAudio && audio &&
+          (audio.byteLength > MAX_REALTIME_AUDIO_BYTES || audio.byteLength % 2 !== 0)) {
+          await this.failCarrierAudio('Telephone greeting audio must be valid PCM and no longer than 10 seconds. Shorten the greeting and retry.');
+          return;
+        }
+        if (this.requiresCarrierAudio && !audio?.byteLength) {
+          await this.failCarrierAudio('Telephone greeting audio could not be generated.');
+          return;
+        }
+        // The carrier bridge releases buffered input on ready. Queue ready and
+        // greeting PCM in the same turn, only after synthesis succeeds, so no
+        // caller response can overtake the greeting during the awaited work.
+        if (this.requiresCarrierAudio) this.sendReady({ mode: 'realtime', ttsMode, greeting, engine: engineLabel });
         if (audio && this.ws) {
           // PCM16 @ 24 kHz = 48000 bytes/s; shield the greeting from
           // noise-triggered barge-in flushes for its playback duration.
           this.greetingGuardUntil = Date.now() + (audio.byteLength / 48000) * 1000 + 500;
           try {
-            this.ws.send(audio);
+            this.sendRealtimeAudio(audio);
           } catch {
-            /* caller gone */
+            this.failRealtimeOutput();
           }
         }
         return;
       }
     }
 
+    if (this.requiresCarrierAudio || this.realtimeConfig?.protocol === 'openai') {
+      await this.failCarrierAudio('The realtime provider could not start this call.');
+      return;
+    }
     this.mode = 'pipeline';
+    this.reserveTranscript(greeting);
     this.history = [
       {
         role: 'system',
@@ -509,6 +666,12 @@ export class CallSession implements DurableObject {
     });
     await this.saveTurn('agent', greeting);
     await this.speak(greeting);
+  }
+
+  private async failCarrierAudio(reason: string): Promise<void> {
+    this.failure = reason;
+    this.sendError(this.requiresCarrierAudio ? 'Telephone audio is unavailable.' : 'Realtime audio is unavailable.');
+    await this.finalize();
   }
 
   // ---- realtime engine bridge (OpenAI Realtime wire protocol) ----
@@ -538,7 +701,32 @@ export class CallSession implements DurableObject {
     }
   }
 
+  private cancelResponse(from: WebSocket): void {
+    if (from.readyState !== WS_OPEN) return;
+    const pending = this.cancelRequests.get(from) ?? new Map<string, number>();
+    for (const [id, until] of pending) if (until <= Date.now()) pending.delete(id);
+    while (pending.size >= 4) pending.delete(pending.keys().next().value!);
+    const eventId = crypto.randomUUID();
+    pending.set(eventId, Date.now() + 10_000);
+    this.cancelRequests.set(from, pending);
+    this.sendUpstream({ type: 'response.cancel', event_id: eventId }, from);
+  }
+
+  private consumeCancelRace(error: UpstreamMessage['error'], from: WebSocket): boolean {
+    if (error?.type !== 'invalid_request_error' || error.code !== 'response_cancel_not_active' ||
+      typeof error.event_id !== 'string' || error.event_id.length > 128) return false;
+    const pending = this.cancelRequests.get(from);
+    const until = pending?.get(error.event_id);
+    pending?.delete(error.event_id); // one acknowledgement, never a reusable exemption
+    return until !== undefined && until > Date.now();
+  }
+
   private closeUpstream(): void {
+    if (this.audioReceiptTimer !== undefined) clearTimeout(this.audioReceiptTimer);
+    this.audioReceiptTimer = undefined;
+    this.audioReceipts.clear();
+    this.nativeGreeting?.resolve(false);
+    this.nativeGreeting = null;
     for (const ws of this.readableUpstreams) {
       try {
         ws.close(1000, 'call ended');
@@ -559,6 +747,10 @@ export class CallSession implements DurableObject {
   private recovering: Promise<void> | null = null;
   private static readonly MAX_TOTAL_RECONNECTS = 5;
   private greetingGuardUntil = 0; // ignore barge-in flushes while our greeting plays
+  private realtimeOutputBudget = new RealtimeOutputBudget(Date.now());
+  private audioReceipts = new RealtimeAudioReceipts();
+  private audioReceiptTimer: ReturnType<typeof setTimeout> | undefined;
+  private cancelRequests = new WeakMap<WebSocket, Map<string, number>>();
   private endPending = false; // caller said farewell; hang up after the agent's sign-off
 
   // ---- session echo read-back ----
@@ -738,6 +930,7 @@ export class CallSession implements DurableObject {
       type: 'session.update',
       session: {
         type: 'realtime',
+        ...(this.realtimeConfig?.protocol === 'openai' ? { output_modalities: ['audio'] } : {}),
         instructions,
         ...(this.toolsSupported()
           ? {
@@ -769,7 +962,7 @@ export class CallSession implements DurableObject {
             // 24 kHz: the lowest rate every tier accepts (native S2S models reject 16 kHz)
             format: { type: 'audio/pcm', rate: 24000 },
             // Per-tier, from the measurements — see TURN_DETECTION_BY_TIER.
-            turn_detection: turnDetectionFor(this.realtimeModel),
+            turn_detection: this.realtimeConfig?.protocol === 'openai' ? SERVER_VAD : turnDetectionFor(this.realtimeModel),
             transcription: {
               // Native S2S tiers only support their own transcription models;
               // forcing ours silently disables caller transcripts there.
@@ -780,7 +973,7 @@ export class CallSession implements DurableObject {
               // azure-speech; name it ourselves and the prompt goes upstream
               // intact, where Azure rejects the **entire** session.update —
               // instructions, voice and tools with it.
-              model: this.realtimeModel.startsWith('gpt-realtime') ? 'whisper-1' : this.env.DEFAULT_STT_MODEL,
+              model: (this.realtimeConfig && realtimeCapabilities(this.realtimeConfig).transcriptionModel) || (this.realtimeModel.startsWith('gpt-realtime') ? 'whisper-1' : this.env.DEFAULT_STT_MODEL),
               // Not sent on HD, where it cannot take effect: Azure Voice Live
               // answers `prompt is not yet supported for azure-speech`, and its
               // transcription config is latched by the first `session.update`
@@ -789,7 +982,7 @@ export class CallSession implements DurableObject {
               // HD call about a field nobody can apply. If Kataleptic stops
               // spending that first update, this can go back to unconditional —
               // and `phrase_list` becomes the supported spelling of it there.
-              ...(this.realtimeModel === 'kataleptic-realtime-hd' ? {} : { prompt: this.biz && this.settings ? sttVocab(this.biz, this.settings) : undefined }),
+              ...(this.realtimeConfig?.protocol !== 'openai' && this.realtimeModel === 'kataleptic-realtime-hd' ? {} : { prompt: this.biz && this.settings ? sttVocab(this.biz, this.settings, this.knowledge) : undefined }),
               // On cascade tiers this is a greeting seed + STT accuracy hint,
               // not a pin: per-utterance detection overrides it once the caller
               // speaks (verified 2026-06-13 after Kataleptic's fix).
@@ -829,11 +1022,16 @@ export class CallSession implements DurableObject {
   // True when the engine should speak the greeting itself: its reply voice is
   // not an Azure voice (so our synthesized greeting would not match), and its
   // first-token latency is low enough for an instant pickup.
+  private realtimeConfig: RealtimeConfig | null = null;
+  private outputAudio: { socket: WebSocket; itemId: string; contentIndex: number; startedAt: number; bytes: number } | null = null;
+
   private engineGreets(): boolean {
+    if (this.realtimeConfig) return realtimeCapabilities(this.realtimeConfig).engineGreeting;
     return this.realtimeModel === 'kataleptic-realtime' || this.realtimeModel.startsWith('gpt-realtime');
   }
 
   private isCascade(): boolean {
+    if (this.realtimeConfig) return realtimeCapabilities(this.realtimeConfig).cascade;
     return this.realtimeModel !== 'kataleptic-realtime-hd' && !this.realtimeModel.startsWith('gpt-realtime');
   }
 
@@ -841,7 +1039,9 @@ export class CallSession implements DurableObject {
   // 33 goodbye turns per engine, the agent invoked `end_call` on 23-25 of them,
   // with no meaningful spread between engines — and on one scenario it fired
   // 1 time in 15 after capturing every detail correctly
-  // (docs/research/voice-engine-quality-2026-08.md, Track B).
+  // (docs/research/voice-engine-quality-2026-08.md, scoring-defects section).
+  // Track B counts only the 9 scored scenarios (17-19/27); the 23-25/33
+  // figure includes every goodbye turn. These are different denominators.
   //
   // So the caller-farewell heuristic and the hangup safety net below are not
   // belt-and-braces. They are the primary mechanism on roughly a quarter of
@@ -871,11 +1071,11 @@ export class CallSession implements DurableObject {
   }
 
   private async startRealtime(systemPrompt: string, greeting: string): Promise<boolean> {
-    const key = this.env.REALTIME_API_KEY || this.env.DEFAULT_LLM_API_KEY || '';
-    const model = this.settings?.realtime_model || this.env.REALTIME_MODEL;
+    this.realtimeConfig ??= resolveRealtime(this.env, this.settings);
+    const model = this.realtimeConfig.model;
     this.realtimeModel = model;
     console.log(`call ${this.callId}: realtime engine, model ${model}`);
-    const isHd = model === 'kataleptic-realtime-hd';
+    const isHd = realtimeCapabilities(this.realtimeConfig).managedVoice;
     const isCascade = this.isCascade();
     // Explicit per-business realtime voice wins; on the Azure-backed HD tier we
     // manage the voice (matches the synthesized greeting); Piper cascades get a
@@ -887,7 +1087,7 @@ export class CallSession implements DurableObject {
       (isHd
         ? voiceForReply(this.env, this.lang, this.settings?.language ?? 'en', this.settings?.voice || '')
         : isCascade
-          ? await piperVoiceFor(this.env, this.lang)
+          ? await piperVoiceFor({ ...this.env, REALTIME_BASE_URL: this.realtimeConfig.baseUrl }, this.lang)
           : '');
     const toolNote = this.toolsSupported()
       ? '\n\nWhen the conversation is finished and you have said goodbye, call the end_call function.'
@@ -915,9 +1115,19 @@ export class CallSession implements DurableObject {
 
   // Instructions may be a thunk so a rotation can snapshot the conversation at
   // handover rather than at dial time — see runRecovery.
-  private openUpstream(instructions: string | (() => string), greetWith: string | null): Promise<boolean> {
-    const key = this.env.REALTIME_API_KEY || this.env.DEFAULT_LLM_API_KEY || '';
-    const url = `${this.env.REALTIME_BASE_URL}?model=${encodeURIComponent(this.realtimeModel)}&token=${encodeURIComponent(key)}`;
+  private async openUpstream(instructions: string | (() => string), greetWith: string | null): Promise<boolean> {
+    const config = this.realtimeConfig ?? resolveRealtime(this.env, this.settings);
+    const connection = realtimeConnection({ ...config, model: this.realtimeModel });
+    let upgraded: WebSocket | null = null;
+    if (connection.headers) {
+      try {
+        const response = await fetch(connection.url, {
+          headers: connection.headers, redirect: 'manual', signal: AbortSignal.timeout(5000),
+        });
+        if (response.status !== 101 || !response.webSocket) return false;
+        upgraded = response.webSocket;
+      } catch { return false; }
+    }
     return new Promise<boolean>((resolve) => {
       let settled = false;
       const settle = (ok: boolean) => {
@@ -928,7 +1138,7 @@ export class CallSession implements DurableObject {
       };
       let ws: WebSocket;
       try {
-        ws = new WebSocket(url);
+        ws = upgraded ?? new WebSocket(connection.url);
       } catch {
         settle(false);
         return;
@@ -944,31 +1154,70 @@ export class CallSession implements DurableObject {
         this.abandonUpstream(ws);
         settle(false);
       }, 5000);
-      ws.addEventListener('open', () => {
+      const ready = () => {
+        if (abandoned || opened) return;
         clearTimeout(timer);
-        if (abandoned) return; // we already gave up on this one and closed it
         opened = true;
+        this.upstream = ws;
+        if (greetWith) this.sendUpstream({
+          type: 'response.create',
+          response: { instructions: `Greet the caller by saying exactly this, then wait for them to speak: "${greetWith}"` },
+        }, ws);
+        settle(true);
+      };
+      let configured = false;
+      const onOpen = () => {
+        if (abandoned || configured) return;
+        configured = true;
         // Snapshot now, not at dial time. The outgoing connection stayed live
         // through the connect window, so `history` may have gained turns since
         // — and taking it before we route means the replacement is briefed on
         // everything that happened up to the moment it takes over.
         const briefing = typeof instructions === 'function' ? instructions() : instructions;
-        this.upstream = ws; // handover: from here we write to the new socket
+        if (config.protocol === 'gateway') this.upstream = ws;
         this.sendSessionUpdate(this.sessionVoice, briefing, ws);
-        if (greetWith) {
-          this.sendUpstream(
-            {
-              type: 'response.create',
-              response: { instructions: `Greet the caller by saying exactly this, then wait for them to speak: "${greetWith}"` },
-            },
-            ws
-          );
+        if (config.protocol === 'gateway') ready();
+      };
+      ws.addEventListener('open', onOpen);
+      const rejectMessage = () => {
+        abandoned = true; clearTimeout(timer);
+        if (opened) {
+          this.readableUpstreams.delete(ws);
+          this.failInternally(new RealtimeInputError());
+          this.abandonUpstream(ws);
         }
-        settle(true);
-      });
+        else this.abandonUpstream(ws);
+        settle(false);
+      };
       ws.addEventListener('message', (ev) => {
         if (!this.readableUpstreams.has(ws)) return; // abandoned or rotated out
-        this.onUpstreamMessage(ev, ws).catch((err) => console.error('upstream handler error', err));
+        let event: UpstreamMessage;
+        try { event = parseRealtimeMessage(ev.data) as unknown as UpstreamMessage; }
+        catch { rejectMessage(); return; }
+        if (config.protocol === 'openai' && !opened) {
+          try {
+            if (event.type === 'error') {
+              abandoned = true; clearTimeout(timer); this.abandonUpstream(ws); settle(false); return;
+            }
+            if (event.type === 'session.updated' && event.session?.instructions === this.sessionState.get(ws)?.sent.instructions) {
+              const differences = CallSession.diffSession(this.sessionState.get(ws)?.sent, event.session, 'session');
+              if (differences.length) {
+                // A direct provider must confirm the actual requested format,
+                // transcription and tools before we tell a telephone caller ready.
+                abandoned = true; clearTimeout(timer); this.abandonUpstream(ws); settle(false); return;
+              }
+              ready();
+            }
+          } catch { /* malformed events are handled below without logging their payload */ }
+        }
+        // This socket is readable for handshake events while pending, but
+        // application output must remain inert until its own configuration is
+        // confirmed. The acknowledged old socket remains live during rotation.
+        if (config.protocol === 'openai' && !opened) return;
+        this.onUpstreamMessage(event, ws).catch(error => {
+          if (error instanceof RealtimeInputError) rejectMessage();
+          else console.error('upstream handler error: provider response redacted');
+        });
       });
       ws.addEventListener('error', () => {
         clearTimeout(timer);
@@ -983,11 +1232,13 @@ export class CallSession implements DurableObject {
         clearTimeout(timer);
         this.readableUpstreams.delete(ws);
         settle(false);
+        if (this.nativeGreeting) { this.nativeGreeting.failed = true; this.nativeGreeting.resolve(false); return; }
         if (this.mode === 'realtime' && !this.ended && this.upstream === ws) {
           this.upstream = null;
           void this.recoverUpstream();
         }
       });
+      if (upgraded) { ws.accept(); onOpen(); }
     });
   }
 
@@ -1075,53 +1326,139 @@ export class CallSession implements DurableObject {
     }
   }
 
-  private async onUpstreamMessage(ev: MessageEvent, from: WebSocket): Promise<void> {
-    if (typeof ev.data !== 'string') return;
-    const msg = JSON.parse(ev.data) as {
-      type: string;
-      delta?: string;
-      transcript?: string;
-      language?: string;
-      item?: { type?: string; name?: string };
-      name?: string;
-      session?: SessionConfig;
-      error?: { message?: string };
-    };
+  private failRealtimeOutput(): void {
+    // finalize() gates the call immediately but defers its body to claim its
+    // single-flight slot. Stop provider ingress now, before another queued
+    // event can even parse, while preserving that finalizer's D1 ordering.
+    this.failInternally(new RealtimeOutputError());
+    this.closeUpstream();
+  }
+
+  private armAudioReceiptDeadline(): void {
+    if (this.audioReceiptTimer !== undefined) clearTimeout(this.audioReceiptTimer);
+    this.audioReceiptTimer = undefined;
+    const deadline = this.audioReceipts.deadline;
+    if (deadline === undefined || this.ended) return;
+    this.audioReceiptTimer = setTimeout(() => {
+      this.audioReceiptTimer = undefined;
+      if (!this.ended) this.failRealtimeOutput();
+    }, Math.max(0, deadline - Date.now()));
+  }
+
+  private checkAudioReceiver(bytes: number, additionalFrames = 0): void {
+    if (!this.ws || this.ws.readyState !== WS_OPEN) throw new RealtimeOutputError();
+    // Useful on runtimes exposing it, but never our Workers safety boundary:
+    // the unacknowledged byte/frame window is enforced even when absent.
+    const buffered = (this.ws as WebSocket & { bufferedAmount?: number }).bufferedAmount;
+    if (buffered !== undefined && (!Number.isFinite(buffered) || buffered < 0 ||
+        buffered + bytes > MAX_UNRECEIVED_AUDIO_BYTES)) throw new RealtimeOutputError();
+    this.audioReceipts.check(bytes, additionalFrames);
+  }
+
+  private sendRealtimeAudio(audio: ArrayBuffer): void {
+    if (!audio.byteLength) return;
+    this.checkAudioReceiver(audio.byteLength);
+    const id = this.audioReceipts.sent(audio.byteLength, Date.now());
+    // Ordered marker follows exactly one admitted binary frame. A recipient
+    // cannot know this unpredictable ID until it consumes the preceding bytes.
+    this.ws!.send(audio);
+    this.ws!.send(JSON.stringify({ type: 'audio_receipt', id, bytes: audio.byteLength }));
+    this.armAudioReceiptDeadline();
+  }
+
+  private sendRealtimeControl(value: unknown): boolean {
+    if (this.ended) return false;
+    try {
+      this.realtimeOutputBudget.control(Date.now());
+      const wire = JSON.stringify(value);
+      const bytes = new TextEncoder().encode(wire).byteLength;
+      this.checkAudioReceiver(bytes);
+      const id = this.audioReceipts.sent(bytes, Date.now());
+      this.ws!.send(wire);
+      this.ws!.send(JSON.stringify({ type: 'control_receipt', id }));
+      this.armAudioReceiptDeadline();
+      return true;
+    } catch {
+      this.failRealtimeOutput();
+      return false;
+    }
+  }
+
+  private receiveRealtimeAudio(msg: UpstreamMessage, from: WebSocket): void {
+    if (this.ended || !this.ws) return;
+    try {
+      // Admission is synchronous and precedes atob/PCM allocation. Do not let
+      // an async rejection microtask leave the rest of a same-turn burst live.
+      const bytes = this.realtimeOutputBudget.reserve(msg.delta ?? '', Date.now(), from, msg.response_id);
+      this.checkAudioReceiver(bytes + (this.nativeGreeting?.bytes ?? 0), this.nativeGreeting?.frames.length ?? 0);
+      if (!msg.delta) return;
+      const audio = decodeRealtimeAudio(msg.delta);
+      if (this.realtimeConfig?.protocol === 'openai' && msg.item_id) {
+        if (this.outputAudio?.itemId !== msg.item_id || this.outputAudio.socket !== from) {
+          this.outputAudio = { socket: from, itemId: msg.item_id, contentIndex: msg.content_index ?? 0, startedAt: Date.now(), bytes: 0 };
+        }
+        this.outputAudio.bytes += audio.byteLength;
+      }
+      const pending = this.nativeGreeting;
+      if (pending) {
+        if (!audio.byteLength || audio.byteLength % 2) return;
+        if (pending.bytes + audio.byteLength > MAX_REALTIME_AUDIO_BYTES) {
+          pending.failed = true; pending.resolve(false); return;
+        }
+        pending.frames.push(audio); pending.bytes += audio.byteLength;
+        pending.resolve(true);
+      } else this.sendRealtimeAudio(audio);
+    } catch {
+      // Never reflect socket/provider exception text. This closes every readable
+      // upstream and the caller synchronously through the existing finalizer.
+      this.failRealtimeOutput();
+    }
+  }
+
+  private async onUpstreamMessage(msg: UpstreamMessage, from: WebSocket): Promise<void> {
+    if (this.ended) return;
     switch (msg.type) {
       case 'response.output_audio.delta':
-        if (msg.delta && this.ws) {
-          try {
-            this.ws.send(b64decode(msg.delta));
-          } catch {
-            /* caller gone */
-          }
-        }
+        this.receiveRealtimeAudio(msg, from);
+        break;
+      case 'response.done':
+        this.realtimeOutputBudget.responseDone(from, msg.response?.id);
         break;
       case 'input_audio_buffer.speech_started':
         // Barge-in: the server cancels its in-flight response; we flush caller
         // playback — except while our own greeting is playing, where a noise
         // blip would cut off the agent's opening line for nothing.
-        if (Date.now() < this.greetingGuardUntil) break;
-        this.send({ type: 'flush' });
-        this.send({ type: 'speaking', who: 'caller' });
+        if (this.nativeGreeting || Date.now() < this.greetingGuardUntil) break;
+        if (!this.sendRealtimeControl({ type: 'flush' })) break;
+        if (this.realtimeConfig?.protocol === 'openai' && this.outputAudio?.socket === from) {
+          const output = this.outputAudio;
+          // The media contract has no per-item playback acknowledgements. Use
+          // elapsed delivery time capped at emitted PCM duration; this is an
+          // estimate, not a claim of exact handset/browser playback position.
+          const audioEndMs = Math.max(0, Math.floor(Math.min(Date.now() - output.startedAt, output.bytes / 48)));
+          this.sendUpstream({ type: 'conversation.item.truncate', item_id: output.itemId,
+            content_index: output.contentIndex, audio_end_ms: audioEndMs }, from);
+          this.outputAudio = null;
+        }
+        this.sendRealtimeControl({ type: 'speaking', who: 'caller' });
         break;
       case 'conversation.item.input_audio_transcription.completed':
         if (msg.transcript?.trim()) {
           const text = msg.transcript.trim();
           // STT echoes the vocabulary bias prompt back on silence-committed
           // turns; cancel the response it triggered and pretend it never happened.
-          const vocab = this.biz && this.settings ? sttVocab(this.biz, this.settings) : '';
+          const vocab = this.biz && this.settings ? sttVocab(this.biz, this.settings, this.knowledge) : '';
           if (vocab && isVocabEcho(text, vocab)) {
             console.log(`call ${this.callId}: dropped vocab-echo transcript: ${text.slice(0, 80)}`);
-            this.sendUpstream({ type: 'response.cancel' });
-            this.send({ type: 'flush' });
+            this.cancelResponse(from);
+            if (!this.sendRealtimeControl({ type: 'flush' })) break;
             break;
           }
+          this.reserveTranscript(text);
+          this.history.push({ role: 'user', content: text });
           // Standard tier sends a detected language with each transcript;
           // prefer it over our own text-based heuristic.
           this.maybeSwitchVoice(text, normalizeLang(msg.language));
-          this.send({ type: 'transcript', text });
-          this.history.push({ role: 'user', content: text });
           // Caller-farewell backstop, armed after at least one real exchange.
           // Not a fallback: `end_call` fires on 23-25 of 33 goodbye turns on
           // every tier measured (see toolsSupported), so on roughly a quarter
@@ -1141,14 +1478,18 @@ export class CallSession implements DurableObject {
             }, 8000);
           }
           await this.saveTurn('caller', text);
+          if (this.ended) return;
+          this.send({ type: 'transcript', text });
         }
         break;
       case 'response.output_audio_transcript.done':
         if (msg.transcript?.trim()) {
           const text = msg.transcript.trim();
-          this.send({ type: 'agent_text', text });
+          this.reserveTranscript(text);
           this.history.push({ role: 'assistant', content: text });
           await this.saveTurn('agent', text);
+          if (this.ended) return;
+          this.send({ type: 'agent_text', text });
           if (this.endPending) this.beginHangup();
         }
         break;
@@ -1173,12 +1514,19 @@ export class CallSession implements DurableObject {
         void this.recoverUpstream();
         break;
       case 'error':
-        console.error('realtime engine error:', JSON.stringify(msg.error ?? msg).slice(0, 300));
+        // A cancel can race a response that already ended. Only a recent
+        // locally issued cancel on this exact socket can exempt that one code.
+        if (this.consumeCancelRace(msg.error, from)) break;
+        // Unknown/input/auth/quota/server failures cannot leave a silent call
+        // alive. Store only a fixed local reason, never provider fields/URLs.
+        this.failInternally(new Error('Realtime provider rejected a request; provider response redacted'));
+        this.closeUpstream();
         break;
     }
   }
 
   private sendCallerText(text: string): void {
+    this.reserveTranscript(text);
     this.maybeSwitchVoice(text);
     this.sendUpstream({
       type: 'conversation.item.create',
@@ -1187,7 +1535,7 @@ export class CallSession implements DurableObject {
     this.sendUpstream({ type: 'response.create' });
     this.send({ type: 'transcript', text });
     this.history.push({ role: 'user', content: text });
-    void this.saveTurn('caller', text);
+    void this.saveTurn('caller', text).catch(error => this.failInternally(error));
   }
 
   private async handleUtterance(audio: ArrayBuffer): Promise<void> {
@@ -1195,12 +1543,13 @@ export class CallSession implements DurableObject {
     this.busy = true;
     try {
       this.send({ type: 'thinking' });
-      const vocab = this.biz && this.settings ? sttVocab(this.biz, this.settings) : undefined;
-      const { text, language } = await transcribe(this.env, audio, this.pendingContentType, vocab);
+      const vocab = this.biz && this.settings ? sttVocab(this.biz, this.settings, this.knowledge) : undefined;
+      const { text, language } = await transcribe(this.env, audio, this.pendingContentType, vocab, this.settings);
       if (!text) {
         this.busy = false;
         return;
       }
+      this.reserveTranscript(text);
       if (language) this.lang = language; // follow the caller's language
       this.send({ type: 'transcript', text });
       await this.respondInner(text);
@@ -1213,6 +1562,7 @@ export class CallSession implements DurableObject {
     if (this.busy || !this.biz) return;
     this.busy = true;
     try {
+      this.reserveTranscript(text);
       this.send({ type: 'transcript', text });
       await this.respondInner(text);
     } finally {
@@ -1227,6 +1577,7 @@ export class CallSession implements DurableObject {
     const raw = (await chatComplete(llm, this.history, { maxTokens: 200, temperature: 0.6 })).trim();
     const wantsEnd = /<?END_CALL>?/i.test(raw);
     const reply = raw.replace(/\s*<?END_CALL>?\s*/gi, ' ').trim();
+    this.reserveTranscript(reply);
     this.history.push({ role: 'assistant', content: reply });
     this.send({ type: 'agent_text', text: reply });
     await this.saveTurn('agent', reply);
@@ -1246,10 +1597,23 @@ export class CallSession implements DurableObject {
     }
   }
 
+  private reserveTranscript(text: string): void {
+    const bytes = transcriptBytes(text);
+    if (this.persistedTranscriptBytes + bytes > MAX_CALL_TRANSCRIPT_BYTES) throw new RealtimeInputError();
+    // Synchronous reservation: overlapping provider events cannot each observe
+    // the same remaining budget while their D1 writes are pending. Keep failed
+    // write reservations spent rather than reopening capacity after an error.
+    this.persistedTranscriptBytes += bytes;
+  }
+
   private async saveTurn(role: 'caller' | 'agent', text: string): Promise<void> {
-    await this.env.DB.prepare('INSERT INTO call_turns (call_id, role, text) VALUES (?, ?, ?)')
-      .bind(this.callId, role, text)
+    const bytes = transcriptBytes(text);
+    const result = await this.env.DB.prepare(`INSERT INTO call_turns (call_id, role, text)
+      SELECT ?, ?, ? WHERE
+      (SELECT COALESCE(SUM(length(CAST(text AS BLOB))), 0) FROM call_turns WHERE call_id = ?) + ? <= ${MAX_CALL_TRANSCRIPT_BYTES}`)
+      .bind(this.callId, role, text, this.callId, bytes)
       .run();
+    if (result.meta?.changes === 0) throw new RealtimeInputError();
     // A model that loops — or an engine echoing itself — would otherwise run up
     // provider spend for as long as the socket stays open.
     if (++this.turns >= CallSession.MAX_TURNS) {
@@ -1478,12 +1842,15 @@ export class CallSession implements DurableObject {
   // "call stuck in progress" into "call completed, caller's message gone",
   // which looks fine on the dashboard and is therefore worse. Read the same
   // data back out of D1 and summarize normally.
-  private async rehydrateHistory(businessId: string): Promise<void> {
+  private async rehydrateHistory(businessId: string, assistantId: string | null): Promise<void> {
     if (this.history.length > 0) return; // live session: memory is authoritative
-    this.settings ??= await this.env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?')
-      .bind(businessId)
-      .first<AgentSettings>();
-    const { results } = await this.env.DB.prepare('SELECT role, text FROM call_turns WHERE call_id = ? ORDER BY id')
+    if (!this.settings) await this.loadSettings(businessId, assistantId);
+    const { results } = await this.env.DB.prepare(`SELECT role, text FROM (
+      SELECT id, role, text, length(CAST(text AS BLOB)) AS bytes,
+        SUM(length(CAST(text AS BLOB))) OVER (ORDER BY id) AS total_bytes
+      FROM call_turns WHERE call_id = ?
+      ORDER BY id LIMIT ${CallSession.MAX_TURNS}
+    ) WHERE bytes <= ${MAX_TRANSCRIPT_FIELD_BYTES} AND total_bytes <= ${MAX_CALL_TRANSCRIPT_BYTES} ORDER BY id`)
       .bind(this.callId)
       .all<{ role: string; text: string }>();
     if (!results.length) return;
@@ -1568,6 +1935,21 @@ export class CallSession implements DurableObject {
       .run();
   }
 
+  // A connected carrier may project failure before session finalization. That
+  // verdict is terminal, but the conversation still needs its content projection.
+  private static readonly failedAsterisk = `channel = 'asterisk' AND status = 'failed'
+    AND connected_at IS NOT NULL AND carrier_released_at IS NOT NULL
+    AND ended_at IS NOT NULL AND failure_code GLOB 'asterisk_*'`;
+
+  private async salvageAsteriskConversation(summary: string | null, intent: string | null, messageJson: string | null): Promise<boolean> {
+    const result = await this.env.DB.prepare(
+      `UPDATE calls SET duration_s = COALESCE(duration_s, MAX(0, unixepoch(ended_at) - unixepoch(connected_at))),
+        summary = COALESCE(summary, ?), intent = COALESCE(intent, ?), message_json = COALESCE(message_json, ?)
+        WHERE id = ? AND ${CallSession.failedAsterisk}`
+    ).bind(summary, intent, messageJson, this.callId).run();
+    return (result?.meta?.changes ?? 0) > 0;
+  }
+
   private async runFinalize(): Promise<void> {
     this.ended = true;
     this.closeUpstream();
@@ -1581,9 +1963,12 @@ export class CallSession implements DurableObject {
       /* already gone */
     }
     const endedAt = await this.rememberEnding();
-    const call = await this.env.DB.prepare('SELECT started_at, business_id FROM calls WHERE id = ? AND status = ?')
+    let call = await this.env.DB.prepare('SELECT started_at, connected_at, business_id, assistant_id FROM calls WHERE id = ? AND status = ?')
       .bind(this.callId, 'active')
-      .first<{ started_at: string; business_id: string }>();
+      .first<{ started_at: string; connected_at: string | null; business_id: string; assistant_id: string | null }>();
+    call ??= await this.env.DB.prepare(
+      `SELECT started_at, connected_at, business_id, assistant_id FROM calls WHERE id = ? AND ${CallSession.failedAsterisk}`
+    ).bind(this.callId).first<typeof call>();
     if (!call) {
       // The row is no longer active: either something else completed it, or the
       // sweep retired it as 'abandoned' before we got here. The sweep is
@@ -1595,8 +1980,11 @@ export class CallSession implements DurableObject {
       await this.clearWatchdog();
       return;
     }
-    const duration = Math.max(0, Math.round((endedAt - new Date(call.started_at + 'Z').getTime()) / 1000));
-    await this.rehydrateHistory(call.business_id);
+    // Carrier reservation/answer/setup precedes media readiness. Count talk
+    // time from connection, preserving the legacy unconnected-row fallback.
+    const durationOrigin = call.connected_at ?? call.started_at;
+    const duration = Math.max(0, Math.round((endedAt - new Date(durationOrigin + 'Z').getTime()) / 1000));
+    await this.rehydrateHistory(call.business_id, call.assistant_id);
     // Survives eviction between attempts, so a retry never pays the
     // summarization model a second time for the same conversation.
     this.summarized ??= (await this.state.storage.get<typeof this.summarized>('summarized')) ?? null;
@@ -1631,10 +2019,11 @@ export class CallSession implements DurableObject {
         const parsed = parseSummary(raw);
         summary = parsed.summary ?? null;
         intent = parsed.intent ?? null;
-        if (parsed.caller_name || parsed.caller_phone || parsed.message) {
+        const callerPhone = normalizeCallerPhone(parsed.caller_phone);
+        if (parsed.caller_name || callerPhone || parsed.message) {
           messageJson = JSON.stringify({
             caller_name: parsed.caller_name ?? null,
-            caller_phone: parsed.caller_phone ?? null,
+            caller_phone: callerPhone,
             message: parsed.message ?? null,
           });
         }
@@ -1659,6 +2048,17 @@ export class CallSession implements DurableObject {
       summary = summary ? `${this.failure} — ${summary}` : this.failure;
     }
     const status = this.failure ? 'failed' : 'completed';
+    // message_json also carries caller contact details. Its mere presence does
+    // not mean a callback message was taken: booking flows commonly collect a
+    // name and phone number without a separate message. Inspect the parsed
+    // message itself before giving it precedence over booking intent.
+    const outcome = this.failure
+      ? 'failed'
+      : messageJsonHasRealMessage(messageJson)
+        ? 'message_taken'
+        : intent === 'booking'
+          ? 'booking_requested'
+          : 'answered';
     // If this throws, `finalized` stays false and the watchdog is still armed,
     // so the alarm retries. Clearing the watchdog first would strand the row
     // as 'active' with nothing left to ever reclaim it.
@@ -1668,15 +2068,39 @@ export class CallSession implements DurableObject {
     // real window. Without the predicate this would overwrite the sweep's
     // status and duration — the salvage path exists to cooperate with the
     // sweep, and unconditionally overriding it is the opposite.
+    // The Telnyx owner can project a carrier failure while this connected row
+    // is still active, including during summarization. Preserve that classification
+    // in this atomic write: terminal owners sleep until cleanup, so correctness
+    // must not depend on a later poll restoring fields overwritten here.
+    const carrierFailure = "channel = 'telnyx' AND failure_code IS NOT NULL AND outcome = 'failed'";
     const res = await this.env.DB.prepare(
-      `UPDATE calls SET status = ?, ended_at = ?, duration_s = ?, summary = ?, intent = ?, message_json = ?
+      `UPDATE calls SET status = CASE WHEN ${carrierFailure} THEN 'failed' ELSE ? END,
+        ended_at = ?, duration_s = ?, summary = ?, intent = ?, message_json = ?,
+        outcome = CASE WHEN ${carrierFailure} THEN outcome ELSE ? END,
+        failure_code = CASE WHEN ${carrierFailure} THEN failure_code ELSE ? END,
+        failure_message = CASE WHEN ${carrierFailure} THEN failure_message ELSE ? END
         WHERE id = ? AND status = 'active'`
     )
-      .bind(status, CallSession.sqlTime(endedAt), duration, summary, intent, messageJson, this.callId)
+      .bind(
+        status,
+        CallSession.sqlTime(endedAt),
+        duration,
+        summary,
+        intent,
+        messageJson,
+        outcome,
+        this.failure ? 'session_error' : null,
+        this.failure,
+        this.callId
+      )
       .run();
     // `changes` missing means the driver did not report one, not that nothing
     // matched — only an explicit zero means the sweep got there first.
-    if ((res?.meta?.changes ?? 1) === 0) await this.salvageSummary();
+    if ((res?.meta?.changes ?? 1) === 0) {
+      // This also covers carrier failure while the summary request was in flight.
+      // Read terminal timing in the UPDATE itself; retries must not add talk time.
+      if (!await this.salvageAsteriskConversation(summary, intent, messageJson)) await this.salvageSummary();
+    }
     this.finalized = true;
     await this.clearWatchdog();
   }

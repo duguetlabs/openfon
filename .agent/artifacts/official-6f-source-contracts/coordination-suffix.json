@@ -1,0 +1,13 @@
+{
+  "status": "PREPARED_FINAL_DOCUMENTATION_REQUIRES_QA",
+  "source_head": "e47ea7b5778b0459d7440c5161e282820e3c88d9",
+  "integration_checkpoint": {
+    "path": ".agent/workstreams/integration.md",
+    "preserved_prefix_sha256": "217b55055cff5073c40adfdbc92cfd2959c89eba1fa7dce2e2c4b458f82582e2",
+    "preserved_prefix_bytes": 260289,
+    "suffix_bytes": 2156,
+    "candidate_sha256": "5bee880f86ae51d6b99082b2c6d3fb30e33584a8aae356766100cf128a3f08b9"
+  },
+  "source_paths": 209,
+  "meaning": "Documentation only; all selected source/evidence/assembly and combined gates closed. Fresh publication/CI/official gates remain separate."
+}

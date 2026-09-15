@@ -1,0 +1,51 @@
+{
+  "state": "EXACT_FOUR_METADATA_PATH_COMMITTED_WORKING_ASSEMBLY_QA_REQUESTED",
+  "head": "cd38b611b408184535c2afde3a5889c77aafbd7b",
+  "parent": "94e4cde199c9d74113c81b158685c0fcfef65322",
+  "candidate_manifest": "d17117b0dbc7a3664a00b9065b6831244f6019398db5c8bb93639ae9c136a78d",
+  "QA": "be2050a",
+  "records": [
+    {
+      "path": ".agent/workstreams/integration.md",
+      "before_sha256": "532d6ec5ad893408e97f55b035bc2a568421688a1b48e9a25a8023fa7fb332b4",
+      "before_bytes": 267674,
+      "candidate_sha256": "bbd42e3d9ec788257132eb5af704d56b1fc8a627b798d99e6ed69c84e9e850db",
+      "candidate_bytes": 267689,
+      "replacements": 1,
+      "reverse_equal": true,
+      "committed_parent_sha256": "6f53c9fa980491e0cfe6de6d9a66260233d219ad3102a23ba80116d7f9a46236"
+    },
+    {
+      "path": ".agent/workstreams/telnyx.md",
+      "before_sha256": "df1f24e5e8b741653c9093507b6dddbe0ea5601e016436d998f2946babcfd5b0",
+      "before_bytes": 48914,
+      "candidate_sha256": "29a8ba12e6bd0717593ae306d5fd970bc21f6432638c3c1a432880d08fc79173",
+      "candidate_bytes": 48929,
+      "replacements": 1,
+      "reverse_equal": true,
+      "committed_parent_sha256": "df1f24e5e8b741653c9093507b6dddbe0ea5601e016436d998f2946babcfd5b0"
+    },
+    {
+      "path": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+      "before_sha256": "e34ba18864c21ae0aebfa262570340e01f05b4427ea0dcb6a7a60126fc87efba",
+      "before_bytes": 233325,
+      "candidate_sha256": "87f8a4eb4ddbc5b0ef051ed0be574a65249b2ec4fa699e8b10dd15335b176ad0",
+      "candidate_bytes": 234074,
+      "change": "Only four additive current-identity/lineage keys in each of two document records; prior entire JSON structure unchanged.",
+      "committed_parent_sha256": "e34ba18864c21ae0aebfa262570340e01f05b4427ea0dcb6a7a60126fc87efba"
+    },
+    {
+      "path": ".agent/artifacts/metadata-resource-f265/lineage.json",
+      "before_sha256": null,
+      "before_bytes": null,
+      "candidate_sha256": "c91b3babb5c245a15376a526f31af2c400b44c7d9e4b617a5c5dff26bb0b18d5",
+      "candidate_bytes": 2413,
+      "committed_parent_sha256": null
+    }
+  ],
+  "checkpoint_precondition": "Committed parent6f53c9fa plus previously accepted working532d6ec5 current-block update; finalbbd42e3d includes that accepted block and one resource substitution. Both prior exact preservation closures retained.",
+  "application_paths_unchanged": true,
+  "index_empty": true,
+  "limits": "No source/runtime/push/publication; historical catalog and assembly identities retained; broad logical/version/privacy limits unresolved. Gateway exact94e4cde closure9c2e822 unchanged.",
+  "at": "2026-09-15T06:49:25.887608+00:00"
+}

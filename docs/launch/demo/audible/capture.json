@@ -1,0 +1,47 @@
+{
+  "started": 1789215082235,
+  "ended": 1789215140645,
+  "callId": "5e890b0d-1c0e-4e34-88d0-92b9c16d0443",
+  "actions": [
+    {
+      "action": "hours",
+      "t": 8.342
+    },
+    {
+      "action": "services",
+      "t": 16.305
+    },
+    {
+      "action": "interrupt",
+      "t": 20.264
+    },
+    {
+      "action": "unknown",
+      "t": 29.579
+    },
+    {
+      "action": "message",
+      "t": 38.478
+    }
+  ],
+  "syntheticCaller": true,
+  "actualProvider": true,
+  "staging_source": "718d233e3754e53b800a397b1e600ffea492bb79",
+  "worker_version": "76a515eb-877e-48ef-bdcd-1ab8ea7095ef",
+  "provider": "Kataleptic",
+  "model": "gpt-realtime-2",
+  "voice": "blank; provider default, resolved ID not recorded",
+  "summary_model": "llama-3.3-70b",
+  "original_audio_seconds": 58.197333,
+  "video_seconds": 68.24,
+  "video_audio_offset_seconds": 1,
+  "alignment": "approximate; do not derive latency from screen timing",
+  "call_budget_remaining": 0,
+  "known_issues": [
+    "Conflicting hours fixture: canonical Saturday closed, description/instructions09\u201314",
+    "Phone extraction literal string null displayed"
+  ],
+  "physical_microphone": false,
+  "pstn": false,
+  "live_direct_openai": false
+}

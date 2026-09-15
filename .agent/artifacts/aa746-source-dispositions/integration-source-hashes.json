@@ -1,0 +1,17 @@
+{
+  "head": "aa7467566662a4c43b54563226e78abeb575dc2d",
+  "review": "5658817846",
+  "scope": "Source-only discovery/logout verification; no new runtime or automatic security closure",
+  "sha256": {
+    "vitest.config.ts": "530bd3ae03a17ef1b60d63ca7bbceaa4231acf82ae4876151083c0e9c402e519",
+    "tsconfig.worker.json": "6f1b4cebf4e7ff46b73e2592b01f50d02cb18a2cdfdcb2b0bea413f2199edb05",
+    "web/tsconfig.json": "057b68f3b622b565c8b242b4150178b1c81cb239ca949adc560fa3a8c2b2a365",
+    "package.json": "baf608b541ac2f7667ec07e062975ac66d08b4201245412c0207e5951942b233",
+    "web/src/pages/Onboarding.tsx": "b096119ad9d18e36990d0f4363305f664fd5574afe9df8b5e09005e9eff38916",
+    "web/src/App.tsx": "50c487e550a0c5940e2714d5800e6a9c877ad5e41a3be4a8b01787e11cf8db16",
+    "web/src/pages/Auth.tsx": "174c8dac5f11e51e6ccf35cfba67a1a25887af2cf09b93daf886ce8fad230d48",
+    "web/src/session-load.ts": "134a9f64968302007ae2a50ac1934afdf9f87d84d99360d66e1e47dae8e4ed53",
+    "src/index.ts": "2497393f1c491097f8d033825a42dd70cdac19b37e7d288e1967c9b210af1629",
+    "test/session-load.test.ts": "e93a43ef8a278be7989c5cd5b1ac537cf843b21277b00cfd6b65c3cc454ffada"
+  }
+}

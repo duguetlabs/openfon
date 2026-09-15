@@ -1,0 +1,29 @@
+{
+  "state": "C865_SOURCE_DISPOSITIONS_AND_LOGOUT_CORRECTION_CLOSED_LATEST_HEAD_REVIEW_REQUIRED",
+  "review_head": "c865e06d23f35c7217151536dda859868ebf8f3a",
+  "source_head": "49cbf52e631e3091539859a3ab7c8514db79c19b",
+  "official_comment": 5676684560,
+  "original_sha256": "9ddc3150b577eafe974d6098a2159e40e07eaf49248164068a075f078b3d9011",
+  "fullbody_sha256": "3133215996fbedd455c6e3b1ac9a9cbe931c547180eed80eac1c71ae927886c0",
+  "source_QA": [
+    "e0607d9",
+    "b6d1493",
+    "219aa6d"
+  ],
+  "logout_QA": [
+    "03d39bd",
+    "68ff8cf",
+    "f25560a"
+  ],
+  "logout_release_record": {
+    "sha256": "c230beb2353a646cfd997dc635d099fafc074726353a3846cd7eee3c79439249",
+    "bytes": 4682
+  },
+  "disposition": {
+    "sha256": "036819578104732fb6326ef3094371cd0b0e2ef8d3c775e4af42d6bf2fdd51ed",
+    "bytes": 5896
+  },
+  "omissions": 528,
+  "status": "Disposition candidate not yet published. Remote c865/green CI are historical gates for that head, not the new correction. Final documentation content/exact assembly, publication/readback/close-reopen/freshCI/immediate gates and distinct latest-head review remain.",
+  "limits": "All disposition qualifications, private provenance distinctions, no exact embedded fixture resources, missing wrapper disposal/nonexhaustive cleanup, double-storage-failure information loss, direct-cookie/new-context risks and rebuilt/failed-original limits retained. No current grant or overall clearance."
+}

@@ -1,0 +1,426 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "07881be5c10451ebda33a7d2da4a4612a9f61cb2d6f566dda69cb0df79c65993",
+    "original_bytes": 27416,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "status": "Targeted duplicate validation complete: original accepted2/failed first assertion; fixed accepted1/PASS. Initial19fixed passes/types preserved. Sole slot released; QA evidence/assembly pending.",
+  "base": "77cde12b99cc63344251dc8bab34256f23216628",
+  "snapshot": "private-ref:4c9af3b56f5e445bbf9f6ebcc1db37ea",
+  "delivery": {
+    "patch": ".agent/artifacts/profile-create-77c.patch",
+    "new_file": {
+      "source": ".agent/artifacts/profile-create-77c/profile-create-pending.spec.ts",
+      "destination": "e2e/profile-create-pending.spec.ts"
+    },
+    "warning": "Apply exact patch plus new fixture only; do not copy old owner whole handlers."
+  },
+  "sha256": {
+    ".agent/artifacts/profile-create-77c.patch": "34c4623114e12780ac003f1f3907a721d9b37aeb923da58ca2ab8c43ef40f749",
+    ".agent/artifacts/profile-create-77c/original-Settings.tsx.txt": "57c5f03f1035a96cde0ef5c02f159b707ed27086c76ee335c1643fb1d5b048ae",
+    ".agent/artifacts/profile-create-77c/fixed-Settings.tsx.txt": "376bd195ec8373c88c11774e5bb95daa643fef298f9b2d456e498002d1fa3a9c",
+    ".agent/artifacts/profile-create-77c/profile-create-pending.spec.ts": "8c8b4739e7eeffe553e63005d0211572e1e5fcf3339a4384c39eb76a57312712"
+  },
+  "active_snapshot_sha256": {
+    "web/src/pages/Settings.tsx": "376bd195ec8373c88c11774e5bb95daa643fef298f9b2d456e498002d1fa3a9c",
+    "e2e/profile-create-pending.spec.ts": "8c8b4739e7eeffe553e63005d0211572e1e5fcf3339a4384c39eb76a57312712"
+  },
+  "static_checks": [
+    "Original Settings byte-matches git show exact77c",
+    "git apply --check and application in disposable original-only tree reproduce saved fixed bytes",
+    "Snapshot fixture bytes match delivery fixture",
+    "No application module imported/executed"
+  ],
+  "case_plan": [
+    {
+      "title": "one pending create admits one POST and one persisted id with confirmed no-op blur",
+      "original_prediction": "negative",
+      "scope": "Counts and persisted ids retained before original first assertion; no post-create read, accepted status, no-op blur"
+    },
+    {
+      "title": "create acknowledgement preserves later name revision and assistant draft (Newer name)",
+      "original_prediction": "negative",
+      "scope": "Captured payload/new name/model/business drafts"
+    },
+    {
+      "title": "create acknowledgement preserves later name revision and assistant draft (Created profile)",
+      "original_prediction": "negative",
+      "scope": "Edit-away-and-back revision survives"
+    },
+    {
+      "title": "pending create blocks Apply, rename and Settings save until explicit later action",
+      "original_prediction": "negative",
+      "scope": "Immediate action-count diagnostic/assertion before row interaction; later fixed rename/save/no-autoqueue/action/draft checks retained"
+    },
+    {
+      "title": "pending Apply blocks create and allows a later explicit create",
+      "original_prediction": "control",
+      "scope": "Prior saving exclusion and successful recovery/list reads"
+    },
+    {
+      "title": "pending create blocks Delete profile, rename and Settings save until explicit later action",
+      "original_prediction": "negative",
+      "scope": "Immediate action-count diagnostic/assertion before row interaction; later fixed rename/save/no-autoqueue/action/draft checks retained"
+    },
+    {
+      "title": "pending Delete profile blocks create and allows a later explicit create",
+      "original_prediction": "control",
+      "scope": "Prior saving exclusion and successful recovery/list reads"
+    },
+    {
+      "title": "blur then create stays blocked through the final queued rename and requires another click",
+      "original_prediction": "negative",
+      "scope": "Synchronous blur admission and newest queued name"
+    },
+    {
+      "title": "independent Settings refresh suppresses list dispatch during committed create and preserves drafts",
+      "original_prediction": "negative",
+      "scope": "Completed independent Settings marker, zero pending list dispatch; original count diagnostic before assertion; later authoritative read"
+    },
+    {
+      "title": "a pre-create list response is not adopted while create is pending",
+      "original_prediction": "negative",
+      "scope": "Held response contains external name marker; no pending adoption"
+    },
+    {
+      "title": "a pre-create list response cannot remove the acknowledged row after creation settles",
+      "original_prediction": "control",
+      "scope": "Already dispatched stale missing-id response rejected after acknowledgement"
+    },
+    {
+      "title": "refused create preserves newer input and releases admission for one explicit retry",
+      "original_prediction": "control",
+      "scope": "Synthetic precommit503, unchanged server list, later explicit create"
+    },
+    {
+      "title": "pending Settings save excludes create without changing accepted save stages",
+      "original_prediction": "control",
+      "scope": "Held businessPUT, accepted save then explicit create"
+    },
+    {
+      "title": "Settings retry and create exclude each other (create first)",
+      "original_prediction": "negative",
+      "scope": "Confirmed save/failed session refresh, no concurrent retry while create pending; explicit later GET"
+    },
+    {
+      "title": "Settings retry and create exclude each other (retry first)",
+      "original_prediction": "control",
+      "scope": "Held sessionGET, no create until retry settles; accepted save retained"
+    }
+  ],
+  "planned_validation": {
+    "new_browser": 15,
+    "original_predictions": {
+      "negative": 9,
+      "control": 6
+    },
+    "bounded_existing_companions": {
+      "e2e/profile-rename-actions.spec.ts": [
+        "blur then Apply sends no action while rename is pending; explicit later click works",
+        "blur then Delete profile sends no action while rename is pending; explicit later click works"
+      ],
+      "e2e/confirmation-refresh.spec.ts": [
+        "confirmed profile apply survives refresh failure and retries reads only",
+        "confirmed profile delete survives refresh failure and retries reads only"
+      ],
+      "e2e/profile-rename-recovery.spec.ts": [
+        "failed profile rename preserves retry and newer edits (newer=true)"
+      ]
+    },
+    "companion_sha256": {
+      "e2e/profile-rename-actions.spec.ts": "159c93b92c03ff1e5563fb9782b65141a863ffc198e7b3e67ba4485fd0073f2b",
+      "e2e/confirmation-refresh.spec.ts": "731a234a49b63dcae1fccf31192c891c0d6f483011ac866ff383eb914d108c8e",
+      "e2e/profile-rename-recovery.spec.ts": "e82b091f161f931b4398edca43b913a1e64f3e6ae62aa2f4d50ad00fd70f5c89"
+    },
+    "types": "Both existing Worker/web typechecks, only after explicit sole grant",
+    "runtime": "Actual Chrome/local workerd8812/9252, workers1/retries0 only if granted; unique original/fixed logs/traces; no source swaps while processes active",
+    "exclusions": "No API/native/full/provider/inference or unrelated browser suites",
+    "status": "Historical granted plan; actual results below supersede predicted counts."
+  },
+  "limitations": [
+    "Historical source-preparation note: All test outcomes/counts are source predictions, not execution receipts",
+    "Browser uses synthetic held HTTP schedules, not server concurrency or backend idempotency proof",
+    "No post-create refresh; returned row acknowledges creation; later external changes visible only through future authoritative reads",
+    "Network response loss can conceal committed create; client guard is not exactly-once across retry/tabs/navigation",
+    "First failed assertion bounds original evidence; only duplicate test explicitly collects accepted duplicate ids before first expectation",
+    "Historical source-preparation note: No fixture or type collection/execution performed during source preparation"
+  ],
+  "fixture_correction": {
+    "reason": "Original Delete may remove row before input interaction; assert/count immediately after attempted action",
+    "previous_fixture_sha256": "0c77dca8d720e6dc26c7faa5fcfd247baeb4e74dc99dff2ac1dae25b9c42686a",
+    "corrected_fixture_sha256": "920571929397888153e8c5218688e10072ffe487ded78beae423ed1d1a67ae7d",
+    "preserved": "All later fixed rename/save/no-autoqueue checks and all other cases unchanged; production patch/source unchanged",
+    "evidence_limit": "Two animation frames are a bounded observation window, not universal absence proof; original stops at competing-action assertion before later row interactions",
+    "runtime": "No tests, types, browser, native or inference executed"
+  },
+  "actual_validation": {
+    "original": {
+      "session": 22709,
+      "exit": 1,
+      "cases": 15,
+      "passed": 7,
+      "intended_negative_failures": 7,
+      "fixture_failures": 1,
+      "unexpected_passes": 1,
+      "duration_ms": 106246.34400000001,
+      "limits": "Two name-clearing, two action count, list-dispatch/list-adoption and create-before-retry negatives. Duplicate case never captured POST; rename-before-create passed unexpectedly. First failures bound later assertions."
+    },
+    "fixed": {
+      "session": 47035,
+      "exit": 1,
+      "cases": 20,
+      "passed": 19,
+      "fixture_failures": 1,
+      "duration_ms": 58813.079,
+      "limits": "14 new plus5 named companions pass; duplicate case remains pre-POST fixture timeout. No retries/source edits."
+    },
+    "types": {
+      "session": 46889,
+      "exit": 0,
+      "scope": "Worker and web serial typechecks passed"
+    },
+    "commands": {
+      "original": [
+        "npx",
+        "--no-install",
+        "playwright",
+        "test",
+        "e2e/profile-create-pending.spec.ts",
+        "--workers=1",
+        "--retries=0",
+        "private-ref:54068f08d4954a79a514db0b711bde0b",
+        "--reporter=line,json"
+      ],
+      "fixed": [
+        "npx",
+        "--no-install",
+        "playwright",
+        "test",
+        "e2e/profile-create-pending.spec.ts",
+        "e2e/profile-rename-actions.spec.ts",
+        "e2e/confirmation-refresh.spec.ts",
+        "e2e/profile-rename-recovery.spec.ts",
+        "--grep",
+        "(?:one\\ pending\\ create\\ admits\\ one\\ POST\\ and\\ one\\ persisted\\ id\\ with\\ confirmed\\ no\\-op\\ blur|create\\ acknowledgement\\ preserves\\ later\\ name\\ revision\\ and\\ assistant\\ draft\\ \\(Newer\\ name\\)|create\\ acknowledgement\\ preserves\\ later\\ name\\ revision\\ and\\ assistant\\ draft\\ \\(Created\\ profile\\)|pending\\ create\\ blocks\\ Apply,\\ rename\\ and\\ Settings\\ save\\ until\\ explicit\\ later\\ action|pending\\ Apply\\ blocks\\ create\\ and\\ allows\\ a\\ later\\ explicit\\ create|pending\\ create\\ blocks\\ Delete\\ profile,\\ rename\\ and\\ Settings\\ save\\ until\\ explicit\\ later\\ action|pending\\ Delete\\ profile\\ blocks\\ create\\ and\\ allows\\ a\\ later\\ explicit\\ create|blur\\ then\\ create\\ stays\\ blocked\\ through\\ the\\ final\\ queued\\ rename\\ and\\ requires\\ another\\ click|independent\\ Settings\\ refresh\\ suppresses\\ list\\ dispatch\\ during\\ committed\\ create\\ and\\ preserves\\ drafts|a\\ pre\\-create\\ list\\ response\\ is\\ not\\ adopted\\ while\\ create\\ is\\ pending|a\\ pre\\-create\\ list\\ response\\ cannot\\ remove\\ the\\ acknowledged\\ row\\ after\\ creation\\ settles|refused\\ create\\ preserves\\ newer\\ input\\ and\\ releases\\ admission\\ for\\ one\\ explicit\\ retry|pending\\ Settings\\ save\\ excludes\\ create\\ without\\ changing\\ accepted\\ save\\ stages|Settings\\ retry\\ and\\ create\\ exclude\\ each\\ other\\ \\(create\\ first\\)|Settings\\ retry\\ and\\ create\\ exclude\\ each\\ other\\ \\(retry\\ first\\)|blur\\ then\\ Apply\\ sends\\ no\\ action\\ while\\ rename\\ is\\ pending;\\ explicit\\ later\\ click\\ works|blur\\ then\\ Delete\\ profile\\ sends\\ no\\ action\\ while\\ rename\\ is\\ pending;\\ explicit\\ later\\ click\\ works|confirmed\\ profile\\ apply\\ survives\\ refresh\\ failure\\ and\\ retries\\ reads\\ only|confirmed\\ profile\\ delete\\ survives\\ refresh\\ failure\\ and\\ retries\\ reads\\ only|failed\\ profile\\ rename\\ preserves\\ retry\\ and\\ newer\\ edits\\ \\(newer=true\\))$",
+        "--workers=1",
+        "--retries=0",
+        "private-ref:84aec13faf5a48a09140677eae158cd5",
+        "--reporter=line,json"
+      ],
+      "types": [
+        "npm",
+        "run",
+        "typecheck"
+      ]
+    },
+    "execution": "Actual Google Chrome/local workerd with held HTTP; no live provider/inference, API/native/full suite or other browser cases",
+    "cleanup": "Three sessions exited; sampled process inventory absent and reserved listeners vacant. Two owned leftover D1 directories removed only after exit. Unrelated processes preserved. Individual resource and process metadata retained privately.",
+    "next": "Initial evidence unchanged; targeted duplicate-only result now recorded separately. QA final evidence/assembly next; nondiscriminating original blur PASS remains a limit.",
+    "tested_fixture_sha256": "920571929397888153e8c5218688e10072ffe487ded78beae423ed1d1a67ae7d"
+  },
+  "evidence_directory": "test-results/profile-create-77c/validation-20260914T053715Z",
+  "evidence_sha256": {
+    "classified-browser-results.json": "65852d4b5f312637720c2c93c352ac8e005d82b756143a54a0bb34464b9639ee",
+    "cleanup-before-temp-removal.json": "14a6d50eab9d84b32e8d16ffd7c3b594492091c2a9664ad484778f02e678a5c5",
+    "cleanup.json": "a5b93efcc2043d36f92520615db02c6dcb2a69e8bdc947b69062f68f67da1ca2",
+    "final-source-provenance.json": "5933ba864328a5bef0ea89660b589d945aeb95141dfbfa636499f402439dd49b",
+    "fixed-after-scan.json": "6b428ef9532013171eef61603c6a4182ef8fc7f0fb99356f77f9569d9852b408",
+    "fixed-before-scan.json": "1e7fba990194173bf3f501bce76589d1f55117910994ab7f312fa9b8e5289e0e",
+    "fixed-browser-results/.last-run.json": "beb1d3ded4ae29b9a79a584c1794bae2765423ce896af122d0b5b63567a3760a",
+    "fixed-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/error-context.md": "48dd76fcf20faeb9ee80a890cae48c207497d3f07d35b496532de4df7f85f26a",
+    "fixed-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/trace.zip": "39bb78c2f2b70d854159493962135aecd2c15244fa200ff8a59b3f1e4ec7c1cf",
+    "fixed-duplicate-after-click.jpeg": "3819a536ef9bdf26e3ae61dba27c5a9a29cbc63746da86b3800803cc19b9bd5e",
+    "fixed-exit.json": "b4d6237e80eb8dff5c9cf9531023edacc2680b06a6582896118392fe8f3f0d5a",
+    "fixed-launch.json": "269553b0c8670d7d0b5c71978142919d70f7ad4cdb8ee16b18e7972231ff7df1",
+    "fixed-report.json": "7424a2453109209c4223d5c123f243c268a3cc1f156beabf0e74681ae7553553",
+    "fixed.log": "c32a229579ef99733569b40293da52e874b2518405c664a19c4edaf24fac1ccd",
+    "original-after-scan.json": "06d1d11be812fccfe4d6a02ab9d2ab6ad5fb9cf23f5c200c8a8f766c0b95c9da",
+    "original-before-scan.json": "b5523fdbb8edef71bcf22fb1047e85b523108d4a9bf26f2935df2d79f20216c6",
+    "original-browser-results/.last-run.json": "384dccfd6da95b8b3c3b21ecfd428578ada4e44e068dbf26e1dfdfd865ec72f6",
+    "original-browser-results/profile-create-pending-Set-a47f2-de-each-other-create-first-/error-context.md": "99afcbad9f1278a05e720abfbb28afb7d39bb1c11f8ab686e5165806cccd6b4a",
+    "original-browser-results/profile-create-pending-Set-a47f2-de-each-other-create-first-/trace.zip": "cfed7a45216979fd012dc4d3f485ef5420172833a1e9609d68cfece986ee2eb6",
+    "original-browser-results/profile-create-pending-a-p-89e7d-ted-while-create-is-pending/error-context.md": "ece460f7b1d51de1a5469096f6e430f458dd6b0d438e55868d5d52b71ba62051",
+    "original-browser-results/profile-create-pending-a-p-89e7d-ted-while-create-is-pending/trace.zip": "e203807f688c44fccdaff69fd6e1992877c51c717032a19dfc9d5bdb1cd3b1b2",
+    "original-browser-results/profile-create-pending-cre-9751e-assistant-draft-Newer-name-/error-context.md": "dc0a7348aae4cae6ebe5c1b7d96c11fae733523cc479e431bba272a9f597f1f9",
+    "original-browser-results/profile-create-pending-cre-9751e-assistant-draft-Newer-name-/trace.zip": "d75f12c5fda6d0159a6848077309035dc3e97b2cda46938c82c9b5568e3cc39b",
+    "original-browser-results/profile-create-pending-cre-def32-tant-draft-Created-profile-/error-context.md": "71660123c2dde0e9cff9b9808977822e88a1debe490636415e1302b9ae5d476d",
+    "original-browser-results/profile-create-pending-cre-def32-tant-draft-Created-profile-/trace.zip": "b069d66b89afae4e2e6ebeacf81ac82c4f9d6c1c43ed9d21230e318a6d9ef4a1",
+    "original-browser-results/profile-create-pending-ind-8de30-create-and-preserves-drafts/error-context.md": "3ba8dc48be0171bf63718ee2ad9fe844e3e6c4b19bcac8c75edf04b09e46abc3",
+    "original-browser-results/profile-create-pending-ind-8de30-create-and-preserves-drafts/trace.zip": "3b6d75ed1929027f0efcf618c2cab8b2605f9d55ad51d6432decbfe20cfc7df3",
+    "original-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/error-context.md": "a0abf65301d2b5f8ef61c91891e71ab738d83cd1ef9a4d8c2d2ef6090c0e87c8",
+    "original-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/trace.zip": "449fcf7b9de1b17de24d82d77120fead0424c41945e0353f154fa06c72ab9bcd",
+    "original-browser-results/profile-create-pending-pen-06137-until-explicit-later-action/error-context.md": "df7eab5eec8fd0c98cc95a9daef6a2eb8a5210c8c748751d3fe308c9b9885e0a",
+    "original-browser-results/profile-create-pending-pen-06137-until-explicit-later-action/trace.zip": "2fccb5426e0a11fbb0df190011564d7fd88e18298f330a67e3950c3c63478feb",
+    "original-browser-results/profile-create-pending-pen-2a3eb-until-explicit-later-action/error-context.md": "befa2e9522f40bc3cd0c9c1d56f40e645cee1b496214d04cc7f8459fc204131f",
+    "original-browser-results/profile-create-pending-pen-2a3eb-until-explicit-later-action/trace.zip": "6c783f80e4fe736c3afd7c9b125c45f3608d6365ae048a342260da7831670736",
+    "original-duplicate-after-click.jpeg": "0ae2cb5b6a34246d15d0954c223ec4c42aba956c5d069c4595322e9c03f3db94",
+    "original-duplicate-click-frame.jpeg": "7a314928913e3a3d4f0b6d1817ee7444b5fa064741591669d04698c447d67ed7",
+    "original-exit.json": "909d42a3d172f4695315226ca711bb3b641446bb1255eaa70f824638aa0edb46",
+    "original-launch.json": "0e04e865e340eee08a4411067d04a41eae161017778a294f2c3151f231b8f344",
+    "original-report.json": "9c415ecc80b40921791fc7213f50f476f430b4d13ea003d053fcc00165817334",
+    "original.log": "5f97aef4be4f543b75b6a4f23277efce70d5c23ac6b1e59813a6033be7687c2a",
+    "pre-fixed-independent-scan.json": "1e3a8baf888a0c4cb4f06b14e10b4cdc9b42e602656b4ee58a4556ef04be0586",
+    "trace-assessment.json": "57169a1d719d02883ac7496de9c5067f7d37c23225943fc3edb93faa88c89b29",
+    "types-after-scan.json": "7a293821658b0d32dd0734be71528c8352f82c5bf6a116b3a8473fd73c69b39d",
+    "types-before-scan.json": "77e38a24980629a4e536aa5f3be53309581f678beb51459d8567ba9a2d2b7c68",
+    "types-exit.json": "13a1a7a16f9af002b1401f0ee045701f0c9a10da3f1efaa4b8440a8808539dfa",
+    "types-launch.json": "08198c0d5239737bf23c03a77df59c51a3178f6fb14fbae7ee72c785b559a4ef",
+    "types.log": "75c97ba8f32dd032ee1e1293129c6bbdd2ff33c240a3223d4b150e23ab19ee29",
+    "validation-orchestration.py": "0d773cc0deb5d3a929cc8fc19a19d4630e76861ef617507abad6d642c0092f8b",
+    "final-release-scan.json": "542e01a317729aa60e971269ddb106d38f515a34a4c6d476883991e5bc31b0d2"
+  },
+  "targeted_fixture_followup": {
+    "change": "ONLY first duplicate case: await create(page).dblclick() replaces await mouseClick(page, create(page), true)",
+    "previous_fixture_sha256": "920571929397888153e8c5218688e10072ffe487ded78beae423ed1d1a67ae7d",
+    "corrected_fixture_sha256": "8c8b4739e7eeffe553e63005d0211572e1e5fcf3339a4384c39eb76a57312712",
+    "production_unchanged": {
+      "Settings": "376bd195ec8373c88c11774e5bb95daa643fef298f9b2d456e498002d1fa3a9c",
+      "patch": "34c4623114e12780ac003f1f3907a721d9b37aeb923da58ca2ab8c43ef40f749"
+    },
+    "preserved": "All hold/count/persisted-id diagnostics and assertions, other14new cases,5companions and mouseClick helper/disabled probes unchanged",
+    "plan": "Only original1/fixed1 duplicate case after actual QA acceptance and explicit sole grant; no runtime yet",
+    "prior_validation_fixture_sha256": "920571929397888153e8c5218688e10072ffe487ded78beae423ed1d1a67ae7d",
+    "prior_results": "Original7PASS8FAIL/fixed19PASS1FAIL/typesPASS retained; duplicate pre-POST timeouts and nondiscriminating blur PASS are not reclassified"
+  },
+  "targeted_validation": {
+    "tested_fixture_sha256": "8c8b4739e7eeffe553e63005d0211572e1e5fcf3339a4384c39eb76a57312712",
+    "original": {
+      "session": 5509,
+      "title": "one pending create admits one POST and one persisted id with confirmed no-op blur",
+      "status": "failed",
+      "exit": 1,
+      "stats": {
+        "startTime": "2026-09-14T05:51:15.608Z",
+        "duration": 15733.651,
+        "expected": 0,
+        "skipped": 0,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "wrapper_seconds": 17.902,
+      "diagnostic": {
+        "sent": 2,
+        "saved": [
+          {
+            "id": "06318a8b-b5ac-4bad-908e-6ab889b18877",
+            "name": "Original profile"
+          },
+          {
+            "id": "b013690c-923d-4b54-a163-8067a047ce72",
+            "name": "Created profile"
+          },
+          {
+            "id": "cac963b1-1f86-405d-899c-5b670dfb19a3",
+            "name": "Created profile"
+          }
+        ],
+        "listReads": 0
+      },
+      "first_error": "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: 1\nReceived: 2",
+      "command": [
+        "npx",
+        "--no-install",
+        "playwright",
+        "test",
+        "e2e/profile-create-pending.spec.ts",
+        "--grep",
+        "one pending create admits one POST and one persisted id with confirmed no-op blur$",
+        "--workers=1",
+        "--retries=0",
+        "private-ref:c932678a656d4b4eb3dde689ab14167e",
+        "--reporter=line,json"
+      ]
+    },
+    "fixed": {
+      "session": 66957,
+      "title": "one pending create admits one POST and one persisted id with confirmed no-op blur",
+      "status": "passed",
+      "exit": 0,
+      "stats": {
+        "startTime": "2026-09-14T05:51:56.062Z",
+        "duration": 12256.024000000001,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "wrapper_seconds": 13.706,
+      "diagnostic": {
+        "sent": 1,
+        "saved": [
+          {
+            "id": "7b8feefd-1110-4589-9579-40e2c8980b0e",
+            "name": "Original profile"
+          },
+          {
+            "id": "9413798f-ea7a-477d-a97c-7da9cc0b8779",
+            "name": "Created profile"
+          }
+        ],
+        "listReads": 0
+      },
+      "first_error": "",
+      "command": [
+        "npx",
+        "--no-install",
+        "playwright",
+        "test",
+        "e2e/profile-create-pending.spec.ts",
+        "--grep",
+        "one pending create admits one POST and one persisted id with confirmed no-op blur$",
+        "--workers=1",
+        "--retries=0",
+        "private-ref:cb02c062718d4830b0942165792960fc",
+        "--reporter=line,json"
+      ]
+    },
+    "evidence_directory": "test-results/profile-create-77c/targeted-duplicate-20260914T055049Z",
+    "evidence_sha256": {
+      "cleanup-before-temp-removal.json": "6bab74bd5254a1fe7db3da65a862fd21ba763aa55160e33312189d4df37b9636",
+      "cleanup-release.json": "d7982cdc7711876d308cd15ec119c6e3bb5dc80259177ed1b325c2ae40920e4f",
+      "fixed-after-scan.json": "f15a1c3a6c28134ffe71db8b00316a853384468bbf5204c98b083f960da2f4c5",
+      "fixed-before-scan.json": "0e73b4b73c7581c920a8dd0eb2ca724b2b27de04017bc24c1646765847c4f7fc",
+      "fixed-browser-results/.last-run.json": "91d1c43004802cd49950d78eb11c8fa7d05da8ffffe219a8b13b2f561bc00903",
+      "fixed-exit.json": "66c80c078740d4e7915598c64fed1d94d9507fc59e6979264722c090d4553f26",
+      "fixed-launch.json": "7bb35e025e89a9632dacab0d0092d1165c0e8890f8a61d119d4a7d1f17c4cc4e",
+      "fixed-report.json": "b50c280ba7f6f58769f28212f893948c472c927165fbb8faa0dd3124b0881947",
+      "fixed.log": "71170a2a8bedc5ff8c3c4db0f2c8a13dc018d014850ce4a296c4a453b24b63a4",
+      "original-after-scan.json": "e27291e341ab78cef88bcc78320395fedeaf208614f1ac36e47a3eb3a0354974",
+      "original-before-scan.json": "5974d63eabc8a1261188b355da65a3ea5010a2a21f2ca7e360cde27de17d78ae",
+      "original-browser-results/.last-run.json": "beb1d3ded4ae29b9a79a584c1794bae2765423ce896af122d0b5b63567a3760a",
+      "original-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/error-context.md": "e6fcc5f4f62b56b3cd761293034dd5e11cf00dacd4702195c27309801a7ef9d4",
+      "original-browser-results/profile-create-pending-one-c6cdb-d-with-confirmed-no-op-blur/trace.zip": "fcda8b15fee72195b59b4c9ca23c29395e040c903e376ee014e8bfbfe84da6f3",
+      "original-exit.json": "aceff135f860a01edce856a3e3a9b5da5683909ff2615e8829daf108d3993a9f",
+      "original-launch.json": "b1133f605a06b8a713dabf2f796a43bc5ba64ea961f79725560a0fd73b6524aa",
+      "original-report.json": "c123bf1363c14b7448cb88afe430f4292c7db94701ed6f121a4c992d01adb449",
+      "original.log": "83b5265addee16c11e1f99d189c014d566ccee5eda547140ee724f04ead47ba6",
+      "prelaunch-historical-mcp-attribution.json": "1d9a130c8f5435d1f3129941e4be60e41d6392974fc967fbe8132d4b632ba5e4",
+      "targeted-orchestration.py": "adc9bdf4bf1f80280283272e60cfef3c568b8546dbc3fa7a0566f6e222741a6b",
+      "targeted-source-provenance.json": "1bbe1862f660591b5e541487eadb6818772317b2715e39cb9c5e89b1abffbd8c",
+      "targeted-summary.json": "268c05e9055276541c6f6979eaeb6ede959e49213df42c005f8e683ecaba2c57"
+    },
+    "scope": "ONLY the named duplicate case once per source, no other tests/types/native/API/inference; original runner exited/fresh vacancy before finally restored fixed",
+    "limits": "Original persisted ids/POST count diagnostic precedes first sent2vs1 assertion, so later original assertions not claimed. Fixed successful suite proves remaining count/accepted status/input clear/unchanged blur assertions; no separate passing trace retained under retain-on-failure. Local Chrome/workerd and held responses, not cross-tab/backend idempotency.",
+    "cleanup": {
+      "utc": "2026-09-14T05:53:02.432102+00:00",
+      "application_test_chrome_official": [],
+      "owned_pids_remaining": [],
+      "reserved_listeners": {},
+      "known_unrelated_mcp_present": [
+        54328,
+        54317
+      ],
+      "removed_owned_temps": [
+        "private-ref:a4574380132d4202bfe130b889ffb52c",
+        "private-ref:f255108d9a4c407daaa86f8e2f354a9d"
+      ],
+      "removed_paths_still_exist": [],
+      "observed_process_count": 63,
+      "slot": "Explicit sole8812/9252 RELEASE; no active runner"
+    },
+    "prelaunch_attribution": "private-ref:3d0df45128c242c38f0c220cd8340f6d"
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "268c05e9055276541c6f6979eaeb6ede959e49213df42c005f8e683ecaba2c57",
+    "original_bytes": 2603,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "original": {
+    "title": "one pending create admits one POST and one persisted id with confirmed no-op blur",
+    "status": "failed",
+    "exit": 1,
+    "stats": {
+      "startTime": "2026-09-14T05:51:15.608Z",
+      "duration": 15733.651,
+      "expected": 0,
+      "skipped": 0,
+      "unexpected": 1,
+      "flaky": 0
+    },
+    "wrapper_seconds": 17.902,
+    "diagnostic": {
+      "sent": 2,
+      "saved": [
+        {
+          "id": "06318a8b-b5ac-4bad-908e-6ab889b18877",
+          "name": "Original profile"
+        },
+        {
+          "id": "b013690c-923d-4b54-a163-8067a047ce72",
+          "name": "Created profile"
+        },
+        {
+          "id": "cac963b1-1f86-405d-899c-5b670dfb19a3",
+          "name": "Created profile"
+        }
+      ],
+      "listReads": 0
+    },
+    "first_error": "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: 1\nReceived: 2",
+    "command": [
+      "npx",
+      "--no-install",
+      "playwright",
+      "test",
+      "e2e/profile-create-pending.spec.ts",
+      "--grep",
+      "one pending create admits one POST and one persisted id with confirmed no-op blur$",
+      "--workers=1",
+      "--retries=0",
+      "private-ref:c932678a656d4b4eb3dde689ab14167e",
+      "--reporter=line,json"
+    ]
+  },
+  "fixed": {
+    "title": "one pending create admits one POST and one persisted id with confirmed no-op blur",
+    "status": "passed",
+    "exit": 0,
+    "stats": {
+      "startTime": "2026-09-14T05:51:56.062Z",
+      "duration": 12256.024000000001,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "wrapper_seconds": 13.706,
+    "diagnostic": {
+      "sent": 1,
+      "saved": [
+        {
+          "id": "7b8feefd-1110-4589-9579-40e2c8980b0e",
+          "name": "Original profile"
+        },
+        {
+          "id": "9413798f-ea7a-477d-a97c-7da9cc0b8779",
+          "name": "Created profile"
+        }
+      ],
+      "listReads": 0
+    },
+    "first_error": "",
+    "command": [
+      "npx",
+      "--no-install",
+      "playwright",
+      "test",
+      "e2e/profile-create-pending.spec.ts",
+      "--grep",
+      "one pending create admits one POST and one persisted id with confirmed no-op blur$",
+      "--workers=1",
+      "--retries=0",
+      "private-ref:cb02c062718d4830b0942165792960fc",
+      "--reporter=line,json"
+    ]
+  }
+}

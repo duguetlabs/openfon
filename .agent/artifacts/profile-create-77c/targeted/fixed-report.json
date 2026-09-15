@@ -1,0 +1,139 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "b50c280ba7f6f58769f28212f893948c472c927165fbb8faa0dd3124b0881947",
+    "original_bytes": 4113,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "config": {
+    "argv": [
+      "private-ref:656082253ae943b38ba5975202b555c2",
+      "private-ref:ee76baba302743b99ee51947343daf14",
+      "test",
+      "e2e/profile-create-pending.spec.ts",
+      "--grep",
+      "one pending create admits one POST and one persisted id with confirmed no-op blur$",
+      "--workers=1",
+      "--retries=0",
+      "private-ref:cb02c062718d4830b0942165792960fc",
+      "--reporter=line,json"
+    ],
+    "configFile": "private-ref:cbb04be4113e403faf42335105ba8613",
+    "rootDir": "private-ref:3c8b9c9355f948d3ac6eebbfa7d89081",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "private-ref:1986c368148d49ee918a10e7a79d5966",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "private-ref:3c8b9c9355f948d3ac6eebbfa7d89081",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "line"
+      ],
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": {
+      "command": "npm run build && node scripts/e2e-server.mjs",
+      "url": "http://localhost:8812",
+      "reuseExistingServer": false,
+      "timeout": 120000
+    }
+  },
+  "suites": [
+    {
+      "title": "profile-create-pending.spec.ts",
+      "file": "profile-create-pending.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "one pending create admits one POST and one persisted id with confirmed no-op blur",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3087,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "create-duplicate-diagnostic {\"sent\":1,\"saved\":[{\"id\":\"7b8feefd-1110-4589-9579-40e2c8980b0e\",\"name\":\"Original profile\"},{\"id\":\"9413798f-ea7a-477d-a97c-7da9cc0b8779\",\"name\":\"Created profile\"}],\"listReads\":0}\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T05:52:03.281Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d38282983314d9d30ea-eedbaab93d96ace7bcf2",
+          "file": "profile-create-pending.spec.ts",
+          "line": 76,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-09-14T05:51:56.062Z",
+    "duration": 12256.024000000001,
+    "expected": 1,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

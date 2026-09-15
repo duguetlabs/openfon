@@ -1,0 +1,634 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "909d42a3d172f4695315226ca711bb3b641446bb1255eaa70f824638aa0edb46",
+    "original_bytes": 10721,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "exit": 1,
+  "duration_seconds": 109.732,
+  "observed_processes": [
+    {
+      "pid": "private-ref:fbae14ed906b482786b16a303db705aa",
+      "ppid": "private-ref:2c474ed18fbd43c4955f9d85d0083171",
+      "comm": "<defunct>"
+    },
+    {
+      "pid": "private-ref:f35b4f6bfccf4e8b8090ed40687cdf4c",
+      "ppid": "private-ref:fbae14ed906b482786b16a303db705aa",
+      "comm": "node"
+    },
+    {
+      "pid": "private-ref:0673c8c093534f5892d6f2df243e1536",
+      "ppid": "private-ref:f35b4f6bfccf4e8b8090ed40687cdf4c",
+      "comm": "(bash)"
+    },
+    {
+      "pid": "private-ref:10d6be76632648d281757272ed4aa1de",
+      "ppid": "private-ref:0673c8c093534f5892d6f2df243e1536",
+      "comm": "npm"
+    },
+    {
+      "pid": "private-ref:e1b12dcf126740c9861fb3e7fe1afd3a",
+      "ppid": "private-ref:10d6be76632648d281757272ed4aa1de",
+      "comm": "sh"
+    },
+    {
+      "pid": "private-ref:b41214bc5ff54b8ea7213535a258a443",
+      "ppid": "private-ref:e1b12dcf126740c9861fb3e7fe1afd3a",
+      "comm": "node"
+    },
+    {
+      "pid": "private-ref:2c692aec47154fcd8dbfa9b46877dfb7",
+      "ppid": "private-ref:b41214bc5ff54b8ea7213535a258a443",
+      "comm": "private-ref:dbb3e62ebbf2410db892c11e7261c936"
+    },
+    {
+      "pid": "private-ref:4314dc0fc1c94d52bbf75eb2d01beab4",
+      "ppid": "private-ref:0673c8c093534f5892d6f2df243e1536",
+      "comm": "(node)"
+    },
+    {
+      "pid": "private-ref:a6f9d35985284bd6b358b5db4a64bc30",
+      "ppid": "private-ref:4314dc0fc1c94d52bbf75eb2d01beab4",
+      "comm": "npm"
+    },
+    {
+      "pid": "private-ref:88172041280d4f61b84881dd4494c5fc",
+      "ppid": "private-ref:a6f9d35985284bd6b358b5db4a64bc30",
+      "comm": "node"
+    },
+    {
+      "pid": "private-ref:68e8e92481f44f7181d74f5059a31b98",
+      "ppid": "private-ref:88172041280d4f61b84881dd4494c5fc",
+      "comm": "private-ref:dbb3e62ebbf2410db892c11e7261c936"
+    },
+    {
+      "pid": "private-ref:65fda67225cb404b9ca3522be8608cf6",
+      "ppid": "private-ref:68e8e92481f44f7181d74f5059a31b98",
+      "comm": "private-ref:dbb3e62ebbf2410db892c11e7261c936"
+    },
+    {
+      "pid": "private-ref:f9599015e5844d6d8ea065cfa1ab41a5",
+      "ppid": "private-ref:68e8e92481f44f7181d74f5059a31b98",
+      "comm": "(workerd)"
+    },
+    {
+      "pid": "private-ref:3360527d3d594cd99f499863ce2a8476",
+      "ppid": "private-ref:68e8e92481f44f7181d74f5059a31b98",
+      "comm": "private-ref:dbb3e62ebbf2410db892c11e7261c936"
+    },
+    {
+      "pid": "private-ref:f06b9e6f61af463dad69e792034f119a",
+      "ppid": "private-ref:68e8e92481f44f7181d74f5059a31b98",
+      "comm": "private-ref:dbb3e62ebbf2410db892c11e7261c936"
+    },
+    {
+      "pid": "private-ref:74fa9b87e90445edbec110ad0d415b59",
+      "ppid": "private-ref:68e8e92481f44f7181d74f5059a31b98",
+      "comm": "private-ref:dbb3e62ebbf2410db892c11e7261c936"
+    },
+    {
+      "pid": "private-ref:5b739f2cb25d45288058a8304524594b",
+      "ppid": "private-ref:4314dc0fc1c94d52bbf75eb2d01beab4",
+      "comm": "(node)"
+    },
+    {
+      "pid": "private-ref:ee78176a437b48d38c95e88c91d6d3e9",
+      "ppid": "private-ref:5b739f2cb25d45288058a8304524594b",
+      "comm": "(node)"
+    },
+    {
+      "pid": "private-ref:a0d8042c6df04f21b8ea7663f1ce354d",
+      "ppid": "private-ref:ee78176a437b48d38c95e88c91d6d3e9",
+      "comm": "(node)"
+    },
+    {
+      "pid": "private-ref:368f78bc89b1484a910dd36e35b50dc8",
+      "ppid": "private-ref:a0d8042c6df04f21b8ea7663f1ce354d",
+      "comm": "(esbuild)"
+    },
+    {
+      "pid": "private-ref:7c0b0f30db94496791ef7d04f752fc28",
+      "ppid": "private-ref:a0d8042c6df04f21b8ea7663f1ce354d",
+      "comm": "(workerd)"
+    },
+    {
+      "pid": "private-ref:84ee902f1636480abd0207ff2c0f3cdd",
+      "ppid": "private-ref:a0d8042c6df04f21b8ea7663f1ce354d",
+      "comm": "(esbuild)"
+    },
+    {
+      "pid": "private-ref:f5ec83bfa9e74bb6806f1383945da48d",
+      "ppid": "private-ref:a0d8042c6df04f21b8ea7663f1ce354d",
+      "comm": "(workerd)"
+    },
+    {
+      "pid": "private-ref:1b0fce476a5b43119d53109cb1eb0e60",
+      "ppid": "private-ref:f35b4f6bfccf4e8b8090ed40687cdf4c",
+      "comm": "private-ref:dbb3e62ebbf2410db892c11e7261c936"
+    },
+    {
+      "pid": "private-ref:7313696f87c84b799510617ff72b8b66",
+      "ppid": "private-ref:1b0fce476a5b43119d53109cb1eb0e60",
+      "comm": "(Google"
+    },
+    {
+      "pid": "private-ref:73a1191d213e42ab81f6306b0cf6bdf5",
+      "ppid": "private-ref:7313696f87c84b799510617ff72b8b66",
+      "comm": "(Google"
+    },
+    {
+      "pid": "private-ref:06d2f09d40ec4719a2d2ac213adc635d",
+      "ppid": "private-ref:7313696f87c84b799510617ff72b8b66",
+      "comm": "(Google"
+    },
+    {
+      "pid": "private-ref:fe9a507c001d4043bb201f0950b8cab1",
+      "ppid": "private-ref:7313696f87c84b799510617ff72b8b66",
+      "comm": "(Google"
+    },
+    {
+      "pid": "private-ref:4b396fcb7469448fb3528eae2d1e0bd7",
+      "ppid": "private-ref:7313696f87c84b799510617ff72b8b66",
+      "comm": "<defunct>"
+    },
+    {
+      "pid": "private-ref:4932fd3c3c2e48d5bdb953b6a9d47b10",
+      "ppid": "private-ref:7313696f87c84b799510617ff72b8b66",
+      "comm": "<defunct>"
+    },
+    {
+      "pid": "private-ref:ffc8eb72adb24f859aef438b390265c6",
+      "ppid": "private-ref:7313696f87c84b799510617ff72b8b66",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:04b04c861e8342829e4322c4fada139f",
+      "ppid": "private-ref:f35b4f6bfccf4e8b8090ed40687cdf4c",
+      "comm": "private-ref:dbb3e62ebbf2410db892c11e7261c936"
+    },
+    {
+      "pid": "private-ref:750cbd6eda0c4871af6950e96f68f4e2",
+      "ppid": "private-ref:04b04c861e8342829e4322c4fada139f",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:3cce56440ca4432c8738e61b21626a03",
+      "ppid": "private-ref:750cbd6eda0c4871af6950e96f68f4e2",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:02918620100742f1a5ad0e5a2e0ebf19",
+      "ppid": "private-ref:750cbd6eda0c4871af6950e96f68f4e2",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:819ab4dace214365bcf29662fec49f9e",
+      "ppid": "private-ref:750cbd6eda0c4871af6950e96f68f4e2",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:f9925099fe0044b09b6acfec0385db2d",
+      "ppid": "private-ref:750cbd6eda0c4871af6950e96f68f4e2",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:c9861920cfd248dda7307cf21c84488d",
+      "ppid": "private-ref:750cbd6eda0c4871af6950e96f68f4e2",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:732a81b24b174b66b6ea375252edc7f9",
+      "ppid": "private-ref:750cbd6eda0c4871af6950e96f68f4e2",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:6b5311a40ab141ee989aa8fe41347741",
+      "ppid": "private-ref:f35b4f6bfccf4e8b8090ed40687cdf4c",
+      "comm": "private-ref:dbb3e62ebbf2410db892c11e7261c936"
+    },
+    {
+      "pid": "private-ref:abb18cc4972e4b18abb62bb4f6689bde",
+      "ppid": "private-ref:6b5311a40ab141ee989aa8fe41347741",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:ae675ee28c9e4a59a7070c52420efea0",
+      "ppid": "private-ref:abb18cc4972e4b18abb62bb4f6689bde",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:bc2300560c88496a9c4b6abd9a51a923",
+      "ppid": "private-ref:abb18cc4972e4b18abb62bb4f6689bde",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:480597b7309e4f63bfbf4c501aadef3e",
+      "ppid": "private-ref:abb18cc4972e4b18abb62bb4f6689bde",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:0e1024b94850496bb576cf8b22cb5326",
+      "ppid": "private-ref:abb18cc4972e4b18abb62bb4f6689bde",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:5958ba768c4f49fa8e371742a81bebbe",
+      "ppid": "private-ref:abb18cc4972e4b18abb62bb4f6689bde",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:a642e05874684b1fa35e97d8391f9526",
+      "ppid": "private-ref:abb18cc4972e4b18abb62bb4f6689bde",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:bb4d77d5b0ca41a2b260a61c9a57e5b8",
+      "ppid": "private-ref:abb18cc4972e4b18abb62bb4f6689bde",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:ec0fed3617154c1698cd7f09faca9162",
+      "ppid": "private-ref:f35b4f6bfccf4e8b8090ed40687cdf4c",
+      "comm": "private-ref:dbb3e62ebbf2410db892c11e7261c936"
+    },
+    {
+      "pid": "private-ref:7f91597441754bc896e63f0199cbb241",
+      "ppid": "private-ref:ec0fed3617154c1698cd7f09faca9162",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:889a3a96f46948679c82786112444759",
+      "ppid": "private-ref:7f91597441754bc896e63f0199cbb241",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:bd51e3a929ef4c4884865ed79fe68b35",
+      "ppid": "private-ref:7f91597441754bc896e63f0199cbb241",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:a1646c311af44fe89e89e8c2d7113ac8",
+      "ppid": "private-ref:7f91597441754bc896e63f0199cbb241",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:0ed15d2c08404fed832ad540801c2a57",
+      "ppid": "private-ref:7f91597441754bc896e63f0199cbb241",
+      "comm": "<defunct>"
+    },
+    {
+      "pid": "private-ref:64cdc395819d4755b5aef0cc8a84052c",
+      "ppid": "private-ref:7f91597441754bc896e63f0199cbb241",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:d2f1696332004d748e5bc15d9b3277de",
+      "ppid": "private-ref:7f91597441754bc896e63f0199cbb241",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:ff4b2644dec444a080b5d32b9637b5ab",
+      "ppid": "private-ref:7f91597441754bc896e63f0199cbb241",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:1e6ec0b0a3a747bb8f6ef04a9ede24e8",
+      "ppid": "private-ref:f35b4f6bfccf4e8b8090ed40687cdf4c",
+      "comm": "private-ref:dbb3e62ebbf2410db892c11e7261c936"
+    },
+    {
+      "pid": "private-ref:0d43952c0bbd42e0bb0e9d7f6615ab27",
+      "ppid": "private-ref:1e6ec0b0a3a747bb8f6ef04a9ede24e8",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:52afece8e0f54bf7912286a1987c36d5",
+      "ppid": "private-ref:0d43952c0bbd42e0bb0e9d7f6615ab27",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:064260dc50924a909c545ec536da3a67",
+      "ppid": "private-ref:0d43952c0bbd42e0bb0e9d7f6615ab27",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:a626714ccde2463ba25841cbd6c3e297",
+      "ppid": "private-ref:0d43952c0bbd42e0bb0e9d7f6615ab27",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:2149c7a7cb1049a987d8c4adbd039467",
+      "ppid": "private-ref:0d43952c0bbd42e0bb0e9d7f6615ab27",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:63f824fd9f92494f9259c24922e5dd54",
+      "ppid": "private-ref:0d43952c0bbd42e0bb0e9d7f6615ab27",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:84afb60e9f2e4916a27e9dc61de3f891",
+      "ppid": "private-ref:0d43952c0bbd42e0bb0e9d7f6615ab27",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:50b072fcb17a46e0822315738fe70369",
+      "ppid": "private-ref:0d43952c0bbd42e0bb0e9d7f6615ab27",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:318fe7f207904ce9ab9bb19841184b5d",
+      "ppid": "private-ref:0d43952c0bbd42e0bb0e9d7f6615ab27",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:b9513be03f354867b7389a7c0a247f4b",
+      "ppid": "private-ref:0d43952c0bbd42e0bb0e9d7f6615ab27",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:545df598182541c28517a20326ed6947",
+      "ppid": "private-ref:0d43952c0bbd42e0bb0e9d7f6615ab27",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:131b2f86d46441a5aac5fe9d865b3ae5",
+      "ppid": "private-ref:f35b4f6bfccf4e8b8090ed40687cdf4c",
+      "comm": "private-ref:dbb3e62ebbf2410db892c11e7261c936"
+    },
+    {
+      "pid": "private-ref:b4dab61aeeca47e1a6042f23b5611196",
+      "ppid": "private-ref:131b2f86d46441a5aac5fe9d865b3ae5",
+      "comm": "(Google"
+    },
+    {
+      "pid": "private-ref:d4f89b99943b4c62a58e3bb0cfacbb13",
+      "ppid": "private-ref:b4dab61aeeca47e1a6042f23b5611196",
+      "comm": "(Google"
+    },
+    {
+      "pid": "private-ref:b40811b70e1c4d11abcc52c96cba6533",
+      "ppid": "private-ref:b4dab61aeeca47e1a6042f23b5611196",
+      "comm": "(Google"
+    },
+    {
+      "pid": "private-ref:7d797de3f224402f90bb2d8186a3b4b6",
+      "ppid": "private-ref:b4dab61aeeca47e1a6042f23b5611196",
+      "comm": "(Google"
+    },
+    {
+      "pid": "private-ref:899f2da0da314cbfa5aaa4140c2a2bc1",
+      "ppid": "private-ref:b4dab61aeeca47e1a6042f23b5611196",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:e24ad8e0c1ed49d298ad88ead8a116e5",
+      "ppid": "private-ref:b4dab61aeeca47e1a6042f23b5611196",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:25fb088de73c4866b5f875eb95ed95a6",
+      "ppid": "private-ref:b4dab61aeeca47e1a6042f23b5611196",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:68e84341bd474a9bbe2aa6c9a80d444f",
+      "ppid": "private-ref:b4dab61aeeca47e1a6042f23b5611196",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:adad618c2e93489185910e2f6583eaca",
+      "ppid": "private-ref:b4dab61aeeca47e1a6042f23b5611196",
+      "comm": "(Google"
+    },
+    {
+      "pid": "private-ref:4fbdf03b30e0432896544606b977ee59",
+      "ppid": "private-ref:b4dab61aeeca47e1a6042f23b5611196",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:206506aaac96454a89151aabc0f6b7ac",
+      "ppid": "private-ref:b4dab61aeeca47e1a6042f23b5611196",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:9383b693a0a74321a0bd3c25cb42aa5e",
+      "ppid": "private-ref:b4dab61aeeca47e1a6042f23b5611196",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:9a50d110a2b940308399711b9c829e42",
+      "ppid": "private-ref:b4dab61aeeca47e1a6042f23b5611196",
+      "comm": "<defunct>"
+    },
+    {
+      "pid": "private-ref:3099d3551de64f1b9d8e27d5d8959c90",
+      "ppid": "private-ref:b4dab61aeeca47e1a6042f23b5611196",
+      "comm": "<defunct>"
+    },
+    {
+      "pid": "private-ref:819c99f5a1dc4b13adaa4b643e807605",
+      "ppid": "private-ref:b4dab61aeeca47e1a6042f23b5611196",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:120002ad2ea64c62aeef2655066e16ee",
+      "ppid": "private-ref:f35b4f6bfccf4e8b8090ed40687cdf4c",
+      "comm": "private-ref:dbb3e62ebbf2410db892c11e7261c936"
+    },
+    {
+      "pid": "private-ref:9497f435ca9e40d2b61bbb55fd0accea",
+      "ppid": "private-ref:120002ad2ea64c62aeef2655066e16ee",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:f4292659d0f6484ba39d75ba4445a60a",
+      "ppid": "private-ref:9497f435ca9e40d2b61bbb55fd0accea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:7a5f1d90d1ae4bcb90412160f612bd5f",
+      "ppid": "private-ref:9497f435ca9e40d2b61bbb55fd0accea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:0bcf3bc3f5b545709cc22379d76090f7",
+      "ppid": "private-ref:9497f435ca9e40d2b61bbb55fd0accea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:34f831c14e004edcbe051a57388138ec",
+      "ppid": "private-ref:9497f435ca9e40d2b61bbb55fd0accea",
+      "comm": "<defunct>"
+    },
+    {
+      "pid": "private-ref:854bcb8268bc46c6b27cab2bf2638bf1",
+      "ppid": "private-ref:9497f435ca9e40d2b61bbb55fd0accea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:333f7d1478844e918214ee7f6aeeda72",
+      "ppid": "private-ref:9497f435ca9e40d2b61bbb55fd0accea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:133789bea05745dd9888cd1a488f7654",
+      "ppid": "private-ref:9497f435ca9e40d2b61bbb55fd0accea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:a417aa5d8019439497cf06c85a4322db",
+      "ppid": "private-ref:f35b4f6bfccf4e8b8090ed40687cdf4c",
+      "comm": "private-ref:dbb3e62ebbf2410db892c11e7261c936"
+    },
+    {
+      "pid": "private-ref:3d1a1572b00c46cc80f6371e5df2aeea",
+      "ppid": "private-ref:a417aa5d8019439497cf06c85a4322db",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:c9313f7632a6450f824e9a5394fd55f8",
+      "ppid": "private-ref:3d1a1572b00c46cc80f6371e5df2aeea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:d191a66ab79d468fb766d3c44ac7563f",
+      "ppid": "private-ref:3d1a1572b00c46cc80f6371e5df2aeea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:853a47a69e6d40dca0783efd1d0eb8d2",
+      "ppid": "private-ref:3d1a1572b00c46cc80f6371e5df2aeea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:41b19adf168e4fffb9d4197beebceb3c",
+      "ppid": "private-ref:3d1a1572b00c46cc80f6371e5df2aeea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:c5b46372d2b7495fb20ff53a9f89ff94",
+      "ppid": "private-ref:3d1a1572b00c46cc80f6371e5df2aeea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:d7c23003fffd4395bf76e8331615a0bb",
+      "ppid": "private-ref:3d1a1572b00c46cc80f6371e5df2aeea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:6e38863651fe4c85b0159b392e43fc4e",
+      "ppid": "private-ref:3d1a1572b00c46cc80f6371e5df2aeea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:4c1f52521e6c44bc9945b3264c1d7888",
+      "ppid": "private-ref:3d1a1572b00c46cc80f6371e5df2aeea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:b989b9131f0d45c887c67b04758e593b",
+      "ppid": "private-ref:3d1a1572b00c46cc80f6371e5df2aeea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:15c1e14a22444968b0dd83881c445fe6",
+      "ppid": "private-ref:3d1a1572b00c46cc80f6371e5df2aeea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:bd8363bc9ca74b569d5e8985e127a598",
+      "ppid": "private-ref:3d1a1572b00c46cc80f6371e5df2aeea",
+      "comm": "<defunct>"
+    },
+    {
+      "pid": "private-ref:2bcddc0b9c67436a82991413f3a34148",
+      "ppid": "private-ref:3d1a1572b00c46cc80f6371e5df2aeea",
+      "comm": "<defunct>"
+    },
+    {
+      "pid": "private-ref:354f229a5bb445ac9685c971d4ce49f0",
+      "ppid": "private-ref:3d1a1572b00c46cc80f6371e5df2aeea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:7419c2263b8f458bbf0ee598dfbf96a2",
+      "ppid": "private-ref:3d1a1572b00c46cc80f6371e5df2aeea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:3cce699fc0164c5498a623b4896f5503",
+      "ppid": "private-ref:3d1a1572b00c46cc80f6371e5df2aeea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:f14ce3eaad9c422aa80f9934570739b3",
+      "ppid": "private-ref:3d1a1572b00c46cc80f6371e5df2aeea",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:5cbf33b1656944df956011629e1ea5db",
+      "ppid": "private-ref:f35b4f6bfccf4e8b8090ed40687cdf4c",
+      "comm": "(node)"
+    },
+    {
+      "pid": "private-ref:44d70af3fda3486e84a39c113f1ec61c",
+      "ppid": "private-ref:5cbf33b1656944df956011629e1ea5db",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:9f5f3ee23fd64789a36b30ad183509e1",
+      "ppid": "private-ref:44d70af3fda3486e84a39c113f1ec61c",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:c12f1ece9909430ab06dab2dbf722f85",
+      "ppid": "private-ref:44d70af3fda3486e84a39c113f1ec61c",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:ea68a17aa5b84fd2b6e2116fb10b020a",
+      "ppid": "private-ref:44d70af3fda3486e84a39c113f1ec61c",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:f9add886b82d4f7dab9b8af3c3dbd361",
+      "ppid": "private-ref:44d70af3fda3486e84a39c113f1ec61c",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:eedd6f2f20394afc84384074661237d9",
+      "ppid": "private-ref:44d70af3fda3486e84a39c113f1ec61c",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:4b6e7cf0264d4131b4bcfbcbefc93dcc",
+      "ppid": "private-ref:44d70af3fda3486e84a39c113f1ec61c",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:1414eb0c51a14dc08030dd1cca7f62c8",
+      "ppid": "private-ref:44d70af3fda3486e84a39c113f1ec61c",
+      "comm": "/Applications/Go"
+    },
+    {
+      "pid": "private-ref:30111dfe396041d8b503d0cb7f446f94",
+      "ppid": "private-ref:44d70af3fda3486e84a39c113f1ec61c",
+      "comm": "(Google"
+    }
+  ],
+  "observed_remaining": [],
+  "temp_new_remaining": [
+    "private-ref:b63675ae2d114742b17191adb0326e4d"
+  ],
+  "scan": {
+    "utc": "2026-09-14T05:39:05.737532+00:00",
+    "application_processes": [],
+    "reserved_listeners": {}
+  },
+  "fixed_restored_sha256": "376bd195ec8373c88c11774e5bb95daa643fef298f9b2d456e498002d1fa3a9c"
+}

@@ -1,0 +1,9 @@
+{
+  "base_copy_sha256": "d0d85531ebc4103dcaf6cbc0e8ed19422f3daea8af77e8451c17c0e1bc36c2c6",
+  "new_sha256": "217b55055cff5073c40adfdbc92cfd2959c89eba1fa7dce2e2c4b458f82582e2",
+  "unchanged_prefix_bytes": 258875,
+  "appended_utf8_bytes": 1414,
+  "method": "Exact accepted prefix preserved; safe current-status suffix appended.",
+  "QA_base": "aaad0bd/1c91a4c",
+  "runtime_repeated": false
+}

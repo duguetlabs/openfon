@@ -1,0 +1,564 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "2b268211207a3fc0a0fae85bd2d64bc88aa4464fbcdafb7a4b0ea4821f5af69d",
+    "original_bytes": 11268,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "original": [
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 0,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created",
+          "pid": "private-ref:6b636b9f0b35498fb06e68445938be97"
+        },
+        {
+          "kind": "child-exit",
+          "code": 0,
+          "signal": null
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 7,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created",
+          "pid": "private-ref:f52ebfceabe2489d83bfa8bb634abced"
+        },
+        {
+          "kind": "child-exit",
+          "code": 7,
+          "signal": null
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 0,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created",
+          "pid": "private-ref:f5fe2232665048d1b385dc68d1e32cb1"
+        },
+        {
+          "kind": "child-exit",
+          "code": null,
+          "signal": "SIGTERM"
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 0,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created",
+          "pid": "private-ref:3703cab46cc1419ab548f1b20526a48b"
+        },
+        {
+          "kind": "child-exit",
+          "code": null,
+          "signal": "SIGKILL"
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 0,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created",
+          "pid": "private-ref:f291c97115dc442fb0a8f26d45aa105d"
+        },
+        {
+          "kind": "forwarded",
+          "signal": "SIGTERM",
+          "sent": true
+        },
+        {
+          "kind": "child-exit",
+          "code": null,
+          "signal": "SIGTERM"
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 0,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created",
+          "pid": "private-ref:51e8f47f18a147a2ba787bdf213448ed"
+        },
+        {
+          "kind": "forwarded",
+          "signal": "SIGINT",
+          "sent": true
+        },
+        {
+          "kind": "child-exit",
+          "code": null,
+          "signal": "SIGINT"
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 7,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created",
+          "pid": "private-ref:2b6fe73d61b04efc9947c87e1a7d5b37"
+        },
+        {
+          "kind": "forwarded",
+          "signal": "SIGTERM",
+          "sent": true
+        },
+        {
+          "kind": "child-exit",
+          "code": 7,
+          "signal": null
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 0,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created",
+          "pid": "private-ref:b5812561d7c040f2a69297d2a3979c0b"
+        },
+        {
+          "kind": "forwarded",
+          "signal": "SIGTERM",
+          "sent": true
+        },
+        {
+          "kind": "child-exit",
+          "code": null,
+          "signal": "SIGKILL"
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 0,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created",
+          "pid": "private-ref:2226da3b77af4cbda9e1c48d411d0429"
+        },
+        {
+          "kind": "forwarded",
+          "signal": "SIGTERM",
+          "sent": true
+        },
+        {
+          "kind": "forwarded",
+          "signal": "SIGINT",
+          "sent": true
+        },
+        {
+          "kind": "child-exit",
+          "code": null,
+          "signal": "SIGTERM"
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 1,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created"
+        },
+        {
+          "kind": "child-error",
+          "code": "ENOENT"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": "private-ref:edabd1b012d94217bd228b51e01fa385"
+    }
+  ],
+  "fixed": [
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 0,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created",
+          "pid": "private-ref:b229d472d5224b22b09755cf1817f98a"
+        },
+        {
+          "kind": "child-exit",
+          "code": 0,
+          "signal": null
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 7,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created",
+          "pid": "private-ref:1fbb5926c69846e0a4eb917ba5adb7a9"
+        },
+        {
+          "kind": "child-exit",
+          "code": 7,
+          "signal": null
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 1,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created",
+          "pid": "private-ref:d8476ee497fb4c1e8a097884c37eb17f"
+        },
+        {
+          "kind": "child-exit",
+          "code": null,
+          "signal": "SIGTERM"
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 1,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created",
+          "pid": "private-ref:fdf68bee023a4c58b916aeb5512286a3"
+        },
+        {
+          "kind": "child-exit",
+          "code": null,
+          "signal": "SIGKILL"
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 0,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created",
+          "pid": "private-ref:d2d3d2ac9f5a4fd295643ecc6317eb77"
+        },
+        {
+          "kind": "forwarded",
+          "signal": "SIGTERM",
+          "sent": true
+        },
+        {
+          "kind": "child-exit",
+          "code": null,
+          "signal": "SIGTERM"
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 0,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created",
+          "pid": "private-ref:89ee8015aac84285a30d81fa0f938304"
+        },
+        {
+          "kind": "forwarded",
+          "signal": "SIGINT",
+          "sent": true
+        },
+        {
+          "kind": "child-exit",
+          "code": null,
+          "signal": "SIGINT"
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 7,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created",
+          "pid": "private-ref:c47476d9eff1477bbde2c44b26c16594"
+        },
+        {
+          "kind": "forwarded",
+          "signal": "SIGTERM",
+          "sent": true
+        },
+        {
+          "kind": "child-exit",
+          "code": 7,
+          "signal": null
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 1,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created",
+          "pid": "private-ref:e0bc65b4708841f8bf0de3a1bb35756e"
+        },
+        {
+          "kind": "forwarded",
+          "signal": "SIGTERM",
+          "sent": true
+        },
+        {
+          "kind": "child-exit",
+          "code": null,
+          "signal": "SIGKILL"
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 0,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created",
+          "pid": "private-ref:18c16c424fa3490791ed2e8cb734ef17"
+        },
+        {
+          "kind": "forwarded",
+          "signal": "SIGTERM",
+          "sent": true
+        },
+        {
+          "kind": "forwarded",
+          "signal": "SIGINT",
+          "sent": true
+        },
+        {
+          "kind": "child-exit",
+          "code": null,
+          "signal": "SIGTERM"
+        },
+        {
+          "kind": "provider-close"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "scope": "actual tail; real owned Node wrapper/child; provider stub",
+      "result": {
+        "code": 1,
+        "signal": null
+      },
+      "events": [
+        {
+          "kind": "child-created"
+        },
+        {
+          "kind": "child-error",
+          "code": "ENOENT"
+        },
+        {
+          "kind": "state-removed"
+        }
+      ],
+      "stderr": "private-ref:f24d3aec3251497c87cc5176f0a04efa"
+    }
+  ]
+}

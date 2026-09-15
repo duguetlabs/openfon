@@ -1,0 +1,230 @@
+{
+  "state": "EVIDENCE_AND_EXACT_SOURCE_ASSEMBLY_CLOSED",
+  "source_head": "c37d2c31aff2d502ce6ea0af5db5f97045defa65",
+  "parent": "f8e8b7619a86797e017f9cc317b090eaf64fe513",
+  "source_QA": "4a8f23d",
+  "controller_QA": "1704c8a",
+  "evidence_QA": "a423333",
+  "assembly_QA": "fbbb0f93b3e8fa639013a5d1a7342acd1e6867d1",
+  "assembly_QA_section": {
+    "sha256": "332d1bb650b24ee44a96b860b6f008acbf912eb056c9d68ca6adf03a78fbe85e",
+    "bytes": 1657
+  },
+  "summary": {
+    "sha256": "e5147194524e5be277f63348e38247b8917098d9d2ba5db29a5ee57becd39247",
+    "bytes": 41687
+  },
+  "assembly_receipt": {
+    "sha256": "a10a550c0d4059f886375625c3043b985a883f38f27f28665d54d7ec6d405516",
+    "bytes": 3582
+  },
+  "targets": [
+    {
+      "path": "web/src/session-load.ts",
+      "original": {
+        "path": "web/src/session-load.ts",
+        "mode": "100644",
+        "git_blob": "261abb718d54abe15ae6cc01c4748b7245ff3325",
+        "sha256": "4e6c19ac6309b9ac238c0c80dbe83e80df4e6d538e1e42a3ace7b63a822401c4",
+        "bytes": 7841
+      },
+      "candidate": {
+        "sha256": "e9c227bb51338312ee5b9979dda1ff790c1b3a65b07ccb78a24f265d24a0bb3d",
+        "bytes": 9928,
+        "mode": "100644"
+      },
+      "safe_copy": "files/web/src/session-load.ts"
+    },
+    {
+      "path": "web/src/App.tsx",
+      "original": {
+        "path": "web/src/App.tsx",
+        "mode": "100644",
+        "git_blob": "83b7288c49ec780c2f541161df05cb29610e3afc",
+        "sha256": "b78f72f6758ec147cdbfc72140fa8cf1a3681258d8a6ad50c11e8f52d30306d1",
+        "bytes": 10005
+      },
+      "candidate": {
+        "sha256": "3ee3cdd6a8e192c2f723cc159ab2b6fb1c571b74a1e8514fb004113b28d3ac12",
+        "bytes": 10768,
+        "mode": "100644"
+      },
+      "safe_copy": "files/web/src/App.tsx"
+    },
+    {
+      "path": "web/src/pages/Account.tsx",
+      "original": {
+        "path": "web/src/pages/Account.tsx",
+        "mode": "100644",
+        "git_blob": "b82ce47bc56fb1b742f0d8e472ed5dfd9040faf3",
+        "sha256": "61ede90a67ffb4c5041c7f600f2f4cda27db52c1d378e1165c1fe7b6a348dfaf",
+        "bytes": 5147
+      },
+      "candidate": {
+        "sha256": "ce6a46ac801c0f4fc1ee2e1e5991c69c16edacfd49dbbf7395facf1ca875e5e4",
+        "bytes": 4988,
+        "mode": "100644"
+      },
+      "safe_copy": "files/web/src/pages/Account.tsx"
+    },
+    {
+      "path": "docs/logout-recovery.md",
+      "original": {
+        "path": "docs/logout-recovery.md",
+        "mode": "100644",
+        "git_blob": "2448a5d5c4da85a2a2d7d0321a936c0fd274c4cc",
+        "sha256": "adb6a25f49a2839493ee9ffed0de661012c214ab6bba37dc43bce9ad09752e89",
+        "bytes": 4010
+      },
+      "candidate": {
+        "sha256": "cfb390dbdae2297ba511b0b55c89959cd70032f60f81a3d7e83b0f171a9ed131",
+        "bytes": 6714,
+        "mode": "100644"
+      },
+      "safe_copy": "files/docs/logout-recovery.md"
+    },
+    {
+      "path": "test/confirmed-account-deletion.test.ts",
+      "original": null,
+      "candidate": {
+        "sha256": "410d73bf4d5f28e6ecb7fb6d7829ffa60d46e8f13e9ece9f47739e340847aded",
+        "bytes": 12583,
+        "mode": "100644"
+      },
+      "safe_copy": "files/test/confirmed-account-deletion.test.ts"
+    },
+    {
+      "path": "e2e/confirmed-account-deletion.spec.ts",
+      "original": null,
+      "candidate": {
+        "sha256": "e0cb1b0bccf55ee6df9c427cd8058762f2f5a0a30615d906c89e7caf435c7cd6",
+        "bytes": 10600,
+        "mode": "100644"
+      },
+      "safe_copy": "files/e2e/confirmed-account-deletion.spec.ts"
+    }
+  ],
+  "actual": {
+    "original_units": {
+      "failed": 4,
+      "skipped": 15,
+      "first_assertions": "All four exact titles/lines/message fragments matched"
+    },
+    "fixed_units": {
+      "passed": 47,
+      "failed": 0,
+      "skipped": 0,
+      "split": "19new+22logout-intent+6session-load"
+    },
+    "web_types": "PASS exit0",
+    "original_Chrome": {
+      "failed": 2,
+      "selected": 2,
+      "unselected": 6,
+      "reported_skipped": 0,
+      "first_assertions": "Both toBeEnabled at line85; one error each, no global error"
+    },
+    "fixed_Chrome": {
+      "passed": 10,
+      "selected": 10,
+      "unselected": 6,
+      "reported_skipped": 0,
+      "split": "8new+2affected existing controls"
+    },
+    "traces": 12,
+    "unexpected_failure": false,
+    "retry": false,
+    "timeout": false
+  },
+  "commands": [
+    {
+      "name": "original-unit",
+      "at": "2026-09-15T14:40:01.057419+00:00",
+      "exit": 1,
+      "elapsed_seconds": 1.2363306659972295,
+      "timeout": false,
+      "counts": {
+        "passed": 0,
+        "failed": 4,
+        "skipped": 15
+      }
+    },
+    {
+      "name": "fixed-unit",
+      "at": "2026-09-15T14:40:03.348325+00:00",
+      "exit": 0,
+      "elapsed_seconds": 0.9058230829978129,
+      "timeout": false,
+      "counts": {
+        "passed": 47,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "fixed-web-types",
+      "at": "2026-09-15T14:40:08.753090+00:00",
+      "exit": 0,
+      "elapsed_seconds": 4.021169459003431,
+      "timeout": false
+    },
+    {
+      "name": "original-browser",
+      "at": "2026-09-15T14:40:52.049570+00:00",
+      "exit": 1,
+      "elapsed_seconds": 41.868327707998105,
+      "timeout": false,
+      "counts": {
+        "passed": 0,
+        "failed": 2
+      }
+    },
+    {
+      "name": "fixed-browser",
+      "at": "2026-09-15T14:41:44.539444+00:00",
+      "exit": 0,
+      "elapsed_seconds": 50.75066995800444,
+      "timeout": false,
+      "counts": {
+        "passed": 10,
+        "failed": 0
+      }
+    }
+  ],
+  "release": {
+    "at": "2026-09-15T14:46:41.270422+00:00",
+    "slot": "8814/9254",
+    "state": "EXPLICIT_RELEASED",
+    "sha256": "aa04cdcc2377e323db419892d7bb6a6244ed49052359fd228b16b5f5d13e6b7b",
+    "controller_exit": 0,
+    "controller_seconds": 181.03555320799933,
+    "five_exits": [
+      1,
+      0,
+      0,
+      1,
+      0
+    ],
+    "sampled_processes": 119,
+    "sampled_surviving": 0,
+    "controller_absent": true,
+    "scoped": 0,
+    "reserved": 0,
+    "fixed6_shared1271_protected1267_dependency5484_executables11": "matched externally",
+    "owned_dependency_link": "not created; isolated dependency copy retained",
+    "missing_wrapper_disposal_receipts": 2,
+    "d1_directories_archived_then_removed": 2,
+    "d1_open_handles_at_removal": 0,
+    "manual_cleanup": "two exact owned D1 directories only, after byte-exact archives and no-open-handle checks",
+    "other_cache_outputs": "retained privately; no broad cleanup"
+  },
+  "private_categories": {
+    "frozen_input_or_harness": 13,
+    "raw_output_or_observation": 54,
+    "derived_receipt_or_catalog": 58,
+    "archived_d1_bytes": 56
+  },
+  "private_modes": "181 catalogued files0600 beneath0700 directories; source snapshots retain Git0644/0755 separately. No symlinks in catalog. Raw/derived categories remain distinct.",
+  "limits": "Predicted originals now observed first-assertion failures; later failed-original assertions not claimed passing. Unit synthetic/storage schedules and Chrome route faults/local Worker do not prove deployed transport, external/new authentication context or cookie ordering. Browser stale completion is sampled after response/task boundary.12private traces retained; no broad credential/privacy inference.2missing wrapper-disposal receipts remain distinct from observed119PID+controller absence, nonexhaustive scans, and archived/removed D1 bytes. No Worker/native/provider/old-review replay.558omissions/rebuilt132/former-binary/unknown2926cause/cookie/context/storage/capacity limits retained; no security/merge clearance.",
+  "combined_assessment": "No additional local combined run selected absent a new concern. The coordinator/App/Account change, normal and failed signOut, storage ownership and session loading were exercised by47units/webtypes/10Chrome. Server/Worker/native/provider behavior unchanged. Fresh published-head CI and independently gated latest-head official review remain required."
+}

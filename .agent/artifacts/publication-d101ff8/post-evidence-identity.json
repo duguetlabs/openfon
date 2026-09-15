@@ -1,0 +1,9 @@
+{
+  "state": "INTEGRATION_PRIVATE_CATALOG_IDENTITY_VERIFIED_QA_EVIDENCE_PENDING",
+  "owner_commit": "747075a",
+  "summary_sha256": "2591de4bf5ff7016a22cdbf0db128cb152c93b7b7856e86193392bb9ff0d0b1d",
+  "verified_items": 41,
+  "checks": "All mapped file SHA256/size/0600/no file symlinks and0700validation root verified through restricted locator. Private paths/mapping retained outside tracked artifacts.",
+  "limits": "Identity check only; no new runtime or stronger assertion/outcome claim. Prior official coverage/rebuilt limits unchanged.",
+  "next": "Await existing independent evidence closure before exact three-path POST assembly."
+}

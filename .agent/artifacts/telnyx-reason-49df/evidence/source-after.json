@@ -1,0 +1,9 @@
+{
+  "base": "49df6fc2a5edc0f75a8c922e0178fa6269276f24",
+  "fixedSourceSha256": "00a3ae80f7c3f79e700a58e58548d8e70f4410b0eea175c0e860e12e9fee845c",
+  "fixtureSha256": "e72ab0cafde73700880f7483b3076e70c21edf54d3a7787cb015ae3c1587a7c9",
+  "otherBaseBlobsUnchanged": 1076,
+  "protectedUnchanged": 19,
+  "allAcceptedArtifactHashesUnchanged": true,
+  "unexpectedSnapshotFiles": 0
+}

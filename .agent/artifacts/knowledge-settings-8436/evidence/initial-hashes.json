@@ -1,0 +1,11 @@
+{
+  "original": {
+    "src/studio-api.ts": "e8865356915d3b628d73343a936a3bccdfcb0c9e650c7ffc64216a0d26ee1574",
+    "web/src/pages/Settings.tsx": "470178fd423d8caadf98092476acc8ebdba6bb7ef4f73147ecdca66f6cad50d8"
+  },
+  "fixtures": {
+    "test/knowledge-concurrency.test.ts": "911a0449b56c4457b43f0af85736ebd543fc35b073e6b1224a1eed28d06273fb",
+    "e2e/profile-rename-actions.spec.ts": "6175ff4eaf4662e972059a83ebb82eeeabb308bb66596a7603a4e761c105efe4"
+  },
+  "patch": "03636f661c3bd766d01a6776c3b48ae49dc7e9622a3cec8b372506d456ca3291"
+}

@@ -1,0 +1,62 @@
+{
+  "id": "5e890b0d-1c0e-4e34-88d0-92b9c16d0443",
+  "status": "completed",
+  "duration_s": 58,
+  "summary": "Caller inquired about Northwheel's hours and services, including bicycle repairs and espresso machine repairs, and left a message for the team.",
+  "intent": "message",
+  "message_json": "{\"caller_name\":\"Alex Example\",\"caller_phone\":\"null\",\"message\":\"Confirm repair timing for Alex Example, who will contact the workshop directly.\"}",
+  "outcome": "message_taken",
+  "failure_message": null,
+  "turns": [
+    {
+      "role": "agent",
+      "text": "Hello, this is Northwheel\u2019s AI assistant. I can answer workshop questions or take a message for the team.",
+      "ts": "2026-09-12 12:11:26"
+    },
+    {
+      "role": "caller",
+      "text": "Are you open on Saturday?",
+      "ts": "2026-09-12 12:11:33"
+    },
+    {
+      "role": "agent",
+      "text": "We\u2019re closed on Saturday. The nearest open day is Monday from 09:00 to 17:00. Would you like to leave a message for staff to follow up?",
+      "ts": "2026-09-12 12:11:36"
+    },
+    {
+      "role": "caller",
+      "text": "Tell me about your bicycle services.",
+      "ts": "2026-09-12 12:11:41"
+    },
+    {
+      "role": "caller",
+      "text": "Actually, can you guarantee my repair today?",
+      "ts": "2026-09-12 12:11:46"
+    },
+    {
+      "role": "agent",
+      "text": "We do puncture repairs and basic bicycle servicing, but repair timing has to be confirmed by staff, so I can\u2019t guarantee a repair today. We\u2019re also closed today. Would you like to leave your name, phone number, and what you need so the team can follow up?",
+      "ts": "2026-09-12 12:11:50"
+    },
+    {
+      "role": "caller",
+      "text": "Do you repair Vintage Espresso Machines?",
+      "ts": "2026-09-12 12:11:55"
+    },
+    {
+      "role": "agent",
+      "text": "I don\u2019t have any information about espresso-machine repairs. Northwheel handles puncture repairs and basic bicycle servicing only. If you\u2019d like, I can take a message for the team about a bike issue.",
+      "ts": "2026-09-12 12:11:58"
+    },
+    {
+      "role": "caller",
+      "text": "Please take a message. I am Alex Example. I would like the team to confirm repair timing. I will contact the workshop myself. So I will not give a phone number.",
+      "ts": "2026-09-12 12:12:11"
+    },
+    {
+      "role": "agent",
+      "text": "Got it, I\u2019ve noted a message for Alex Example asking the team to confirm repair timing, with no phone number provided because you\u2019ll contact the workshop yourself. Please reach out to them when it\u2019s convenient for you.",
+      "ts": "2026-09-12 12:12:15"
+    }
+  ]
+}

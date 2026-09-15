@@ -1,0 +1,36 @@
+{
+  "original": {
+    "exit_code": 1,
+    "seconds": 3.083,
+    "command": [
+      "npm",
+      "test",
+      "--",
+      "test/account-api.test.ts",
+      "-t",
+      "\\[export-url\\]",
+      "--maxWorkers=1"
+    ]
+  },
+  "fixed": {
+    "exit_code": 0,
+    "seconds": 3.627,
+    "command": [
+      "npm",
+      "test",
+      "--",
+      "test/account-api.test.ts",
+      "test/auth-hardening.test.ts",
+      "--maxWorkers=1"
+    ]
+  },
+  "types": {
+    "exit_code": 0,
+    "seconds": 2.945,
+    "command": [
+      "npm",
+      "run",
+      "typecheck"
+    ]
+  }
+}

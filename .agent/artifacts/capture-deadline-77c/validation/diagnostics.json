@@ -1,0 +1,71 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "8bee9956696612c0a6b68c857d6f9ead3a7437bb4e5bbaef554fce7bb9ad163c",
+    "original_bytes": 1343,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "original": [
+    {
+      "scope": "real owned child, deliberate SIGTERM handler",
+      "pid": "private-ref:1a7ff2a1c67d452fb78ef9d3697e3e19",
+      "result": "TEST_WATCHDOG",
+      "elapsedMs": 7502,
+      "calls": [
+        {
+          "signal": "SIGTERM",
+          "sent": true
+        }
+      ],
+      "stdout": "ready\\nreceived\\n",
+      "exits": 0,
+      "errors": 0,
+      "exitCode": null,
+      "signalCode": null,
+      "browserClosed": true,
+      "temporaryExists": true,
+      "settled": false
+    },
+    {
+      "scope": "real owned graceful child",
+      "pid": "private-ref:9df3555ba3274ec2b2c99ebae0bc63b6",
+      "calls": 1,
+      "result": "resolved",
+      "exitCode": 0,
+      "signalCode": null
+    }
+  ],
+  "fixed": [
+    {
+      "scope": "real owned child, deliberate SIGTERM handler",
+      "pid": "private-ref:de9a9b0f40c34fd6881b59ae8e2e5f09",
+      "result": "rejected",
+      "code": "CAPTURE_CHILD_STOP_TIMEOUT",
+      "elapsedMs": 5009,
+      "calls": [
+        {
+          "signal": "SIGTERM",
+          "sent": true
+        }
+      ],
+      "stdout": "ready\\nreceived\\n",
+      "exits": 0,
+      "errors": 0,
+      "exitCode": null,
+      "signalCode": null,
+      "browserClosed": true,
+      "temporaryExists": false,
+      "settled": true
+    },
+    {
+      "scope": "real owned graceful child",
+      "pid": "private-ref:c0c3b68dcc9d4bd395918864099fd7d2",
+      "calls": 1,
+      "result": "resolved",
+      "exitCode": 0,
+      "signalCode": null
+    }
+  ]
+}

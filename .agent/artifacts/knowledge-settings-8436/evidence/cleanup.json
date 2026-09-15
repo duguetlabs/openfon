@@ -1,0 +1,67 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "4b40e89cd7b437ab3d226ed8b3259e77d1d89d97d073efe4df6c1ee9b1ed4aad",
+    "original_bytes": 1631,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "owned_pids_recorded": [
+    61363,
+    61379,
+    61380,
+    61411,
+    61732,
+    61759,
+    61760,
+    61761,
+    61762,
+    61766,
+    61767,
+    61770,
+    61771,
+    61777,
+    61778,
+    61779,
+    61839,
+    61840,
+    61841
+  ],
+  "owned_pids_remaining": [],
+  "reserved_listeners": "",
+  "app_processes": [],
+  "runner_temp_paths": {
+    "private-ref:d393a9e6aa2b41238945ccfac7eb963e": false,
+    "private-ref:1c410362f7b74415aa132d3f038525aa": false,
+    "private-ref:7ad6e5c27d3940c1a5fc4914354a0201": false
+  },
+  "unrelated_browser": "Existing linkedin-mcp headless browser is outside owner tree and untouched.",
+  "sessions": {
+    "original_api": {
+      "id": 40493,
+      "exit": 1
+    },
+    "original_browser": {
+      "id": 31053,
+      "exit": 1
+    },
+    "fixed_api": {
+      "id": 3239,
+      "exit": 0
+    },
+    "fixed_types": {
+      "id": 88666,
+      "exit": 0
+    },
+    "fixed_browser": {
+      "id": 93440,
+      "exit": 0
+    }
+  },
+  "manual_temp_cleanup": {
+    "original": "openfon-e2e-8wrx3n created05:49:53 during sole original run; two synthetic Rename action workshop workspaces/two total; removed after all runners exited",
+    "fixed": "openfon-e2e-JG9DZO recorded in owned process arguments; four new-case synthetic workspaces/eleven total; removed after all runners exited",
+    "limitation": "Launcher left D1 state directories despite exited processes; initial cleanup assertion retained. Read-only workspace counts used solely to identify owned temp state, not new native validation."
+  }
+}

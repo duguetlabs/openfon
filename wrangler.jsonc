@@ -20,14 +20,18 @@
     }
   ],
   "durable_objects": {
-    "bindings": [{ "name": "CALL_SESSION", "class_name": "CallSession" }]
+    "bindings": [{ "name": "CALL_SESSION", "class_name": "CallSession" }, { "name": "TELNYX_CALL", "class_name": "TelnyxCall" }, { "name": "ASTERISK_CALL", "class_name": "AsteriskCall" }]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CallSession"] }],
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CallSession"] }, { "tag": "v2", "new_sqlite_classes": ["TelnyxCall"] }, { "tag": "v3", "new_sqlite_classes": ["AsteriskCall"] }],
   // Retires call rows left 'active' by a start that never connected or by a
   // deploy that restarted the worker mid-call. Cron Triggers are on the free
   // plan, so self-hosters get the sweep too.
   "triggers": { "crons": ["*/5 * * * *"] },
   "vars": {
+    "TELNYX_ENABLED": "false",
+    "ASTERISK_ENABLED": "false",
+    // Opt in only after configuring TELNYX_API_KEY/TELNYX_PUBLIC_KEY secrets,
+    // TELNYX_CONNECTION_ID, TELNYX_PUBLIC_ORIGIN, and operator-owned number routes.
     // Non-secret defaults. Override secrets with `wrangler secret put`:
     //   DEFAULT_LLM_API_KEY, DEFAULT_STT_API_KEY, AZURE_SPEECH_KEY
     "DEFAULT_LLM_BASE_URL": "https://api.kataleptic.com/v1",

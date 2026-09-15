@@ -1,0 +1,142 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "937e606695a94541e6a7167fc4ff37489fef076b687e15f0e5666cc4edc4b440",
+    "original_bytes": 6868,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "base": "beec8b70419ddf760b9594b95626f20e1d71d399",
+  "source": "private-ref:89bb7663ff674150b31d64adeb2c248e",
+  "original_sha256": {
+    "scripts/e2e-server.mjs": "b0b296b15a8ed862dc8ea53bb00ce84110e53b525e4f6cf91698174f434fe007",
+    "scripts/e2e-server.test.mjs": null
+  },
+  "source_sha256": {
+    "scripts/e2e-server.mjs": "c49ead380644097a395af5c325d298e2a6ff7b3bfa4fa6ab0f679844ea359c60",
+    "scripts/e2e-server.test.mjs": "b4e864a1d287922c6047d4d0093224a0a808dbed4f5a171dcc000602cec7002a"
+  },
+  "patch_sha256": "973246b9b5cdc3787a7ed7b58272cb72df1728069ce01448f15b747ca45ae79e",
+  "protected_base_git_objects": [
+    "100644 blob 31a1ce94a4ef0dfdfc350257ceb1d2918779349f\tdocs/launch/demo/README.md",
+    "100644 blob cb0db09a034f92b1d0200b6e1518ebf50cd8e889\tdocs/launch/demo/audible-script.md",
+    "100644 blob 5a7e079a065b2ebaf1b5e3d872173fce6bcb75ad\tdocs/launch/demo/audible/README.md",
+    "100644 blob 10417f3fa12ce5d6958a0a7435ee7c2f5e30aa62\tdocs/launch/demo/audible/capture.json",
+    "100644 blob ea8973f2340b61f4375b72a229205591baec6817\tdocs/launch/demo/audible/northwheel-original-audio.flac",
+    "100644 blob 77d14541785fcdc318ca52508483b29a2e829325\tdocs/launch/demo/audible/northwheel-staging-call.mp4",
+    "100644 blob db7fd61596792e11bbb51bfd94bdfb30cafc2570\tdocs/launch/demo/audible/poster.png",
+    "100644 blob 6a228ef1ab6e5eafb6013f9354848ecf94b793ac\tdocs/launch/demo/audible/result.json",
+    "100644 blob d681c22e435aacc56f4fc98da645eb12e607a784\tdocs/launch/demo/capture-child.mjs",
+    "100644 blob 87c418a7988c580db6db2c9ec8ee999024c21cb4\tdocs/launch/demo/capture-child.test.mjs",
+    "100644 blob 37ec9a36e03ea05d5742603c4f9a2e06052ecb83\tdocs/launch/demo/capture-harness.md",
+    "100644 blob 7b91bd9332cfefb5a8e1ea836ddfd066c2c76a9f\tdocs/launch/demo/capture-sequence.mjs",
+    "100644 blob 28b57cda778eb9c1d50a956e4264d91fb987e4e8\tdocs/launch/demo/capture-sequence.test.mjs",
+    "100644 blob f4c7d05ad9780777a25be8e799b657adfb5af153\tdocs/launch/demo/capture.json",
+    "100644 blob d52545a2e0f2afe66c6381d2582bdaad5994bddc\tdocs/launch/demo/capture.mjs",
+    "100644 blob 358497e3fb48badcaf5d9c31eeb1a98f60e2bb97\tdocs/launch/demo/corrected/README.md",
+    "100644 blob c2b76167af37069bafb6b16042e8f7f8efb46320\tdocs/launch/demo/corrected/corrected-capture.json",
+    "100644 blob fdc9ee80fc78cd26efd81b8198f1ac5ee5e38b3e\tdocs/launch/demo/corrected/corrected-poster.png",
+    "100644 blob b4dd8dfe86c4d0f33838fbcee1e79d9ab5bf822a\tdocs/launch/demo/corrected/corrected-result.json",
+    "100644 blob 2d916d105919c7aab18b5b0dde5dbb898cb0071d\tdocs/launch/demo/corrected/northwheel-corrected-original-audio.flac",
+    "100644 blob 1a24fd33a7367bfba24a533b25a24f8e7ccb5219\tdocs/launch/demo/corrected/northwheel-corrected-staging-call.mp4",
+    "100644 blob 7e84aa5bfbbfd0f37771989596d669232a06155f\tdocs/launch/demo/corrected/verified-fixture.json",
+    "100644 blob 28346905081df6bddfcfa1b704ed9aa6ff59a93e\tdocs/launch/demo/openfon-walkthrough.mp4",
+    "100644 blob d966d0edb27c2d41183e786165d534ae89b5dba4\tdocs/launch/demo/poster.png",
+    "100644 blob 299d13e9a5bc6fe76c0cf6bf6e0214a5991cccb5\tplaywright.config.ts"
+  ],
+  "validation": "COMPLETE: original13/fixed13 serial actual-tail process-only tests and2syntax checks; no app/npx/workerd/provider/browser/capture execution",
+  "planned_original_command": "private-ref:d12449a9ecc04ea8aa1a576a514288b1",
+  "planned_fixed_command": "node --test scripts/e2e-server.test.mjs",
+  "test_count": 13,
+  "test_contract": "10 actual owned Node wrapper/direct-child cases and3 synthetic failed-forwarding/null-status controls; extracted exact source tail, provider.close stub and real disposable state only. Pre-assertion wrapper/child/forwarding/cleanup diagnostics retained.",
+  "limits": [
+    "Direct Node child status contract; no npx/workerd descendant, OOM or false-green CI claim.",
+    "Test IPC and child-signal actions are fixture controls; actual production spawn is not run.",
+    "Synthetic throw continuation catches callback failure for acceptance inspection; actual uncaught wrapper throw would already fail.",
+    "Signal acceptance is a successful forwarded request and matching observed signal, not proof of exclusive causation.",
+    "Process Leak declined under retained explicit uncertainty/no-escalation policy; capture helper remains unchanged.",
+    "Protected capture/config records are Git identities only; reduced snapshot does not contain those files."
+  ],
+  "runtime": {
+    "at": "2026-09-14T03:25:11.635656+00:00",
+    "node": "v22.14.0",
+    "original": {
+      "exit": 1,
+      "passed": 7,
+      "failed": 6,
+      "duration_ms": 761.406625,
+      "failed_cases": [
+        3,
+        4,
+        8,
+        11,
+        12,
+        13
+      ],
+      "first_failure_stage": "Each fails at wrapper/status0vs1; subsequent cleanup assertions on failed originals did not execute. Real cases retain pre-assertion child/forward/cleanup diagnostics."
+    },
+    "fixed": {
+      "exit": 0,
+      "passed": 13,
+      "failed": 0,
+      "duration_ms": 613.2165
+    },
+    "syntax": [
+      {
+        "command": "node --check scripts/e2e-server.mjs",
+        "exit": 0,
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      {
+        "command": "node --check scripts/e2e-server.test.mjs",
+        "exit": 0,
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      }
+    ],
+    "post_source_sha256": {
+      "scripts/e2e-server.mjs": "c49ead380644097a395af5c325d298e2a6ff7b3bfa4fa6ab0f679844ea359c60",
+      "scripts/e2e-server.test.mjs": "b4e864a1d287922c6047d4d0093224a0a808dbed4f5a171dcc000602cec7002a"
+    },
+    "log_sha256": {
+      "original-process.log": "5fe1bde44400c900f1206ea0016aae5d96f4465cbc3b210406a9185f070ce9ad",
+      "fixed-process.log": "a176502aaea7b32eea1815af4ba343d9a0145463e0020da293bc15ab6b7e109b",
+      "syntax.log": "b2fce8e6aa1b1538ec0adb4836ff0e4eef6e5956deaab974fc25af8686b8f134",
+      "syntax-results.json": "6189049440c1b089e2df259f61234cdbd0c5586970910c4f180ec531ecdc8e59",
+      "process-diagnostics.json": "2b268211207a3fc0a0fae85bd2d64bc88aa4464fbcdafb7a4b0ea4821f5af69d"
+    },
+    "owned_child_pids_observed": [
+      "34312",
+      "34314",
+      "34316",
+      "34318",
+      "34320",
+      "34322",
+      "34324",
+      "34326",
+      "34328",
+      "37621",
+      "37623",
+      "37626",
+      "37637",
+      "37691",
+      "37761",
+      "37813",
+      "37821",
+      "37854"
+    ],
+    "live_owned_child_pids": [],
+    "remaining_matching_runners": [],
+    "remaining_fixture_directories": [],
+    "fixture_roots_scanned": [
+      "/tmp",
+      "private-ref:6e179185accc452d98a8c1881888b9cb"
+    ],
+    "reserved_listener_check": {
+      "exit": 1,
+      "stdout": ""
+    }
+  }
+}

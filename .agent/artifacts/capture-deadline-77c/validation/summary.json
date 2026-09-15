@@ -1,0 +1,56 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "da9c2b4339cf9fc19aa067bf4801ae58a3c53f76cfd43eabcb4a77fb0f4159e3",
+    "original_bytes": 2927,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "base": "77cde12b99cc63344251dc8bab34256f23216628",
+  "source_manifest_sha256": "b1b2aec957d3a9e5fa1c12873428cff8e6da23cf786a3c300d1355370264222a",
+  "patch_sha256": "8e69db2dd251cb482f594cb56a521b4f51ca9f15ebd2bb20de9542c5895635bf",
+  "results": {
+    "original": {
+      "pass": 3,
+      "fail": 7,
+      "exit": 1,
+      "duration_ms": 7649.68775
+    },
+    "fixed": {
+      "pass": 10,
+      "fail": 0,
+      "exit": 0,
+      "duration_ms": 5166.478959
+    },
+    "syntax-helper": {
+      "exit": 0
+    },
+    "syntax-test": {
+      "exit": 0
+    }
+  },
+  "attribution": [
+    "Original real case1 fails first result assertion: TEST_WATCHDOG versus rejected. Preassertion diagnostic: kill true/receipt, elapsed7502ms, no exit/error, terminal fields null, browserClosed true, temp exists, stop pending.",
+    "Fixed real case1: CAPTURE_CHILD_STOP_TIMEOUT after5009ms; kill true/receipt, child still live/terminal null/no error, browserClosed true/temp removed. Remaining assertions pass; owned child reaped afterward.",
+    "Original synthetic3..8 fail first deadline-existence assertion0vs1. Later timeout/error/race assertions were not reached; fixed all pass.",
+    "Original controls2/9/10 pass: real graceful exit and synthetic terminal/noPID prior-error/no-signal/no-timer.",
+    "Real owned Node deliberate handler, not actual npx/workerd stall; exact extracted capture finally with fake browser.close, real temporary rm. Synthetic lexical timers/events distinguish first-settlement/timer/error behavior from OS evidence.",
+    "Protected25 are base Git identities; reduced fixture does not contain recordings.",
+    "No source change or retry; no old15/app/capture/npx/workerd/browser/provider/types/native/inference."
+  ],
+  "release": "All commands and observed8PIDs disposed; process/listener scans vacant; no fixture temp directories. Sole bounded slot RELEASED.",
+  "evidence_sha256": {
+    "after.json": "5819443c7a95bb6c18ab04edb6a1f55995293b81b2f31160e1173e779a29fbe4",
+    "before.json": "e557a237b546055c3c385db111feeb96b43c8ef207e3c57f8134a0ea06969a82",
+    "diagnostics.json": "8bee9956696612c0a6b68c857d6f9ead3a7437bb4e5bbaef554fce7bb9ad163c",
+    "fixed-command.json": "d8f84afbfda6c8a6c7d2ce145084a742cae48e6b41b5a559b6de6f401c2b841b",
+    "fixed.log": "5cf87a9a0151e295ce8b2e41b7cca0df6536c59c3c40a7568f3a8d9f42755c41",
+    "original-command.json": "1fc6dcb0fa7b490795b4b31161e134ebd60f404ce38f729101a62d30ee565e1a",
+    "original.log": "f324ba3d65888480a5bd553f76a9ab842ee832289536af8c170734218776ec8f",
+    "syntax-helper-command.json": "c03b13600a8a92b8ed3af72e897e4c7e2c98909492c0061c71c915a4ad6853a6",
+    "syntax-helper.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "syntax-test-command.json": "0aa2af3b4642007fe66540128a8662218d8f01867737b6d171fbbfb99155316c",
+    "syntax-test.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

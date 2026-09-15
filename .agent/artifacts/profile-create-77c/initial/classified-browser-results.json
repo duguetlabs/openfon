@@ -1,0 +1,330 @@
+{
+  "original": {
+    "stats": {
+      "startTime": "2026-09-14T05:37:18.345Z",
+      "duration": 106246.34400000001,
+      "expected": 7,
+      "skipped": 0,
+      "unexpected": 8,
+      "flaky": 0
+    },
+    "cases": [
+      {
+        "title": "one pending create admits one POST and one persisted id with confirmed no-op blur",
+        "status": "failed",
+        "classification": "fixture-preassertion-timeout",
+        "first_error": "Error: expect(received).toBeGreaterThan(expected)\n\nExpected: > 0\nReceived:   0\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate",
+        "diagnostics": [],
+        "duration_ms": 6521
+      },
+      {
+        "title": "create acknowledgement preserves later name revision and assistant draft (Newer name)",
+        "status": "failed",
+        "classification": "intended-original-negative",
+        "first_error": "Error: expect(locator).toHaveValue(expected) failed\n\nLocator:  getByPlaceholder('Save current setup as\u2026 e.g. \"Realtime HD English (Emma)\"')\nExpected: \"Newer name\"\nReceived: \"\"\nTimeout:  5000ms\n\nCall log:\n  - Expect \"toHaveValue\" getByPlaceholder('Save current setup as\u2026 e.g. \"Realtime HD English (Emma)\"') with timeout 5000ms\n  - waiting for getByPlaceholder('Save current setup as\u2026 e.g. \"Realtime HD English (Emma)\"')\n    14 \u00d7 locator resolved to <input value=\"\" placeholder=\"Save current setup as\u2026 e.g. \"Realtime HD English (Emma)\"\" class=\"rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm text-ink outline-none transition-[border-color,box-shadow] placeholder:text-ink-faint focus:border-iris focus:ring-[3px] focus:ring-iris/15 flex-1 px-3.5 py-2\"/>\n       - unexpected value \"\"\n",
+        "diagnostics": [],
+        "duration_ms": 7245
+      },
+      {
+        "title": "create acknowledgement preserves later name revision and assistant draft (Created profile)",
+        "status": "failed",
+        "classification": "intended-original-negative",
+        "first_error": "Error: expect(locator).toHaveValue(expected) failed\n\nLocator:  getByPlaceholder('Save current setup as\u2026 e.g. \"Realtime HD English (Emma)\"')\nExpected: \"Created profile\"\nReceived: \"\"\nTimeout:  5000ms\n\nCall log:\n  - Expect \"toHaveValue\" getByPlaceholder('Save current setup as\u2026 e.g. \"Realtime HD English (Emma)\"') with timeout 5000ms\n  - waiting for getByPlaceholder('Save current setup as\u2026 e.g. \"Realtime HD English (Emma)\"')\n    14 \u00d7 locator resolved to <input value=\"\" placeholder=\"Save current setup as\u2026 e.g. \"Realtime HD English (Emma)\"\" class=\"rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm text-ink outline-none transition-[border-color,box-shadow] placeholder:text-ink-faint focus:border-iris focus:ring-[3px] focus:ring-iris/15 flex-1 px-3.5 py-2\"/>\n       - unexpected value \"\"\n",
+        "diagnostics": [],
+        "duration_ms": 7180
+      },
+      {
+        "title": "pending create blocks Apply, rename and Settings save until explicit later action",
+        "status": "failed",
+        "classification": "intended-original-negative",
+        "first_error": "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: 0\nReceived: 1",
+        "diagnostics": [
+          {
+            "text": "create-competing-action-diagnostic {\"action\":\"Apply\",\"competingWrites\":1}\n"
+          }
+        ],
+        "duration_ms": 3464
+      },
+      {
+        "title": "pending Apply blocks create and allows a later explicit create",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 3165
+      },
+      {
+        "title": "pending create blocks Delete profile, rename and Settings save until explicit later action",
+        "status": "failed",
+        "classification": "intended-original-negative",
+        "first_error": "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: 0\nReceived: 1",
+        "diagnostics": [
+          {
+            "text": "create-competing-action-diagnostic {\"action\":\"Delete profile\",\"competingWrites\":1}\n"
+          }
+        ],
+        "duration_ms": 4259
+      },
+      {
+        "title": "pending Delete profile blocks create and allows a later explicit create",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 3663
+      },
+      {
+        "title": "blur then create stays blocked through the final queued rename and requires another click",
+        "status": "passed",
+        "classification": "unexpected-original-pass-not-discriminating",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 2856
+      },
+      {
+        "title": "independent Settings refresh suppresses list dispatch during committed create and preserves drafts",
+        "status": "failed",
+        "classification": "intended-original-negative",
+        "first_error": "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: 0\nReceived: 1",
+        "diagnostics": [
+          {
+            "text": "create-read-suppression-diagnostic {\"listReads\":1,\"acknowledged\":false}\n"
+          }
+        ],
+        "duration_ms": 5244
+      },
+      {
+        "title": "a pre-create list response is not adopted while create is pending",
+        "status": "failed",
+        "classification": "intended-original-negative",
+        "first_error": "Error: expect(locator).toHaveValue(expected) failed\n\nLocator:  getByRole('button', { name: 'Apply', exact: true }).locator('..').first().locator('input')\nExpected: \"Original profile\"\nReceived: \"External list marker\"\nTimeout:  5000ms\n\nCall log:\n  - Expect \"toHaveValue\" getByRole('button', { name: 'Apply', exact: true }).locator('..').first().locator('input') with timeout 5000ms\n  - waiting for getByRole('button', { name: 'Apply', exact: true }).locator('..').first().locator('input')\n    14 \u00d7 locator resolved to <input value=\"External list marker\" class=\"min-w-32 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-ink outline-none hover:border-line-strong focus:border-iris focus:bg-surface focus:ring-[3px] focus:ring-iris/15\"/>\n       - unexpected value \"External list marker\"\n",
+        "diagnostics": [],
+        "duration_ms": 10696
+      },
+      {
+        "title": "a pre-create list response cannot remove the acknowledged row after creation settles",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 3177
+      },
+      {
+        "title": "refused create preserves newer input and releases admission for one explicit retry",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 4537
+      },
+      {
+        "title": "pending Settings save excludes create without changing accepted save stages",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 3532
+      },
+      {
+        "title": "Settings retry and create exclude each other (create first)",
+        "status": "failed",
+        "classification": "intended-original-negative",
+        "first_error": "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: 0\nReceived: 1",
+        "diagnostics": [],
+        "duration_ms": 5137
+      },
+      {
+        "title": "Settings retry and create exclude each other (retry first)",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 8141
+      }
+    ]
+  },
+  "fixed": {
+    "stats": {
+      "startTime": "2026-09-14T05:40:48.809Z",
+      "duration": 58813.079,
+      "expected": 19,
+      "skipped": 0,
+      "unexpected": 1,
+      "flaky": 0
+    },
+    "cases": [
+      {
+        "title": "confirmed profile apply survives refresh failure and retries reads only",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 1391
+      },
+      {
+        "title": "confirmed profile delete survives refresh failure and retries reads only",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 2176
+      },
+      {
+        "title": "one pending create admits one POST and one persisted id with confirmed no-op blur",
+        "status": "failed",
+        "classification": "fixture-preassertion-timeout",
+        "first_error": "Error: expect(received).toBeGreaterThan(expected)\n\nExpected: > 0\nReceived:   0\n\nCall Log:\n- Timeout 5000ms exceeded while waiting on the predicate",
+        "diagnostics": [],
+        "duration_ms": 5892
+      },
+      {
+        "title": "create acknowledgement preserves later name revision and assistant draft (Newer name)",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 1460
+      },
+      {
+        "title": "create acknowledgement preserves later name revision and assistant draft (Created profile)",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 1148
+      },
+      {
+        "title": "pending create blocks Apply, rename and Settings save until explicit later action",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [
+          {
+            "text": "create-competing-action-diagnostic {\"action\":\"Apply\",\"competingWrites\":0}\n"
+          }
+        ],
+        "duration_ms": 2881
+      },
+      {
+        "title": "pending Apply blocks create and allows a later explicit create",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 2254
+      },
+      {
+        "title": "pending create blocks Delete profile, rename and Settings save until explicit later action",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [
+          {
+            "text": "create-competing-action-diagnostic {\"action\":\"Delete profile\",\"competingWrites\":0}\n"
+          }
+        ],
+        "duration_ms": 2721
+      },
+      {
+        "title": "pending Delete profile blocks create and allows a later explicit create",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 2188
+      },
+      {
+        "title": "blur then create stays blocked through the final queued rename and requires another click",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 2216
+      },
+      {
+        "title": "independent Settings refresh suppresses list dispatch during committed create and preserves drafts",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [
+          {
+            "text": "create-read-suppression-diagnostic {\"listReads\":0,\"acknowledged\":false}\n"
+          }
+        ],
+        "duration_ms": 2985
+      },
+      {
+        "title": "a pre-create list response is not adopted while create is pending",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 2716
+      },
+      {
+        "title": "a pre-create list response cannot remove the acknowledged row after creation settles",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 2857
+      },
+      {
+        "title": "refused create preserves newer input and releases admission for one explicit retry",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 2556
+      },
+      {
+        "title": "pending Settings save excludes create without changing accepted save stages",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 2211
+      },
+      {
+        "title": "Settings retry and create exclude each other (create first)",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 3061
+      },
+      {
+        "title": "Settings retry and create exclude each other (retry first)",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 2497
+      },
+      {
+        "title": "blur then Apply sends no action while rename is pending; explicit later click works",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 2470
+      },
+      {
+        "title": "blur then Delete profile sends no action while rename is pending; explicit later click works",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 2016
+      },
+      {
+        "title": "failed profile rename preserves retry and newer edits (newer=true)",
+        "status": "passed",
+        "classification": "pass",
+        "first_error": "",
+        "diagnostics": [],
+        "duration_ms": 1214
+      }
+    ]
+  }
+}

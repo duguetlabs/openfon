@@ -1,0 +1,32 @@
+2026-09-14T18:23:09.2190141Z [31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+2026-09-14T18:23:09.2190391Z 
+2026-09-14T18:23:09.2192814Z [41m[1m FAIL [22m[49m test/telnyx-webhook-admission.test.ts[2m > [22maggregate public webhook lease ownership[2m > [22mholds completed signed bodies through durable dispatch reject
+2026-09-14T18:23:09.2197388Z [31m[1mError[22m: Test timed out in 5000ms.
+2026-09-14T18:23:09.2198071Z If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+2026-09-14T18:23:09.2198930Z [36m [2m❯[22m test/telnyx-webhook-admission.test.ts:[2m192:41[22m[39m
+2026-09-14T18:23:09.2254327Z     [90m190|[39m   });
+2026-09-14T18:23:09.2254684Z     [90m191|[39m
+2026-09-14T18:23:09.2255326Z     [90m192|[39m   it.each(['fulfill', 'reject'] as const)('holds completed signed bodi…
+2026-09-14T18:23:09.2256180Z     [90m   |[39m                                         [31m^[39m
+2026-09-14T18:23:09.2256902Z     [90m193|[39m     const gates = Array.from({ length: 16 }, () => deferred<Response>(…
+2026-09-14T18:23:09.2257752Z     [90m194|[39m     gates.forEach(gate => cleanup.push(() => gate.resolve(new Response…
+2026-09-14T18:23:09.2258157Z 
+2026-09-14T18:23:09.2258474Z [31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+2026-09-14T18:23:09.2258742Z 
+2026-09-14T18:23:09.2258763Z 
+2026-09-14T18:23:09.2266502Z [2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m61 passed[39m[22m[90m (62)[39m
+2026-09-14T18:23:09.2272542Z [2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m1468 passed[39m[22m[90m (1469)[39m
+2026-09-14T18:23:09.2273307Z [2m   Start at [22m 18:22:52
+2026-09-14T18:23:09.2277675Z [2m   Duration [22m 16.56s[2m (tests 89%, import 6%, transform 5%)[22m
+2026-09-14T18:23:09.2293225Z 
+2026-09-14T18:23:09.2293917Z [2m    Isolate [22m [33m62 workers spawned[39m[2m · ~94ms startup each (spawn + environment, per file)[22m
+2026-09-14T18:23:09.2294952Z [2m            [22m [2mat least ~1.85s faster with [22m[33misolate: false[39m[2m — reuses workers across files instead of one per file[22m
+2026-09-14T18:23:09.2295383Z 
+2026-09-14T18:23:09.2312727Z 
+2026-09-14T18:23:09.2334615Z ##[error]Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ test/telnyx-webhook-admission.test.ts:192:41
+
+
+2026-09-14T18:23:09.2762847Z ##[error]Process completed with exit code 1.
+2026-09-14T18:23:09.2906615Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

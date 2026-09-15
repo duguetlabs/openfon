@@ -1,0 +1,100 @@
+{
+  "state": "EXACT_THREE_PATH_COMMITTED_WORKING_ASSEMBLY_QA_PENDING",
+  "parent": "c6f079cdad384aa1974d595a94e7f19893a5032f",
+  "artifact_base": "f82a656aeb4ab2d25580fb43e1ce52c709eaca7f",
+  "targets": [
+    {
+      "path": "src/studio-api.ts",
+      "original_sha256": "21ea122353d9074d0c142aa16fe5df96f30a6535b43d8faf9f0e528bf5a9f521",
+      "sha256": "d9266a3bc150dd79379a0b7996aeb60799cfa4713b1fbab1fa55cc9f41ea2b99",
+      "bytes": 101566
+    },
+    {
+      "path": "test/post-response-atomic.test.ts",
+      "original_sha256": null,
+      "sha256": "50fca0fb61338c38a391a4d9488993989c6d47a36ffd637db0120bc22c974549",
+      "bytes": 13525
+    },
+    {
+      "path": "scripts/post-response-smoke.mjs",
+      "original_sha256": null,
+      "sha256": "d35fa60be5284f074837cd1e6c8d84e69da48ab026db7447344bcf24acbd861c",
+      "bytes": 15107
+    }
+  ],
+  "patch_sha256": "9fae335b5b4f7047452db02c09eb888f958cd03797dfb7ff12346183034749ef",
+  "source_QA": "d476d5c",
+  "evidence_QA": "fac7707",
+  "protected_count": 217,
+  "protected_exception": {
+    "commit": "c6f079cdad384aa1974d595a94e7f19893a5032f",
+    "targets": [
+      {
+        "path": "src/piper-catalog.ts",
+        "original_sha256": "55493b66069a9df8613b43cf8acb1804a76f32b18de408cf4fd60d8e35446958",
+        "sha256": "63f7923bafa6e9fc0f220b636fa20b1381391920b0f17c4cf47e605cee4fe274"
+      },
+      {
+        "path": "docs/piper-catalog-concurrency.md",
+        "original_sha256": "b7a385bf1065f33e8a2abb49c5eb948b67ffcffab1cc53a54c37fe5450a21a27",
+        "sha256": "ca7d4d0ee52d01abb9de32e518c9dc1116bcb26e6d05a067c0c034b5578041a1"
+      },
+      {
+        "path": "test/piper-catalog-caller-deadline.test.ts",
+        "original_sha256": null,
+        "sha256": "c70602f1882c8ae15a2cd19e35f7890e92c6022aab08e2876903910ecfbeda68"
+      },
+      {
+        "path": "test/piper-catalog-concurrency.test.ts",
+        "original_sha256": "57378d7d6b4ed4587484f4025cb41dbf4f0e9fdd076dcdb39339703e78ceca3b",
+        "sha256": "8ec98ee8bd3b0e9c56c3a7c3a9c57268c09ea292c939f6e4bb57a29c5fb83252"
+      }
+    ]
+  },
+  "owner_safe_copies": [
+    {
+      "path": ".agent/artifacts/post-response-d101/README.md",
+      "sha256": "b532149d30ef3b557af3bc3f5720eceefa72b6b3e153ebeedeab49c009207bc8",
+      "bytes": 7945
+    },
+    {
+      "path": ".agent/artifacts/post-response-d101/contract.md",
+      "sha256": "d937cef248f5d155eb8dc41c08ba2e5b9d9f23884951a9f5a854165ece442228",
+      "bytes": 11424
+    },
+    {
+      "path": ".agent/artifacts/post-response-d101/delivery.patch",
+      "sha256": "9fae335b5b4f7047452db02c09eb888f958cd03797dfb7ff12346183034749ef",
+      "bytes": 33453
+    },
+    {
+      "path": ".agent/artifacts/post-response-d101/prepared/scripts/post-response-smoke.mjs",
+      "sha256": "d35fa60be5284f074837cd1e6c8d84e69da48ab026db7447344bcf24acbd861c",
+      "bytes": 15107
+    },
+    {
+      "path": ".agent/artifacts/post-response-d101/prepared/test/post-response-atomic.test.ts",
+      "sha256": "50fca0fb61338c38a391a4d9488993989c6d47a36ffd637db0120bc22c974549",
+      "bytes": 13525
+    },
+    {
+      "path": ".agent/artifacts/post-response-d101/prepared-manifest.json",
+      "sha256": "e4e13db052fb252437ef5053e02966fa95985e326a17cd6db43bd573feeb1884",
+      "bytes": 35927
+    },
+    {
+      "path": ".agent/artifacts/post-response-d101/source.json",
+      "sha256": "771de31c9a1d1afd465beffc793b2dbd8585cee3a86544e0903b8de42fe757aa",
+      "bytes": 5199
+    },
+    {
+      "path": ".agent/artifacts/post-response-d101/validation/summary.json",
+      "sha256": "2591de4bf5ff7016a22cdbf0db128cb152c93b7b7856e86193392bb9ff0d0b1d",
+      "bytes": 19985
+    }
+  ],
+  "summary_sha256": "2591de4bf5ff7016a22cdbf0db128cb152c93b7b7856e86193392bb9ff0d0b1d",
+  "limits": "Original10API/1native first failures; fixed18API/Worker types/native11;36web identities/reused closed web types,41private items,earlier foundation and transport-loss/Node-vs-native/16sampled nonexhaustive cleanup limits retained. No replay.",
+  "commit": "1bda67475038e962a01939414109f99ed6b8866a",
+  "working_tracked_clean": true
+}

@@ -1,0 +1,27 @@
+Derived public evidence; not original raw output. Historical hashes identify the privately retained original bytes.
+Original SHA256: 5686fdb63fb47210ef08279cc08715a469824196bf12fce58fec9a14eca2e298
+Original bytes: 6040
+Ordered extracted numeric result fields (not an inferred final result):
+[
+  {
+    "vitest_scope": "files",
+    "counts": [
+      {
+        "failed": 1
+      }
+    ]
+  },
+  {
+    "vitest_scope": "tests",
+    "counts": [
+      {
+        "failed": 14
+      },
+      {
+        "passed": 7
+      }
+    ]
+  }
+]
+First-assertion, runtime and cleanup scope remains governed by associated historical validation manifests and original evidence. An empty extraction is unknown, never a passing result. No new or later failed-case assertions are inferred.
+Catalog: .agent/artifacts/metadata-hygiene-49df/derivation.json

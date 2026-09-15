@@ -1,0 +1,17 @@
+{
+  "variant": "fixed",
+  "exit": 0,
+  "counts": {
+    "passed": 11,
+    "skipped": 98
+  },
+  "durationSeconds": 1.062,
+  "runnerReportedDuration": "608ms (import 43%, transform 38%, tests 18%)",
+  "diagnostics": [],
+  "rawReference": "reason49df-fixed-log",
+  "rawSha256": "edaa27cdca7954f7ffc182e10e07f2d81c1cc10ee8cd6a9eec225bf46fabee58",
+  "rawBytes": 383,
+  "derivation": "Parsed actual test totals and exact synthetic preassertion fields only; raw output retained privately.",
+  "sourceSha256After": "00a3ae80f7c3f79e700a58e58548d8e70f4410b0eea175c0e860e12e9fee845c",
+  "fixtureSha256After": "e72ab0cafde73700880f7483b3076e70c21edf54d3a7787cb015ae3c1587a7c9"
+}

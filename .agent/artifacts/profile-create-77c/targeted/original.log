@@ -1,0 +1,48 @@
+{
+  "representation": "derived public evidence; not original raw output",
+  "original_sha256": "83b5265addee16c11e1f99d189c014d566ccee5eda547140ee724f04ead47ba6",
+  "original_bytes": 4598,
+  "matching_result_summary": {
+    "repository_path": ".agent/artifacts/profile-create-77c/manifest.json",
+    "relative_link": "../manifest.json",
+    "json_pointer": "/targeted_validation/original",
+    "summary_original_sha256": "07881be5c10451ebda33a7d2da4a4612a9f61cb2d6f566dda69cb0df79c65993",
+    "association": "Matching original log SHA256 explicitly appears in this summary."
+  },
+  "reported_result_from_summary": {
+    "title": "one pending create admits one POST and one persisted id with confirmed no-op blur",
+    "status": "failed",
+    "exit": 1,
+    "stats": {
+      "startTime": "2026-09-14T05:51:15.608Z",
+      "duration": 15733.651,
+      "expected": 0,
+      "skipped": 0,
+      "unexpected": 1,
+      "flaky": 0
+    },
+    "wrapper_seconds": 17.902,
+    "diagnostic": {
+      "sent": 2,
+      "saved": [
+        {
+          "id": "06318a8b-b5ac-4bad-908e-6ab889b18877",
+          "name": "Original profile"
+        },
+        {
+          "id": "b013690c-923d-4b54-a163-8067a047ce72",
+          "name": "Created profile"
+        },
+        {
+          "id": "cac963b1-1f86-405d-899c-5b670dfb19a3",
+          "name": "Created profile"
+        }
+      ],
+      "listReads": 0
+    },
+    "first_error": "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: 1\nReceived: 2"
+  },
+  "limits": "Result is copied from the named historical result-summary field, not inferred from empty log extraction. Consult the full linked summary for first-assertion, exit, fixture, runtime and cleanup limitations. Failed cases establish only assertions reached; no new run or later assertion success is claimed. Historical hashes identify privately retained originals; public summary projections have separate identities in the derivation catalog.",
+  "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+  "result_projection": "Exact named result-summary fields, excluding command, tool-session and log-location metadata. Full source summary and its original hash remain linked."
+}

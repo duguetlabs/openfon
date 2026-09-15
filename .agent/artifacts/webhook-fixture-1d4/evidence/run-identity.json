@@ -1,0 +1,33 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "e94ff60abb13324deca3d2f7c2e3de56523f3516a848afe353e8c79aa52228e4",
+    "original_bytes": 1157,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "base": "1d4b73331353ecacf07b46ce9d186c032a04fc51",
+  "patchSha256": "9fae38ff11c6fb143c506f098fbccd811419e8dfe48238e831234041d991cb7a",
+  "snapshots": {
+    "inverse-original": "private-ref:32e0484549274841b662255f807a14cd",
+    "inverse-fixed": "private-ref:34eae2234fd7437c940b7bfc7fae19ec",
+    "natural-fixed": "private-ref:af3a4c2f848b4f98b0e1b967ec88b7ac"
+  },
+  "fixtureHashes": {
+    "inverse-original": "a53c43b8656e218d782c5e16a7c7d9fb2ca00e46630b66a5cb696c5d658e328d",
+    "inverse-fixed": "fbf192216ca7458b4615f0d19c20a340e05fa12489d2613769e37049e978c2f0",
+    "natural-fixed": "5f8f69d108d2ac91d503a0948672d285bc47372d1b405bf77e6db6c0375e3d18"
+  },
+  "dependencyTarget": "private-ref:0963f9caf3b546528d7bd74095ddb8df",
+  "protectedCount": 19,
+  "command": [
+    "npx",
+    "vitest",
+    "run",
+    "test/telnyx-webhook-admission.test.ts",
+    "--maxWorkers=1",
+    "-t",
+    "holds completed signed bodies through durable dispatch|holds completed bodies through cryptographic verification"
+  ]
+}

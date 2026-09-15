@@ -1,0 +1,175 @@
+{
+  "state": "EXACT_RESIDUAL_FIELD_CORRECTION_CURRENT_DOCUMENT_LINEAGE",
+  "parent": "30ba767e9e9e89328fc952ebb429d5da5fbe71f0",
+  "selection_sha256": "c3202a5c9ae9222124ee19bacdceb2b62e2ec3efd3c6a68dde1031842abed042",
+  "inventory_sha256": "4994e60499dbcfa39d1ec2cf4d3e12c6fc8d29d296e11de6f183649ffbe9fbc8",
+  "source_QA": "668cb70",
+  "prior_documentation_QA": "7242238",
+  "fields": [
+    {
+      "category": "worker_deployment_identifier",
+      "reference": "deployment-ref:b9673df2-30d1-4b25-97ca-e1f19c124449",
+      "current_occurrences": 3
+    },
+    {
+      "category": "database_logical_name",
+      "reference": "deployment-ref:2cb0ae33-3897-4c20-be55-67eeb8324f8c",
+      "current_occurrences": 2
+    }
+  ],
+  "documents": [
+    {
+      "path": ".agent/workstreams/integration.md",
+      "before_sha256": "d6e14a202256d03c824cadd203b994f98d167d076b13d1235a7bcca9017b0470",
+      "before_bytes": 271605,
+      "candidate_sha256": "4b6358a8cd62ccff041abe91cdbdb4adf40478c88d9ebc9be86f7356848cd4fc",
+      "candidate_bytes": 271939,
+      "field_changes": 2,
+      "additional_change": "Two specified leading current-status lines only; remainder preserves all bytes"
+    },
+    {
+      "path": "docs/launch/production-preflight.md",
+      "before_sha256": "d557b5dbc7236cf3ef5752aeb9f3883af78451045ab05da2381b83d59b505f0f",
+      "before_bytes": 5500,
+      "candidate_sha256": "6fe00fe18445fea9fd963ae9dc1bee1b00da2aa7816e05b13b741686610fc565",
+      "candidate_bytes": 5532,
+      "field_changes": 2,
+      "additional_change": "None"
+    },
+    {
+      "path": "docs/launch/readiness.md",
+      "before_sha256": "046a98703ff4296345b042812e7a7594eef3ed086b80f2dfbb46296d5081112a",
+      "before_bytes": 96763,
+      "candidate_sha256": "104b578c33ff43db72016f2f6082cce322b0e28e878c9bef14e2681a73babb0d",
+      "candidate_bytes": 96778,
+      "field_changes": 1,
+      "additional_change": "None"
+    }
+  ],
+  "catalog": {
+    "path": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "before_sha256": "11b92c38fef5c0312bbccc4ef3c6eca10c634eb59fe569045f09d4aef9916540",
+    "candidate_sha256": "0a93417843f3c1b752c2e7f793c72ec6df581336566b6e8ce3ed438aa646f143",
+    "prior_fields": {
+      ".agent/workstreams/integration.md": {
+        "current_public_sha256": "d6e14a202256d03c824cadd203b994f98d167d076b13d1235a7bcca9017b0470",
+        "current_public_bytes": 271605,
+        "current_identity_lineage": ".agent/artifacts/official-f265-source-contracts/checkpoint-lineage.json"
+      },
+      "docs/launch/readiness.md": {
+        "path": "docs/launch/readiness.md",
+        "status": "additional consumer-label candidate awaiting QA",
+        "source_sha256": "82bb2d08f714a2d030dd850d112c771965477322b6c52e3258f17797f958bd1a",
+        "candidate_sha256": "046a98703ff4296345b042812e7a7594eef3ed086b80f2dfbb46296d5081112a",
+        "changed_lines": [
+          22,
+          23,
+          24
+        ],
+        "scope": "Only three evidence link labels distinguish public projections from privately retained original bytes; no active gate/history/result change."
+      }
+    },
+    "change": "Three integration current values; four additive readiness current/role keys. No existing readiness source/candidate/status or other catalog value changes."
+  },
+  "current_support": [
+    {
+      "path": ".agent/artifacts/official-f265-source-contracts/disposition.md",
+      "before_sha256": "ca5c4a50c804903f243a32a86c93854eb2ef6a086f98d13c3a10795fc591c39d",
+      "candidate_sha256": "1b913ec5f7eb442815b0fd923f6e15a161120b69bad481f091b22a0bd9b1f72c"
+    },
+    {
+      "path": ".agent/artifacts/official-f265-source-contracts/review-closure.json",
+      "before_sha256": "e329d38ebdb9a403ea6a062df12c53056fcdb61440e2421f7efaad46bd0b7e54",
+      "candidate_sha256": "2e475dcc773868982ca91bde39420c10882473a4a3c54839ed2e27a0a96531a0"
+    },
+    {
+      "path": ".agent/artifacts/publication-f265a1f/status.json",
+      "before_sha256": "1e5c927a64145e397c47d3a8eefcf3afeb55c7578a1c77b0afd489c926bb3732",
+      "candidate_sha256": "b38de74df23346672bd67d601118b5128e444f13e73f32cce71d7126a3f60866"
+    }
+  ],
+  "consumer_roles": [
+    {
+      "path": ".agent/artifacts/gateway-header-f265/manifest.json",
+      "before_sha256": "35838772b11b9af36b6d1576c3821fcb22c225845c80b7775cc5712c51fb75c2",
+      "role": "Historical source/baseline/accepted-candidate or exact assembly receipt; preserve hash bytes unchanged and link predecessor identity here."
+    },
+    {
+      "path": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+      "before_sha256": "11b92c38fef5c0312bbccc4ef3c6eca10c634eb59fe569045f09d4aef9916540",
+      "role": "Update three current integration fields and add four readiness current/role fields; retain original source/candidate/status fields."
+    },
+    {
+      "path": ".agent/artifacts/metadata-hygiene-49df/integration-assembly.json",
+      "before_sha256": "d423a8fa314025ce164dca644e24045265975bd3eb3d3fe887c5cf1bb367cd62",
+      "role": "Historical source/baseline/accepted-candidate or exact assembly receipt; preserve hash bytes unchanged and link predecessor identity here."
+    },
+    {
+      "path": ".agent/artifacts/official-f265-source-contracts/checkpoint-lineage.json",
+      "before_sha256": "4ab97252c7fd537b6253691fa9c358b5df34649980d5a91dd900d897604bc4e2",
+      "role": "Historical source/baseline/accepted-candidate or exact assembly receipt; preserve hash bytes unchanged and link predecessor identity here."
+    },
+    {
+      "path": ".agent/artifacts/official-f265-source-contracts/review-closure.json",
+      "before_sha256": "e329d38ebdb9a403ea6a062df12c53056fcdb61440e2421f7efaad46bd0b7e54",
+      "role": "Update only current disposition/closure and residual status; private predecessor and this lineage preserve exact prior bytes."
+    },
+    {
+      "path": ".agent/artifacts/piper-caller-deadline-d101/manifest.json",
+      "before_sha256": "facf3406254b8d1cfd0d59416574b5a8ad72f69f3b16f4a8cfbe7b3bd64333af",
+      "role": "Historical source/baseline/accepted-candidate or exact assembly receipt; preserve hash bytes unchanged and link predecessor identity here."
+    },
+    {
+      "path": ".agent/artifacts/piper-retry-control-d101/manifest.json",
+      "before_sha256": "cc23cac8d5ff9d476bd31a413e36ad84ebc0786aa4d3c520d555d98202aac8f7",
+      "role": "Historical source/baseline/accepted-candidate or exact assembly receipt; preserve hash bytes unchanged and link predecessor identity here."
+    },
+    {
+      "path": ".agent/artifacts/publication-f265a1f/final-documentation-assembly.json",
+      "before_sha256": "69e5c5624e53eeaa9fc93dab0b1db2d84827ca3870fe7e7b95d48445e8d50310",
+      "role": "Historical source/baseline/accepted-candidate or exact assembly receipt; preserve hash bytes unchanged and link predecessor identity here."
+    },
+    {
+      "path": ".agent/artifacts/publication-f265a1f/final-documentation-manifest.json",
+      "before_sha256": "27c07c8048f5b68dbaf99b2c3a2c67988d02be211d1832be6cc1ee74af21ff21",
+      "role": "Historical source/baseline/accepted-candidate or exact assembly receipt; preserve hash bytes unchanged and link predecessor identity here."
+    },
+    {
+      "path": ".agent/artifacts/publication-f265a1f/status.json",
+      "before_sha256": "1e5c927a64145e397c47d3a8eefcf3afeb55c7578a1c77b0afd489c926bb3732",
+      "role": "Update only current disposition/closure and residual status; private predecessor and this lineage preserve exact prior bytes."
+    },
+    {
+      "path": ".agent/artifacts/readiness-gate-49df/manifest.json",
+      "before_sha256": "f5ba0dabc72daff63ee87f77586de335ad0f0c757d80644bf91e626004438f0c",
+      "role": "Historical source/baseline/accepted-candidate or exact assembly receipt; preserve hash bytes unchanged and link predecessor identity here."
+    },
+    {
+      "path": ".agent/artifacts/telnyx-reason-49df/base-file-hashes.json",
+      "before_sha256": "bab97a708a8d134a592d8243d955af9157aa83f4fd1249bdca3bfe6231579890",
+      "role": "Historical source/baseline/accepted-candidate or exact assembly receipt; preserve hash bytes unchanged and link predecessor identity here."
+    },
+    {
+      "path": ".agent/artifacts/webhook-fixture-1d4/base-file-hashes.json",
+      "before_sha256": "7f6b52dcae7c731f68fd4dfcb363ada0721845add3a9a2587e5bbe844c5a1f8b",
+      "role": "Historical source/baseline/accepted-candidate or exact assembly receipt; preserve hash bytes unchanged and link predecessor identity here."
+    }
+  ],
+  "historical_artifacts_retained": [
+    ".agent/artifacts/onboarding-8436/onboarding-8436.patch",
+    ".agent/artifacts/onboarding-8436/pre-review.patch",
+    ".agent/artifacts/onboarding-8436/fixed/docs/launch/readiness.md",
+    ".agent/artifacts/onboarding-8436/original/docs/launch/readiness.md"
+  ],
+  "closed_lineages_preserved": [
+    {
+      "path": ".agent/artifacts/metadata-resource-f265/lineage.json",
+      "sha256": "c91b3babb5c245a15376a526f31af2c400b44c7d9e4b617a5c5dff26bb0b18d5"
+    },
+    {
+      "path": ".agent/artifacts/official-f265-source-contracts/checkpoint-lineage.json",
+      "sha256": "4ab97252c7fd537b6253691fa9c358b5df34649980d5a91dd900d897604bc4e2"
+    }
+  ],
+  "limits": "Current exact two-field scope only; historical artifact/public occurrences remain. Private originals and reversible mapping retained. No raw-value removal patch, credentials, app/runtime change, deployed claim, comprehensive privacy or security clearance."
+}

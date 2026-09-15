@@ -1,0 +1,77 @@
+{
+  "state": "COMPLETE_PUBLISHED_EXPLICIT_RELEASE_NO_CLEARANCE",
+  "at": "2026-09-15T12:07:49.102746+00:00",
+  "completion_sha256": "dfad6265ca027e27dd629e7fc65b1a41d3cea11ed22e1a9615c750cceaeb89ef",
+  "release_sha256": "00e1b19544cbc38a31b42d400e44c0405d131563b04427f940be95ae9e1baf98",
+  "completion": {
+    "at": "2026-09-15T12:03:51.640531+00:00",
+    "head": "f8e8b7619a86797e017f9cc317b090eaf64fe513",
+    "attempt_id": "f8e8b76-path-prefix-1",
+    "status": "complete",
+    "reviewer_elapsed_s": 178.0,
+    "launcher_elapsed_s": 181.718,
+    "runtime_exit_reported": 0,
+    "reviewer_stderr_bytes_reported": 0,
+    "launcher_stderr_bytes": 0,
+    "original_sha256": "349e8c6ea2647a6eb6edbcf401e1fd74eacb7fb2077389fb7a51968a66811912",
+    "original_bytes": 10355,
+    "original_characters": 10313,
+    "public_comment": 5679828339,
+    "public_url": "https://github.com/duguetlabs/openfon/pull/16#issuecomment-5679828339",
+    "fullbody_sha256": "24d058f2a512a3ed07b119ca32b116f1cfd56b4e776d9a2b2660490cf78912fb",
+    "exact_original_public_readback": true,
+    "omissions": {
+      "listed": 50,
+      "additional": 508,
+      "total": 558
+    },
+    "security": "Reviewer reports incomplete logout and disabled Asterisk ingress resource exhaustion; six focus findings remain unadjudicated, no security/major clearance.",
+    "release": {
+      "at": "2026-09-15T12:03:51.639041+00:00",
+      "state": "EXPLICIT_RELEASED",
+      "head": "f8e8b7619a86797e017f9cc317b090eaf64fe513",
+      "attempt_id": "f8e8b76-path-prefix-1",
+      "grant_state": "CONSUMED_ONCE_COMPLETE_PUBLISHED_RELEASED",
+      "launcher_exit": 0,
+      "publisher_exit": 0,
+      "observed_process_count": 2,
+      "observed_remaining": 0,
+      "scoped_process_matches": 0,
+      "reserved_listeners": 0,
+      "unrelated_exact_identity_exclusions": 5,
+      "nonexhaustive": "Two observed launcher/publisher PIDs absent in point-in-time process table and scoped scan; no exhaustive descendant or transport teardown proof.",
+      "source_files_unchanged": 515,
+      "runtime_identities_unchanged": 522,
+      "application_paths_unchanged": 219,
+      "dependency_or_source_cleanup": "None created or changed; private original evidence retained."
+    },
+    "limits": [
+      "Prior542/528/497/432/430/417 omissions historical",
+      "Prior failed2926stderr contents/cause and historicalQA PATH remain unproved",
+      "Rebuilt132versions match; former binary/build/site-file identity unproved",
+      "No retry/fallback/settings/model/source change or application replay",
+      "Findings not independently adjudicated by this execution closure"
+    ]
+  },
+  "catalogs": [
+    {
+      "role": "qa-official-f8e8b76-path-prefix-1",
+      "count": 33,
+      "sha256": "81ba57bb83ba290eb116db8ef3a5411c8087db3586dec2a10d33d830a0603859"
+    },
+    {
+      "role": "qa-preflight-f8e8b76-path-prefix-1-classified",
+      "count": 25,
+      "sha256": "d584e1eb036741ec3d590258ef2a94af83f80d439be0d8a3802f334b1bccd40d"
+    },
+    {
+      "role": "qa-preflight-f8e8b76-path-prefix-1",
+      "count": 12,
+      "sha256": "701c38ef6492e7b5c818cea0a999e7594b9063be959aa73413f2f22c17c2b1cc"
+    }
+  ],
+  "evidence_meaning": "70catalogued records across attempt/classified/stopped preflight include raw, derived and harness records; not70original reviewer outputs. No recataloguing or execution by integration.",
+  "recovery": "Initial prelaunch and later publisher preflight stopped on unrelated process identity changes before respective Popen. Rejected recovery8cbc retained; classification-only6137110b accepted under existing publication approval; publisher once.",
+  "independent_public_readback": "Fullbody24d058f2 and original349e8c6e suffix independently matched. Root independently confirms OPEN/head/ref/body and both exactCI.",
+  "limits": "558omissions, oldfailedcause/rebuilt132/cookie/capacity/firstassertion/synthetic/nonexhaustive unchanged. No new grant or genuine security/major clearance."
+}

@@ -1,0 +1,44 @@
+[WebServer] (node:27608) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:27611) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:27612) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:27639) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] (node:27721) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[WebServer] ▲ [WARNING] Scheduled Workers are not automatically triggered during local development.
+[WebServer] 
+[WebServer]   To manually trigger a scheduled event, run:
+[WebServer]     curl "http://localhost:8814/cdn-cgi/local/scheduled"
+[WebServer]   For more details, see https://developers.cloudflare.com/workers/configuration/cron-triggers/#test-cron-triggers-locally
+[WebServer] 
+[WebServer] 
+
+
+Running 6 tests using 1 worker
+
+(node:27755) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+(node:27755) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/6] e2e/onboarding-retry.spec.ts:4:3 › onboarding resumes after workspace update fails after workspace creation
+[2/6] e2e/onboarding-retry.spec.ts:4:3 › onboarding resumes after assistant list fails after workspace creation
+[3/6] e2e/onboarding-retry.spec.ts:4:3 › onboarding resumes after assistant update fails after workspace creation
+[4/6] e2e/onboarding-retry.spec.ts:62:1 › acknowledged onboarding retries only reads and preserves later server edits [onboarding-refresh]
+e2e/onboarding-retry.spec.ts:62:1 › acknowledged onboarding retries only reads and preserves later server edits [onboarding-refresh]
+{"phase":"after-second-refresh-failure","writes":{"create":1,"business":1,"assistant":1},"description":"Newer peer description.","greeting":"Newer peer greeting."}
+
+[5/6] e2e/onboarding-retry.spec.ts:124:1 › onboarding freezes draft controls while an acknowledged save response is held [onboarding-refresh]
+[6/6] e2e/onboarding-retry.spec.ts:149:1 › signout prevents later setup stages after an in-flight creation response [onboarding-refresh]
+  6 passed (15.3s)

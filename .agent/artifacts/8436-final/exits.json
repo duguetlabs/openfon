@@ -1,0 +1,21 @@
+{
+  "full": {
+    "exit": 0,
+    "seconds": 27.678,
+    "command": [
+      "npm",
+      "test",
+      "--",
+      "--maxWorkers=1"
+    ]
+  },
+  "types": {
+    "exit": 0,
+    "seconds": 5.042,
+    "command": [
+      "npm",
+      "run",
+      "typecheck"
+    ]
+  }
+}

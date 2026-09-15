@@ -1,0 +1,10 @@
+{
+  "timestamp_utc": "2026-09-14T19:30:32.271386+00:00",
+  "prior_release": "QA0427f8a official49df explicit19:09:40Z and earlier owner releases; no intervening runtime grant",
+  "source_artifacts_verified": 7,
+  "protected_verified": 19,
+  "current_originals_verified": 2,
+  "app_or_review_process_matches": 0,
+  "reserved_listener_matches": 0,
+  "scope": "Read-only pregrant scan excluding own scan ancestry; no cleanup or process termination."
+}

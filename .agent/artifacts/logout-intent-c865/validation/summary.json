@@ -1,0 +1,133 @@
+{
+  "state": "COMPLETE_EXPLICIT_RELEASED_EVIDENCE_QA_PENDING",
+  "at": "2026-09-15T08:47:03.984903+00:00",
+  "base": "c865e06d23f35c7217151536dda859868ebf8f3a",
+  "root_selection": "55169c3",
+  "source_fixture_QA": "03d39bd",
+  "manifest_sha256": "8a18a4387b7392e574e7563d1f75a60701bf22d2b2fd7c57f17ae080cea4bade",
+  "patch_sha256": "cc758ac9936f6fbffff8843a1ef2b1cbf3d09e2b083fd9aa1abddecd0b8f658e",
+  "grant_sha256": "cd31898a98b0e81451cb9c1a8a91a213b9ef3523c6d50dde7eda734af83f2a6c",
+  "grant_consumed": "Exactly five serial commands once; exits1/0/0/1/0; no unexpected failure or retry.",
+  "results": [
+    {
+      "id": "original-unit",
+      "exit": 1,
+      "elapsed_seconds": 1.5246398339986627,
+      "at": "2026-09-15T08:43:40.794519+00:00",
+      "counts": {
+        "failed": 7,
+        "passed": 0,
+        "skipped": 15
+      }
+    },
+    {
+      "id": "fixed-unit",
+      "exit": 0,
+      "elapsed_seconds": 0.5860668339992117,
+      "at": "2026-09-15T08:43:42.102472+00:00",
+      "counts": {
+        "failed": 0,
+        "passed": 28,
+        "skipped": 0
+      }
+    },
+    {
+      "id": "web-types",
+      "exit": 0,
+      "elapsed_seconds": 2.6705067499970028,
+      "at": "2026-09-15T08:43:45.502684+00:00"
+    },
+    {
+      "id": "original-browser",
+      "exit": 1,
+      "elapsed_seconds": 28.200226916000247,
+      "at": "2026-09-15T08:44:14.425624+00:00",
+      "counts": {
+        "passed": 0,
+        "failed": 2
+      }
+    },
+    {
+      "id": "fixed-browser",
+      "exit": 0,
+      "elapsed_seconds": 14.882988375000423,
+      "at": "2026-09-15T08:44:30.352312+00:00",
+      "counts": {
+        "passed": 8,
+        "failed": 0
+      }
+    }
+  ],
+  "targets": [
+    {
+      "path": "web/src/logout-intent.ts",
+      "sha256": "6531376e51c3a814fcd8d6d8aa94de0e500e415919e2c4b7b0ba64f622d108cf",
+      "bytes": 1567
+    },
+    {
+      "path": "web/src/session-load.ts",
+      "sha256": "4e6c19ac6309b9ac238c0c80dbe83e80df4e6d538e1e42a3ace7b63a822401c4",
+      "bytes": 7841
+    },
+    {
+      "path": "web/src/App.tsx",
+      "sha256": "b78f72f6758ec147cdbfc72140fa8cf1a3681258d8a6ad50c11e8f52d30306d1",
+      "bytes": 10005
+    },
+    {
+      "path": "web/src/pages/Auth.tsx",
+      "sha256": "a3ebd0040a43d1d9e743b7138c75e0fcd6b3a870651d5c000c733e9390574ec1",
+      "bytes": 9700
+    },
+    {
+      "path": "test/logout-intent.test.ts",
+      "sha256": "41d1f268f3f81dd44d074513fb570c824780990cef692da06ad25c2586830f3c",
+      "bytes": 12832
+    },
+    {
+      "path": "e2e/logout-intent.spec.ts",
+      "sha256": "571037dcba55ead9c84d3cd3831ce759f53cb2f66a283b14fe6bf7ae63a456f6",
+      "bytes": 9707
+    },
+    {
+      "path": "docs/logout-recovery.md",
+      "sha256": "adb6a25f49a2839493ee9ffed0de661012c214ab6bba37dc43bce9ad09752e89",
+      "bytes": 4010
+    }
+  ],
+  "protected_count": 1234,
+  "source_preservation": "all7accepted/execution targets; shared3original/4absent;1234protected PASS",
+  "private_capture_count": 77,
+  "private_final_catalog": {
+    "sha256": "0010b74a15398add985eb9844db4f197c2822231a61782cc37273a0724106c2c",
+    "bytes": 14809
+  },
+  "release": {
+    "at": "2026-09-15T08:47:03.984903+00:00",
+    "scoped": 0,
+    "reserved": 0,
+    "sampled_absent": 111,
+    "owned_leftover_dirs_archived_then_removed": 2,
+    "remaining_owned_state_dirs": 0,
+    "controller_exit": 0
+  },
+  "browser_traces": {
+    "original": 2,
+    "fixed": 8,
+    "exact_fixture_embedded_count": 0,
+    "scope": "ZIP/source-resource identity inspection; not full visual/trace replay"
+  },
+  "original_unit_first_failure": "Seven authenticated-load spies were called after recreated coordinator/unknown storage;15skipped. No missing-export/API-constructor failure.",
+  "original_browser_first_failure": "Both establish real synthetic session/cookie and existing pending/failure state, then fail the warning visibility assertion after actual Chrome reload. Later fixed-only assertions are not original evidence.",
+  "fixed_browser": "Eight PASS: actual Chrome/Worker failed and pending reload, repeated explicit retry, malformed/unsupported/unreadable storage, write-failure live guard, confirmed/removal local-only recovery and ordinary absent-marker flow. Route/storage faults are injected; still-valid cookie proved by test-owned API response separately from page-owned reads.",
+  "stderr": {
+    "original-unit": 4404,
+    "fixed-unit": 0,
+    "web-types": 0,
+    "original-browser": 402,
+    "fixed-browser": 402
+  },
+  "cleanup_limits": "111sampled identities/250ms plus fresh scoped and descriptor scans are nonexhaustive. e2e wrappers supplied no disposal receipt; two leftover state dirs archived then removed only after observed absence. No native/provider teardown inference.",
+  "scope_limits": "Same-tab UI mitigation; no server/API/schema change, global/direct-API/new-context/stolen-cookie protection, cancellation of in-flight requests or universal restart/storage availability guarantee. Confirmation lost after BOTH confirmation persistence and removal failure may be explicitly retried after reload; live-known/durable confirmation never automatically repeats. Newer-owner conflict stays local-only until current owner recovers.",
+  "retained": "Superseded b2b53a19 preparation/QA777e0c5 source bug retained, no runtime on that candidate. Prior Worker/native/gateway/Piper evidence reused without replay. c865528review omissions/rebuilt132/former binary and failed original cause limits remain; no security/major clearance or source assembly/publication."
+}

@@ -1,0 +1,20 @@
+{
+  "original": {
+    "files": {
+      "src/telnyx-routes.ts": "2dcd65d69143331b6451d81a5161268d7e6e78cfc831fe05af50be5be300e4e9",
+      "src/telnyx-webhook.ts": "a11e106d55bd1c931c5dd49229f898166fa1eca5b3aa7499a032fa1bf9307b11",
+      "test/telnyx-body.test.ts": "b011204d5a0ba4d337a81d60c6af0f45ecf06aa77e1ba3042b9ee8077d16147d",
+      "scripts/telnyx-webhook-body-smoke.mjs": "9f72687219dce66c46c84424984b4c174722b44ef0a804e8945bc1576abdf7cc"
+    },
+    "protectedUnchanged": 13
+  },
+  "fixed": {
+    "files": {
+      "src/telnyx-routes.ts": "2719a06b2c1ca1d951943685792cc03b08689304073be6b13c664d5a600c6770",
+      "src/telnyx-webhook.ts": "fba2355f23073ae5fdaa2ae4f4d056cb4e27dca67c49dad18c7f3c15d66a97e5",
+      "test/telnyx-body.test.ts": "b011204d5a0ba4d337a81d60c6af0f45ecf06aa77e1ba3042b9ee8077d16147d",
+      "scripts/telnyx-webhook-body-smoke.mjs": "9f72687219dce66c46c84424984b4c174722b44ef0a804e8945bc1576abdf7cc"
+    },
+    "protectedUnchanged": 13
+  }
+}

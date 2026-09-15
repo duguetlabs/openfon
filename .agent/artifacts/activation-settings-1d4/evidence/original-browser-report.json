@@ -1,0 +1,522 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "dcd125536906cb23c9489c2fcd81768960af08cb441652c61c9bf73f394686f6",
+    "original_bytes": 28172,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "config": {
+    "argv": [
+      "private-ref:656082253ae943b38ba5975202b555c2",
+      "private-ref:4aa3c5781f094ab08e1602e6ae44477e",
+      "test",
+      "e2e/settings-load-error.spec.ts",
+      "--workers=1",
+      "--retries=0",
+      "private-ref:7f3ca8498b5a4fbd962e977a0f6a8ea6",
+      "--reporter=line,json"
+    ],
+    "configFile": "private-ref:306e14d22a1d46fdad27a295cb697476",
+    "rootDir": "private-ref:f2e48ec5264c4bdcb54471dbaaef8b84",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "private-ref:947d5bb5812e45859db55cc3273af2d8",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "private-ref:f2e48ec5264c4bdcb54471dbaaef8b84",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "line"
+      ],
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": {
+      "command": "npm run build && node scripts/e2e-server.mjs",
+      "url": "http://localhost:8812",
+      "reuseExistingServer": false,
+      "timeout": 120000
+    }
+  },
+  "suites": [
+    {
+      "title": "settings-load-error.spec.ts",
+      "file": "settings-load-error.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "accepted automatic settings read clears only an earlier local load failure and retains drafts",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 8652,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveCount\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('alert').filter({ hasText: 'Local load unavailable' })\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveCount\" getByRole('alert').filter({ hasText: 'Local load unavailable' }) with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('alert').filter({ hasText: 'Local load unavailable' })\u001b[22m\n\u001b[2m    14 \u00d7 locator resolved to 1 element\u001b[22m\n\u001b[2m       - unexpected value \"1\"\u001b[22m\n",
+                    "stack": {
+                      "representation": "derived-reported-comparison-fields",
+                      "private_original_ref": "private-ref:26c914b4344543ff8f269017420365a0",
+                      "numeric_fields": [
+                        {
+                          "label": "Expected",
+                          "value": 0
+                        },
+                        {
+                          "label": "Received",
+                          "value": 1
+                        }
+                      ],
+                      "limits": "Extracted reported numeric comparisons only. Empty list is not a passing result or absence of failure. Full stack stays private; sibling assertion records and historical manifest retain first-assertion attribution."
+                    },
+                    "location": {
+                      "file": "private-ref:6a38e305b56f4349b16d85ab8ff478b7",
+                      "column": 55,
+                      "line": 70
+                    },
+                    "snippet": "  68 |   await expect.poll(() => reads.delivered.includes(4)).toBe(true);\n  69 |   console.log('settings-load-diagnostic', JSON.stringify({ reads: reads.reads, delivered: reads.delivered, loadAlerts: await alert(page, 'Local load unavailable').count() }));\n> 70 |   await expect(alert(page, 'Local load unavailable')).toHaveCount(0);\n     |                                                       ^\n  71 |   await expect(retrySettings(page)).toHaveCount(0);\n  72 |   await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Newer unsaved business draft');\n  73 |   expect((await (await page.request.get('/api/me/business')).json()).name).toBe('Load ownership workshop');"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "private-ref:6a38e305b56f4349b16d85ab8ff478b7",
+                        "column": 55,
+                        "line": 70
+                      },
+                      "message": "private-ref:ca2ba4d59b1341b78fa87d7992205cb4"
+                    }
+                  ],
+                  "stdout": [
+                    {
+                      "text": "settings-load-diagnostic {\"reads\":4,\"delivered\":[1,2,3,4],\"loadAlerts\":1}\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T18:52:50.335Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "private-ref:5bd544abd00d4cd095f44c8c66881f28"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "private-ref:dfe9f00bbb5041d78f41394fbfa9daf9"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "private-ref:6a38e305b56f4349b16d85ab8ff478b7",
+                    "column": 55,
+                    "line": 70
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "ea0f1188e33c32150dcd-b7f2733da93dad100308",
+          "file": "settings-load-error.spec.ts",
+          "line": 58,
+          "column": 1
+        },
+        {
+          "title": "superseded local success cannot change the newer load outcome",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2052,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T18:53:02.596Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ea0f1188e33c32150dcd-093c9ddddb9615bac734",
+          "file": "settings-load-error.spec.ts",
+          "line": 77,
+          "column": 3
+        },
+        {
+          "title": "superseded local failure cannot change the newer load outcome",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1758,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T18:53:04.966Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ea0f1188e33c32150dcd-a6f319fe2691929dd73c",
+          "file": "settings-load-error.spec.ts",
+          "line": 77,
+          "column": 3
+        },
+        {
+          "title": "accepted settings read preserves a newer create refusal with identical error text",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 7855,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveCount\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('button', { name: 'Retry settings refresh', exact: true })\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveCount\" getByRole('button', { name: 'Retry settings refresh', exact: true }) with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Retry settings refresh', exact: true })\u001b[22m\n\u001b[2m    14 \u00d7 locator resolved to 1 element\u001b[22m\n\u001b[2m       - unexpected value \"1\"\u001b[22m\n",
+                    "stack": {
+                      "representation": "derived-reported-comparison-fields",
+                      "private_original_ref": "private-ref:490b67fa5a7746dabf07996901917667",
+                      "numeric_fields": [
+                        {
+                          "label": "Expected",
+                          "value": 0
+                        },
+                        {
+                          "label": "Received",
+                          "value": 1
+                        }
+                      ],
+                      "limits": "Extracted reported numeric comparisons only. Empty list is not a passing result or absence of failure. Full stack stays private; sibling assertion records and historical manifest retain first-assertion attribution."
+                    },
+                    "location": {
+                      "file": "private-ref:6a38e305b56f4349b16d85ab8ff478b7",
+                      "column": 41,
+                      "line": 141
+                    },
+                    "snippet": "  139 |       await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Accepted after mutation error');\n  140 |       await expect(alert(page, 'Same ownership message')).toBeVisible();\n> 141 |       await expect(retrySettings(page)).toHaveCount(0);\n      |                                         ^\n  142 |       await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Newer draft after refusal');\n  143 |       if (mutation === 'create') await expect(page.getByPlaceholder(/Save current setup as/)).toHaveValue('Retained create draft');\n  144 |       expect(writes).toBe(1);"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "private-ref:6a38e305b56f4349b16d85ab8ff478b7",
+                        "column": 41,
+                        "line": 141
+                      },
+                      "message": "private-ref:ba45e06c83cb4f62a04ab7d8024b0cef"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T18:53:06.731Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "private-ref:cd92d42a3c8143548c2ba99f17399b81"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "private-ref:2c8d0243f3b040baa127110957667d74"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "private-ref:6a38e305b56f4349b16d85ab8ff478b7",
+                    "column": 41,
+                    "line": 141
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "ea0f1188e33c32150dcd-0adb80a549ea8601fa57",
+          "file": "settings-load-error.spec.ts",
+          "line": 111,
+          "column": 3
+        },
+        {
+          "title": "accepted settings read preserves a newer rename refusal with identical error text",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 6673,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveCount\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('button', { name: 'Retry settings refresh', exact: true })\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveCount\" getByRole('button', { name: 'Retry settings refresh', exact: true }) with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Retry settings refresh', exact: true })\u001b[22m\n\u001b[2m    14 \u00d7 locator resolved to 1 element\u001b[22m\n\u001b[2m       - unexpected value \"1\"\u001b[22m\n",
+                    "stack": {
+                      "representation": "derived-reported-comparison-fields",
+                      "private_original_ref": "private-ref:490b67fa5a7746dabf07996901917667",
+                      "numeric_fields": [
+                        {
+                          "label": "Expected",
+                          "value": 0
+                        },
+                        {
+                          "label": "Received",
+                          "value": 1
+                        }
+                      ],
+                      "limits": "Extracted reported numeric comparisons only. Empty list is not a passing result or absence of failure. Full stack stays private; sibling assertion records and historical manifest retain first-assertion attribution."
+                    },
+                    "location": {
+                      "file": "private-ref:6a38e305b56f4349b16d85ab8ff478b7",
+                      "column": 41,
+                      "line": 141
+                    },
+                    "snippet": "  139 |       await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Accepted after mutation error');\n  140 |       await expect(alert(page, 'Same ownership message')).toBeVisible();\n> 141 |       await expect(retrySettings(page)).toHaveCount(0);\n      |                                         ^\n  142 |       await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Newer draft after refusal');\n  143 |       if (mutation === 'create') await expect(page.getByPlaceholder(/Save current setup as/)).toHaveValue('Retained create draft');\n  144 |       expect(writes).toBe(1);"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "private-ref:6a38e305b56f4349b16d85ab8ff478b7",
+                        "column": 41,
+                        "line": 141
+                      },
+                      "message": "private-ref:ba45e06c83cb4f62a04ab7d8024b0cef"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T18:53:16.070Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "private-ref:1960d793f4ea4b638f0c3a2ccaab37ff"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "private-ref:0635d958d20a4f4dac3d70913fafc769"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "private-ref:6a38e305b56f4349b16d85ab8ff478b7",
+                    "column": 41,
+                    "line": 141
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "ea0f1188e33c32150dcd-2b596f2409eae36fa364",
+          "file": "settings-load-error.spec.ts",
+          "line": 111,
+          "column": 3
+        },
+        {
+          "title": "independent accepted settings read retains confirmed apply display recovery",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2877,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T18:53:24.531Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ea0f1188e33c32150dcd-c76999f17b3936213ea2",
+          "file": "settings-load-error.spec.ts",
+          "line": 150,
+          "column": 3
+        },
+        {
+          "title": "independent accepted settings read retains confirmed delete display recovery",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2549,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T18:53:27.720Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ea0f1188e33c32150dcd-b366b72e6ee781342ce6",
+          "file": "settings-load-error.spec.ts",
+          "line": 150,
+          "column": 3
+        },
+        {
+          "title": "independent accepted settings read preserves accepted-write session recovery and baseline",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2532,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-14T18:53:30.275Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ea0f1188e33c32150dcd-74fae4b69ce336c36308",
+          "file": "settings-load-error.spec.ts",
+          "line": 181,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-09-14T18:52:32.566Z",
+    "duration": 61673.742,
+    "expected": 5,
+    "skipped": 0,
+    "unexpected": 3,
+    "flaky": 0
+  }
+}

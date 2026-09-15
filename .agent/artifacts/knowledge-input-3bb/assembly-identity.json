@@ -1,0 +1,50 @@
+{
+  "_public_evidence": {
+    "representation": "public-derived",
+    "original_sha256": "da45d6a4f79a9ed3bc397f4e736faa6fa3201edbede8fd517ca5c9944c999e7d",
+    "original_bytes": 3043,
+    "original_status": "privately_retained_byte_exact_from_frozen_Git",
+    "catalog": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "reference_rule": "Historical hashes, source snapshots and validation claims remain attributed to ORIGINAL bytes; this public projection was not executed. Resolve changed public file identities through the derivation catalog."
+  },
+  "assembly": "0bba840461d98d9c4888082c0660e8e808a293ee",
+  "parent": "3bb6c299e26f25d189b679c18d043586ee4bab68",
+  "paths": [
+    "src/studio-api.ts",
+    "web/src/pages/Settings.tsx",
+    "e2e/profile-rename-actions.spec.ts",
+    "test/knowledge-input-boundaries.test.ts"
+  ],
+  "final_sha256": {
+    "src/studio-api.ts": "801aa8415afaaad6029c8d9fa74d6131f7a99dc38c15e4dfa05cac56712987ff",
+    "web/src/pages/Settings.tsx": "57c5f03f1035a96cde0ef5c02f159b707ed27086c76ee335c1643fb1d5b048ae",
+    "e2e/profile-rename-actions.spec.ts": "159c93b92c03ff1e5563fb9782b65141a863ffc198e7b3e67ba4485fd0073f2b",
+    "test/knowledge-input-boundaries.test.ts": "644b2af7d4cef13752797c2116abf93194a45102c0141ea70b19ceb0605c6651"
+  },
+  "patch_sha256": "9e4b0374037c3fd83e4d97c691e738d55ea34c2e01e8fa500259fc8dbed7e14c",
+  "copied_evidence": {
+    "cleanup-before-temp-removal.json": "e72d32e113538e4fa8dcf68497f6bdfe27745ffb44bb8d435ba7db504763b5ea",
+    "cleanup.json": "989bc79a88af7b32461ac95eb65b5d985a0e3d164e78bf82827832a6da8346aa",
+    "final-source-provenance.json": "79ff3705b2caf1c06c97096f587b3d3cb16f7ce05cf3df8af40286291e5989ca",
+    "fixed-api.log": "306d7eb51bec898c093dbe9b32bd73d443424f1b5ad8b31df5b4d852b0709144",
+    "fixed-browser-results/.last-run.json": "91d1c43004802cd49950d78eb11c8fa7d05da8ffffe219a8b13b2f561bc00903",
+    "fixed-browser.log": "d58c63a0230706f1ea6a08e8fe9b2074b70272c92508b6a40e9caa7dbf5d2ce3",
+    "fixed-owned-processes.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "fixed-pagination.log": "bed3c003e3543fdad26f141c33c4ae947c19a6374741226800ac152dbf8966de",
+    "fixed-types.log": "75c97ba8f32dd032ee1e1293129c6bbdd2ff33c240a3223d4b150e23ab19ee29",
+    "initial-provenance.json": "ea639d57103f01318a58f5e7ab9cad01b9545685f5c441312587bed48f3a7901",
+    "original-api.log": "649c22b2e526569ef84924e07acbf04e0374a5c0b7a1926e537b1c928a7fd705",
+    "original-browser-results/.last-run.json": "53a107cdf8e9e9f1147605dd3cf2ba96595215bd715a8ebbe276badc59a4d391",
+    "original-browser.log": "a67a3b8eb2d66dad7b4e3d9ade6b10075d1fff071c8699fea633e514f4e43a74",
+    "original-cursor-diagnostics.json": "820685e84508dcfd03013862fd4637a7df815fe15b01f7de7d2affa894651d8b",
+    "original-owned-processes.json": "28ab4cd43662c8ad0632e2851be3df8ec67919fddd3b4fc5fff1ad9ce5413a47",
+    "original-phase-exit.json": "5c7b3d65e64b25ad54781c63c9abce4216be4f04e47618a2792555942a0c36ef"
+  },
+  "owner_local_evidence": {
+    "original-browser-results/profile-rename-actions-pro-d80fc-ore-during-and-after-rename/error-context.md": "17746669d18af98fe5c04a1191a41591b846eb7d15c0d4e67039b1136d47e6ba",
+    "original-browser-results/profile-rename-actions-pro-d80fc-ore-during-and-after-rename/trace.zip": "5a32a26aaaaacd157417ac6577ab31c5856635dae264e8a32bfc630a9a97c770"
+  },
+  "owner_evidence_directory": "private-ref:57482720d3ad4bd3b0b2e379686453e5",
+  "qa_source": "2580532",
+  "qa_evidence_assembly": "a37c3e6: CLOSED exact0bba840"
+}

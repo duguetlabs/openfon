@@ -1,0 +1,12 @@
+{
+  "createdAt": "2026-09-11T22:43:59.745Z",
+  "trimSeconds": 0.48,
+  "durationSeconds": 31.697,
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "synthetic": true,
+  "silent": true,
+  "artifact": "openfon-walkthrough.mp4"
+}
