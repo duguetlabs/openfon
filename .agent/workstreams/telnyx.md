@@ -149,7 +149,7 @@ Read and corroborated against integration checkpoint on 2026-09-12; these are in
 - Worker version: 8439378c-eeda-4fb7-83e5-a01a2f986fb0 (100%)
 - Deployment ID: 44be36d9-0f17-42a9-8361-d22fbb8f0d7a
 - Source SHA: 41041c1a3425c1c0ff90697917ce39cdb2394e7a; recorded by integration in OPENFON_RELEASE_SHA.
-- Separate staging D1: e1d93b7d-9024-447a-ae25-6b1e5ed298b3, migrations through 0011; separate DO namespaces.
+- Separate staging D1: deployment-ref:2195daf9-f581-4a6a-9f56-2341e8ce9ae9, migrations through 0011; separate DO namespaces.
 - Both carrier flags false; copied routes disabled, assistants paused, sessions cleared; cron disabled.
 - Observed HTTP results: root 200, /api/me 401, POST /api/telnyx/webhooks 503 while disabled. This does not establish signed webhook acceptance, authenticated media/WSS, valid provider credentials or a successful real call.
 - Direct-provider pre-ack fix was integrated and scoped QA approved the assembled 6e64872; final release review gates remain independent of that scoped approval.

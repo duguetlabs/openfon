@@ -3236,7 +3236,11 @@
       "candidate_sha256": "d0d85531ebc4103dcaf6cbc0e8ed19422f3daea8af77e8451c17c0e1bc36c2c6",
       "source_bytes": 258726,
       "candidate_bytes": 258875,
-      "validation": "Metadata transformation only; no runtime/validation claim changed."
+      "validation": "Metadata transformation only; no runtime/validation claim changed.",
+      "accepted_candidate_identity_role": "Historical accepted metadata copy; preserved unchanged. Later current identity is recorded separately.",
+      "current_public_sha256": "bbd42e3d9ec788257132eb5af704d56b1fc8a627b798d99e6ed69c84e9e850db",
+      "current_public_bytes": 267689,
+      "current_identity_lineage": ".agent/artifacts/metadata-resource-f265/lineage.json"
     },
     {
       "path": ".agent/workstreams/launch.md",
@@ -3264,7 +3268,11 @@
       "state": "public-derived-owner-copy",
       "original_sha256": "40caee23465ef17e33cd1087bb58e9a8ffbdd198adbfcc9153124cc31efd8200",
       "candidate_sha256": "df1f24e5e8b741653c9093507b6dddbe0ea5601e016436d998f2946babcfd5b0",
-      "individual_QA": "accepted; exact shared assembly separate"
+      "individual_QA": "accepted; exact shared assembly separate",
+      "accepted_candidate_identity_role": "Historical accepted metadata copy; preserved unchanged. Later current identity is recorded separately.",
+      "current_public_sha256": "29a8ba12e6bd0717593ae306d5fd970bc21f6432638c3c1a432880d08fc79173",
+      "current_public_bytes": 48929,
+      "current_identity_lineage": ".agent/artifacts/metadata-resource-f265/lineage.json"
     },
     {
       "path": "docs/launch/strategy.md",
