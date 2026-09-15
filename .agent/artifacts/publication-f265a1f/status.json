@@ -1,15 +1,15 @@
 {
-  "state": "SOURCE_EVIDENCE_ASSEMBLIES_CLOSED_DOCUMENTATION_CHECKPOINT",
-  "at": "2026-09-15T06:54:27.481368+00:00",
-  "source_head": "cd38b611b408184535c2afde3a5889c77aafbd7b",
+  "state": "RESIDUAL_METADATA_DOCUMENTATION_CHECKPOINT",
+  "at": "2026-09-15T07:25:27.099968+00:00",
+  "source_head": "30ba767e9e9e89328fc952ebb429d5da5fbe71f0",
   "published_head": "f265a1f11780c7ad1f6359eadec8e018a90f3ac3",
   "gateway_assembly_QA": "9c2e822",
   "metadata_assembly_QA": "8875343",
   "review_closure": ".agent/artifacts/official-f265-source-contracts/review-closure.json",
-  "review_closure_sha256": "e329d38ebdb9a403ea6a062df12c53056fcdb61440e2421f7efaad46bd0b7e54",
-  "disposition_sha256": "ca5c4a50c804903f243a32a86c93854eb2ef6a086f98d13c3a10795fc591c39d",
+  "review_closure_sha256": "2e475dcc773868982ca91bde39420c10882473a4a3c54839ed2e27a0a96531a0",
+  "disposition_sha256": "1b913ec5f7eb442815b0fd923f6e15a161120b69bad481f091b22a0bd9b1f72c",
   "grants": "All consumed/released; no new runtime or official grant",
-  "next": "Exact final documentation QA/assembly, normal publication/close-reopen/fresh CI, separately selected unchanged latest-head review after immediate gates.",
+  "next": "Actual residual metadata candidate/consumer QA and exact assembly closure, then normal publication/readbacks/close-reopen/fresh CI and separately granted unchanged latest-head review.",
   "prior_coordination_snapshot": {
     "state": "GATEWAY_ASSEMBLY_CLOSED_METADATA_ASSEMBLY_COMMITTED_QA_PENDING",
     "head": "f265a1f11780c7ad1f6359eadec8e018a90f3ac3",
@@ -133,5 +133,12 @@
     "local_head": "cd38b611b408184535c2afde3a5889c77aafbd7b",
     "published_head": "f265a1f11780c7ad1f6359eadec8e018a90f3ac3"
   },
-  "prior_snapshot_role": "Historical phase state; preserve receipt facts, current state is top-level."
+  "prior_snapshot_role": "Historical phase state; preserve receipt facts, current state is top-level.",
+  "final27_assembly_QA": "7242238",
+  "residual_metadata": {
+    "classification_QA": "668cb70",
+    "lineage": ".agent/artifacts/metadata-residual-f265/lineage.json",
+    "scope": "Two fields/five substitutions/three current documents; four historical artifacts unchanged.",
+    "clearance": "None; latest-head security AND major review remains required."
+  }
 }

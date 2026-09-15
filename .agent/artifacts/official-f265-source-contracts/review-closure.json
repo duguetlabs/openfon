@@ -1,6 +1,6 @@
 {
-  "state": "SELECTED_CORRECTIONS_SOURCE_EVIDENCE_ASSEMBLIES_CLOSED_DOCUMENTATION_CHECKPOINT",
-  "source_head": "cd38b611b408184535c2afde3a5889c77aafbd7b",
+  "state": "SELECTED_CORRECTIONS_AND_RESIDUAL_METADATA_DOCUMENTATION_CHECKPOINT",
+  "source_head": "30ba767e9e9e89328fc952ebb429d5da5fbe71f0",
   "published_reviewed_head": "f265a1f11780c7ad1f6359eadec8e018a90f3ac3",
   "official_comment": 5675555931,
   "official_original_sha256": "137c116caa75e4e9abd33df406847116eb156a48a7a1b60a42e42eac22d0d0ad",
@@ -27,9 +27,23 @@
     "assembly_QA": "8875343",
     "lineage": ".agent/artifacts/metadata-resource-f265/lineage.json",
     "checkpoint_refresh_lineage": ".agent/artifacts/official-f265-source-contracts/checkpoint-lineage.json",
-    "limits": "Exact resource-ID opacity only; unclassified logical/version/general privacy remains unresolved."
+    "limits": "Prior D1 UUID correction closed; residual Worker deployment field and D1 logical name corrected in three current documents. Four historical onboarding artifacts/public history retain original occurrences. No exhaustive privacy/security clearance.",
+    "residual": {
+      "source_QA": "668cb70",
+      "selection_sha256": "c3202a5c9ae9222124ee19bacdceb2b62e2ec3efd3c6a68dde1031842abed042",
+      "lineage": ".agent/artifacts/metadata-residual-f265/lineage.json",
+      "current_paths": [
+        ".agent/workstreams/integration.md",
+        "docs/launch/production-preflight.md",
+        "docs/launch/readiness.md"
+      ],
+      "historical_artifact_occurrences_retained": 4,
+      "prior_final27_assembly": "30ba767e9e9e89328fc952ebb429d5da5fbe71f0",
+      "prior_final27_QA": "7242238",
+      "acceptance": "Actual residual candidate/assembly QA is recorded separately; this is the documentation checkpoint."
+    }
   },
-  "disposition_sha256": "ca5c4a50c804903f243a32a86c93854eb2ef6a086f98d13c3a10795fc591c39d",
+  "disposition_sha256": "1b913ec5f7eb442815b0fd923f6e15a161120b69bad481f091b22a0bd9b1f72c",
   "application_count": 214,
   "application": [
     {

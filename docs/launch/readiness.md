@@ -775,7 +775,7 @@ Implementation through `d43a3ff` includes presets `ce62114`, realtime `18d3638`/
 
 ## Isolated staging
 
-https://openfon-staging.duguetlabs.workers.dev runs Worker version `14edbcb0-a26d-4ff6-b82e-a14b70469e9d` from source `b15ed876`. Its D1 binding is the separate rehearsal database upgraded through 0012. Both carrier flags are false; copied assistants/routes are disabled and copied sessions cleared. HTTP checks returned 200 for root, 401 for signed-out account and 503 for each disabled carrier endpoint. The private fictional captures used earlier staging versions and staging-only provider secrets; the phone and assistant-retry corrections remain deployed. The newer review corrections through `d43a3ff` and migrations0013–0017 are not yet staged. This is not carrier or clean release acceptance. Production remains on its prior version.
+https://openfon-staging.duguetlabs.workers.dev runs Worker version `deployment-ref:b9673df2-30d1-4b25-97ca-e1f19c124449` from source `b15ed876`. Its D1 binding is the separate rehearsal database upgraded through 0012. Both carrier flags are false; copied assistants/routes are disabled and copied sessions cleared. HTTP checks returned 200 for root, 401 for signed-out account and 503 for each disabled carrier endpoint. The private fictional captures used earlier staging versions and staging-only provider secrets; the phone and assistant-retry corrections remain deployed. The newer review corrections through `d43a3ff` and migrations0013–0017 are not yet staged. This is not carrier or clean release acceptance. Production remains on its prior version.
 
 ## Historical PR and review state
 
