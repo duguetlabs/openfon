@@ -1,0 +1,24 @@
+{
+  "head": "d101ff8e8558f3d953c8876f495d5e26cddd6cc7",
+  "selected_at": "2026-09-14T23:18:47.837198+00:00",
+  "owner": "existing realtime pG",
+  "status": "SOURCE_AND_FIXTURE_PREPARATION_ONLY",
+  "basis": "fe4a7cb source contract plus independent QA qualified agreement",
+  "scope": [
+    "Minimal src/piper-catalog.ts local caller deadline and bounded new unit fixtures",
+    "Minimal existing Piper contract documentation update if needed; preserve historical evidence attribution"
+  ],
+  "requirements": [
+    "1500ms single admission-origin deadline, registered before I/O; no reset",
+    "Local expired/aborted winner guard before cache publication even if Date.now moves",
+    "Inner context-local fetch/read/awaited-cancel alone owns identity-checked reservation finally; no outer-timeout release",
+    "Observe inner late rejection before detach; clear caller timer/listener on early settlement",
+    "Setup failure before inner start must release its admitted slot; distinguish after-start timeout",
+    "Preserve32settlement-only admission, rejection-as-settlement, no expiry refill/cross-context promise sharing",
+    "Expired-response negative: caller fallback may precede late response; inject response after deadline then observe cancel and retained capacity",
+    "Other held branches prove actual boundary before deadline assertion; original finite discriminating evidence proposal, no intentional5s hang",
+    "Preserve per-endpoint/language/cache/TTL/redirect/body/voice/identity boundaries and no late publication or extra admission"
+  ],
+  "delivery": "Exact d101 original hashes, minimal patch, newfixture bytes, protected identities and bounded original/fixed proposal in durable safe artifact; private persistent snapshots/locators stay private. Actual artifact QA before runtime or assembly.",
+  "runtime": "NONE authorized: no parser/import/test/types/native/browser/provider/inference/dependency install/link or shared source apply. No old native replay. Existing evidence remains historical."
+}

@@ -1,0 +1,74 @@
+{
+  "state": "EXACT_FOUR_PATH_COMMITTED_WORKING_ASSEMBLY_QA_PENDING",
+  "parent": "d101ff8e8558f3d953c8876f495d5e26cddd6cc7",
+  "source_QA": "80d3f3c",
+  "evidence_QA": "b8ebfa4",
+  "patch_sha256": "1744a7d6ed42df547d102846c30eb486a38f94b910a0e6d5243defbe5b5bf50d",
+  "targets": [
+    {
+      "path": "src/studio-api.ts",
+      "original_sha256": "ac65c8b47152e7e1d558c197f113ae972bdaa7fbb932273dc4d89769806dd2fd",
+      "sha256": "21ea122353d9074d0c142aa16fe5df96f30a6535b43d8faf9f0e528bf5a9f521",
+      "bytes": 101613
+    },
+    {
+      "path": "test/knowledge-concurrency.test.ts",
+      "original_sha256": "911a0449b56c4457b43f0af85736ebd543fc35b073e6b1224a1eed28d06273fb",
+      "sha256": "a6a9ad6df73c25b7121bdc54a1762a95a05ccb419022d5fbe50c09893a2b273a",
+      "bytes": 9907
+    },
+    {
+      "path": "test/put-response-atomic.test.ts",
+      "original_sha256": null,
+      "sha256": "cdef0471a54129532d2ce9904e84cd9ffa696f977ba0f523104042930b32f1d6",
+      "bytes": 12426
+    },
+    {
+      "path": "scripts/put-response-smoke.mjs",
+      "original_sha256": null,
+      "sha256": "c53b5573144e6eeb68d9702174da73a3409cfa255cb0a9b64450dbcbfdaa6f33",
+      "bytes": 13312
+    }
+  ],
+  "protected_count": 214,
+  "owner_safe_copies": [
+    {
+      "path": ".agent/artifacts/ambiguous-write-d101/contract.md",
+      "sha256": "d2cc1ca30de62e982fce4831aa48c2bed928dd8f163567a88315dbc26f3a5ace"
+    },
+    {
+      "path": ".agent/artifacts/ambiguous-write-d101/source.json",
+      "sha256": "a71bb501c7dae9d79554d7c8e895fb7672d7b3311228e528d247882df095f676"
+    },
+    {
+      "path": ".agent/artifacts/ambiguous-write-d101/README.md",
+      "sha256": "756977b4a4eb0d150311ed78b4448cf5d7f15f64f8c8cc73351aee3ea152be86"
+    },
+    {
+      "path": ".agent/artifacts/ambiguous-write-d101/prepared-manifest.json",
+      "sha256": "920ddaf0b7178df5c69c87d49515e6f7f4fd9e67d3f20352133bd638fb731f3b"
+    },
+    {
+      "path": ".agent/artifacts/ambiguous-write-d101/delivery.patch",
+      "sha256": "1744a7d6ed42df547d102846c30eb486a38f94b910a0e6d5243defbe5b5bf50d"
+    },
+    {
+      "path": ".agent/artifacts/ambiguous-write-d101/prepared/test/put-response-atomic.test.ts",
+      "sha256": "cdef0471a54129532d2ce9904e84cd9ffa696f977ba0f523104042930b32f1d6"
+    },
+    {
+      "path": ".agent/artifacts/ambiguous-write-d101/prepared/scripts/put-response-smoke.mjs",
+      "sha256": "c53b5573144e6eeb68d9702174da73a3409cfa255cb0a9b64450dbcbfdaa6f33"
+    },
+    {
+      "path": ".agent/artifacts/ambiguous-write-d101/validation/summary.json",
+      "sha256": "3ff0e5d9e295e28f682b16b2af547674a97f9e225c99aa4933620bdc376a5589"
+    }
+  ],
+  "validation_summary_sha256": "3ff0e5d9e295e28f682b16b2af547674a97f9e225c99aa4933620bdc376a5589",
+  "limits": "Original6API/1native first failures,54private raw/transcript-derived distinctions,two orchestration incidents,22sampled nonexhaustive cleanup; no new runtime",
+  "Piper": "Released43PASS1FAIL and Worker typesPASS; not assembled or rerun.",
+  "commit": "f82a656aeb4ab2d25580fb43e1ce52c709eaca7f",
+  "other_existing_application_paths_unchanged": 207,
+  "working_tracked_clean": true
+}

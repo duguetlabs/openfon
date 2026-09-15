@@ -1,0 +1,26 @@
+{
+  "head": "d101ff8e8558f3d953c8876f495d5e26cddd6cc7",
+  "selected_at": "2026-09-14T23:22:01.804399+00:00",
+  "owner": "existing presets pF",
+  "status": "SOURCE_AND_FIXTURE_PREPARATION_ONLY",
+  "source_contract_commit": "b81f2a9",
+  "contract_sha256": "d2cc1ca30de62e982fce4831aa48c2bed928dd8f163567a88315dbc26f3a5ace",
+  "basis": "Independent QA production contract agreement plus required knowledge-concurrency hold compatibility",
+  "scope": [
+    "src/studio-api.ts only two selected PUT response paths: assistant first UPDATE RETURNING* within existing full batch; item UPDATE RETURNING* in one-statement batch",
+    "New bounded API/native fixtures",
+    "Minimal test/knowledge-concurrency.test.ts holdWrite compatibility only; existing assertions/hooks/migration range otherwise unchanged"
+  ],
+  "requirements": [
+    "Preserve assistant first predicates/binds/DML values and uninterrupted mirror/snapshot order; await full batch then first boolean409 before returned row",
+    "Preserve item validation/ownership/CAS/quota/0021/source refs/timestamps and boolean409",
+    "No SqliteD1 adapter, migration, CREATE response, foundation, provider or UI changes",
+    "Keep original item/collection statement.run hold; mark target item statements and hold relevant batch BEFORE calling real db.batch/BEGIN using same one-shot gate",
+    "Never hold batchRun after BEGIN; competing fixture write must remain outside held transaction",
+    "Return exact helper delta and bounded affected existing concurrency selection including retained run-path controls for actual QA",
+    "Original finite fault/preassertion persisted snapshots+explicit retry/spare or final quota; first-failure limits",
+    "Native RETURNING row/meta/immediate changes-chain and late mirror/snapshot execution rollback require concrete new fixtures; no prepare-syntax-only proof"
+  ],
+  "delivery": "Minimal exact-head patch/newfixtures, original/target/protected identities, immutable safe manifest and concrete serial original/fixed/affected-concurrency proposal; snapshots/raw locators private and persistent. Actual artifact QA before runtime/assembly.",
+  "runtime": "NONE authorized: no parser/import/tests/types/SQL/native/browser/provider/inference/dependency action/shared source application. Prior CREATE/0021 evidence not replayed."
+}

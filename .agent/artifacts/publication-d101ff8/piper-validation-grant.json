@@ -1,0 +1,72 @@
+{
+  "state": "SOLE_BOUNDED_PIPER_VALIDATION_GRANTED",
+  "head": "d101ff8e8558f3d953c8876f495d5e26cddd6cc7",
+  "at": "2026-09-14T23:36:24.745002+00:00",
+  "owner": "existing realtime pG",
+  "QA": "08dc0e0",
+  "patch_sha256": "dbd93069e0324e3c8e6b5a6f349b04a32e820ce2242ccfcfca0dde3a38db1246",
+  "files": [
+    {
+      "path": "src/piper-catalog.ts",
+      "original_sha256": "55493b66069a9df8613b43cf8acb1804a76f32b18de408cf4fd60d8e35446958",
+      "original_bytes": 4829,
+      "candidate_sha256": "63f7923bafa6e9fc0f220b636fa20b1381391920b0f17c4cf47e605cee4fe274",
+      "candidate_bytes": 6314,
+      "artifact": "candidate/src/piper-catalog.ts"
+    },
+    {
+      "path": "docs/piper-catalog-concurrency.md",
+      "original_sha256": "b7a385bf1065f33e8a2abb49c5eb948b67ffcffab1cc53a54c37fe5450a21a27",
+      "original_bytes": 5101,
+      "candidate_sha256": "ca7d4d0ee52d01abb9de32e518c9dc1116bcb26e6d05a067c0c034b5578041a1",
+      "candidate_bytes": 6052,
+      "artifact": "candidate/docs/piper-catalog-concurrency.md"
+    },
+    {
+      "path": "test/piper-catalog-caller-deadline.test.ts",
+      "original_sha256": null,
+      "original_bytes": null,
+      "candidate_sha256": "c70602f1882c8ae15a2cd19e35f7890e92c6022aab08e2876903910ecfbeda68",
+      "candidate_bytes": 14294,
+      "artifact": "candidate/test/piper-catalog-caller-deadline.test.ts"
+    }
+  ],
+  "protected_count": 674,
+  "selected": [
+    "Original tagged7 negatives/10skip from new fixture only",
+    "Fixed new17+existing27=44 across3catalog files",
+    "Worker types ONLY"
+  ],
+  "original_command": "npx --no-install vitest run test/piper-catalog-caller-deadline.test.ts --maxWorkers=1 --reporter=verbose -t '\\[caller-deadline-negative\\]'",
+  "fixed_command": "npx --no-install vitest run test/piper-catalog-caller-deadline.test.ts test/piper-catalog-concurrency.test.ts test/piper-catalog.test.ts --maxWorkers=1 --reporter=verbose",
+  "type_command": "npx --no-install tsc --noEmit -p tsconfig.worker.json",
+  "dependencies": "Existing verified dependencies; absent-only candidate symlink allowed, record/remove owned link only; no install",
+  "types_scope": "Worker source change only; reuse PUT web-types evidence with unchanged web/config. Explicitly narrows README npm typecheck proposal.",
+  "prior_release": {
+    "PUT": {
+      "released_at": "2026-09-14T23:33:31.809924+00:00",
+      "state": "RELEASED",
+      "all_commands_exited": true,
+      "native_disposals": 2,
+      "sampled_pids_absent": 22,
+      "sampling": "250ms nonexhaustive",
+      "manual_temp_removals": 0,
+      "owned_candidate_link_removed": true,
+      "preexisting_owner_dependencies_preserved": true,
+      "application_matches": 0,
+      "reserved_listeners": 0,
+      "fixed_source_verified": true
+    },
+    "PUT_summary_sha256": "3ff0e5d9e295e28f682b16b2af547674a97f9e225c99aa4933620bdc376a5589",
+    "official": "d101 single grant completed/released"
+  },
+  "fresh_scan": {
+    "application_official_uv": 0,
+    "reserved_listeners": 0,
+    "nonexhaustive": true
+  },
+  "limits": "Counts predictions only. Finite first assertions separate from cleanup-hook failures. Mock signal/stream scheduling and settlement vs physical/context teardown limits retained. No native/browser/provider/inference/old-native/PUT replay.",
+  "execution": "3serial commands once, original source only substitution in isolated snapshot,restore accepted fixed after exit. No retries/edits/timeout increase. Unexpected failure preserved/classified.",
+  "evidence": "Persistent restrictive raw evidence; safe derived hashes/outcomes. All command exits,owned cleanup/freshscans and explicit release required.",
+  "pregrant_incident": "Initial system Git shim failed before grant creation/scans; premature message explicitly held. Existing direct CommandLineTools Git succeeded; this record is the sole actual grant. No system/license change or application retry."
+}

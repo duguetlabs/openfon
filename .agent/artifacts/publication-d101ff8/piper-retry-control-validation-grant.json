@@ -1,0 +1,84 @@
+{
+  "state": "SOLE_BOUNDED_SIX_CASE_PIPER_RETRY_CONTROL_GRANTED",
+  "at": "2026-09-15T05:03:37.311981+00:00",
+  "owner": "existing realtime pG",
+  "QA": "05cd559",
+  "integration_head": "f82a656aeb4ab2d25580fb43e1ce52c709eaca7f",
+  "candidate_base": "d101ff8e8558f3d953c8876f495d5e26cddd6cc7",
+  "manifest_sha256": "cc23cac8d5ff9d476bd31a413e36ad84ebc0786aa4d3c520d555d98202aac8f7",
+  "test_sha256": "8ec98ee8bd3b0e9c56c3a7c3a9c57268c09ea292c939f6e4bb57a29c5fb83252",
+  "patch_sha256": "12ff090c66891ee2ad3768ba7b66ce48b142b417f05ee01c7f2e047753e6c887",
+  "accepted_candidates": [
+    {
+      "path": "src/piper-catalog.ts",
+      "original_sha256": "55493b66069a9df8613b43cf8acb1804a76f32b18de408cf4fd60d8e35446958",
+      "original_bytes": 4829,
+      "candidate_sha256": "63f7923bafa6e9fc0f220b636fa20b1381391920b0f17c4cf47e605cee4fe274",
+      "candidate_bytes": 6314,
+      "artifact": "candidate/src/piper-catalog.ts"
+    },
+    {
+      "path": "docs/piper-catalog-concurrency.md",
+      "original_sha256": "b7a385bf1065f33e8a2abb49c5eb948b67ffcffab1cc53a54c37fe5450a21a27",
+      "original_bytes": 5101,
+      "candidate_sha256": "ca7d4d0ee52d01abb9de32e518c9dc1116bcb26e6d05a067c0c034b5578041a1",
+      "candidate_bytes": 6052,
+      "artifact": "candidate/docs/piper-catalog-concurrency.md"
+    },
+    {
+      "path": "test/piper-catalog-caller-deadline.test.ts",
+      "original_sha256": null,
+      "original_bytes": null,
+      "candidate_sha256": "c70602f1882c8ae15a2cd19e35f7890e92c6022aab08e2876903910ecfbeda68",
+      "candidate_bytes": 14294,
+      "artifact": "candidate/test/piper-catalog-caller-deadline.test.ts"
+    }
+  ],
+  "protected_count": 673,
+  "prior_release": {
+    "state": "RELEASED",
+    "at": "2026-09-14T23:37:53.248481+00:00",
+    "all_three_commands_exited": true,
+    "exit_codes": [
+      1,
+      1,
+      0
+    ],
+    "sampled_pids_absent": 10,
+    "sampling": "250ms nonexhaustive",
+    "owned_dependency_link_removed": true,
+    "existing_dependency_target_preserved": true,
+    "application_official_uv_matches": 0,
+    "reserved_listeners": 0,
+    "fixed_source_verified": true,
+    "all674protected_verified": true
+  },
+  "fresh_scan": {
+    "at": "2026-09-15T05:03:37.311981+00:00",
+    "application_official_uv_matches": 0,
+    "reserved_listeners": 0,
+    "load_1_5_15": [
+      3.21337890625,
+      11.12060546875,
+      31.744140625
+    ],
+    "logical_cpus": 10,
+    "private_sha256": "59a0896d6217394aab6c2b18a61f1743e4c63d56365f2b8ca48ecee3d8f86cee",
+    "scope": "Token-based argv scan excluding scan ancestry; reserved8810-8819,8821,9250-9299. Point-in-time/nonexhaustive; no termination."
+  },
+  "command_argv": [
+    "npx",
+    "--no-install",
+    "vitest",
+    "run",
+    "test/piper-catalog-concurrency.test.ts",
+    "--maxWorkers=1",
+    "--reporter=verbose",
+    "-t",
+    "releases a failed lookup for a later retry:"
+  ],
+  "execution": "ONE command ONCE in accepted isolated persistent snapshot. Six selected/seven skipped are predictions. No source edit, retry, timeout increase or grant reuse. Recheck identity/vacancy immediately before launch; mismatch or failure requires classification.",
+  "dependencies": "Existing verified install only; absent-only candidate symlink allowed and must be recorded/removed after exit. No install.",
+  "evidence": "Retain restrictive persistent raw log/exit/provenance/source before-after/observed process cleanup and explicit release; safe derived summary. No raw metadata in tracked copies.",
+  "excluded": "No original7/new17/full44/types/native/browser/provider/inference/PUT replay, source assembly or publication. Failed43PASS1FAIL remains unchanged; later six-case evidence separately attributed."
+}

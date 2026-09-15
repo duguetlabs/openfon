@@ -1,0 +1,59 @@
+{
+  "state": "SOLE_BOUNDED_PUT_VALIDATION_GRANTED",
+  "head": "d101ff8e8558f3d953c8876f495d5e26cddd6cc7",
+  "at": "2026-09-14T23:29:51.357565+00:00",
+  "owner": "existing presets pF",
+  "QA": "80d3f3c",
+  "patch_sha256": "1744a7d6ed42df547d102846c30eb486a38f94b910a0e6d5243defbe5b5bf50d",
+  "targets": [
+    {
+      "path": "src/studio-api.ts",
+      "original_sha256": "ac65c8b47152e7e1d558c197f113ae972bdaa7fbb932273dc4d89769806dd2fd",
+      "sha256": "21ea122353d9074d0c142aa16fe5df96f30a6535b43d8faf9f0e528bf5a9f521",
+      "bytes": 101613
+    },
+    {
+      "path": "test/knowledge-concurrency.test.ts",
+      "original_sha256": "911a0449b56c4457b43f0af85736ebd543fc35b073e6b1224a1eed28d06273fb",
+      "sha256": "a6a9ad6df73c25b7121bdc54a1762a95a05ccb419022d5fbe50c09893a2b273a",
+      "bytes": 9907
+    },
+    {
+      "path": "test/put-response-atomic.test.ts",
+      "original_sha256": null,
+      "sha256": "cdef0471a54129532d2ce9904e84cd9ffa696f977ba0f523104042930b32f1d6",
+      "bytes": 12426
+    },
+    {
+      "path": "scripts/put-response-smoke.mjs",
+      "original_sha256": null,
+      "sha256": "c53b5573144e6eeb68d9702174da73a3409cfa255cb0a9b64450dbcbfdaa6f33",
+      "bytes": 13312
+    }
+  ],
+  "protected_count": 214,
+  "proposal": "Exact owner README seven serial commands, no edits/retries",
+  "selected": [
+    "original6API filter response fault records fresh retry",
+    "original native ONLY primary-spare-response-fault",
+    "fixed20newAPI",
+    "fixed15affected concurrency controls with exact README filter/6skip",
+    "Worker types",
+    "web types",
+    "fixed native10"
+  ],
+  "expected": "Counts/failures remain predictions until execution. Preserve first500-vs200 original failures plus preassertion persisted/retry/quota snapshots; unexpected setup/fixture/cleanup failure separate.",
+  "dependencies": "Existing verified dependencies only; absent-only candidate symlink allowed after checking source/lock; record and remove only owned added link, no install",
+  "ports": [
+    8812,
+    9252
+  ],
+  "fresh_vacancy": {
+    "app_official_uv": 0,
+    "reserved_listeners": 0,
+    "scope": "nonexhaustive current snapshot"
+  },
+  "previous_release": "Officiald101 completion204e7443 explicit RELEASE verified; all application slots released; Piper ungranted",
+  "limits": "Original source substitution only in isolated exact candidate; restore accepted fixed after original commands and disposal; no concurrent source swaps. RETURNING/meta/changes-chain are new proof; no browser,old native,CREATE/0021/34consumer replay,inference or deployment.",
+  "evidence": "Persistent private raw captures/hash-size records; safe public derived facts; no raw local metadata. Capture all exits,MF disposal,owned cleanup/fresh process+reserved scans and explicit release. No automatic retry or failure-driven source edits."
+}

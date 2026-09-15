@@ -1,0 +1,379 @@
+--- a/src/piper-catalog.ts
++++ b/src/piper-catalog.ts
+@@ -81,21 +81,55 @@
+     if (pendingCatalogs.has(endpoint) || pendingCatalogs.size >= MAX_PENDING_ENDPOINTS) return fallback;
+     const reservation = { expiresAt: now + FETCH_TIMEOUT_MS };
+     pendingCatalogs.set(endpoint, reservation);
++    let started = false;
++    let removeDeadline: (() => void) | undefined;
+     try {
+-      const response = await fetch(endpoint, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), redirect: 'manual' });
+-      if (Date.now() >= reservation.expiresAt) {
+-        await response.body?.cancel();
+-        return fallback;
++      const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
++      let expired = false;
++      let finish!: (voice: string) => void;
++      const caller = new Promise<string>(resolve => { finish = resolve; });
++      // The caller deadline starts before I/O and never releases admission.
++      // Keep a local winner flag: wall-clock changes cannot revive late work.
++      const onDeadline = () => { expired = true; finish(fallback); };
++      signal.addEventListener('abort', onDeadline, { once: true });
++      removeDeadline = () => signal.removeEventListener('abort', onDeadline);
++      if (signal.aborted) { onDeadline(); return await caller; }
++      const run = async (): Promise<string> => {
++        try {
++          const response = await fetch(endpoint, { signal, redirect: 'manual' });
++          if (expired || signal.aborted || Date.now() >= reservation.expiresAt) {
++            await response.body?.cancel();
++            return fallback;
++          }
++          const voices = await readVoices(response);
++          if (expired || signal.aborted || Date.now() >= reservation.expiresAt ||
++            pendingCatalogs.get(endpoint) !== reservation) return fallback;
++          if (catalogs.size >= MAX_ENDPOINTS) catalogs.delete(catalogs.keys().next().value!);
++          catalogs.set(endpoint, { voices, fetchedAt: Date.now() });
++          return voices[lang] ?? fallback;
++        } finally {
++          // Only actual pipeline settlement frees its reservation, including
++          // awaited cancellation. Returning the caller fallback is separate.
++          if (pendingCatalogs.get(endpoint) === reservation) pendingCatalogs.delete(endpoint);
++        }
++      };
++      started = true;
++      // Attach both settlement handlers before returning/detaching from run.
++      // Late failure is observed even after the caller deadline has won.
++      void run().then(voice => {
++        removeDeadline?.();
++        finish(voice);
++      }, () => {
++        removeDeadline?.();
++        finish(fallback);
++      });
++      return await caller;
++    } finally {
++      // Signal/listener setup can fail before an operation owns cleanup.
++      if (!started) {
++        removeDeadline?.();
++        if (pendingCatalogs.get(endpoint) === reservation) pendingCatalogs.delete(endpoint);
+       }
+-      const voices = await readVoices(response);
+-      // Late work from an expired/replaced reservation cannot publish stale
+-      // data, evict a newer cache entry, or release a newer request's capacity.
+-      if (Date.now() >= reservation.expiresAt || pendingCatalogs.get(endpoint) !== reservation) return fallback;
+-      if (catalogs.size >= MAX_ENDPOINTS) catalogs.delete(catalogs.keys().next().value!);
+-      catalogs.set(endpoint, { voices, fetchedAt: Date.now() });
+-      return voices[lang] ?? fallback;
+-    } finally {
+-      if (pendingCatalogs.get(endpoint) === reservation) pendingCatalogs.delete(endpoint);
+     }
+   } catch {
+     // Never use another endpoint's entry or expired data after a failed lookup.
+--- a/docs/piper-catalog-concurrency.md
++++ b/docs/piper-catalog-concurrency.md
+@@ -8,9 +8,11 @@
+ 
+ Fetch, response, reader, abort signal and async continuations remain local to the initiating request/Durable Object context. Neither a follower nor admission cleanup awaits work owned by another context. Admission is released only by the initiating lookup's finally after its fetch/read/cancel path settles. Elapsed time alone cannot release another slot or admit a replacement over unresolved old work. The deadline still prevents obsolete cache publication; a response arriving after expiry is cancelled before read/parse begins. Finally checks reservation identity before removal.
+ 
++The initiating caller has a separate context-local1500ms deadline, registered before I/O. It returns that caller's static fallback even if fetch/read/cancel remains unresolved; the existing native abort signal supplies this deadline. The inner pipeline alone retains and releases admission after settlement. Its late rejection is observed, and a local expired/aborted flag prevents late cache publication even if wall-clock time changes. Early settlement removes the caller abort listener (the platform timeout signal has no cancellation API); setup failure before the pipeline starts releases the reservation. No timer or promise is shared across contexts, and no deadline reset, expiry refill or physical teardown guarantee is introduced. This is an event-loop deadline, not a guarantee against synchronous starvation or context destruction. These caller-deadline refinements are prepared source only; the historical evidence below does not validate them.
++
+ **Availability tradeoff:** if an initiating context disappears without running finally, its scalar reservation remains occupied until the isolate is recreated. Enough such events can exhaust dynamic catalog admission in that isolate. Subsequent misses return static voice fallbacks immediately; already-fresh cached maps remain usable. No context destruction or abandoned-slot recovery is claimed. Retaining bounded capacity was chosen over expiry-based reclamation that could overlap unresolved old work.
+ 
+-Manual redirects,1500ms native fetch timeout,65536-byte body limit,64 voice entries, identifier validation, endpoint normalization and refusal to reuse expired/foreign maps remain unchanged. No CallSession, provider routing, audio, receipt or finalizer changes are included. This is a per-isolate concurrent-lookup bound, not a deployment-wide rate limit. Sustained sequential misses may still issue lookups. During cold/expired overlap, callers other than the admitted one may temporarily use a static voice instead of a catalog-specific voice. They never wait for another call's I/O.
++Manual redirects,1500ms abort budget,65536-byte body limit,64 voice entries, identifier validation, endpoint normalization and refusal to reuse expired/foreign maps remain unchanged. No CallSession, provider routing, audio, receipt or finalizer changes are included. This is a per-isolate concurrent-lookup bound, not a deployment-wide rate limit. Sustained sequential misses may still issue lookups. During cold/expired overlap, callers other than the admitted one may temporarily use a static voice instead of a catalog-specific voice. They never wait for another call's I/O.
+ 
+ ## Validation and proof limits
+ 
+--- /dev/null
++++ b/test/piper-catalog-caller-deadline.test.ts
+@@ -0,0 +1,290 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++
++let lookup: typeof import('../src/piper-catalog').piperVoiceFromCatalog;
++const endpoint = 'wss://voice.example/rt';
++const payload = (voice = 'en_late') => new TextEncoder().encode(JSON.stringify({
++  'kataleptic-realtime': { voices_by_language: { en: voice } },
++}));
++const catalog = (voice = 'en_ok') => new Response(payload(voice));
++function deferred<T>() {
++  let resolve!: (value: T) => void;
++  let reject!: (error: unknown) => void;
++  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
++  return { promise, resolve, reject };
++}
++async function flush() { for (let i = 0; i < 24; i++) await Promise.resolve(); }
++// Cleanup failures are reported by a separate afterEach hook, so a failing
++// original deadline assertion retains its own first failure and stack.
++const cleanupFailures: Error[] = [];
++async function admissionBarrier(bases: string[], fetcher: ReturnType<typeof vi.fn>): Promise<void> {
++  const admitted = new Set<string>();
++  // Cleanup probes cannot cache data or wait on the old fixture gates. A fetch
++  // for the SAME endpoint proves its old reservation was released; completion
++  // of this immediate non-OK/null-body probe also settles the probe itself.
++  fetcher.mockImplementation(async (url: string) => {
++    admitted.add(url);
++    return new Response(null, { status: 503 });
++  });
++  for (const base of bases) {
++    const url = base.replace('wss://', 'https://') + '/voices';
++    let crossed = false;
++    for (let attempt = 0; attempt < 32; attempt++) {
++      let completed = false, rejected = false;
++      void lookup(base, 'en', 'cleanup_fallback').then(
++        () => { completed = true; },
++        () => { completed = true; rejected = true; },
++      );
++      await flush();
++      // Never await an unbounded public promise or add another probe while it
++      // remains unresolved. No timers or elapsed-time refill advance here.
++      if (!completed || rejected) throw new Error('Cleanup probe did not complete successfully within 24 microtask turns');
++      if (admitted.has(url)) { crossed = true; break; }
++    }
++    if (!crossed) throw new Error('Old endpoint admission was not released within 32 bounded probes');
++  }
++}
++async function cleanupHeld(label: string, release: () => void, fetcher: ReturnType<typeof vi.fn>, bases: string[]) {
++  try { release(); }
++  catch { cleanupFailures.push(new Error(label + ': gate release failed')); }
++  try { await admissionBarrier(bases, fetcher); }
++  catch (error) {
++    cleanupFailures.push(new Error(label + ': admission cleanup barrier failed', { cause: error }));
++  }
++}
++const signals: Array<{ signal: AbortSignal; add: ReturnType<typeof vi.spyOn>; remove: ReturnType<typeof vi.spyOn> }> = [];
++beforeEach(async () => {
++  vi.useFakeTimers();
++  vi.setSystemTime(10_000);
++  vi.resetModules();
++  signals.length = 0;
++  cleanupFailures.length = 0;
++  // Drive the existing native timeout API deterministically; mocked fetch and
++  // streams intentionally ignore abort. This is not native cancellation proof.
++  vi.spyOn(AbortSignal, 'timeout').mockImplementation(ms => {
++    const controller = new AbortController();
++    const add = vi.spyOn(controller.signal, 'addEventListener');
++    const remove = vi.spyOn(controller.signal, 'removeEventListener');
++    signals.push({ signal: controller.signal, add, remove });
++    setTimeout(() => controller.abort(), ms);
++    return controller.signal;
++  });
++  ({ piperVoiceFromCatalog: lookup } = await import('../src/piper-catalog'));
++});
++afterEach(() => {
++  vi.clearAllTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers();
++  if (cleanupFailures.length) {
++    throw new AggregateError(cleanupFailures, 'Piper fixture cleanup failure (separate from test-body assertions)');
++  }
++});
++
++describe('Piper initiating caller deadline', () => {
++  it.each(['http-error', 'declared-size', 'stream-overflow', 'expired-response', 'fetch', 'read'] as const)(
++    '[caller-deadline-negative] returns fallback while %s pipeline is still held', async kind => {
++      const headers = deferred<Response>();
++      const cancel = deferred<void>();
++      let cancelEntered = 0, readEntered = 0, fetchEntered = 0;
++      let stream!: ReadableStreamDefaultController<Uint8Array>;
++      const body = new ReadableStream<Uint8Array>({
++        start(controller) { stream = controller; },
++        pull(controller) {
++          readEntered++;
++          if (kind === 'stream-overflow') controller.enqueue(new Uint8Array(65_537));
++        },
++        cancel() { cancelEntered++; return cancel.promise; },
++      }, { highWaterMark: 0 });
++      const response = new Response(body, {
++        status: kind === 'http-error' ? 503 : 200,
++        headers: kind === 'declared-size' ? { 'Content-Length': '65537' } : {},
++      });
++      const fetcher = vi.fn(() => {
++        fetchEntered++;
++        return kind === 'expired-response' || kind === 'fetch' ? headers.promise : Promise.resolve(response);
++      });
++      vi.stubGlobal('fetch', fetcher);
++      let observed: string | undefined;
++      const first = lookup(endpoint, 'en', 'owner_fallback');
++      void first.then(value => { observed = value; });
++      try {
++        await flush();
++        expect(fetchEntered).toBe(1);
++        if (['http-error', 'declared-size', 'stream-overflow'].includes(kind)) expect(cancelEntered).toBe(1);
++        if (kind === 'read') expect(readEntered).toBe(1);
++        if (kind === 'expired-response' || kind === 'fetch') expect(readEntered).toBe(0);
++        await vi.advanceTimersByTimeAsync(1499);
++        expect(observed).toBeUndefined();
++        await vi.advanceTimersByTimeAsync(1);
++        const outcomeAtDeadline = observed;
++        // Expired-response ordering: capture caller outcome FIRST, then inject
++        // late headers and prove cancel (not read) is entered with debt retained.
++        if (kind === 'expired-response') {
++          headers.resolve(response);
++          await flush();
++          expect(cancelEntered).toBe(1);
++          expect(readEntered).toBe(0);
++        }
++        expect(await lookup(endpoint, 'de', 'follower_fallback')).toBe('follower_fallback');
++        expect(fetcher).toHaveBeenCalledTimes(1);
++        // The original terminates here with undefined, never a five-second hang.
++        expect(outcomeAtDeadline).toBe('owner_fallback');
++      } finally {
++        await cleanupHeld('held-' + kind, () => {
++          headers.resolve(response);
++          cancel.resolve();
++          if (kind === 'read') stream.close();
++        }, fetcher, [endpoint]);
++      }
++    },
++  );
++
++  it('retains all32 slots after caller timeout and releases exactly one on cancel settlement', async () => {
++    const cancels = Array.from({ length: 32 }, () => deferred<void>());
++    let entered = 0;
++    const fetcher = vi.fn(async (url: string) => {
++      const index = Number(new URL(url).hostname.split('-')[1].split('.')[0]);
++      return new Response(new ReadableStream({ cancel() { entered++; return cancels[index].promise; } }, { highWaterMark: 0 }), { status: 503 });
++    });
++    vi.stubGlobal('fetch', fetcher);
++    const outcomes: Array<string | undefined> = Array(32).fill(undefined);
++    const ownerEndpoints = Array.from({ length: 32 }, (_, i) => `wss://tenant-${i}.example/rt`);
++    const owners = ownerEndpoints.map((base, i) => lookup(base, 'en', `fallback_${i}`));
++    owners.forEach((owner, i) => { void owner.then(value => { outcomes[i] = value; }); });
++    const replacementGate = deferred<Response>();
++    let replacement: Promise<string> | undefined;
++    try {
++      await flush();
++      expect(entered).toBe(32);
++      await vi.advanceTimersByTimeAsync(1500);
++      expect(await lookup('wss://overflow.example/rt', 'en', 'full')).toBe('full');
++      expect(await lookup('wss://tenant-0.example/rt', 'de', 'busy')).toBe('busy');
++      expect(fetcher).toHaveBeenCalledTimes(32);
++      const outcomesBeforeFirstRelease = [...outcomes];
++      expect(outcomesBeforeFirstRelease).toEqual(Array.from({ length: 32 }, (_, i) => `fallback_${i}`));
++      cancels[0].resolve();
++      await flush();
++      fetcher.mockImplementation(() => replacementGate.promise);
++      replacement = lookup('wss://replacement.example/rt', 'en', 'replacement');
++      expect(await lookup('wss://overflow.example/rt', 'en', 'still_full')).toBe('still_full');
++      expect(fetcher).toHaveBeenCalledTimes(33);
++    } finally {
++      await cleanupHeld('full32', () => {
++        cancels.forEach(gate => gate.resolve());
++        replacementGate.resolve(new Response(null, { status: 503 }));
++      }, fetcher, [...ownerEndpoints, ...(replacement ? ['wss://replacement.example/rt'] : [])]);
++    }
++  });
++
++  it('[caller-deadline-negative] never publishes a late body after deadline and wall-clock rollback', async () => {
++    let stream!: ReadableStreamDefaultController<Uint8Array>;
++    let entered = 0;
++    const body = new ReadableStream<Uint8Array>({ start(c) { stream = c; }, pull() { entered++; } }, { highWaterMark: 0 });
++    const fetcher = vi.fn(async () => new Response(body));
++    vi.stubGlobal('fetch', fetcher);
++    let observed: string | undefined;
++    const first = lookup(endpoint, 'en', 'fallback');
++    void first.then(value => { observed = value; });
++    try {
++      await flush(); expect(entered).toBe(1);
++      await vi.advanceTimersByTimeAsync(1500);
++      vi.setSystemTime(0);
++      stream.enqueue(payload()); stream.close();
++      await flush();
++      expect(observed).toBe('fallback');
++      fetcher.mockImplementation(async () => catalog('en_fresh'));
++      expect(await lookup(endpoint, 'en', 'fallback')).toBe('en_fresh');
++      expect(fetcher).toHaveBeenCalledTimes(2);
++    } finally {
++      try { stream.close(); } catch { /* already closed */ }
++      await first;
++    }
++  });
++
++  it.each(['fulfill', 'reject'] as const)('observes late cancel %s and admits a clean retry', async outcome => {
++    const cancel = deferred<void>();
++    let entered = 0;
++    const fetcher = vi.fn(async () => new Response(new ReadableStream({
++      cancel() { entered++; return cancel.promise; },
++    }, { highWaterMark: 0 }), { status: 503 }));
++    vi.stubGlobal('fetch', fetcher);
++    const first = lookup(endpoint, 'en', 'fallback');
++    try {
++      await flush(); expect(entered).toBe(1);
++      await vi.advanceTimersByTimeAsync(1500);
++      expect(await lookup(endpoint, 'en', 'busy')).toBe('busy');
++      if (outcome === 'reject') cancel.reject(new Error('synthetic cancellation rejection'));
++      else cancel.resolve();
++      await first; await flush();
++      fetcher.mockImplementation(async () => catalog());
++      expect(await lookup(endpoint, 'en', 'fallback')).toBe('en_ok');
++      expect(fetcher).toHaveBeenCalledTimes(2);
++    } finally { cancel.resolve(); await first; }
++  });
++
++  it.each(['signal', 'listener', 'already-aborted'] as const)('releases admission when %s setup fails before I/O', async failure => {
++    if (failure === 'signal') vi.mocked(AbortSignal.timeout).mockImplementationOnce(() => { throw new Error('setup'); });
++    else if (failure === 'already-aborted') {
++      const controller = new AbortController(); controller.abort();
++      vi.mocked(AbortSignal.timeout).mockReturnValueOnce(controller.signal);
++    } else {
++      const signal = new AbortController().signal;
++      vi.spyOn(signal, 'addEventListener').mockImplementationOnce(() => { throw new Error('setup'); });
++      vi.mocked(AbortSignal.timeout).mockReturnValueOnce(signal);
++    }
++    const fetcher = vi.fn(async () => catalog());
++    vi.stubGlobal('fetch', fetcher);
++    expect(await lookup(endpoint, 'en', 'fallback')).toBe('fallback');
++    expect(fetcher).not.toHaveBeenCalled();
++    expect(await lookup(endpoint, 'en', 'retry')).toBe('en_ok');
++    expect(fetcher).toHaveBeenCalledTimes(1);
++  });
++
++  it.each(['success', 'failure'] as const)('removes the caller listener on early %s', async outcome => {
++    const fetcher = vi.fn(async () => {
++      if (outcome === 'failure') throw new Error('offline');
++      return catalog();
++    });
++    vi.stubGlobal('fetch', fetcher);
++    expect(await lookup(endpoint, 'en', 'fallback')).toBe(outcome === 'success' ? 'en_ok' : 'fallback');
++    expect(AbortSignal.timeout).toHaveBeenCalledWith(1500);
++    const record = signals[0];
++    const registration = record.add.mock.calls.find(args => args[0] === 'abort');
++    expect(registration).toBeDefined();
++    expect(record.remove).toHaveBeenCalledWith('abort', registration![1]);
++    await vi.advanceTimersByTimeAsync(1500);
++    expect(fetcher).toHaveBeenCalledTimes(1);
++  });
++
++  it('uses admission-origin deadline after delayed headers without resetting on body progress', async () => {
++    const headers = deferred<Response>();
++    let stream!: ReadableStreamDefaultController<Uint8Array>;
++    let reads = 0;
++    const body = new ReadableStream<Uint8Array>({ start(c) { stream = c; }, pull() { reads++; } }, { highWaterMark: 0 });
++    const fetcher = vi.fn(() => headers.promise);
++    vi.stubGlobal('fetch', fetcher);
++    let observed: string | undefined;
++    const first = lookup(endpoint, 'en', 'fallback');
++    void first.then(value => { observed = value; });
++    try {
++      await vi.advanceTimersByTimeAsync(1000);
++      headers.resolve(new Response(body)); await flush();
++      expect(reads).toBe(1);
++      stream.enqueue(new TextEncoder().encode('{')); await flush();
++      await vi.advanceTimersByTimeAsync(499); expect(observed).toBeUndefined();
++      await vi.advanceTimersByTimeAsync(1); expect(observed).toBe('fallback');
++    } finally {
++      await cleanupHeld('delayed-headers', () => {
++        headers.resolve(new Response(null));
++        stream.close();
++      }, fetcher, [endpoint]);
++    }
++  });
++
++  it('preserves exact body limit, language selection and settled cache hits', async () => {
++    const text = new TextDecoder().decode(payload('en_exact'));
++    const fetcher = vi.fn(async (_url: string, _init: RequestInit) => new Response(text + ' '.repeat(65_536 - text.length)));
++    vi.stubGlobal('fetch', fetcher);
++    expect(await lookup(endpoint, 'en', 'fallback')).toBe('en_exact');
++    expect(await lookup(endpoint, 'de', 'de_fallback')).toBe('de_fallback');
++    expect(fetcher).toHaveBeenCalledTimes(1);
++    expect(fetcher.mock.calls[0][1]).toMatchObject({ redirect: 'manual', signal: signals[0].signal });
++  });
++});

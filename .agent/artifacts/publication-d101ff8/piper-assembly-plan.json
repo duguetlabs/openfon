@@ -1,0 +1,100 @@
+{
+  "state": "EXACT_FOUR_PATH_ASSEMBLY_READY_DEFERRED_UNTIL_POST_RELEASE",
+  "parent": "f82a656aeb4ab2d25580fb43e1ce52c709eaca7f",
+  "targets": [
+    {
+      "path": "src/piper-catalog.ts",
+      "original_sha256": "55493b66069a9df8613b43cf8acb1804a76f32b18de408cf4fd60d8e35446958",
+      "sha256": "63f7923bafa6e9fc0f220b636fa20b1381391920b0f17c4cf47e605cee4fe274"
+    },
+    {
+      "path": "docs/piper-catalog-concurrency.md",
+      "original_sha256": "b7a385bf1065f33e8a2abb49c5eb948b67ffcffab1cc53a54c37fe5450a21a27",
+      "sha256": "ca7d4d0ee52d01abb9de32e518c9dc1116bcb26e6d05a067c0c034b5578041a1"
+    },
+    {
+      "path": "test/piper-catalog-caller-deadline.test.ts",
+      "original_sha256": null,
+      "sha256": "c70602f1882c8ae15a2cd19e35f7890e92c6022aab08e2876903910ecfbeda68"
+    },
+    {
+      "path": "test/piper-catalog-concurrency.test.ts",
+      "original_sha256": "57378d7d6b4ed4587484f4025cb41dbf4f0e9fdd076dcdb39339703e78ceca3b",
+      "sha256": "8ec98ee8bd3b0e9c56c3a7c3a9c57268c09ea292c939f6e4bb57a29c5fb83252"
+    }
+  ],
+  "source_QA": [
+    "08dc0e0",
+    "05cd559"
+  ],
+  "evidence_QA": [
+    "bb4ccc8",
+    "6c7b7b2"
+  ],
+  "original_patch_sha256": "dbd93069e0324e3c8e6b5a6f349b04a32e820ce2242ccfcfca0dde3a38db1246",
+  "test_patch_sha256": "12ff090c66891ee2ad3768ba7b66ce48b142b417f05ee01c7f2e047753e6c887",
+  "copies": [
+    {
+      "path": ".agent/artifacts/piper-caller-deadline-d101/README.md",
+      "sha256": "ebfec249e728a6a229f98d5d0d4c4da0dff5ce2c74de7606b28590f1f9d3a4ba",
+      "bytes": 5986
+    },
+    {
+      "path": ".agent/artifacts/piper-caller-deadline-d101/candidate/docs/piper-catalog-concurrency.md",
+      "sha256": "ca7d4d0ee52d01abb9de32e518c9dc1116bcb26e6d05a067c0c034b5578041a1",
+      "bytes": 6052
+    },
+    {
+      "path": ".agent/artifacts/piper-caller-deadline-d101/candidate/src/piper-catalog.ts",
+      "sha256": "63f7923bafa6e9fc0f220b636fa20b1381391920b0f17c4cf47e605cee4fe274",
+      "bytes": 6314
+    },
+    {
+      "path": ".agent/artifacts/piper-caller-deadline-d101/candidate/test/piper-catalog-caller-deadline.test.ts",
+      "sha256": "c70602f1882c8ae15a2cd19e35f7890e92c6022aab08e2876903910ecfbeda68",
+      "bytes": 14294
+    },
+    {
+      "path": ".agent/artifacts/piper-caller-deadline-d101/manifest.json",
+      "sha256": "facf3406254b8d1cfd0d59416574b5a8ad72f69f3b16f4a8cfbe7b3bd64333af",
+      "bytes": 117010
+    },
+    {
+      "path": ".agent/artifacts/piper-caller-deadline-d101/source.patch",
+      "sha256": "dbd93069e0324e3c8e6b5a6f349b04a32e820ce2242ccfcfca0dde3a38db1246",
+      "bytes": 21685
+    },
+    {
+      "path": ".agent/artifacts/piper-caller-deadline-d101/validation.json",
+      "sha256": "f0c770eb80d79c78f2c3332ee5abe842eb4f48635bfdeba0e4e491dddd9174f3",
+      "bytes": 23572
+    },
+    {
+      "path": ".agent/artifacts/piper-retry-control-d101/README.md",
+      "sha256": "6eb928f723f8d917b62eb16b6fcdd62585214e5edc9ab1c5503e445a751a59d5",
+      "bytes": 3141
+    },
+    {
+      "path": ".agent/artifacts/piper-retry-control-d101/candidate/test/piper-catalog-concurrency.test.ts",
+      "sha256": "8ec98ee8bd3b0e9c56c3a7c3a9c57268c09ea292c939f6e4bb57a29c5fb83252",
+      "bytes": 12119
+    },
+    {
+      "path": ".agent/artifacts/piper-retry-control-d101/manifest.json",
+      "sha256": "cc23cac8d5ff9d476bd31a413e36ad84ebc0786aa4d3c520d555d98202aac8f7",
+      "bytes": 117042
+    },
+    {
+      "path": ".agent/artifacts/piper-retry-control-d101/test-only.patch",
+      "sha256": "12ff090c66891ee2ad3768ba7b66ce48b142b417f05ee01c7f2e047753e6c887",
+      "bytes": 2096
+    },
+    {
+      "path": ".agent/artifacts/piper-retry-control-d101/validation.json",
+      "sha256": "d1266d2e159f2f19a6fe389efe7b43b0c6dce3d8048a847b8e2d464d5adcc574",
+      "bytes": 7839
+    }
+  ],
+  "validation": "Historical original7FAIL10SKIP,fixed43PASS1FAIL/Worker types plus separate corrected6PASS7SKIP. Not a passing44rerun. Mocked finite scheduling and native/cleanup limits retained.",
+  "scope": "Only exact four paths after current POST runtime release; preserve four PUT paths and all other current application bytes. No runtime/replay."
+}
