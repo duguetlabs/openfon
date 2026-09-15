@@ -1457,13 +1457,12 @@ export function registerStudioApi(app: StudioApp): void {
       .first();
     if (duplicate) return c.json({ error: 'A collection with this name already exists' }, 409);
     const id = newId();
-    await c.env.DB.prepare(
-      'INSERT INTO knowledge_collections (id, business_id, name, description) VALUES (?, ?, ?, ?)'
+    const statement = c.env.DB.prepare(
+      'INSERT INTO knowledge_collections (id, business_id, name, description) VALUES (?, ?, ?, ?) RETURNING *'
     )
-      .bind(id, workspace.id, body.name.trim(), body.description?.trim() ?? '')
-      .run();
-    const row = await c.env.DB.prepare('SELECT * FROM knowledge_collections WHERE id = ?').bind(id).first();
-    return c.json(row, 201);
+      .bind(id, workspace.id, body.name.trim(), body.description?.trim() ?? '');
+    const [created] = await c.env.DB.batch<KnowledgeCollection>([statement]);
+    return c.json(created.results[0], 201);
   });
 
   app.get('/api/me/knowledge/collections/:collectionId', async (c) => {
@@ -1535,10 +1534,10 @@ export function registerStudioApi(app: StudioApp): void {
     const status = normalizedStatus(body.status) ?? 'draft';
     if (status === 'active' && !itemReady(candidate)) return c.json({ error: 'Complete the item before activation' }, 400);
     const id = newId();
-    await c.env.DB.prepare(
+    const statement = c.env.DB.prepare(
       `INSERT INTO knowledge_items (
         id, business_id, collection_id, kind, status, title, question, answer, content, activated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'active' THEN datetime('now') ELSE NULL END)`
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'active' THEN datetime('now') ELSE NULL END) RETURNING *`
     )
       .bind(
         id,
@@ -1551,10 +1550,9 @@ export function registerStudioApi(app: StudioApp): void {
         candidate.answer,
         candidate.content,
         status
-      )
-      .run();
-    const row = await c.env.DB.prepare('SELECT * FROM knowledge_items WHERE id = ?').bind(id).first();
-    return c.json(row, 201);
+      );
+    const [created] = await c.env.DB.batch<KnowledgeItem>([statement]);
+    return c.json(created.results[0], 201);
   });
 
   app.get('/api/me/knowledge/items/:itemId', async (c) => {
@@ -1638,15 +1636,14 @@ export function registerStudioApi(app: StudioApp): void {
     }
     if (!collection || collection.business_id !== workspace.id) return c.json({ error: 'Collection not found' }, 404);
     const id = newId();
-    await c.env.DB.prepare(
+    const statement = c.env.DB.prepare(
       `INSERT INTO knowledge_items (
         id, business_id, collection_id, kind, status, question, answer, source_call_id, source_turn_id
-       ) VALUES (?, ?, ?, 'faq', 'draft', ?, '', ?, ?)`
+       ) VALUES (?, ?, ?, 'faq', 'draft', ?, '', ?, ?) RETURNING *`
     )
-      .bind(id, workspace.id, collection.id, turn.text.trim(), body.callId, turn.id)
-      .run();
-    const row = await c.env.DB.prepare('SELECT * FROM knowledge_items WHERE id = ?').bind(id).first();
-    return c.json(row, 201);
+      .bind(id, workspace.id, collection.id, turn.text.trim(), body.callId, turn.id);
+    const [created] = await c.env.DB.batch<KnowledgeItem>([statement]);
+    return c.json(created.results[0], 201);
   });
 
   app.post('/api/me/assistants/:assistantId/knowledge-collections/:collectionId', async (c) => {
@@ -1952,11 +1949,11 @@ export function registerStudioApi(app: StudioApp): void {
     const llmModel = typeof body.llm_model === 'string' ? body.llm_model : '';
     await assertPresetWriteBudget(c.env, workspace.id, { id, name, engine,
       realtime_model:realtimeModel, realtime_voice:realtimeVoice, language, voice, llm_model:llmModel }, true);
-    await c.env.DB.batch([
+    const [created] = await c.env.DB.batch<Record<string, unknown>>([
       c.env.DB.prepare(
       `INSERT INTO engine_presets (
         id, business_id, name, engine, realtime_model, realtime_voice, language, voice, llm_model
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`
       ).bind(id, workspace.id, name, engine, realtimeModel, realtimeVoice, language, voice, llmModel),
       c.env.DB.prepare(
         `INSERT INTO engine_profiles (
@@ -1977,8 +1974,7 @@ export function registerStudioApi(app: StudioApp): void {
         llmModel
       ),
     ]);
-    const row = await c.env.DB.prepare('SELECT * FROM engine_presets WHERE id = ?').bind(id).first();
-    return c.json(row, 201);
+    return c.json(created.results[0], 201);
   });
 
   app.post('/api/me/engine-presets/:presetId/apply', async (c) => {
