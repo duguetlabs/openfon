@@ -1,0 +1,7 @@
+{
+  "state": "NO_ADDITIONAL_LOCAL_COMBINED_RUN_SELECTED",
+  "source_assembly": "94e4cde199c9d74113c81b158685c0fcfef65322",
+  "source_evidence_QA": "f1c9495",
+  "basis": "Single production connection helper changed; full helper23, QA-selected72 shared-fixture consumers, Worker types and novel gateway synthetic workerd1 exercised exact candidate bytes. Metadata/docs add no runtime behavior. No other adapter/interface/schema change or unresolved failure discovered.",
+  "limits": "Omitted106CallSession cases remain unverified locally; fresh exact published-head CI required. Direct native/web results are historical, not rerun. No timeout/retry or old Piper/audio broad replay authorized."
+}

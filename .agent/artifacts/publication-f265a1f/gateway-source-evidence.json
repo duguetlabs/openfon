@@ -1,0 +1,20 @@
+{
+  "repository": "kataleptic-backend",
+  "head": "995f35b9b5539417fdf0fd8f991f7a89ea608245",
+  "files": [
+    {
+      "file": "gateway/duguet-gateway.py",
+      "sha256": "5eff488e74f25ccff4c38de9438719c21648f4c4f493f9bb314f2cb396be950c",
+      "committed_working_equal": true
+    },
+    {
+      "file": "gateway/tests/test_realtime_ws.py",
+      "sha256": "b45e657517d3454c31a2a3945e9cafceeb5abeecb32123a9dc9b9205507a5dcc",
+      "committed_working_equal": true
+    }
+  ],
+  "inspection": "Retained source Authorization bearer/token takes precedence over query fallback; header-only tests are source evidence, unexecuted.",
+  "limits": "No deployed-version, arbitrary endpoint, live upgrade or log-policy proof. No sibling changes/runtime/credentials. Existing realtime owner and QA reconciling source contract.",
+  "QA": "2aa14b2",
+  "route_attribution": "Header-only GA/beta test bodies both use /v1/realtime. Second URL alias support is shared-handler source evidence, not those test bodies."
+}

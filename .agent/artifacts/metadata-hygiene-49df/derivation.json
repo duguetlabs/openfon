@@ -3238,9 +3238,9 @@
       "candidate_bytes": 258875,
       "validation": "Metadata transformation only; no runtime/validation claim changed.",
       "accepted_candidate_identity_role": "Historical accepted metadata copy; preserved unchanged. Later current identity is recorded separately.",
-      "current_public_sha256": "bbd42e3d9ec788257132eb5af704d56b1fc8a627b798d99e6ed69c84e9e850db",
-      "current_public_bytes": 267689,
-      "current_identity_lineage": ".agent/artifacts/metadata-resource-f265/lineage.json"
+      "current_public_sha256": "d6e14a202256d03c824cadd203b994f98d167d076b13d1235a7bcca9017b0470",
+      "current_public_bytes": 271605,
+      "current_identity_lineage": ".agent/artifacts/official-f265-source-contracts/checkpoint-lineage.json"
     },
     {
       "path": ".agent/workstreams/launch.md",

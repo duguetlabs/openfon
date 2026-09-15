@@ -1,0 +1,3076 @@
+{
+  "classification": "OWNER_BOUNDED_VALIDATION_COMPLETE; independent evidence and assembly QA pending",
+  "grant_sha256": "828daed0b93fc8fa7b5c1cf5097c860363b7b50163ca9c6cc520e2f39f3cb9b7",
+  "base_commit": "f265a1f11780c7ad1f6359eadec8e018a90f3ac3",
+  "source_commit": "27482ef31af8dc3704c0aa6bdbdf0a58e2f416c7",
+  "artifact_QA": "45c14e9",
+  "manifest_sha256": "35838772b11b9af36b6d1576c3821fcb22c225845c80b7775cc5712c51fb75c2",
+  "patch_sha256": "ed99e93a0ee946d30503674e82ee17456dfa7b50f1730f0a4d13e2465878e920",
+  "targets": [
+    {
+      "path": "docs/realtime-providers.md",
+      "original_sha256": "a0eb5e5955682600014937a0f25ef9746ef7861dc1d6a5ea00edb085666c5d86",
+      "original_bytes": 7838,
+      "candidate_sha256": "143af52b798f6f664edce33fcaf869b149537417c63daaff5cd1fd5ef74269b9",
+      "candidate_bytes": 9433
+    },
+    {
+      "path": "scripts/realtime-smoke.mjs",
+      "original_sha256": "4f744f691c5b2851dad72790b14533e99008e962a9df2727f9257eb9e4728533",
+      "original_bytes": 15904,
+      "candidate_sha256": "ef56f8d94d27bd6a87697a3c7c947e9400991665f10e156c6eb46bc4ee1a8457",
+      "candidate_bytes": 16151
+    },
+    {
+      "path": "src/realtime-providers.ts",
+      "original_sha256": "341f5dd8e9e825d36d75aac4fd6afcbbf94190811fa02a20c530fba8529c375e",
+      "original_bytes": 4712,
+      "candidate_sha256": "3dbaafdc7de38bbca7cd24f5d11bf26c3e75b8b4dbd36f705b4ee89e720963d0",
+      "candidate_bytes": 4784
+    },
+    {
+      "path": "test/call-session.test.ts",
+      "original_sha256": "7435aa9e536147439b3e5a7c420f8cd05883248364511c7d722116ecfa9af5a2",
+      "original_bytes": 145614,
+      "candidate_sha256": "375fd7ff8be609e36317262ffbc9bcf226fcf516e6402e6d104579238feaadec",
+      "candidate_bytes": 155466
+    },
+    {
+      "path": "test/realtime-providers.test.ts",
+      "original_sha256": "56bc3e78be0eb897b30c051aedfae3360579dc9e1a2a0d4514cb0cfe4b4e73d3",
+      "original_bytes": 3421,
+      "candidate_sha256": "8b4974b8043241498fe727e5df340e6bec2be5c6cc0a8591dab1f019ccfb21fd",
+      "candidate_bytes": 5725
+    }
+  ],
+  "protected_count": 1203,
+  "protected_match_before_after_each_command": true,
+  "commands": [
+    {
+      "argv": [
+        "npx",
+        "--no-install",
+        "vitest",
+        "run",
+        "test/realtime-providers.test.ts",
+        "test/call-session.test.ts",
+        "--maxWorkers=1",
+        "--reporter=verbose",
+        "-t",
+        "gateway-header-negative"
+      ],
+      "phase": "original-tagged",
+      "exit_code": 1,
+      "elapsed_seconds": 6.287,
+      "at": "2026-09-15T06:40:12.827557+00:00",
+      "timed_out": false,
+      "counts": {
+        "PASS": 0,
+        "FAIL": 7,
+        "SKIP": 194
+      },
+      "cases": [
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "second attach to a live call > is refused, so the first caller keeps the stream",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "second attach to a live call > leaves no socket behind when arming the watchdog fails",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "second attach to a live call > recovers cleanly when the alarm half of arming fails",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "second attach to a live call > refuses a replacement socket even after the first one closes",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "second attach to a live call > refuses a replacement while the first socket is still CLOSING",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "handleStart idempotency > keeps legacy services and FAQs for a mixed-version call without an assistant id",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "handleStart idempotency > answers once no matter how many start messages arrive",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "handleStart idempotency > joins starts that arrive together rather than duplicating the attempt",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "handleStart idempotency > does not carry a failed attempt forward onto a call that then works",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "handleStart idempotency > freezes the end of the call before the first fallible statement",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "handleStart idempotency > ends the call when startup fails, instead of leaving it half-alive",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "handleStart idempotency > tells the caller nothing about why it broke",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "handleStart idempotency > does not re-run startup when a failure happens after ready is sent",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "handleStart idempotency > abandons startup if the caller hangs up mid-way",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalize closes attached sockets > sends ended and actually closes, instead of going silently deaf",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalize closes attached sockets > writes the call row once when closing the socket re-enters finalize",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalize closes attached sockets > releases the call when it breaks mid-conversation, keeping the summary",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalize closes attached sockets > clears the watchdog alarm when the call ends",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime session payload > redacts valid and malformed upstream error frames before logging",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime session payload > keeps gpt-realtime tiers on server VAD, splitting and all",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime session payload > keeps 2.1 on server VAD given the observed semantic detector tail",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime session payload > keeps 2.1-mini on server VAD after incomplete split mitigation",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime session payload > gives a tier nobody has measured the tuned server VAD, not an untuned default",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime session payload > never moves the HD tier off server VAD, which would fail every call at session start",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime session payload > never moves cascade tiers off server VAD, which would silently lose the tuning",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime session payload > never asks for noise reduction, on any tier",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > re-sends the payload when the engine applied a different turn detector",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > stays quiet when the echo matches what we asked for",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > ignores the gateway session that is not ours",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > gives up rather than looping when the engine keeps substituting",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > says nothing about a voice the tier picked for itself",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > re-asserts the vocabulary prompt a native tier dropped",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > does not fight the HD tier over a transcription it cannot set",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > never re-sends on the cascade tier, which does not diverge",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > does not send the HD tier a vocabulary prompt it cannot apply",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > re-sends when the echo drops the whole audio block, not just a leaf",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > classifies by structure, not by how a divergence is worded",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > reports a divergence outside the enforced subtrees without re-sending",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > keeps a superseded socket off the replacement connection",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > re-asserts on the replacement connection after a rotation",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "upstream connect timeout > cancels the pending upgrade and ignores a late synthetic completion",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "upstream recovery > still reconnects when an established socket errors before closing",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "upstream recovery > keeps the outgoing connection live for the whole rotation window",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "upstream recovery > briefs the replacement with turns that arrived during the handover",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "upstream recovery > keeps the call alive when a proactive rotation fails to connect",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "upstream recovery > recovers from a second engine drop, not just the first",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "upstream recovery > is bounded and finalizes rather than spawning orphan connections",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > finalizes a call whose client vanished without a close frame",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > reschedules itself while the call is still active",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > recovers the call id from storage after an eviction",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > sees a stale call as idle when the alarm runs on a rebuilt instance",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > does not refresh persisted activity from a rebuilt instance",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > does nothing when there is no call to reconcile",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > releases a socket that never starts, however hard it pings",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > retires the start deadline in the same write that arms the watchdog",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > does not kill a start that is still in flight",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > gives up on a start that never completes, with an accurate reason",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > does not apply the start deadline once the call is under way",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > keeps the watchdog armed when the call row fails to write",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > summarizes from call_turns when finalizing on a rebuilt instance",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > retries finalize at the ordinary tick until it lands",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > does not overwrite the sweep when it retires the row mid-summarization",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > keeps a failed call failed when the retry lands on a rebuilt instance",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > salvages the caller message when the sweep retires the row first",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > stops retrying on its own, without relying on a sweep existing",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > defers to platform retries when it has no durable clock to bound itself",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > retries at a flat cadence rather than backing off",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > stops retrying once the sweep has retired the row",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > reports the duration the call actually had, not the retry delay",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > does not re-bill summarization when the retry lands on a rebuilt instance",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > does not re-bill summarization on a finalize retry",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > completes the call when the retry lands on a rebuilt instance",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "telephone audio capabilities > rejects a pipeline telephone call before advertising readiness",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "telephone audio capabilities > does not fall back to browser pipeline when the realtime connection fails",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "telephone audio capabilities > rejects a realtime tier whose greeting would require browser speech synthesis",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "telephone audio capabilities > finalizes a telephone call when server synthesis returns empty audio",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "telephone audio capabilities > holds carrier readiness through delayed synthesis, then queues greeting immediately",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "telephone audio capabilities > does not announce readiness or send late greeting after hangup during synthesis",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "telephone audio capabilities > allows native realtime greeting audio without a browser TTS provider",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > runs greeting, PCM, interruption, tool hangup and persisted summary with gateway endpoints unavailable",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > keeps pending direct application events inert during startup",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > keeps pending direct application events inert during rotation",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > keeps the acknowledged socket when replacement handshake fails by error",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > keeps the acknowledged socket when replacement handshake fails by timeout",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > keeps the acknowledged socket when replacement handshake fails by oversized-json",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > keeps the acknowledged socket when replacement handshake fails by oversized-audio",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed before forwarding oversized pending-json",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed before forwarding oversized pending-audio",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed before forwarding oversized ready-audio",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed before forwarding oversized ready-json",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed before forwarding oversized greeting-audio",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > rejects oversized transcript before forwarding/history/write: conversation.item.input_audio_transcription.completed",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > rejects oversized transcript before forwarding/history/write: response.output_audio_transcript.done",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > reserves transcript bytes across burst events and rotation before any await",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed on reject without pipeline fallback",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed on redirect without pipeline fallback",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed on session-error without pipeline fallback",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed on session-mismatch without pipeline fallback",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed on session-timeout without pipeline fallback",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "native greeting admission boundary > connects direct realtime without text keys for web startup",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "native greeting admission boundary > connects direct realtime without text keys for telnyx startup",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "native greeting admission boundary > withholds carrier ready and buffered input until delayed native greeting audio exists",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "native carrier greeting failure > does not announce ready after timeout while waiting for native audio",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "native carrier greeting failure > does not announce ready after hangup while waiting for native audio",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "native carrier greeting failure > does not announce ready after upstream-close while waiting for native audio",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "native carrier greeting failure > does not announce ready after upstream-close-with-audio while waiting for native audio",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > excludes setup delay for connected telnyx calls",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > excludes setup delay for connected asterisk calls",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > excludes setup delay for connected web calls",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > preserves the unconnected telnyx fallback",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > preserves the unconnected asterisk fallback",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > preserves the unconnected web fallback",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > clamps a connection timestamp after the frozen end to zero",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > preserves already completed carrier projections",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > preserves already failed carrier projections",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > does not add retry delay after eviction to connected talk time",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > recovers failed Asterisk conversation before lookup without changing its verdict",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > recovers failed Asterisk conversation during summary without changing its verdict",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > retries failed Asterisk content projection after eviction without resummarizing or adding retry delay",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > preserves completed conversation content when carrier failure arrives after finalization",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > fills only absent failed Asterisk content fields",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > does not generate a fresh summary for telnyx terminal rows",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > does not generate a fresh summary for unready terminal rows",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > does not generate a fresh summary for unreleased terminal rows",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > does not generate a fresh summary for other failure terminal rows",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > does not generate a fresh summary for abandoned terminal rows",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > does not overwrite a carrier failure racing the final UPDATE",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "persisted transcript byte budget on SQLite > reloads persisted bytes after eviction without counting another call",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "persisted transcript byte budget on SQLite > atomically refuses a stale writer at the exact persisted byte limit",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "persisted transcript byte budget on SQLite > bounds historical rehydration before D1 materializes whole turns",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "transcript budget preserves native farewell ordering > arms the caller farewell before an immediately following agent transcript",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > fails established openai errors without leaking payload or waiting for close",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > fails established gateway errors without leaking payload or waiting for close",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > fails a openai error during firstPCM wait before ready",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > fails a gateway error during firstPCM wait before ready",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > keeps openai alive for a correlated benign cancel race",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > keeps gateway alive for a correlated benign cancel race",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > does not exempt unmatched cancellation metadata",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > does not exempt expired cancellation metadata",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > does not exempt replayed cancellation metadata",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > does not exempt evicted cancellation metadata",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > does not exempt different-error cancellation metadata",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > does not carry a cancellation exemption across an acknowledged rotation",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "synthesized carrier greeting size admission > admits exact ten-second telnyx greeting only after synthesis, with ready then PCM in one turn",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "synthesized carrier greeting size admission > admits exact ten-second asterisk greeting only after synthesis, with ready then PCM in one turn",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "synthesized carrier greeting size admission > rejects invalid telnyx synthesized greeting of 480002 bytes before ready or any PCM",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "synthesized carrier greeting size admission > rejects invalid asterisk synthesized greeting of 480002 bytes before ready or any PCM",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "synthesized carrier greeting size admission > rejects invalid telnyx synthesized greeting of 479999 bytes before ready or any PCM",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "synthesized carrier greeting size admission > rejects invalid asterisk synthesized greeting of 479999 bytes before ready or any PCM",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "synthesized carrier greeting size admission > preserves browser synthesized audio above the carrier frame limit",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: refuses a same-turn openai exact-limit flood before third decode",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: refuses a same-turn gateway exact-limit flood before third decode",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: cannot mint credit with done, flush or changing item IDs",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: bounds tiny outstanding frames even without bufferedAmount",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: refuses advertised transport backpressure before decoding",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: closes a stalled receiver at the oldest receipt deadline",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > rejects wrong receipt identity without returning credit",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > rejects out-of-order receipt identity without returning credit",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > rejects replayed receipt identity without returning credit",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > rejects expired receipt identity without returning credit",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: retains admission across pending and successful replacement",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > admits normal multi-response audio beyond a whole-call cap with timely receipts",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: bounds one long response despite timely receipt and normal pacing",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: closes a control-only stalled caller without unlimited flush writes",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > pairs actual telnyx receiver receipts with sender through greeting, flush and ending",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > pairs actual asterisk receiver receipts with sender through greeting, flush and ending",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: counts empty delta floods as bounded event work",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: refuses a tiny-frame native greeting burst before carrier readiness",
+          "duration_ms": null
+        },
+        {
+          "status": "FAIL",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > [gateway-header-negative] starts web through header Upgrade with gateway readiness and PCM",
+          "duration_ms": 29.0
+        },
+        {
+          "status": "FAIL",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > [gateway-header-negative] starts telnyx through header Upgrade with gateway readiness and PCM",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > refuses gateway 401 at pickup without query downgrade",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > refuses gateway 302 at pickup without query downgrade",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > refuses gateway reject at pickup without query downgrade",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > refuses gateway timeout at pickup without query downgrade",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > preserves old gateway audio during a success replacement",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > preserves old gateway audio during a 401 replacement",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > preserves old gateway audio during a 302 replacement",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > preserves old gateway audio during a timeout replacement",
+          "duration_ms": null
+        },
+        {
+          "status": "FAIL",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > [gateway-header-negative] preserves instance gateway authentication and capabilities",
+          "duration_ms": 4.0
+        },
+        {
+          "status": "FAIL",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > [gateway-header-negative] removes every credential alias while preserving ws routing",
+          "duration_ms": 1.0
+        },
+        {
+          "status": "FAIL",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > [gateway-header-negative] removes every credential alias while preserving wss routing",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "FAIL",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > [gateway-header-negative] uses only the explicit gateway workspace key",
+          "duration_ms": 1.0
+        },
+        {
+          "status": "FAIL",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > [gateway-header-negative] prefers the instance realtime key to the legacy text fallback",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "SKIP",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > does not invent an instance gateway credential when both keys are absent",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > uses OpenAI Authorization without gateway credentials, catalogs or synthesis",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > does not lend the instance key to explicit openai",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > does not lend the instance key to explicit kataleptic",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > does not lend the instance key to explicit custom",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > pins direct OpenAI destination wss://evil.example/v1/realtime",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > pins direct OpenAI destination wss://api.openai.com/v1/realtime?target=evil",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > pins direct OpenAI destination wss://api.openai.com./v1/realtime",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > pins direct OpenAI destination wss://user:pass@api.openai.com/v1/realtime",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > rejects unsafe workspace destination ws://public.example/rt",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > rejects unsafe workspace destination wss://127.0.0.1/rt",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > rejects unsafe workspace destination wss://[::1]/rt",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > rejects unsafe workspace destination wss://localhost./rt",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > rejects unsafe workspace destination https://public.example/rt",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > rejects unsafe workspace destination wss://public.example/rt?token=x",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > supports explicit experimental GA endpoints with their own credentials",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > does not use default text credentials for an OpenAI instance",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > rejects a gateway-only model on OpenAI",
+          "duration_ms": null
+        }
+      ],
+      "accepted_expected_outcome": true,
+      "stdout_sha256": "4c27241e8f158a941bd64b638d15abddaffa422c360c7bd567f9ea57b043fe1a",
+      "stderr_sha256": "cf87a2910c4bd84c503296ab235ad9ab0daee92776e0981f1f3f5a90740022f1",
+      "stderr_bytes": 5415
+    },
+    {
+      "argv": [
+        "npx",
+        "--no-install",
+        "vitest",
+        "run",
+        "test/realtime-providers.test.ts",
+        "--maxWorkers=1",
+        "--reporter=verbose"
+      ],
+      "phase": "fixed-helper",
+      "exit_code": 0,
+      "elapsed_seconds": 1.527,
+      "at": "2026-09-15T06:40:32.564828+00:00",
+      "timed_out": false,
+      "counts": {
+        "PASS": 23,
+        "FAIL": 0,
+        "SKIP": 0
+      },
+      "cases": [
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > [gateway-header-negative] preserves instance gateway authentication and capabilities",
+          "duration_ms": 1.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > [gateway-header-negative] removes every credential alias while preserving ws routing",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > [gateway-header-negative] removes every credential alias while preserving wss routing",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > [gateway-header-negative] uses only the explicit gateway workspace key",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > [gateway-header-negative] prefers the instance realtime key to the legacy text fallback",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > does not invent an instance gateway credential when both keys are absent",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > uses OpenAI Authorization without gateway credentials, catalogs or synthesis",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > does not lend the instance key to explicit openai",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > does not lend the instance key to explicit kataleptic",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > does not lend the instance key to explicit custom",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > pins direct OpenAI destination wss://evil.example/v1/realtime",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > pins direct OpenAI destination wss://api.openai.com/v1/realtime?target=evil",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > pins direct OpenAI destination wss://api.openai.com./v1/realtime",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > pins direct OpenAI destination wss://user:pass@api.openai.com/v1/realtime",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > rejects unsafe workspace destination ws://public.example/rt",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > rejects unsafe workspace destination wss://127.0.0.1/rt",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > rejects unsafe workspace destination wss://[::1]/rt",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > rejects unsafe workspace destination wss://localhost./rt",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > rejects unsafe workspace destination https://public.example/rt",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > rejects unsafe workspace destination wss://public.example/rt?token=x",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > supports explicit experimental GA endpoints with their own credentials",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > does not use default text credentials for an OpenAI instance",
+          "duration_ms": 0.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/realtime-providers.test.ts",
+          "title": "explicit realtime providers > rejects a gateway-only model on OpenAI",
+          "duration_ms": 0.0
+        }
+      ],
+      "accepted_expected_outcome": true,
+      "stdout_sha256": "4632348c8732f531b77978c91e36043789f9e4b3aa5e78d1f65668b6ed0c0c31",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_bytes": 0
+    },
+    {
+      "argv": [
+        "npx",
+        "--no-install",
+        "vitest",
+        "run",
+        "test/call-session.test.ts",
+        "--maxWorkers=1",
+        "--reporter=verbose",
+        "-t",
+        "gateway header transport contract|realtime session payload|session echo read-back|upstream connect timeout|upstream recovery|runs greeting, PCM, interruption, tool hangup and persisted summary with gateway endpoints unavailable|keeps pending direct application events inert|keeps the acknowledged socket when replacement handshake fails|fails closed on .* without pipeline fallback|native greeting admission boundary|native carrier greeting failure|transcript budget preserves native farewell ordering|established realtime provider error policy|negative control: refuses a same-turn gateway exact-limit flood before third decode"
+      ],
+      "phase": "fixed-call-session",
+      "exit_code": 0,
+      "elapsed_seconds": 1.789,
+      "at": "2026-09-15T06:40:50.003880+00:00",
+      "timed_out": false,
+      "counts": {
+        "PASS": 72,
+        "FAIL": 0,
+        "SKIP": 106
+      },
+      "cases": [
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "second attach to a live call > is refused, so the first caller keeps the stream",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "second attach to a live call > leaves no socket behind when arming the watchdog fails",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "second attach to a live call > recovers cleanly when the alarm half of arming fails",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "second attach to a live call > refuses a replacement socket even after the first one closes",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "second attach to a live call > refuses a replacement while the first socket is still CLOSING",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "handleStart idempotency > keeps legacy services and FAQs for a mixed-version call without an assistant id",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "handleStart idempotency > answers once no matter how many start messages arrive",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "handleStart idempotency > joins starts that arrive together rather than duplicating the attempt",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "handleStart idempotency > does not carry a failed attempt forward onto a call that then works",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "handleStart idempotency > freezes the end of the call before the first fallible statement",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "handleStart idempotency > ends the call when startup fails, instead of leaving it half-alive",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "handleStart idempotency > tells the caller nothing about why it broke",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "handleStart idempotency > does not re-run startup when a failure happens after ready is sent",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "handleStart idempotency > abandons startup if the caller hangs up mid-way",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalize closes attached sockets > sends ended and actually closes, instead of going silently deaf",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalize closes attached sockets > writes the call row once when closing the socket re-enters finalize",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalize closes attached sockets > releases the call when it breaks mid-conversation, keeping the summary",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalize closes attached sockets > clears the watchdog alarm when the call ends",
+          "duration_ms": null
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "realtime session payload > redacts valid and malformed upstream error frames before logging",
+          "duration_ms": 21.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "realtime session payload > keeps gpt-realtime tiers on server VAD, splitting and all",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "realtime session payload > keeps 2.1 on server VAD given the observed semantic detector tail",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "realtime session payload > keeps 2.1-mini on server VAD after incomplete split mitigation",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "realtime session payload > gives a tier nobody has measured the tuned server VAD, not an untuned default",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "realtime session payload > never moves the HD tier off server VAD, which would fail every call at session start",
+          "duration_ms": 1.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "realtime session payload > never moves cascade tiers off server VAD, which would silently lose the tuning",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "realtime session payload > never asks for noise reduction, on any tier",
+          "duration_ms": 6.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > re-sends the payload when the engine applied a different turn detector",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > stays quiet when the echo matches what we asked for",
+          "duration_ms": 1.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > ignores the gateway session that is not ours",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > gives up rather than looping when the engine keeps substituting",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > says nothing about a voice the tier picked for itself",
+          "duration_ms": 1.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > re-asserts the vocabulary prompt a native tier dropped",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > does not fight the HD tier over a transcription it cannot set",
+          "duration_ms": 1.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > never re-sends on the cascade tier, which does not diverge",
+          "duration_ms": 1.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > does not send the HD tier a vocabulary prompt it cannot apply",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > re-sends when the echo drops the whole audio block, not just a leaf",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > classifies by structure, not by how a divergence is worded",
+          "duration_ms": 3.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > reports a divergence outside the enforced subtrees without re-sending",
+          "duration_ms": 1.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > keeps a superseded socket off the replacement connection",
+          "duration_ms": 3.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "session echo read-back > re-asserts on the replacement connection after a rotation",
+          "duration_ms": 3.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "upstream connect timeout > cancels the pending upgrade and ignores a late synthetic completion",
+          "duration_ms": 3.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "upstream recovery > still reconnects when an established socket errors before closing",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "upstream recovery > keeps the outgoing connection live for the whole rotation window",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "upstream recovery > briefs the replacement with turns that arrived during the handover",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "upstream recovery > keeps the call alive when a proactive rotation fails to connect",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "upstream recovery > recovers from a second engine drop, not just the first",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "upstream recovery > is bounded and finalizes rather than spawning orphan connections",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > finalizes a call whose client vanished without a close frame",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > reschedules itself while the call is still active",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > recovers the call id from storage after an eviction",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > sees a stale call as idle when the alarm runs on a rebuilt instance",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > does not refresh persisted activity from a rebuilt instance",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > does nothing when there is no call to reconcile",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > releases a socket that never starts, however hard it pings",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > retires the start deadline in the same write that arms the watchdog",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > does not kill a start that is still in flight",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > gives up on a start that never completes, with an accurate reason",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > does not apply the start deadline once the call is under way",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > keeps the watchdog armed when the call row fails to write",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > summarizes from call_turns when finalizing on a rebuilt instance",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > retries finalize at the ordinary tick until it lands",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > does not overwrite the sweep when it retires the row mid-summarization",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > keeps a failed call failed when the retry lands on a rebuilt instance",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > salvages the caller message when the sweep retires the row first",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > stops retrying on its own, without relying on a sweep existing",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > defers to platform retries when it has no durable clock to bound itself",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > retries at a flat cadence rather than backing off",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > stops retrying once the sweep has retired the row",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > reports the duration the call actually had, not the retry delay",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > does not re-bill summarization when the retry lands on a rebuilt instance",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > does not re-bill summarization on a finalize retry",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "watchdog alarm > completes the call when the retry lands on a rebuilt instance",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "telephone audio capabilities > rejects a pipeline telephone call before advertising readiness",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "telephone audio capabilities > does not fall back to browser pipeline when the realtime connection fails",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "telephone audio capabilities > rejects a realtime tier whose greeting would require browser speech synthesis",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "telephone audio capabilities > finalizes a telephone call when server synthesis returns empty audio",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "telephone audio capabilities > holds carrier readiness through delayed synthesis, then queues greeting immediately",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "telephone audio capabilities > does not announce readiness or send late greeting after hangup during synthesis",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "telephone audio capabilities > allows native realtime greeting audio without a browser TTS provider",
+          "duration_ms": null
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > runs greeting, PCM, interruption, tool hangup and persisted summary with gateway endpoints unavailable",
+          "duration_ms": 8.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > keeps pending direct application events inert during startup",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > keeps pending direct application events inert during rotation",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > keeps the acknowledged socket when replacement handshake fails by error",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > keeps the acknowledged socket when replacement handshake fails by timeout",
+          "duration_ms": 3.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > keeps the acknowledged socket when replacement handshake fails by oversized-json",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > keeps the acknowledged socket when replacement handshake fails by oversized-audio",
+          "duration_ms": 4.0
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed before forwarding oversized pending-json",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed before forwarding oversized pending-audio",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed before forwarding oversized ready-audio",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed before forwarding oversized ready-json",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed before forwarding oversized greeting-audio",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > rejects oversized transcript before forwarding/history/write: conversation.item.input_audio_transcription.completed",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > rejects oversized transcript before forwarding/history/write: response.output_audio_transcript.done",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > reserves transcript bytes across burst events and rotation before any await",
+          "duration_ms": null
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed on reject without pipeline fallback",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed on redirect without pipeline fallback",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed on session-error without pipeline fallback",
+          "duration_ms": 1.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed on session-mismatch without pipeline fallback",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "direct OpenAI realtime independence > fails closed on session-timeout without pipeline fallback",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "native greeting admission boundary > connects direct realtime without text keys for web startup",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "native greeting admission boundary > connects direct realtime without text keys for telnyx startup",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "native greeting admission boundary > withholds carrier ready and buffered input until delayed native greeting audio exists",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "native carrier greeting failure > does not announce ready after timeout while waiting for native audio",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "native carrier greeting failure > does not announce ready after hangup while waiting for native audio",
+          "duration_ms": 1.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "native carrier greeting failure > does not announce ready after upstream-close while waiting for native audio",
+          "duration_ms": 1.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "native carrier greeting failure > does not announce ready after upstream-close-with-audio while waiting for native audio",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > excludes setup delay for connected telnyx calls",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > excludes setup delay for connected asterisk calls",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > excludes setup delay for connected web calls",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > preserves the unconnected telnyx fallback",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > preserves the unconnected asterisk fallback",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > preserves the unconnected web fallback",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > clamps a connection timestamp after the frozen end to zero",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > preserves already completed carrier projections",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > preserves already failed carrier projections",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > does not add retry delay after eviction to connected talk time",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > recovers failed Asterisk conversation before lookup without changing its verdict",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > recovers failed Asterisk conversation during summary without changing its verdict",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > retries failed Asterisk content projection after eviction without resummarizing or adding retry delay",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > preserves completed conversation content when carrier failure arrives after finalization",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > fills only absent failed Asterisk content fields",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > does not generate a fresh summary for telnyx terminal rows",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > does not generate a fresh summary for unready terminal rows",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > does not generate a fresh summary for unreleased terminal rows",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > does not generate a fresh summary for other failure terminal rows",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > does not generate a fresh summary for abandoned terminal rows",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "finalization duration on SQLite > does not overwrite a carrier failure racing the final UPDATE",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "persisted transcript byte budget on SQLite > reloads persisted bytes after eviction without counting another call",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "persisted transcript byte budget on SQLite > atomically refuses a stale writer at the exact persisted byte limit",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "persisted transcript byte budget on SQLite > bounds historical rehydration before D1 materializes whole turns",
+          "duration_ms": null
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "transcript budget preserves native farewell ordering > arms the caller farewell before an immediately following agent transcript",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > fails established openai errors without leaking payload or waiting for close",
+          "duration_ms": 3.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > fails established gateway errors without leaking payload or waiting for close",
+          "duration_ms": 1.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > fails a openai error during firstPCM wait before ready",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > fails a gateway error during firstPCM wait before ready",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > keeps openai alive for a correlated benign cancel race",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > keeps gateway alive for a correlated benign cancel race",
+          "duration_ms": 1.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > does not exempt unmatched cancellation metadata",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > does not exempt expired cancellation metadata",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > does not exempt replayed cancellation metadata",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > does not exempt evicted cancellation metadata",
+          "duration_ms": 3.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > does not exempt different-error cancellation metadata",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "established realtime provider error policy > does not carry a cancellation exemption across an acknowledged rotation",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "synthesized carrier greeting size admission > admits exact ten-second telnyx greeting only after synthesis, with ready then PCM in one turn",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "synthesized carrier greeting size admission > admits exact ten-second asterisk greeting only after synthesis, with ready then PCM in one turn",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "synthesized carrier greeting size admission > rejects invalid telnyx synthesized greeting of 480002 bytes before ready or any PCM",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "synthesized carrier greeting size admission > rejects invalid asterisk synthesized greeting of 480002 bytes before ready or any PCM",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "synthesized carrier greeting size admission > rejects invalid telnyx synthesized greeting of 479999 bytes before ready or any PCM",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "synthesized carrier greeting size admission > rejects invalid asterisk synthesized greeting of 479999 bytes before ready or any PCM",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "synthesized carrier greeting size admission > preserves browser synthesized audio above the carrier frame limit",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: refuses a same-turn openai exact-limit flood before third decode",
+          "duration_ms": null
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: refuses a same-turn gateway exact-limit flood before third decode",
+          "duration_ms": 31.0
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: cannot mint credit with done, flush or changing item IDs",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: bounds tiny outstanding frames even without bufferedAmount",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: refuses advertised transport backpressure before decoding",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: closes a stalled receiver at the oldest receipt deadline",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > rejects wrong receipt identity without returning credit",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > rejects out-of-order receipt identity without returning credit",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > rejects replayed receipt identity without returning credit",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > rejects expired receipt identity without returning credit",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: retains admission across pending and successful replacement",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > admits normal multi-response audio beyond a whole-call cap with timely receipts",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: bounds one long response despite timely receipt and normal pacing",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: closes a control-only stalled caller without unlimited flush writes",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > pairs actual telnyx receiver receipts with sender through greeting, flush and ending",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > pairs actual asterisk receiver receipts with sender through greeting, flush and ending",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: counts empty delta floods as bounded event work",
+          "duration_ms": null
+        },
+        {
+          "status": "SKIP",
+          "file": "test/call-session.test.ts",
+          "title": "realtime output cumulative and receipt bounds > negative control: refuses a tiny-frame native greeting burst before carrier readiness",
+          "duration_ms": null
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > [gateway-header-negative] starts web through header Upgrade with gateway readiness and PCM",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > [gateway-header-negative] starts telnyx through header Upgrade with gateway readiness and PCM",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > refuses gateway 401 at pickup without query downgrade",
+          "duration_ms": 1.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > refuses gateway 302 at pickup without query downgrade",
+          "duration_ms": 1.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > refuses gateway reject at pickup without query downgrade",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > refuses gateway timeout at pickup without query downgrade",
+          "duration_ms": 3.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > preserves old gateway audio during a success replacement",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > preserves old gateway audio during a 401 replacement",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > preserves old gateway audio during a 302 replacement",
+          "duration_ms": 2.0
+        },
+        {
+          "status": "PASS",
+          "file": "test/call-session.test.ts",
+          "title": "gateway header transport contract > preserves old gateway audio during a timeout replacement",
+          "duration_ms": 2.0
+        }
+      ],
+      "accepted_expected_outcome": true,
+      "stdout_sha256": "f9b4a4aca7bdc931a9282266dd5a42891a39f40be1e22a30f1872378fa078d24",
+      "stderr_sha256": "cb6e7a033959c9893d3bd3d4b197f99646cee6d7e50fd79e48e7a463e2f41310",
+      "stderr_bytes": 10340
+    },
+    {
+      "argv": [
+        "npx",
+        "--no-install",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "tsconfig.worker.json"
+      ],
+      "phase": "worker-types",
+      "exit_code": 0,
+      "elapsed_seconds": 2.711,
+      "at": "2026-09-15T06:41:07.823635+00:00",
+      "timed_out": false,
+      "counts": {
+        "PASS": 0,
+        "FAIL": 0,
+        "SKIP": 0
+      },
+      "cases": [],
+      "accepted_expected_outcome": true,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_bytes": 0
+    },
+    {
+      "argv": [
+        "node",
+        "scripts/realtime-smoke.mjs",
+        "--gateway"
+      ],
+      "phase": "fixed-gateway-native",
+      "exit_code": 0,
+      "elapsed_seconds": 4.461,
+      "at": "2026-09-15T06:41:22.868647+00:00",
+      "timed_out": false,
+      "counts": {
+        "PASS": 0,
+        "FAIL": 0,
+        "SKIP": 0
+      },
+      "cases": [],
+      "accepted_expected_outcome": true,
+      "stdout_sha256": "88d49203fc864bfe0994c119754ace5723718dcca30a29458a4cc7a428280352",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_bytes": 0
+    }
+  ],
+  "release": {
+    "at": "2026-09-15T06:41:59.064521+00:00",
+    "state": "SOLE_SLOT_EXPLICITLY_RELEASED",
+    "all_five_command_exits": [
+      1,
+      0,
+      0,
+      0,
+      0
+    ],
+    "owned_link_removed": true,
+    "sampled_process_count": 16,
+    "sampled_remaining": 0,
+    "scoped_process_matches": 0,
+    "reserved_listeners": 0,
+    "nonexhaustive": true,
+    "native_cleanup": "Unmodified script reached PASS and exited zero through finally: Miniflare dispose and temp removal awaited; carrier close attempted with its existing swallowed-error limit. No universal transport/context teardown claim."
+  },
+  "original_first_assertions": [
+    "Five helper cases fail connection/header assertions; later assertions unexecuted.",
+    "Two CallSession cases fail header fetch count: observed zero versus expected one; later readiness/PCM assertions unexecuted."
+  ],
+  "diagnostics": {
+    "original": "Expected seven assertion failures; full stderr retained. No reported hook/unhandled errors.",
+    "fixed_call_session": "Failure-path session divergence, provider refusal/error, greeting-failure and cumulative-budget diagnostics retained; no reported test/hook/unhandled error.",
+    "fixed_helper_types_native": "Empty stderr."
+  },
+  "raw_catalog": [
+    {
+      "name": "dependency-link-removal.json",
+      "bytes": 204,
+      "sha256": "51eedc6505a8d42f63a00a6c9c2f1a1c457beca755e52a51b95b4ba0c58ded50"
+    },
+    {
+      "name": "dependency-link.json",
+      "bytes": 259,
+      "sha256": "b144b08e6fe36e39cb3413cf314a0147486ccf12b83c11778ff91c2f488e0d79"
+    },
+    {
+      "name": "execution-harness.py",
+      "bytes": 13010,
+      "sha256": "14e0e54bdbc7500241f565dc88295f77b522d0a6a5d1f008e03f223d7bfef759"
+    },
+    {
+      "name": "final-release-listeners.txt",
+      "bytes": 496,
+      "sha256": "dedc359202a5f02a162ba25878fe818fca8cf5930d8e68472489512cee96d8ae"
+    },
+    {
+      "name": "final-release-processes.txt",
+      "bytes": 204044,
+      "sha256": "d5c59da6726729189d09acb598fbd7b07bf7ba0e881b5b0d1a5292ab79a19cd8"
+    },
+    {
+      "name": "final-release-scan.json",
+      "bytes": 339,
+      "sha256": "b757b3faa28b8a9c6d430a3d628fe69cf15d832a455b7778413ed4324660a952"
+    },
+    {
+      "name": "final-source.json",
+      "bytes": 1115,
+      "sha256": "4b80122e093e8f3b2af215aeba55bf729ec0b001be2f4fe7ba9c915553d9c41f"
+    },
+    {
+      "name": "fixed-call-session-after-listeners.txt",
+      "bytes": 496,
+      "sha256": "dedc359202a5f02a162ba25878fe818fca8cf5930d8e68472489512cee96d8ae"
+    },
+    {
+      "name": "fixed-call-session-after-processes.txt",
+      "bytes": 201437,
+      "sha256": "ac485ce3f28cbac2aa28b90e20178e87986105595bb1ecbe1a70c2c4ea3c6e6b"
+    },
+    {
+      "name": "fixed-call-session-after-scan.json",
+      "bytes": 338,
+      "sha256": "1607c562686ad8731b235f0535042467d23a8cd583a5aba61867a3ea64de6840"
+    },
+    {
+      "name": "fixed-call-session-after-source.json",
+      "bytes": 1115,
+      "sha256": "d7268b19622bc969ec16d182eed1c1af809c01779ac4c2907ad407a37342c4d5"
+    },
+    {
+      "name": "fixed-call-session-before-listeners.txt",
+      "bytes": 496,
+      "sha256": "dedc359202a5f02a162ba25878fe818fca8cf5930d8e68472489512cee96d8ae"
+    },
+    {
+      "name": "fixed-call-session-before-processes.txt",
+      "bytes": 203044,
+      "sha256": "1e32de841e790aad5ed9f9ec41c5aeca6459b3a2820ca4fc0e06896a9406780a"
+    },
+    {
+      "name": "fixed-call-session-before-scan.json",
+      "bytes": 338,
+      "sha256": "41db4897a68275d0bfb5b1f2adbea2487107e8b5fd1d8a929af7a5ba0f0a31c9"
+    },
+    {
+      "name": "fixed-call-session-before-source.json",
+      "bytes": 1115,
+      "sha256": "7a75b6d53e564da5e51a4f4e587a0450371f01bd15943c9a3949e128eddb468e"
+    },
+    {
+      "name": "fixed-call-session-exit.json",
+      "bytes": 39970,
+      "sha256": "86ef2459917507c6b775d25eea1a9fdcbbe9b5b3c3ecb309a5063a7891b82b91"
+    },
+    {
+      "name": "fixed-call-session-sampled-cleanup.json",
+      "bytes": 113,
+      "sha256": "99dd6bb819ef2a1d0fbe6c7524aa18c32bccfa7adf685c49e3d1fbdf1e6d41bb"
+    },
+    {
+      "name": "fixed-call-session-sampled-processes.json",
+      "bytes": 2195,
+      "sha256": "e24a8c839023d9f79bb32cbdbf0bfd6c0c6781997bf8dfc950c41d751bb75ed9"
+    },
+    {
+      "name": "fixed-call-session-start.json",
+      "bytes": 960,
+      "sha256": "61f96092e7a66bf6f6921a1c5728785ba05c57757f2a1393aa0e7eeb5b57b068"
+    },
+    {
+      "name": "fixed-call-session-stderr.log",
+      "bytes": 10340,
+      "sha256": "cb6e7a033959c9893d3bd3d4b197f99646cee6d7e50fd79e48e7a463e2f41310"
+    },
+    {
+      "name": "fixed-call-session-stdout.log",
+      "bytes": 46488,
+      "sha256": "f9b4a4aca7bdc931a9282266dd5a42891a39f40be1e22a30f1872378fa078d24"
+    },
+    {
+      "name": "fixed-gateway-native-after-listeners.txt",
+      "bytes": 496,
+      "sha256": "dedc359202a5f02a162ba25878fe818fca8cf5930d8e68472489512cee96d8ae"
+    },
+    {
+      "name": "fixed-gateway-native-after-processes.txt",
+      "bytes": 202393,
+      "sha256": "2b86c363ccdf410b437c883a9f328cc5825aa3a3d00b8db184ec5eb392f9f306"
+    },
+    {
+      "name": "fixed-gateway-native-after-scan.json",
+      "bytes": 336,
+      "sha256": "f761437c23b3f3f37c7012f146d1964f22453d89f1a363dd30887432490237a6"
+    },
+    {
+      "name": "fixed-gateway-native-after-source.json",
+      "bytes": 1115,
+      "sha256": "3bceeb2b8f0d732a36f6405e286ec7f5ea461844abd729032b4e2726d37a47f0"
+    },
+    {
+      "name": "fixed-gateway-native-before-listeners.txt",
+      "bytes": 496,
+      "sha256": "dedc359202a5f02a162ba25878fe818fca8cf5930d8e68472489512cee96d8ae"
+    },
+    {
+      "name": "fixed-gateway-native-before-processes.txt",
+      "bytes": 201571,
+      "sha256": "5f85e9c011218cc17f92e4774493a2608c49786812b2a87de20e5d291ab404fd"
+    },
+    {
+      "name": "fixed-gateway-native-before-scan.json",
+      "bytes": 341,
+      "sha256": "b69cc2720114f4a0e1681add2f8199a347b5fdd06a547f0c0c09882fff1e0aa4"
+    },
+    {
+      "name": "fixed-gateway-native-before-source.json",
+      "bytes": 1115,
+      "sha256": "ea57cbd54c3a426748b0ce553ba33215c33842d982afd10c835545a73fff4d79"
+    },
+    {
+      "name": "fixed-gateway-native-exit.json",
+      "bytes": 460,
+      "sha256": "79c0748ebca0dec278d354122850d393551decb143e6a32786fee5803d0cf227"
+    },
+    {
+      "name": "fixed-gateway-native-sampled-cleanup.json",
+      "bytes": 113,
+      "sha256": "01dc5af49b7d801479a205371dc1ea48d2d0d23642e81a2a70700dc9065b763c"
+    },
+    {
+      "name": "fixed-gateway-native-sampled-processes.json",
+      "bytes": 587,
+      "sha256": "1d582a71510cf91dcea31819a83e667df7e3e06e22a6d27816c0426348c9497b"
+    },
+    {
+      "name": "fixed-gateway-native-start.json",
+      "bytes": 240,
+      "sha256": "7802c9d137f8262fec52bf03fd3eb711052bfd9ec17a9d2cb702fe3b0fa21de0"
+    },
+    {
+      "name": "fixed-gateway-native-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "fixed-gateway-native-stdout.log",
+      "bytes": 411,
+      "sha256": "88d49203fc864bfe0994c119754ace5723718dcca30a29458a4cc7a428280352"
+    },
+    {
+      "name": "fixed-helper-after-listeners.txt",
+      "bytes": 496,
+      "sha256": "dedc359202a5f02a162ba25878fe818fca8cf5930d8e68472489512cee96d8ae"
+    },
+    {
+      "name": "fixed-helper-after-processes.txt",
+      "bytes": 201991,
+      "sha256": "262b67b956bdfe12cc60902abfbf8313ed3aaf710d5c12764b1fa300bf16bc7c"
+    },
+    {
+      "name": "fixed-helper-after-scan.json",
+      "bytes": 337,
+      "sha256": "60c8141776df8aff62a31397b886947e8319ee0b264ce9324f945f241d28f83c"
+    },
+    {
+      "name": "fixed-helper-after-source.json",
+      "bytes": 1115,
+      "sha256": "0353fce9f7547c926a348de41ea3e4a81f502391e210ce34232f3a6c7abe3434"
+    },
+    {
+      "name": "fixed-helper-before-listeners.txt",
+      "bytes": 496,
+      "sha256": "dedc359202a5f02a162ba25878fe818fca8cf5930d8e68472489512cee96d8ae"
+    },
+    {
+      "name": "fixed-helper-before-processes.txt",
+      "bytes": 201571,
+      "sha256": "347064e6ae9e904d6f04d3a7c9181506a4a94669d52973c2aff9dc164fac1621"
+    },
+    {
+      "name": "fixed-helper-before-scan.json",
+      "bytes": 340,
+      "sha256": "3ae0600fc7676a769205ebf58169bf5cd2f5ad07e3cb883df19bf44b7cbcd9c5"
+    },
+    {
+      "name": "fixed-helper-before-source.json",
+      "bytes": 1115,
+      "sha256": "75028baca2dbc3da88328315295077373829198be72bcdc6432b540dcb838a8f"
+    },
+    {
+      "name": "fixed-helper-exit.json",
+      "bytes": 5636,
+      "sha256": "abf7549ea0bea4019e5dfb0b48b39e6da5eab5caeb6a04b7fdac1119b6e0739a"
+    },
+    {
+      "name": "fixed-helper-sampled-cleanup.json",
+      "bytes": 113,
+      "sha256": "7bdf642fca10e41d116724f137ee7ecb5dd1a521584a2abe83bb3066e25b76eb"
+    },
+    {
+      "name": "fixed-helper-sampled-processes.json",
+      "bytes": 583,
+      "sha256": "75fa77674fd1bcb4dd011e4b7ee40273f3d35f9060de5391ed82e7708689648a"
+    },
+    {
+      "name": "fixed-helper-start.json",
+      "bytes": 320,
+      "sha256": "164c4ebb4ca13cf2a020378b5f034441a5a3d008a18b2b3edf43f65bc96c8c90"
+    },
+    {
+      "name": "fixed-helper-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "fixed-helper-stdout.log",
+      "bytes": 3466,
+      "sha256": "4632348c8732f531b77978c91e36043789f9e4b3aa5e78d1f65668b6ed0c0c31"
+    },
+    {
+      "name": "grant.json",
+      "bytes": 7194,
+      "sha256": "828daed0b93fc8fa7b5c1cf5097c860363b7b50163ca9c6cc520e2f39f3cb9b7"
+    },
+    {
+      "name": "original-restoration.json",
+      "bytes": 157,
+      "sha256": "f95f711bf5c793cce89a7c36ff45bf591125981c4c5a546fead22b9b9d66ede3"
+    },
+    {
+      "name": "original-substitution.json",
+      "bytes": 1115,
+      "sha256": "eaf57e96f0bb142b6cc65b5dc499d5fb0b4900caf384fcce522d01990da62665"
+    },
+    {
+      "name": "original-tagged-after-listeners.txt",
+      "bytes": 496,
+      "sha256": "dedc359202a5f02a162ba25878fe818fca8cf5930d8e68472489512cee96d8ae"
+    },
+    {
+      "name": "original-tagged-after-processes.txt",
+      "bytes": 201788,
+      "sha256": "4e3bd04beb2d32e6a99fb6ebb650482bb4004e5d6b553ffe53c555a2ff0200dc"
+    },
+    {
+      "name": "original-tagged-after-scan.json",
+      "bytes": 335,
+      "sha256": "1443c7cb15efe3da6924506395e9e0a188dbfb4fe06a3fd7a9cdef7c58304b94"
+    },
+    {
+      "name": "original-tagged-after-source.json",
+      "bytes": 1115,
+      "sha256": "f3e43b6c57cb9e863925064c0ab68b80f1ec40c7ea2e8b47bbe5cb3698a99d05"
+    },
+    {
+      "name": "original-tagged-before-listeners.txt",
+      "bytes": 496,
+      "sha256": "dedc359202a5f02a162ba25878fe818fca8cf5930d8e68472489512cee96d8ae"
+    },
+    {
+      "name": "original-tagged-before-processes.txt",
+      "bytes": 201988,
+      "sha256": "0f1508cd75a57cb2d7e134cf5264490760f9e1b6d23d2880f0ba10cba9325652"
+    },
+    {
+      "name": "original-tagged-before-scan.json",
+      "bytes": 342,
+      "sha256": "15db77d64cceb25917d8931f4a52add9dbe8b6112ab65f32b85a10a7b8bff83b"
+    },
+    {
+      "name": "original-tagged-before-source.json",
+      "bytes": 1115,
+      "sha256": "abf46174559ae1318c528a49d24e4c7d5e6dcf9343ff93ba185ff1c4fcf0bdc9"
+    },
+    {
+      "name": "original-tagged-exit.json",
+      "bytes": 45233,
+      "sha256": "b41fd5ff0233935a3bc71bcbb97ed17e490f505b3d1c97f3da5e8624c93c3d0a"
+    },
+    {
+      "name": "original-tagged-sampled-cleanup.json",
+      "bytes": 113,
+      "sha256": "a2de97486c35e78f435fc70427f094682cd1b36abe42b4d193de8b15828c08a1"
+    },
+    {
+      "name": "original-tagged-sampled-processes.json",
+      "bytes": 1049,
+      "sha256": "11f3f525015dd78b9db5ad2122ca6ac9927951344d808bf26572112d8f2ab149"
+    },
+    {
+      "name": "original-tagged-start.json",
+      "bytes": 394,
+      "sha256": "ea9dadd09c05672fcf7825c49caac82d5b8c237440b3a088813132111e41897a"
+    },
+    {
+      "name": "original-tagged-stderr.log",
+      "bytes": 5415,
+      "sha256": "cf87a2910c4bd84c503296ab235ad9ab0daee92776e0981f1f3f5a90740022f1"
+    },
+    {
+      "name": "original-tagged-stdout.log",
+      "bytes": 27678,
+      "sha256": "4c27241e8f158a941bd64b638d15abddaffa422c360c7bd567f9ea57b043fe1a"
+    },
+    {
+      "name": "preflight-dependencies.json",
+      "bytes": 2349,
+      "sha256": "24258384ce37448b049eb9b6b25a1e966d93b364edfd0dc61aa82a9af6d1f4a8"
+    },
+    {
+      "name": "preflight-listeners.txt",
+      "bytes": 496,
+      "sha256": "dedc359202a5f02a162ba25878fe818fca8cf5930d8e68472489512cee96d8ae"
+    },
+    {
+      "name": "preflight-processes.txt",
+      "bytes": 201788,
+      "sha256": "f02c058a50bea7b9b8e2269aeb9ad06450b40cbc3b92e1a02f2ceb390dad6359"
+    },
+    {
+      "name": "preflight-scan.json",
+      "bytes": 334,
+      "sha256": "773173cd16e66b62c407008e32ea7616dd059e1eb35946e387713fe7b429a3ee"
+    },
+    {
+      "name": "preflight-source.json",
+      "bytes": 1115,
+      "sha256": "f522a6548073814498553a6a7b462f9ab2297d87322eeaf2e22a91c9ecf7c8da"
+    },
+    {
+      "name": "prior-release-receipt.json",
+      "bytes": 3963,
+      "sha256": "6b82e9173df5978ff285f943677770500a17c42548fa12947ff694e6008e2fb2"
+    },
+    {
+      "name": "release.json",
+      "bytes": 573,
+      "sha256": "0fdf97b721eedc59931aa824419255f90082949176d2e4f53918ce95c18f81d1"
+    },
+    {
+      "name": "source-delivery.json",
+      "bytes": 1862,
+      "sha256": "1751fa0d8abd729317f13d830de864032b02620908730cd4ddab72a07287a8c7"
+    },
+    {
+      "name": "worker-types-after-listeners.txt",
+      "bytes": 496,
+      "sha256": "dedc359202a5f02a162ba25878fe818fca8cf5930d8e68472489512cee96d8ae"
+    },
+    {
+      "name": "worker-types-after-processes.txt",
+      "bytes": 201571,
+      "sha256": "2e21a7799b265646f2bd8a7f34ec838032cfd79351dd54bcd91e69a97551e597"
+    },
+    {
+      "name": "worker-types-after-scan.json",
+      "bytes": 341,
+      "sha256": "08fd44717532e1aaf6a99544ebe11505be59ec43cafc4f6d6a40b515087c5dc0"
+    },
+    {
+      "name": "worker-types-after-source.json",
+      "bytes": 1115,
+      "sha256": "d4fdf42b79e7d778125d30b0994bbe5a52af6657792ca3416d965eca54b3daf0"
+    },
+    {
+      "name": "worker-types-before-listeners.txt",
+      "bytes": 496,
+      "sha256": "dedc359202a5f02a162ba25878fe818fca8cf5930d8e68472489512cee96d8ae"
+    },
+    {
+      "name": "worker-types-before-processes.txt",
+      "bytes": 201628,
+      "sha256": "de04a3e121cabaf3448acfa8358eb3b7247393cbb338066db65c25485cb076bc"
+    },
+    {
+      "name": "worker-types-before-scan.json",
+      "bytes": 340,
+      "sha256": "b273192f84d722aa6e120c591f90fb2e1817f4c146cd8f4690c722f649487565"
+    },
+    {
+      "name": "worker-types-before-source.json",
+      "bytes": 1115,
+      "sha256": "27d6264ffb25ef99382d0ebbf397a5d28358a6001881df277ebcebf9823dab24"
+    },
+    {
+      "name": "worker-types-exit.json",
+      "bytes": 452,
+      "sha256": "c26d937ebead157b3376b7daf6e0903cae5215a948f450a081b1ce95a7df8ee8"
+    },
+    {
+      "name": "worker-types-sampled-cleanup.json",
+      "bytes": 113,
+      "sha256": "776fb880e81b99d7fc9d13b39382852f3a95a8824b886af1d5e096d9d6d681cc"
+    },
+    {
+      "name": "worker-types-sampled-processes.json",
+      "bytes": 139,
+      "sha256": "33be3569154e1fcb556899a01877f8438eb88e1b059f38c71beb3f7627f213e5"
+    },
+    {
+      "name": "worker-types-start.json",
+      "bytes": 273,
+      "sha256": "1fb7cebd2e6976fcfbba1da6cde48b0135195c97ed910ebdeecf65b907317e41"
+    },
+    {
+      "name": "worker-types-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "worker-types-stdout.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "limits": [
+    "Original failures are required negative evidence, not passing original behavior.",
+    "Fixed CallSession72 PASS106 SKIP is selected coverage, not whole-file PASS.",
+    "Worker types exclude test files; no new web-type PASS.",
+    "Gateway native one PASS uses local workerd and synthetic upstream/carrier, not deployed/proxy/arbitrary endpoint proof.",
+    "No direct-native replay or new direct-native PASS.",
+    "Mock deadline/cleanup is not native cancellation or context-destruction proof.",
+    "Native carrier close has existing swallowed-error limit; Miniflare disposal/temp removal are awaited before observed exit zero.",
+    "Process sampling250ms and vacancy checks are point-in-time/nonexhaustive.",
+    "Prior Piper43PASS1FAIL and separate6PASS are unchanged; no passing44 claim.",
+    "Elapsed_seconds includes wrapper identity/scan work, not a pure test duration."
+  ]
+}

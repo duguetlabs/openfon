@@ -1,0 +1,54 @@
+{
+  "state": "EXACT_FIVE_PATH_COMMITTED_WORKING_ASSEMBLY_QA_REQUESTED",
+  "head": "94e4cde199c9d74113c81b158685c0fcfef65322",
+  "parent": "f265a1f11780c7ad1f6359eadec8e018a90f3ac3",
+  "clean_owner_source": "27482ef31af8dc3704c0aa6bdbdf0a58e2f416c7",
+  "full_committed_tree_equals_clean_owner_source": true,
+  "paths": [
+    {
+      "path": "docs/realtime-providers.md",
+      "original_sha256": "a0eb5e5955682600014937a0f25ef9746ef7861dc1d6a5ea00edb085666c5d86",
+      "original_bytes": 7838,
+      "candidate_sha256": "143af52b798f6f664edce33fcaf869b149537417c63daaff5cd1fd5ef74269b9",
+      "candidate_bytes": 9433
+    },
+    {
+      "path": "scripts/realtime-smoke.mjs",
+      "original_sha256": "4f744f691c5b2851dad72790b14533e99008e962a9df2727f9257eb9e4728533",
+      "original_bytes": 15904,
+      "candidate_sha256": "ef56f8d94d27bd6a87697a3c7c947e9400991665f10e156c6eb46bc4ee1a8457",
+      "candidate_bytes": 16151
+    },
+    {
+      "path": "src/realtime-providers.ts",
+      "original_sha256": "341f5dd8e9e825d36d75aac4fd6afcbbf94190811fa02a20c530fba8529c375e",
+      "original_bytes": 4712,
+      "candidate_sha256": "3dbaafdc7de38bbca7cd24f5d11bf26c3e75b8b4dbd36f705b4ee89e720963d0",
+      "candidate_bytes": 4784
+    },
+    {
+      "path": "test/call-session.test.ts",
+      "original_sha256": "7435aa9e536147439b3e5a7c420f8cd05883248364511c7d722116ecfa9af5a2",
+      "original_bytes": 145614,
+      "candidate_sha256": "375fd7ff8be609e36317262ffbc9bcf226fcf516e6402e6d104579238feaadec",
+      "candidate_bytes": 155466
+    },
+    {
+      "path": "test/realtime-providers.test.ts",
+      "original_sha256": "56bc3e78be0eb897b30c051aedfae3360579dc9e1a2a0d4514cb0cfe4b4e73d3",
+      "original_bytes": 3421,
+      "candidate_sha256": "8b4974b8043241498fe727e5df340e6bec2be5c6cc0a8591dab1f019ccfb21fd",
+      "candidate_bytes": 5725
+    }
+  ],
+  "source_QA": "45c14e9",
+  "evidence_QA": "f1c9495",
+  "evidence_summary": "e55c670431047d3dd4d6594b44f9478f8da176cc5b271eb6222f38e06a9a6542",
+  "working_exception": {
+    "path": ".agent/workstreams/integration.md",
+    "sha256": "532d6ec5ad893408e97f55b035bc2a568421688a1b48e9a25a8023fa7fb332b4",
+    "role": "Previously QA-accepted working checkpoint, excluded from this five-path commit"
+  },
+  "limits": "No rerun, branch cherry-pick, publication or new runtime/review. Exact metadata4 remains separate and unapplied. All source/evidence/coverage/deployment limits transfer.",
+  "at": "2026-09-15T06:47:23.338754+00:00"
+}

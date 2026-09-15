@@ -1,0 +1,63 @@
+{
+  "state": "INTEGRATION_READ_ONLY_FAILURE_EVIDENCE_IDENTITY_VERIFIED",
+  "head": "f265a1f11780c7ad1f6359eadec8e018a90f3ac3",
+  "QA": "4e5acec",
+  "completion_sha256": "bc0dc7bc20d2455a6983159d77be82436661f716a4e7f3b9735623a2863182f3",
+  "catalog_sha256": "c8d5451338a677e0ca76a01e749ce2c6a04067bd69deb5ea2227938ae1dc028f",
+  "records": [
+    {
+      "name": "completion-provenance.json",
+      "bytes": 2463,
+      "sha256": "bc0dc7bc20d2455a6983159d77be82436661f716a4e7f3b9735623a2863182f3"
+    },
+    {
+      "name": "launch-provenance.json",
+      "bytes": 1842,
+      "sha256": "79ffe55e35bf96a5c8778a9ae03437011b91e9b6f3d5632d3923dd2af17f3a12"
+    },
+    {
+      "name": "launch-start.json",
+      "bytes": 267,
+      "sha256": "9bd578ab22c9187f01c28f61e32ba63a5bf19efd6b0f56ed95f323db8d580bd6"
+    },
+    {
+      "name": "launcher-exit.json",
+      "bytes": 223,
+      "sha256": "5cddd1f56be89d4432fa33208c3039a350cee90401d285de154f7fb7995cc693"
+    },
+    {
+      "name": "launcher-stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "launcher-stdout.log",
+      "bytes": 43,
+      "sha256": "c91e75fade8e44f9733639f36de161700c67070cb0b33e74c952b00475d3768a"
+    },
+    {
+      "name": "postrelease-listeners.txt",
+      "bytes": 1872,
+      "sha256": "3ce2899dadc677a1ab3a86e7e41c366c5fc135389014800d33b633071d136f35"
+    },
+    {
+      "name": "postrelease-process-scan.txt",
+      "bytes": 232788,
+      "sha256": "fec6e5e2ceae0721909739a405d3d0d511b11ca7cb985388c9278f595b526c3b"
+    },
+    {
+      "name": "prelaunch-listeners.txt",
+      "bytes": 1872,
+      "sha256": "3ce2899dadc677a1ab3a86e7e41c366c5fc135389014800d33b633071d136f35"
+    },
+    {
+      "name": "prelaunch-process-scan.txt",
+      "bytes": 231535,
+      "sha256": "642861f55f0cdd7c698eb6f93368880f8c2448de5dff70eac170c7f84dbff3b8"
+    }
+  ],
+  "distinction": "Launcher exit0 and reviewer runtime_exit1. No original,coverage or publication. Reviewer stderr contents unavailable; cause unestablished.",
+  "grant": "4e2c10f7 consumed once,explicitly released; no retry selected",
+  "checks": "Ten retained record hashes/bytes/0600files/no file symlinks and0700root verified; exact stdout JSON matches runtime_exit1/stderr_bytes2926.",
+  "runtime": "No new execution,probe,reinstall,source/settings/wrapper change or publication."
+}
