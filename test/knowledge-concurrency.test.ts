@@ -39,25 +39,32 @@ beforeEach(async () => {
 });
 afterEach(() => { db.close(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
-// Hold exactly the requested single UPDATE after all handler reads/preflight.
+// Hold exactly the requested UPDATE after reads/preflight, before any batch BEGIN.
 // bind mutates and returns the same adapter statement, so the run spy survives it.
 function holdWrite(kind: Kind) {
   let entered!: () => void, release!: () => void, held = false;
   const reached = new Promise<void>(resolve => { entered = resolve; });
   const gate = new Promise<void>(resolve => { release = resolve; });
-  const prepare = db.prepare.bind(db);
+  const targets = new WeakSet<object>();
+  const holdOnce = async () => { if (!held) { held = true; entered(); await gate; } };
+  const prepare = db.prepare.bind(db), batch = db.batch.bind(db);
   const spy = vi.spyOn(db, 'prepare').mockImplementation(sql => {
     const statement = prepare(sql);
     if (sql.startsWith(`UPDATE ${table(kind)} SET`)) {
+      if (kind === 'item') targets.add(statement);
       const run = statement.run.bind(statement);
       vi.spyOn(statement, 'run').mockImplementation(async () => {
-        if (!held) { held = true; entered(); await gate; }
+        await holdOnce();
         return run();
       });
     }
     return statement;
   });
-  return { reached, release, restore() { spy.mockRestore(); } };
+  const batchSpy = vi.spyOn(db, 'batch').mockImplementation(async statements => {
+    if (statements.some(statement => targets.has(statement))) await holdOnce();
+    return batch(statements);
+  });
+  return { reached, release, restore() { spy.mockRestore(); batchSpy.mockRestore(); } };
 }
 
 const itemChanges = [

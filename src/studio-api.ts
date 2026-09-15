@@ -1103,7 +1103,7 @@ export function registerStudioApi(app: StudioApp): void {
       `UPDATE assistants SET name=?, greeting=?, persona=?, language=?, voice=?, take_messages=?,
         custom_instructions=?, engine=?, realtime_model=?, realtime_voice=?, llm_model=?, updated_at=datetime('now')
        WHERE id=? AND ${CHECKED_REALTIME_PROVIDER_SQL}
-        AND ${CHECKED_ASSISTANT_SNAPSHOT_SQL}`
+        AND ${CHECKED_ASSISTANT_SNAPSHOT_SQL} RETURNING *`
       ).bind(
         name,
         greeting,
@@ -1143,12 +1143,11 @@ export function registerStudioApi(app: StudioApp): void {
       );
       statements.push(updateAgentSnapshot(c.env, assistant.business_id, true));
     }
-    const [updated] = await c.env.DB.batch(statements);
+    const [updated] = await c.env.DB.batch<Assistant>(statements);
     if (!updated.meta.changes) {
       return c.json({ error: 'Assistant or provider configuration changed. Reload and retry.' }, 409);
     }
-    const row = await c.env.DB.prepare('SELECT * FROM assistants WHERE id = ?').bind(assistant.id).first<Assistant>();
-    return c.json(row);
+    return c.json(updated.results[0]);
   });
 
   app.delete('/api/me/assistants/:assistantId', async (c) => {
@@ -1584,12 +1583,12 @@ export function registerStudioApi(app: StudioApp): void {
     };
     const status = normalizedStatus(body.status) ?? item.status;
     if (status === 'active' && !itemReady(candidate)) return c.json({ error: 'Complete the item before activation' }, 400);
-    const updated = await c.env.DB.prepare(
+    const statement = c.env.DB.prepare(
       `UPDATE knowledge_items SET collection_id=?, kind=?, status=?, title=?, question=?, answer=?, content=?,
         updated_at=datetime('now'),
         activated_at=CASE WHEN ?='active' THEN COALESCE(activated_at, datetime('now')) ELSE NULL END
        WHERE id=? AND business_id=? AND collection_id IS ? AND kind IS ? AND status IS ?
-         AND title IS ? AND question IS ? AND answer IS ? AND content IS ?`
+         AND title IS ? AND question IS ? AND answer IS ? AND content IS ? RETURNING *`
     )
       .bind(
         collectionId,
@@ -1602,11 +1601,10 @@ export function registerStudioApi(app: StudioApp): void {
         status,
         item.id, item.business_id, item.collection_id, item.kind, item.status,
         item.title, item.question, item.answer, item.content
-      )
-      .run();
+      );
+    const [updated] = await c.env.DB.batch<KnowledgeItem>([statement]);
     if (!updated.meta.changes) return c.json({ error: 'Knowledge item changed. Reload and retry.' }, 409);
-    const row = await c.env.DB.prepare('SELECT * FROM knowledge_items WHERE id = ?').bind(item.id).first();
-    return c.json(row);
+    return c.json(updated.results[0]);
   });
 
   app.delete('/api/me/knowledge/items/:itemId', async (c) => {
