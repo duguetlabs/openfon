@@ -5,10 +5,37 @@ const env = { REALTIME_BASE_URL: 'wss://gateway.example/v1/realtime', REALTIME_M
 const settings = (extra: object) => ({ realtime_model: '', ...extra }) as AgentSettings;
 
 describe('explicit realtime providers', () => {
-  it('preserves instance gateway authentication and capabilities', () => {
+  it('[gateway-header-negative] preserves instance gateway authentication and capabilities', () => {
     const cfg = resolveRealtime(env, null);
-    expect(realtimeConnection(cfg)).toEqual({ url: 'wss://gateway.example/v1/realtime?model=kataleptic-realtime-hd&token=operator-key' });
+    expect(realtimeConnection(cfg)).toEqual({ url: 'https://gateway.example/v1/realtime?model=kataleptic-realtime-hd', headers: { Upgrade: 'websocket', Authorization: 'Bearer operator-key' } });
     expect(realtimeCapabilities(cfg)).toMatchObject({ engineGreeting: false, managedVoice: true, cascade: false });
+  });
+  it.each(['ws', 'wss'])('[gateway-header-negative] removes every credential alias while preserving %s routing', scheme => {
+    const cfg = resolveRealtime({ ...env, REALTIME_BASE_URL: `${scheme}://gateway.example/api/v1/realtime?token=old-a&route=east&api_key=old-b&token=old-c&api_key=old-d&model=old` }, null);
+    const connection = realtimeConnection(cfg);
+    expect(connection.headers?.Authorization).toBe('Bearer operator-key');
+    const url = new URL(connection.url);
+    expect(url.protocol).toBe(scheme === 'wss' ? 'https:' : 'http:');
+    expect(url.host).toBe('gateway.example');
+    expect(url.pathname).toBe('/api/v1/realtime');
+    expect([...url.searchParams.entries()]).toEqual([['route', 'east'], ['model', 'kataleptic-realtime-hd']]);
+    expect(cfg.protocol).toBe('gateway');
+  });
+  it('[gateway-header-negative] uses only the explicit gateway workspace key', () => {
+    const cfg = resolveRealtime({ ...env, REALTIME_API_KEY: 'instance-realtime' }, settings({ realtime_provider: 'kataleptic', realtime_base_url: 'wss://workspace.example/v1/realtime', realtime_api_key: 'workspace-gateway', realtime_model: 'gpt-realtime-2' }));
+    expect(realtimeConnection(cfg)).toEqual({ url: 'https://workspace.example/v1/realtime?model=gpt-realtime-2', headers: { Upgrade: 'websocket', Authorization: 'Bearer workspace-gateway' } });
+    expect(cfg.protocol).toBe('gateway');
+    expect(realtimeCapabilities(cfg)).toEqual({ engineGreeting: true, managedVoice: false, cascade: false, transcriptionModel: 'whisper-1' });
+  });
+  it('[gateway-header-negative] prefers the instance realtime key to the legacy text fallback', () => {
+    const cfg = resolveRealtime({ ...env, REALTIME_API_KEY: 'instance-realtime' }, null);
+    expect(realtimeConnection(cfg).headers?.Authorization).toBe('Bearer instance-realtime');
+    expect(new URL(realtimeConnection(cfg).url).searchParams.has('token')).toBe(false);
+  });
+  it('does not invent an instance gateway credential when both keys are absent', () => {
+    const cfg = resolveRealtime({ ...env, DEFAULT_LLM_API_KEY: '', REALTIME_API_KEY: '' }, null);
+    expect(cfg.apiKey).toBe('');
+    expect(realtimeConnection(cfg).headers?.Authorization).toBe('Bearer ');
   });
   it('uses OpenAI Authorization without gateway credentials, catalogs or synthesis', () => {
     const cfg = resolveRealtime(env, settings({ realtime_provider: 'openai', realtime_api_key: 'workspace-key' }));

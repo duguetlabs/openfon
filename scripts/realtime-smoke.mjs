@@ -36,7 +36,7 @@ export default { async fetch(request, env) {
   const url = new URL(request.url);
   if (url.hostname === 'api.telnyx.com') return env.RECORD.fetch(request);
   if (url.hostname === '${gateway ? 'realtime.smoke.invalid' : 'api.openai.com'}' && url.pathname === '/v1/realtime' && request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
-    if (${gateway ? "url.searchParams.get('token') !== 'synthetic-gateway-key'" : "request.headers.get('Authorization') !== 'Bearer synthetic-direct-key' || url.searchParams.has('token')"}) return new Response('Invalid provider authentication', { status: 401 });
+    if (${gateway ? "request.headers.get('Authorization') !== 'Bearer synthetic-gateway-key' || url.searchParams.has('token') || url.searchParams.has('api_key') || url.searchParams.get('model') !== 'gpt-realtime-2' || url.searchParams.get('route') !== 'synthetic'" : "request.headers.get('Authorization') !== 'Bearer synthetic-direct-key' || url.searchParams.has('token')"}) return new Response('Invalid provider authentication', { status: 401 });
     const pair = new WebSocketPair(); const socket = pair[1]; socket.accept();
     let responded = false; let greetingEmitted = false;
     const tone=new Uint8Array(4800); const view=new DataView(tone.buffer);
@@ -98,7 +98,7 @@ try {
         TELNYX_ENABLED:'true',TELNYX_API_KEY:'synthetic-test-only',TELNYX_PUBLIC_KEY:key,TELNYX_CONNECTION_ID:call.connection_id,TELNYX_PUBLIC_ORIGIN:'https://openfon.smoke.invalid',
         DEFAULT_LLM_BASE_URL:'https://unavailable.kataleptic.invalid/v1',DEFAULT_LLM_MODEL:'synthetic',
         DEFAULT_TTS_PROVIDER:'browser',DEFAULT_TTS_VOICE:'en-US-AvaMultilingualNeural',
-        REALTIME_BASE_URL:gateway ? 'wss://realtime.smoke.invalid/v1/realtime' : 'wss://unavailable.kataleptic.invalid/v1/realtime',REALTIME_MODEL:gateway ? 'gpt-realtime-2' : 'kataleptic-realtime-hd',...(gateway ? {REALTIME_API_KEY:'synthetic-gateway-key'} : {}),
+        REALTIME_BASE_URL:gateway ? 'wss://realtime.smoke.invalid/v1/realtime?token=synthetic-old-a&api_key=synthetic-old-b&route=synthetic' : 'wss://unavailable.kataleptic.invalid/v1/realtime',REALTIME_MODEL:gateway ? 'gpt-realtime-2' : 'kataleptic-realtime-hd',...(gateway ? {REALTIME_API_KEY:'synthetic-gateway-key'} : {}),
       },
     },
     { name:'mock-provider',modules:true,script:mockScript,compatibilityDate:'2026-05-01',

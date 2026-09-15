@@ -15,7 +15,7 @@ The existing per-assistant text model overrides the workspace text model.
 
 | Setting | Meaning |
 | --- | --- |
-| `realtime_provider=instance` | Use operator `REALTIME_PROVIDER` (default `kataleptic`), endpoint, key and model. Preserves existing deployments. |
+| `realtime_provider=instance` | Use operator `REALTIME_PROVIDER` (default `kataleptic`), endpoint, key and model. Gateway endpoints must support header authentication as described below. |
 | `realtime_provider=kataleptic` | Workspace gateway endpoint/key; default `wss://api.kataleptic.com/v1/realtime`. |
 | `realtime_provider=openai` | Direct OpenAI GA protocol; endpoint pinned to `wss://api.openai.com/v1/realtime`. |
 | `realtime_provider=custom` | Experimental OpenAI GA protocol endpoint with its own key, native audio greeting and PCM24 support required. |
@@ -49,8 +49,30 @@ wait fails closed if no greeting audio arrives. Browser readiness is unchanged. 
 unconfirmed direct connection fails the call, without falling back to an instance
 pipeline. Reconnection retains the existing retry limits and conversation briefing.
 
-Kataleptic retains its token-query connection and measured tier-specific voice,
-transcription and VAD behavior. Both adapters retain existing turn persistence,
+Kataleptic gateway connections now use the same Worker HTTP Upgrade transport
+with `Authorization: Bearer …`, retaining the gateway protocol and tier-specific
+voice, transcription, VAD, readiness and rotation behavior. Both `token` and
+`api_key` query aliases are removed from the connection URL, including aliases
+already present in an instance endpoint. Model and noncredential routing parameters
+remain; explicit workspace endpoints still reject all configured query parameters.
+There is no retry using query authentication after a header failure. Existing
+credential ownership, five-second connection limits and manual redirect refusal
+remain unchanged.
+
+Gateway endpoints must support header authentication. Retained backend commit
+`995f35b9b5539417fdf0fd8f991f7a89ea608245` accepts Authorization before query
+fallback on both `/v1/realtime` and `/api/v1/realtime` through one handler.
+Its header-only GA/beta test source covers `/v1/realtime`; the alias is established
+by the shared handler source, not those two tests. This is source compatibility
+evidence, not verification of a deployed revision, proxy header forwarding or a
+live connection. Older or arbitrary query-only gateway endpoints are unsupported
+by this contract. Operators must ensure the endpoint and its proxy support it.
+No gateway deployment or endpoint probe is implied by this change.
+
+Removing credentials from the URL avoids this query-retention risk, but cannot
+ensure that a remote system never logs Authorization headers. No observed leak,
+remote log-policy guarantee or short-lived token exchange is claimed.
+Both adapters retain existing turn persistence,
 summary finalization and playback-drain hangup handling. Telephone admission uses
 the resolved provider's credentials and greeting capability, including workspace
 OpenAI credentials when instance AI keys are absent.
@@ -86,8 +108,8 @@ access, header auth,
 signed/idempotent telephone admission, greeting, incoming/outgoing PCM, interruption,
 `end_call`, playback drain, carrier release, saved turns and the text summary.
 The unit suite also covers direct authentication/redirect/session rejection with no
-pipeline fallback. The `--gateway` variant checks the preserved token-query gateway path on the same
-reserved ports; run the two commands sequentially.
+pipeline fallback. The `--gateway` variant checks synthetic gateway header authentication, removal of
+both credential query aliases, and preserved model/routing on the same reserved ports; run the two commands sequentially.
 
 This is synthetic provider/carrier validation in a real local runtime. No direct
 OpenAI credential was available from `dsecret --list` on 2026-09-12; no live OpenAI

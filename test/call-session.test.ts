@@ -213,10 +213,58 @@ const flush = async (rounds = 24) => {
 let serverSockets: FakeSocket[] = [];
 let upstreamSockets: FakeSocket[] = [];
 const realGlobals: Record<string, unknown> = {};
+const gatewayRequests: { url: string; init: RequestInit }[] = [];
+let gatewayOutcomes: ('pending' | 'reject' | number)[] = [];
+const gatewayDisposals = new Set<() => void>();
+const signalTimers = new Set<ReturnType<typeof setTimeout>>();
+let restoreSignalTimeout = () => {};
+
+// Only this synthetic endpoint is admitted. Legacy emit('open') means that the
+// pending HTTP Upgrade completes, not a post-upgrade open event from workerd.
+function gatewayFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const url = new URL(String(input));
+  if (url.hostname !== 'stub.invalid' || url.pathname !== '/v1/realtime' ||
+      !['http:', 'https:'].includes(url.protocol) || new Headers(init.headers).get('Upgrade') !== 'websocket') {
+    throw new Error('no network in unit tests');
+  }
+  gatewayRequests.push({ url: url.href, init });
+  const outcome = gatewayOutcomes.shift() ?? 'pending';
+  if (outcome === 'reject') return Promise.reject(new Error('synthetic upgrade rejection'));
+  if (typeof outcome === 'number') return Promise.resolve({ status: outcome, webSocket: null } as unknown as Response);
+  const ws = new FakeSocket(); upstreamSockets.push(ws);
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const clean = () => { init.signal?.removeEventListener('abort', fail); gatewayDisposals.delete(fail); };
+    const fail = () => {
+      if (settled) return;
+      settled = true; clean(); ws.close(1000, 'synthetic upgrade cancelled');
+      reject(new Error('synthetic upgrade cancelled'));
+    };
+    gatewayDisposals.add(fail);
+    ws.addEventListener('open', () => {
+      if (settled) return;
+      settled = true; clean(); resolve({ status: 101, webSocket: ws } as unknown as Response);
+    });
+    ws.addEventListener('error', fail);
+    ws.addEventListener('close', fail);
+    init.signal?.addEventListener('abort', fail, { once: true });
+    if (init.signal?.aborted) fail();
+  });
+}
 
 beforeEach(() => {
   serverSockets = [];
   upstreamSockets = [];
+  gatewayRequests.length = 0; gatewayOutcomes = [];
+  // Model AbortSignal.timeout using the same fake clock as the test. This is
+  // deterministic fixture behavior, not evidence of native fetch cancellation.
+  const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation(ms => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => { signalTimers.delete(timer); controller.abort(); }, ms);
+    signalTimers.add(timer);
+    return controller.signal;
+  });
+  restoreSignalTimeout = () => timeout.mockRestore();
   for (const k of ['WebSocketPair', 'Response', 'WebSocket', 'fetch']) realGlobals[k] = (globalThis as never)[k];
 
   (globalThis as never).WebSocketPair = function () {
@@ -245,12 +293,14 @@ beforeEach(() => {
     return ws;
   };
   // Any real network call in these tests is a bug in the test, not a pass.
-  (globalThis as never).fetch = () => {
-    throw new Error('no network in unit tests');
-  };
+  globalThis.fetch = gatewayFetch as typeof fetch;
 });
 
-afterEach(() => {
+afterEach(async () => {
+  for (const dispose of gatewayDisposals) dispose();
+  await flush();
+  for (const timer of signalTimers) clearTimeout(timer);
+  signalTimers.clear(); restoreSignalTimeout();
   for (const [k, v] of Object.entries(realGlobals)) (globalThis as never)[k] = v;
   vi.useRealTimers();
 });
@@ -975,10 +1025,10 @@ describe('session echo read-back', () => {
     const newUp = upstreamSockets.at(-1)!;
 
     // The handover itself: the replacement has just been configured, and the
-    // outgoing socket has not been closed yet. Deliberately no flush here —
-    // that window is the whole point, and letting the rotation finish would
-    // close the outgoing socket and test nothing.
+    // outgoing socket has not been closed yet. Resume the fetch continuation
+    // only; a full flush would finish recovery and erase the overlap window.
     newUp.emit('open', {});
+    await Promise.resolve();
     expect(updatesSent(newUp)).toBe(1);
     expect(up.readyState).toBe(1); // still open, still serving the caller
 
@@ -1029,7 +1079,7 @@ describe('session echo read-back', () => {
 });
 
 describe('upstream connect timeout', () => {
-  it('closes the abandoned socket and ignores it if it opens late', async () => {
+  it('cancels the pending upgrade and ignores a late synthetic completion', async () => {
     vi.useFakeTimers();
     const { session } = newSession('realtime');
     await session.fetch(upgradeRequest());
@@ -1041,7 +1091,7 @@ describe('upstream connect timeout', () => {
 
     expect(upstreamSockets).toHaveLength(1);
     const zombie = upstreamSockets[0];
-    expect(zombie.closed).not.toBeNull(); // was left open and still in this.upstream
+    expect(zombie.closed).not.toBeNull(); // fake fetch disposed its pending socket on abort
 
     // The call fell back to pipeline, which is what the client was told.
     const ready = sock.messages().find((m) => m.type === 'ready');
@@ -3009,5 +3059,143 @@ describe('realtime output cumulative and receipt bounds', () => {
     await flush(100);
     expect(caller.binaryCount()).toBe(0); expect(caller.countOf('ready')).toBe(0);
     expect(up.closed).not.toBeNull();
+  });
+});
+
+describe('gateway header transport contract', () => {
+  const gatewaySettings = { realtime_model: 'gpt-realtime-2', realtime_voice: 'marin' };
+  const gatewayEnv = {
+    REALTIME_BASE_URL: 'wss://stub.invalid/v1/realtime?token=old-a&api_key=old-b&route=synthetic',
+    REALTIME_API_KEY: 'synthetic-gateway-key',
+    DEFAULT_LLM_API_KEY: '',
+  };
+  function forbidConstructor() {
+    const constructor = vi.fn(() => { throw new Error('query-auth constructor is forbidden'); });
+    globalThis.WebSocket = constructor as unknown as typeof WebSocket;
+    return constructor;
+  }
+  function expectHeaderRequest(index: number) {
+    const { url, init } = gatewayRequests[index];
+    expect(url).toBe('https://stub.invalid/v1/realtime?route=synthetic&model=gpt-realtime-2');
+    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer synthetic-gateway-key');
+    expect(new Headers(init.headers).get('Upgrade')).toBe('websocket');
+    expect(init.redirect).toBe('manual');
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(AbortSignal.timeout).toHaveBeenCalledWith(5000);
+  }
+  async function cleanup(caller: FakeSocket) {
+    // Release owned pending fake fetches even if the test's first assertion
+    // fails. This cleanup does not claim native network teardown evidence.
+    for (const dispose of gatewayDisposals) dispose();
+    caller.receive({ type: 'hangup' });
+    await flush(100);
+  }
+
+  it.each(['web', 'telnyx'])('[gateway-header-negative] starts %s through header Upgrade with gateway readiness and PCM', async channel => {
+    vi.useFakeTimers();
+    const constructor = forbidConstructor();
+    const { session, ctl } = newSession('realtime', gatewaySettings, gatewayEnv);
+    ctl.channel = channel;
+    await session.fetch(upgradeRequest());
+    const caller = serverSockets[0];
+    try {
+      caller.receive({ type: 'start' }); await flush(100);
+      expect(gatewayRequests).toHaveLength(1); // original first failure: constructor path, no header fetch
+      expectHeaderRequest(0);
+      expect(caller.countOf('ready')).toBe(0);
+      const up = upstreamSockets[0]; up.emit('open', {}); await flush(100);
+      const update = up.messages().find(m => m.type === 'session.update')!.session as {
+        output_modalities?: unknown; audio: { output: { voice: string; format: { rate: number } } };
+      };
+      expect(update.output_modalities).toBeUndefined(); // gateway payload, not direct GA policy
+      expect(update.audio.output.voice).toBe('marin');
+      expect(update.audio.output.format.rate).toBe(24000);
+      expect(up.countOf('response.create')).toBe(1); // gateway needs no direct session.updated acknowledgement
+      expect(caller.countOf('ready')).toBe(channel === 'telnyx' ? 0 : 1);
+      up.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' }); await flush(100);
+      expect(caller.countOf('ready')).toBe(1);
+      expect(caller.binaryCount()).toBe(1);
+      expect(caller.countOf('error')).toBe(0);
+      caller.emit('message', { data: new ArrayBuffer(8) }); await flush(100);
+      expect(up.countOf('input_audio_buffer.append')).toBe(1);
+      expect(constructor).not.toHaveBeenCalled();
+      expect(gatewayRequests).toHaveLength(1);
+    } finally { await cleanup(caller); }
+  });
+
+  it.each([401, 302, 'reject', 'timeout'] as const)('refuses gateway %s at pickup without query downgrade', async failure => {
+    vi.useFakeTimers();
+    const constructor = forbidConstructor();
+    gatewayOutcomes = [failure === 'timeout' ? 'pending' : failure];
+    const { session, ctl, callUpdates } = newSession('realtime', gatewaySettings, gatewayEnv);
+    ctl.channel = 'telnyx';
+    await session.fetch(upgradeRequest());
+    const caller = serverSockets[0];
+    try {
+      caller.receive({ type: 'start' }); await flush(100);
+      expect(gatewayRequests).toHaveLength(1);
+      expectHeaderRequest(0);
+      if (failure === 'timeout') {
+        await vi.advanceTimersByTimeAsync(4999); await flush(100);
+        expect(gatewayRequests[0].init.signal!.aborted).toBe(false);
+        expect(caller.countOf('error')).toBe(0);
+        await vi.advanceTimersByTimeAsync(1); await flush(100);
+        expect(gatewayRequests[0].init.signal!.aborted).toBe(true);
+      }
+      expect(caller.countOf('ready')).toBe(0);
+      expect(caller.binaryCount()).toBe(0);
+      expect(caller.countOf('error')).toBe(1);
+      expect(caller.countOf('ended')).toBe(1);
+      expect(callUpdates().some(w => w.args[0] === 'failed')).toBe(true);
+      expect(gatewayRequests).toHaveLength(1);
+      expect(constructor).not.toHaveBeenCalled();
+    } finally { await cleanup(caller); }
+  });
+
+  it.each(['success', 401, 302, 'timeout'] as const)('preserves old gateway audio during a %s replacement', async outcome => {
+    vi.useFakeTimers();
+    const constructor = forbidConstructor();
+    gatewayOutcomes = ['pending', typeof outcome === 'number' ? outcome : 'pending'];
+    const { session, callUpdates } = newSession('realtime', gatewaySettings, gatewayEnv);
+    await session.fetch(upgradeRequest());
+    const caller = serverSockets[0];
+    try {
+      caller.receive({ type: 'start' }); await flush(100);
+      expect(gatewayRequests).toHaveLength(1);
+      const old = upstreamSockets[0]; old.emit('open', {}); await flush(100);
+      expect(caller.countOf('ready')).toBe(1);
+      old.receive({ type: 'session.expiring' }); await flush(100);
+      expect(gatewayRequests).toHaveLength(2);
+      expectHeaderRequest(0); expectHeaderRequest(1);
+      expect(old.closed).toBeNull();
+      const before = caller.binaryCount();
+      old.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' }); await flush(100);
+      expect(caller.binaryCount()).toBe(before + 1);
+      const inputBefore = old.countOf('input_audio_buffer.append');
+      caller.emit('message', { data: new ArrayBuffer(8) }); await flush(100);
+      expect(old.countOf('input_audio_buffer.append')).toBe(inputBefore + 1);
+      if (outcome === 'success') {
+        const replacement = upstreamSockets[1];
+        expect(replacement.sent).toHaveLength(0);
+        replacement.emit('open', {}); await flush(100);
+        expect(old.closed).not.toBeNull();
+        expect(replacement.countOf('session.update')).toBe(1);
+        expect(replacement.countOf('response.create')).toBe(0); // no repeated greeting
+        const after = caller.binaryCount();
+        old.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' });
+        replacement.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' }); await flush(100);
+        expect(caller.binaryCount()).toBe(after + 1);
+      } else {
+        if (outcome === 'timeout') { await vi.advanceTimersByTimeAsync(5000); await flush(100); }
+        expect(old.closed).toBeNull();
+        old.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' }); await flush(100);
+        expect(caller.binaryCount()).toBe(before + 2);
+      }
+      expect(caller.countOf('error')).toBe(0);
+      expect(caller.countOf('ended')).toBe(0);
+      expect(callUpdates()).toHaveLength(0);
+      expect(gatewayRequests).toHaveLength(2);
+      expect(constructor).not.toHaveBeenCalled();
+    } finally { await cleanup(caller); }
   });
 });

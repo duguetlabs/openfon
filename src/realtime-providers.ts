@@ -53,11 +53,12 @@ export function realtimeConnection(config: RealtimeConfig): { url: string; heade
   const url = new URL(config.baseUrl);
   url.searchParams.set('model', config.model);
   if (config.protocol === 'gateway') {
-    url.searchParams.set('token', config.apiKey);
-    return { url: url.href };
+    // Instance endpoints may contain legacy credential query aliases.
+    url.searchParams.delete('token');
+    url.searchParams.delete('api_key');
   }
   // Workers fetch Upgrade supports server-side Authorization; never put a
-  // durable project API key in URL query parameters or browser subprotocols.
+  // durable configured API key in URL query parameters or browser subprotocols.
   url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
   return { url: url.href, headers: { Upgrade: 'websocket', Authorization: `Bearer ${config.apiKey}` } };
 }
