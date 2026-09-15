@@ -1,0 +1,14 @@
+{
+  "state": "SOURCE_AGREEMENTS_CLOSED_CONFIRMED_DELETION_PREPARATION_SELECTED",
+  "at": "2026-09-15T13:15:10.562228+00:00",
+  "head": "f8e8b7619a86797e017f9cc317b090eaf64fe513",
+  "qa_commit": "5d17b5bf214e75bc79049d4ab6331408880b772d",
+  "qa_section_sha256": "560ad1967e95e9c2a41f73c003543c8141adf159c4aa5fe93b80ee422a7e439f",
+  "publication_QA": "00d6fa4829ebb3046758c32993bf9a76086bdcad",
+  "reconciliation_sha256": "19d9b219568e97b12e7146ad17c5f9e830d215be05a5d212f8668012a2d83f44",
+  "prior_contract_state_preserved": "b8e909e685bb7cc600e8451e1f407cc217ca379a31df071f5f90b7df2ba42425",
+  "qa_identity_scope": "34+16+7 records / 50 unique; consumed independent audit, not replayed",
+  "selected": "Only necessary frontend coordinator/App/Account wiring, discriminating unit/browser fixtures and truthful docs, isolated on f8. Actual QA before any separate runtime selection.",
+  "residual": "Acknowledged account DELETE followed by redundant logout rejection/pending can gate UI; missing session does not inherently cause401.",
+  "no_actions": "No application source mutation, fixture execution, inference, new owner dispatch, public disposition or merge."
+}
