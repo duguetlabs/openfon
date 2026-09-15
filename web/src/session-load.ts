@@ -42,6 +42,7 @@ export class SignOutRecoveryError extends Error {
 
 export class CompatibilitySessionCoordinator {
   private generation = 0;
+  private deletionAttempt = 0;
   private signOutState: 'idle' | SignOutRecovery = 'idle';
   private intentId: string | null = null;
 
@@ -82,6 +83,52 @@ export class CompatibilitySessionCoordinator {
       if (recovery) blocked?.(recovery);
       else failed(error);
     }
+  }
+
+  // App invalidates its context on unmount, including a recreated coordinator.
+  // This does not cancel a request or change another owner's stored intent.
+  invalidate(): void {
+    ++this.generation;
+  }
+
+  async deleteAccount(
+    removeAccount: () => Promise<unknown>,
+    callbacks: CompatibilitySignOutCallbacks
+  ): Promise<boolean> {
+    const recovery = this.blocked();
+    if (recovery) throw new SignOutRecoveryError(recovery === 'pending' ? 'unconfirmed' : recovery);
+    // Capture before the request. A later refresh/sign-out/unmount or deletion
+    // attempt supersedes this context, even if the visible account looks equal.
+    const generation = this.generation;
+    const attempt = ++this.deletionAttempt;
+    await removeAccount(); // Rejection/ambiguous delivery is not confirmation.
+    if (generation !== this.generation || attempt !== this.deletionAttempt || this.signOutState !== 'idle') return false;
+    const read = this.storage ? readLogoutIntent(this.storage) : { kind: 'absent' } as const;
+    // We began with no intent. Never promote/remove a subsequently stored owner.
+    if (read.kind === 'intent') return false;
+
+    const completion = ++this.generation;
+    this.signOutState = 'local';
+    this.intentId = null;
+    if (this.storage && read.kind === 'absent') {
+      try {
+        const id = crypto.randomUUID();
+        // Confirmation is already known. Persist that phase directly so a
+        // failed removal/reload cannot turn it into a second server request.
+        this.storage.write(JSON.stringify({ version: 1, id, phase: 'confirmed' }));
+        this.intentId = id;
+      } catch { /* live confirmation survives; inspect storage before cleanup */ }
+    }
+    callbacks.clearLocal();
+    if (completion !== this.generation) return false;
+    try {
+      this.finishConfirmed(completion, this.intentId);
+      if (completion === this.generation) callbacks.confirmed();
+    } catch (error) {
+      if (completion === this.generation) callbacks.failed(error);
+      throw error;
+    }
+    return true;
   }
 
   // This path never performs a server write. A confirmed marker survives a

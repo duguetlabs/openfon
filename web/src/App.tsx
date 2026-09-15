@@ -32,6 +32,7 @@ interface Session {
   firstAssistantReady: boolean;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccount: (input: Parameters<typeof api.deleteAccount>[0]) => Promise<void>;
   signOutPending: boolean;
   signOutWarning: string | null;
   signOutLocalRecovery: boolean;
@@ -45,6 +46,7 @@ const SessionCtx = createContext<Session>({
   firstAssistantReady: false,
   refresh: async () => {},
   signOut: async () => {},
+  deleteAccount: async () => {},
   signOutPending: false,
   signOutWarning: null,
   signOutLocalRecovery: false,
@@ -124,9 +126,22 @@ export default function App() {
     });
   }, [clearSession, sessionCoordinator, showRecovery]);
 
+  const deleteAccount = useCallback(async (input: Parameters<typeof api.deleteAccount>[0]) => {
+    await sessionCoordinator.deleteAccount(() => api.deleteAccount(input), {
+      clearLocal: () => { clearSession(); setSignOutPending(false); },
+      confirmed: () => {
+        setSignOutPending(false);
+        setSignOutWarning(null);
+        setSignOutLocalRecovery(false);
+      },
+      failed: error => showRecovery(error instanceof SignOutRecoveryError ? error.recovery : 'local'),
+    });
+  }, [clearSession, sessionCoordinator, showRecovery]);
+
   useEffect(() => {
     void refresh().catch(() => {}); // Initial signed-out/unavailable load has no saving page.
-  }, [refresh]);
+    return () => sessionCoordinator.invalidate();
+  }, [refresh, sessionCoordinator]);
 
   if (loading) {
     return (
@@ -146,6 +161,7 @@ export default function App() {
         firstAssistantReady,
         refresh,
         signOut,
+        deleteAccount,
         signOutPending,
         signOutWarning,
         signOutLocalRecovery,

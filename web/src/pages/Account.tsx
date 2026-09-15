@@ -1,13 +1,11 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useSession } from '../App';
 import { Button, Card, Field } from '../ui';
 import { Notice, PageTitle } from './Studio';
 
 export default function Account() {
-  const { me, signOut } = useSession();
-  const navigate = useNavigate();
+  const { me, deleteAccount } = useSession();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [repeatPassword, setRepeatPassword] = useState('');
@@ -50,8 +48,7 @@ export default function Account() {
     </div>
     <Card className="mt-6"><h2 className="studio-heading">Delete account</h2><p className="studio-description">Permanently delete your account and workspace, including assistants, knowledge, call history, and saved provider credentials. Export anything you want to keep first. End active calls before deleting. This cannot be undone.</p>
       <form onSubmit={e => { e.preventDefault(); if (confirmation !== 'DELETE') return; void run('delete', async () => {
-        await api.deleteAccount({ currentPassword: deletePassword, confirmation: 'DELETE' });
-        await signOut().catch(() => {}); navigate('/auth', { replace: true });
+        await deleteAccount({ currentPassword: deletePassword, confirmation: 'DELETE' });
       }); }}><fieldset disabled={Boolean(busy)} className="studio-fields">
         <Field label="Current password to confirm deletion" type="password" autoComplete="current-password" required maxLength={1024} value={deletePassword} onChange={e => setDeletePassword(e.target.value)} />
         <Field label="Type DELETE to confirm" required value={confirmation} onChange={e => setConfirmation(e.target.value)} autoComplete="off" />

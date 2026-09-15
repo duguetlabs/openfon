@@ -55,3 +55,41 @@ prove deployed browser/privacy settings, transport delivery, or server-failure r
 in production. Runtime results and first-failure/cleanup limitations belong to the
 separate validation receipt; source preparation is not a passing test report or security
 clearance.
+
+## Confirmed account deletion
+
+The Account page delegates deletion to the same session coordinator. Before awaiting
+DELETE, it captures the current coordinator generation and a deletion-attempt identity.
+Only an acknowledged DELETE in that still-current context may clear the local session.
+It does not issue a second logout request. The server account-deletion/cascade/cookie
+contract is unchanged; local completion is not evidence about a newer login or another
+browser context.
+
+A refresh, sign-out, App unmount or later deletion attempt makes the older completion
+obsolete. A newly stored intent is also left untouched, whether unconfirmed or confirmed.
+The old completion neither navigates nor clears/promotes that owner's state. This is a
+conservative context check, not cancellation: DELETE may have completed server-side even
+when its local completion is ignored. An authentication change outside this coordinator,
+including another context's cookie activity, is not detected or made safe by this check.
+
+Rejected or ambiguous DELETE still reports an error on the Account page without claiming
+confirmation, clearing the current session, adding logout intent or automatically retrying.
+A pending DELETE stays pending; no new request timeout or server policy is introduced.
+A lost response can therefore leave the old UI visible after actual server deletion.
+
+For a current acknowledgement, the coordinator records a confirmed intent and performs
+its existing owned local cleanup. Removal failure keeps a confirmed marker across reload
+and offers Retry local cleanup without DELETE or logout. A failed confirmation write with
+readable absence can finish cleanup directly. Unreadable storage after acknowledgement
+keeps live local-only recovery and never treats unknown contents as absence or overwrites
+them. If a different marker is later observed, cleanup waits for its owner; the old
+confirmation cannot authorize clearing it. Without durable confirmation, reload cannot
+recover that memory-only fact, and the general storage/information-loss limits above apply.
+
+The additional unit fixtures control acknowledgement, newer generation/intent, invalidation,
+failed or pending DELETE and storage faults. New browser fixtures exercise the actual
+Account/App/coordinator path, real local signup/deletion, route-injected response failure,
+held acknowledgement, and Chrome reload with confirmed sessionStorage. They do not prove
+production transport, old/new cookie ordering, arbitrary external authentication changes,
+all callback schedules, or browser-storage reliability. Test preparation is not execution;
+original failures and fixed outcomes require a separately authorized validation receipt.
