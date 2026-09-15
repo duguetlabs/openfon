@@ -1,0 +1,26 @@
+{
+  "state": "A8_SOURCE_DISPOSITIONS_AND_COLLECTION_CORRECTION_CLOSED_LATEST_HEAD_REVIEW_REQUIRED",
+  "review_head": "a8cff6a7eab73bff0e48c2afe992a3cb69d995c0",
+  "source_head": "9034f6af6c305ce941295d598c252f23437337ac",
+  "official_comment": 5677843598,
+  "original_sha256": "ba4a975674d31d1349f878363bdda270774226a03275daab1c5e82fa08f561ff",
+  "fullbody_sha256": "2ac5b5d5cf9ab7a8d32e7f80b87d5003327c19e02b6600fa702b7a37042f4473",
+  "source_QA": "10c7584",
+  "collection_QA": [
+    "a98dd23",
+    "8351f38",
+    "b5957d9",
+    "b63523e"
+  ],
+  "disposition": {
+    "sha256": "c13fca8a6a92879abc1054678f8e893039d12c9245f6170d91c5d25dee4c5adb",
+    "bytes": 9234
+  },
+  "release_record": {
+    "sha256": "2036599187dbc245274679cd2ddc27549f5dfb22923d403e5c96f59ead8cf5f7",
+    "bytes": 6807
+  },
+  "omissions": 542,
+  "status": "Current disposition candidate is unpublished. Prior a8 CI and review are historical gates. Final documentation QA/assembly, publication/readbacks/close-reopen/freshCI and distinct latest-head official review remain. No grant remains.",
+  "limits": "Six qualified declines do not deny valid-cookie/new-context/storage-loss risks, capacity stranding or archived standalone defects. Synthetic/native first-assertion/statement-only/nonexhaustive/rebuilt132/former-binary/discarded2926cause limits retained."
+}

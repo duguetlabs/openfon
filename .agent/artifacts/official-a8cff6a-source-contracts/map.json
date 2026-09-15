@@ -1,0 +1,88 @@
+{
+  "state": "SOURCE_ONLY_CITATION_MAP_NO_OWNER_DISPATCH_OR_CORRECTION_SELECTION",
+  "at": "2026-09-15T09:27:24.228738+00:00",
+  "head": "a8cff6a7eab73bff0e48c2afe992a3cb69d995c0",
+  "original_comment": 5677843598,
+  "original_sha256": "ba4a975674d31d1349f878363bdda270774226a03275daab1c5e82fa08f561ff",
+  "fullbody_sha256": "2ac5b5d5cf9ab7a8d32e7f80b87d5003327c19e02b6600fa702b7a37042f4473",
+  "security_categories": [
+    "failed logout",
+    "account export caching",
+    "webhook admission capacity"
+  ],
+  "findings": [
+    {
+      "title": "Delete Race",
+      "path": "src/studio-api.ts",
+      "start_line": 1503,
+      "end_line": 1508,
+      "sha256": "d9266a3bc150dd79379a0b7996aeb60799cfa4713b1fbab1fa55cc9f41ea2b99",
+      "bytes": 101566,
+      "status": "Exact citation identity mapped; source disposition pending"
+    },
+    {
+      "title": "Create Race",
+      "path": "src/studio-api.ts",
+      "start_line": 1455,
+      "end_line": 1465,
+      "sha256": "d9266a3bc150dd79379a0b7996aeb60799cfa4713b1fbab1fa55cc9f41ea2b99",
+      "bytes": 101566,
+      "status": "Exact citation identity mapped; source disposition pending"
+    },
+    {
+      "title": "Invalid Input",
+      "path": "src/index.ts",
+      "start_line": 673,
+      "end_line": 681,
+      "sha256": "7d21900e2bc6ace0af34c9b0b4f745eeb0f3285249f469575fd7eb6b31e5e9d4",
+      "bytes": 76784,
+      "status": "Exact citation identity mapped; source disposition pending"
+    },
+    {
+      "title": "Test Discovery",
+      "path": ".agent/artifacts/telnyx-reason-49df/prepared/test/telnyx-control.test.ts",
+      "start_line": 1,
+      "end_line": 16,
+      "sha256": "e72ab0cafde73700880f7483b3076e70c21edf54d3a7787cb015ae3c1587a7c9",
+      "bytes": 61703,
+      "status": "Exact citation identity mapped; source disposition pending"
+    },
+    {
+      "title": "Failed logout",
+      "path": "web/src/pages/Onboarding.tsx",
+      "start_line": 145,
+      "end_line": 145,
+      "sha256": "b096119ad9d18e36990d0f4363305f664fd5574afe9df8b5e09005e9eff38916",
+      "bytes": 16479,
+      "status": "Exact citation identity mapped; source disposition pending"
+    },
+    {
+      "title": "Syntax Error",
+      "path": ".agent/artifacts/webhook-leases-ddce/pre-review/test/telnyx-webhook-admission.test.ts",
+      "start_line": 63,
+      "end_line": 67,
+      "sha256": "4a54a6195e818bdd33c551057c961ea3381d69d38ce101120cedd38b78b3a3cf",
+      "bytes": 12907,
+      "status": "Exact citation identity mapped; source disposition pending"
+    },
+    {
+      "title": "Sensitive Caching",
+      "path": ".agent/artifacts/export-ce783/original-account-api.ts",
+      "start_line": 172,
+      "end_line": 173,
+      "sha256": "ed644f19a5348be956d98d1c25808b97b9c4717246aac2158afd5c185d539ad2",
+      "bytes": 15606,
+      "status": "Exact citation identity mapped; source disposition pending"
+    },
+    {
+      "title": "Capacity Leak",
+      "path": "src/telnyx-routes.ts",
+      "start_line": 59,
+      "end_line": 67,
+      "sha256": "2351a3bcdca548785d439ae32be2cdfb64be6148e1d1c03a681281b8b2d73c41",
+      "bytes": 8299,
+      "status": "Exact citation identity mapped; source disposition pending"
+    }
+  ],
+  "limits": "Eight findings/seven cited paths mapped committed=working. Identity mapping is not source adjudication. New542omissions and prior528/497/432/430/417 historical; rebuilt/runtime/cleanup/privacy limits retained. No application/fixture edit, runtime, review retry, new owner dispatch or clearance."
+}

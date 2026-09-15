@@ -3238,9 +3238,9 @@
       "candidate_bytes": 258875,
       "validation": "Metadata transformation only; no runtime/validation claim changed.",
       "accepted_candidate_identity_role": "Historical accepted metadata copy; preserved unchanged. Later current identity is recorded separately.",
-      "current_public_sha256": "196582218c301342e8aecc2ab202eecde42f8123f048dddc18747fbf488d9019",
-      "current_public_bytes": 276013,
-      "current_identity_lineage": ".agent/artifacts/official-c865-source-contracts/checkpoint-lineage.json"
+      "current_public_sha256": "7890c7110ee2eb6647171dc5adb0fb5cd3e64bae8c3e6e721701bc19b4f28668",
+      "current_public_bytes": 279282,
+      "current_identity_lineage": ".agent/artifacts/official-a8cff6a-source-contracts/checkpoint-lineage.json"
     },
     {
       "path": ".agent/workstreams/launch.md",
