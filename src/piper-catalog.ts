@@ -81,21 +81,55 @@ export async function piperVoiceFromCatalog(base: string, lang: string, fallback
     if (pendingCatalogs.has(endpoint) || pendingCatalogs.size >= MAX_PENDING_ENDPOINTS) return fallback;
     const reservation = { expiresAt: now + FETCH_TIMEOUT_MS };
     pendingCatalogs.set(endpoint, reservation);
+    let started = false;
+    let removeDeadline: (() => void) | undefined;
     try {
-      const response = await fetch(endpoint, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), redirect: 'manual' });
-      if (Date.now() >= reservation.expiresAt) {
-        await response.body?.cancel();
-        return fallback;
-      }
-      const voices = await readVoices(response);
-      // Late work from an expired/replaced reservation cannot publish stale
-      // data, evict a newer cache entry, or release a newer request's capacity.
-      if (Date.now() >= reservation.expiresAt || pendingCatalogs.get(endpoint) !== reservation) return fallback;
-      if (catalogs.size >= MAX_ENDPOINTS) catalogs.delete(catalogs.keys().next().value!);
-      catalogs.set(endpoint, { voices, fetchedAt: Date.now() });
-      return voices[lang] ?? fallback;
+      const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+      let expired = false;
+      let finish!: (voice: string) => void;
+      const caller = new Promise<string>(resolve => { finish = resolve; });
+      // The caller deadline starts before I/O and never releases admission.
+      // Keep a local winner flag: wall-clock changes cannot revive late work.
+      const onDeadline = () => { expired = true; finish(fallback); };
+      signal.addEventListener('abort', onDeadline, { once: true });
+      removeDeadline = () => signal.removeEventListener('abort', onDeadline);
+      if (signal.aborted) { onDeadline(); return await caller; }
+      const run = async (): Promise<string> => {
+        try {
+          const response = await fetch(endpoint, { signal, redirect: 'manual' });
+          if (expired || signal.aborted || Date.now() >= reservation.expiresAt) {
+            await response.body?.cancel();
+            return fallback;
+          }
+          const voices = await readVoices(response);
+          if (expired || signal.aborted || Date.now() >= reservation.expiresAt ||
+            pendingCatalogs.get(endpoint) !== reservation) return fallback;
+          if (catalogs.size >= MAX_ENDPOINTS) catalogs.delete(catalogs.keys().next().value!);
+          catalogs.set(endpoint, { voices, fetchedAt: Date.now() });
+          return voices[lang] ?? fallback;
+        } finally {
+          // Only actual pipeline settlement frees its reservation, including
+          // awaited cancellation. Returning the caller fallback is separate.
+          if (pendingCatalogs.get(endpoint) === reservation) pendingCatalogs.delete(endpoint);
+        }
+      };
+      started = true;
+      // Attach both settlement handlers before returning/detaching from run.
+      // Late failure is observed even after the caller deadline has won.
+      void run().then(voice => {
+        removeDeadline?.();
+        finish(voice);
+      }, () => {
+        removeDeadline?.();
+        finish(fallback);
+      });
+      return await caller;
     } finally {
-      if (pendingCatalogs.get(endpoint) === reservation) pendingCatalogs.delete(endpoint);
+      // Signal/listener setup can fail before an operation owns cleanup.
+      if (!started) {
+        removeDeadline?.();
+        if (pendingCatalogs.get(endpoint) === reservation) pendingCatalogs.delete(endpoint);
+      }
     }
   } catch {
     // Never use another endpoint's entry or expired data after a failed lookup.

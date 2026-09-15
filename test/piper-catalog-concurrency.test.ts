@@ -187,13 +187,40 @@ describe('Piper concurrent catalog admission', () => {
     vi.stubGlobal('fetch', fetcher);
     const result = lookup('wss://voice.example/rt', 'en', 'fallback');
     await Promise.resolve();
-    abort.abort();
+    if (failure === 'abort') abort.abort();
     expect(await result).toBe('fallback');
     expect(timeout).toHaveBeenCalledWith(1500);
     expect(fetcher.mock.calls[0][1]).toMatchObject({ redirect: 'manual', signal: abort.signal });
     timeout.mockRestore();
     fetcher.mockImplementation(() => Promise.resolve(catalog({ en: 'en_recovered' })));
-    expect(await lookup('wss://voice.example/rt', 'en', 'fallback')).toBe('en_recovered');
+    if (failure === 'abort') {
+      // Deadline fallback is not inner settlement. Observe a new same-endpoint
+      // fetch and its completion without advancing time or widening the budget.
+      let admitted = false;
+      for (let attempt = 0; attempt < 32 && !admitted; attempt++) {
+        let outcome: { value: string } | { error: unknown } | undefined;
+        void lookup('wss://voice.example/rt', 'en', 'fallback').then(
+          value => { outcome = { value }; },
+          error => { outcome = { error }; },
+        );
+        for (let turn = 0; turn < 24; turn++) await Promise.resolve();
+        // Do not add another attempt over an unresolved probe. The mocked
+        // recovery response is immediate; this bound is fixture scheduling only.
+        expect(outcome).toBeDefined();
+        const fetches = fetcher.mock.calls.length;
+        expect(fetches).toBeLessThanOrEqual(2);
+        if (fetches === 2) {
+          expect(outcome).toEqual({ value: 'en_recovered' });
+          admitted = true;
+        } else {
+          expect(fetches).toBe(1);
+          expect(outcome).toEqual({ value: 'fallback' });
+        }
+      }
+      expect(admitted).toBe(true);
+    } else {
+      expect(await lookup('wss://voice.example/rt', 'en', 'fallback')).toBe('en_recovered');
+    }
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 });
