@@ -1458,10 +1458,14 @@ export function registerStudioApi(app: StudioApp): void {
     if (duplicate) return c.json({ error: 'A collection with this name already exists' }, 409);
     const id = newId();
     const statement = c.env.DB.prepare(
-      'INSERT INTO knowledge_collections (id, business_id, name, description) VALUES (?, ?, ?, ?) RETURNING *'
+      `INSERT INTO knowledge_collections (id, business_id, name, description)
+       SELECT ?, ?, ?, ? WHERE NOT EXISTS (
+         SELECT 1 FROM knowledge_collections WHERE business_id=? AND name=?
+       ) RETURNING *`
     )
-      .bind(id, workspace.id, body.name.trim(), body.description?.trim() ?? '');
+      .bind(id, workspace.id, body.name.trim(), body.description?.trim() ?? '', workspace.id, body.name.trim());
     const [created] = await c.env.DB.batch<KnowledgeCollection>([statement]);
+    if (!created.results[0]) return c.json({ error: 'A collection with this name already exists' }, 409);
     return c.json(created.results[0], 201);
   });
 
@@ -1492,9 +1496,13 @@ export function registerStudioApi(app: StudioApp): void {
       .first();
     if (duplicate) return c.json({ error: 'A collection with this name already exists' }, 409);
     const updated = await c.env.DB.prepare(
-      "UPDATE knowledge_collections SET name=?, description=?, updated_at=datetime('now') WHERE id=? AND business_id=? AND name IS ? AND description IS ?"
+      `UPDATE knowledge_collections SET name=?, description=?, updated_at=datetime('now')
+       WHERE id=? AND business_id=? AND name IS ? AND description IS ?
+         AND NOT EXISTS (SELECT 1 FROM knowledge_collections AS competing
+           WHERE competing.business_id=? AND competing.name=? AND competing.id<>?)`
     )
-      .bind(name, body.description ?? collection.description, collection.id, collection.business_id, collection.name, collection.description)
+      .bind(name, body.description ?? collection.description, collection.id, collection.business_id, collection.name, collection.description,
+        collection.business_id, name, collection.id)
       .run();
     if (!updated.meta.changes) return c.json({ error: 'Collection changed. Reload and retry.' }, 409);
     return c.json({ ok: true });
@@ -1504,7 +1512,10 @@ export function registerStudioApi(app: StudioApp): void {
     const collection = await ownedCollection(c.env, c.get('userId'), c.req.param('collectionId'));
     if (!collection) return c.json({ error: 'Not found' }, 404);
     if (collection.is_default) return c.json({ error: 'The default collection cannot be deleted' }, 409);
-    await c.env.DB.prepare('DELETE FROM knowledge_collections WHERE id = ?').bind(collection.id).run();
+    const deleted = await c.env.DB.prepare(
+      'DELETE FROM knowledge_collections WHERE id=? AND business_id=? AND is_default=0 RETURNING id'
+    ).bind(collection.id, collection.business_id).first<{ id: string }>();
+    if (!deleted) return c.json({ error: 'Collection changed. Reload and retry.' }, 409);
     return c.json({ ok: true });
   });
 

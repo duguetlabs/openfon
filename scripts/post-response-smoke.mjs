@@ -35,7 +35,7 @@ try {
   const count = (state, route) => state.find(t => t.name === 'rate_counters').rows.filter(r => r.bucket === bucket(route)).reduce((n, r) => n + r.count, 0);
   const setCount = async (route, n) => native.prepare("INSERT INTO rate_counters(bucket,window_start,count) VALUES(?,CAST(strftime('%s',datetime('now')) AS INTEGER)/86400*86400,?) ON CONFLICT(bucket,window_start) DO UPDATE SET count=excluded.count").bind(bucket(route), n).run();
   const responseSql = route => `SELECT * FROM ${table(route)} WHERE id = ?`;
-  const isRequested = sql => sql.startsWith('INSERT INTO knowledge_collections (id, business_id, name, description) VALUES') ||
+  const isRequested = sql => /^INSERT INTO knowledge_collections \(id, business_id, name, description\)\s+(?:VALUES|SELECT)\b/.test(sql) ||
     (sql.startsWith('INSERT INTO knowledge_items (') && (sql.includes("CASE WHEN ? = 'active'") || sql.includes("VALUES (?, ?, ?, 'faq', 'draft'"))) ||
     (sql.startsWith('INSERT INTO engine_presets (') && sql.includes(') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'));
   let route, failRead = false, failMirror = false, quotaPeer = false, baseline, outsideReads = 0, batches = [], results = [], errors = [];

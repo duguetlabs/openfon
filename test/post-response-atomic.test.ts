@@ -13,7 +13,7 @@ const charge = (route: Route) => route === 'preset' ? 2 : 1;
 const path = (route: Route) => ({ collection: '/api/me/knowledge/collections', item: '/api/me/knowledge/collections/kc_default_biz/items', draft: '/api/me/knowledge/drafts/from-turn', preset: '/api/me/engine-presets' })[route];
 const payload = (route: Route) => ({ collection: { name: '  Saved collection  ', description: '  Description 👋  ' }, item: { kind: 'note', status: 'active', title: '  Saved item  ', content: '  Ready 👋  ', source_call_id: 'ignored' }, draft: { callId: 'source', turnId: 1 }, preset: { name: '  Saved preset  ', llm_base_url: 'https://ignored.example/v1', llm_api_key: 'synthetic-ignored' } })[route];
 const responseSql = (route: Route) => `SELECT * FROM ${table(route)} WHERE id = ?`;
-const isRequested = (sql: string) => sql.startsWith('INSERT INTO knowledge_collections (id, business_id, name, description) VALUES') ||
+const isRequested = (sql: string) => /^INSERT INTO knowledge_collections \(id, business_id, name, description\)\s+(?:VALUES|SELECT)\b/.test(sql) ||
   (sql.startsWith('INSERT INTO knowledge_items (') && (sql.includes("CASE WHEN ? = 'active'") || sql.includes("VALUES (?, ?, ?, 'faq', 'draft'"))) || (sql.startsWith('INSERT INTO engine_presets (') && sql.includes(') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'));
 const query = (sql: string) => db.database.prepare(sql).all() as Record<string, unknown>[];
 const snapshot = () => (query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name") as { name: string }[])
