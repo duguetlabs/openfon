@@ -133,6 +133,34 @@ async function refundStudioSpend(env: Env, reservations: readonly StudioReservat
   await env.DB.batch(statements);
 }
 
+// A returned token is owned by this request before another acquisition awaits.
+// Drain before refund submission: a rejected refund may already have committed.
+class StudioSpendJournal {
+  private readonly reservations: StudioReservation[] = [];
+
+  constructor(private readonly env: Env) {}
+
+  async reserve(
+    subject: string, suffix: string, windowSeconds: number, max: number, now: number
+  ): Promise<StudioReservation | null> {
+    try {
+      const token = await reserveStudioSpend(this.env, subject, suffix, windowSeconds, max, now);
+      if (token) this.reservations.push(token);
+      return token;
+    } catch (error) {
+      // Only confirmed earlier increments are refundable. The rejected write
+      // itself is ambiguous; never invent its token or retry uncertain cleanup.
+      try { await this.refund(); } catch { /* preserve the acquisition error */ }
+      throw error;
+    }
+  }
+
+  async refund(): Promise<void> {
+    const taken = this.reservations.splice(0);
+    await refundStudioSpend(this.env, taken);
+  }
+}
+
 async function studioSpendAtLimit(
   env: Env,
   subject: string,
@@ -155,20 +183,16 @@ function studioClientIp(connectingIp: string | undefined): string {
 }
 
 async function reserveStudioIpSpend(
-  env: Env,
+  spend: StudioSpendJournal,
   connectingIp: string | undefined,
   now: number
-): Promise<{ blocked: 'minute' | 'day' | null; reservations: StudioReservation[] }> {
+): Promise<{ blocked: 'minute' | 'day' | null }> {
   const subject = studioClientIp(connectingIp);
-  const minute = await reserveStudioSpend(env, subject, 'ip-minute', 60, STUDIO_SPEND_PER_IP_PER_MINUTE, now);
-  if (!minute) {
-    return { blocked: 'minute', reservations: [] };
-  }
-  const day = await reserveStudioSpend(env, subject, 'ip-day', DAY_SECONDS, STUDIO_SPEND_PER_IP_PER_DAY, now);
-  if (!day) {
-    return { blocked: 'day', reservations: [minute] };
-  }
-  return { blocked: null, reservations: [minute, day] };
+  const minute = await spend.reserve(subject, 'ip-minute', 60, STUDIO_SPEND_PER_IP_PER_MINUTE, now);
+  if (!minute) return { blocked: 'minute' };
+  const day = await spend.reserve(subject, 'ip-day', DAY_SECONDS, STUDIO_SPEND_PER_IP_PER_DAY, now);
+  if (!day) return { blocked: 'day' };
+  return { blocked: null };
 }
 
 async function studioIpLimitAtCapacity(
@@ -1228,8 +1252,8 @@ export function registerStudioApi(app: StudioApp): void {
         'Retry-After': String(fixedWindowRetryAfter(DAY_SECONDS, rateLimitNow)),
       });
     }
-    const workspaceReservation = await reserveStudioSpend(
-      c.env,
+    const spend = new StudioSpendJournal(c.env);
+    const workspaceReservation = await spend.reserve(
       assistant.business_id,
       'minute',
       60,
@@ -1241,16 +1265,15 @@ export function registerStudioApi(app: StudioApp): void {
         'Retry-After': minuteRetryAfter,
       });
     }
-    const ipLimit = await reserveStudioIpSpend(c.env, c.req.header('CF-Connecting-IP'), rateLimitNow);
-    const reservations = [workspaceReservation, ...ipLimit.reservations];
+    const ipLimit = await reserveStudioIpSpend(spend, c.req.header('CF-Connecting-IP'), rateLimitNow);
     if (ipLimit.blocked === 'minute') {
-      await refundStudioSpend(c.env, reservations);
+      await spend.refund();
       return c.json({ error: 'Too many studio actions from this connection. Please wait a minute.' }, 429, {
         'Retry-After': minuteRetryAfter,
       });
     }
     if (ipLimit.blocked === 'day') {
-      await refundStudioSpend(c.env, reservations);
+      await spend.refund();
       return c.json({ error: 'Daily studio action limit reached. Try again tomorrow.' }, 429, {
         'Retry-After': String(fixedWindowRetryAfter(DAY_SECONDS, rateLimitNow)),
       });
@@ -1262,11 +1285,11 @@ export function registerStudioApi(app: StudioApp): void {
     try {
       workspace = await workspaceForUser(c.env, c.get('userId'));
     } catch (error) {
-      await refundStudioSpend(c.env, reservations);
+      await spend.refund();
       throw error;
     }
     if (!workspace) {
-      await refundStudioSpend(c.env, reservations);
+      await spend.refund();
       return c.json({ error: 'Not found' }, 404);
     }
     const callId = newId();
@@ -1291,11 +1314,11 @@ export function registerStudioApi(app: StudioApp): void {
         )
         .run();
     } catch (error) {
-      await refundStudioSpend(c.env, reservations);
+      await spend.refund();
       throw error;
     }
     if ((inserted.meta.changes ?? 0) !== 1) {
-      await refundStudioSpend(c.env, reservations);
+      await spend.refund();
       const currentDay = await testCallDayState(c.env, assistant.business_id, rateLimitNow);
       return c.json({ error: 'Daily test-call limit reached. Try again tomorrow.' }, 429, {
         'Retry-After': String(rollingDayRetryAfter(currentDay.oldest_started_at ?? undefined, rateLimitNow)),
@@ -1874,8 +1897,8 @@ export function registerStudioApi(app: StudioApp): void {
         'Retry-After': String(fixedWindowRetryAfter(DAY_SECONDS, rateLimitNow)),
       });
     }
-    const workspaceReservation = await reserveStudioSpend(
-      c.env,
+    const spend = new StudioSpendJournal(c.env);
+    const workspaceReservation = await spend.reserve(
       workspace.id,
       'minute',
       60,
@@ -1887,22 +1910,20 @@ export function registerStudioApi(app: StudioApp): void {
         'Retry-After': minuteRetryAfter,
       });
     }
-    const ipLimit = await reserveStudioIpSpend(c.env, c.req.header('CF-Connecting-IP'), rateLimitNow);
-    const reservations = [workspaceReservation, ...ipLimit.reservations];
+    const ipLimit = await reserveStudioIpSpend(spend, c.req.header('CF-Connecting-IP'), rateLimitNow);
     if (ipLimit.blocked === 'minute') {
-      await refundStudioSpend(c.env, reservations);
+      await spend.refund();
       return c.json({ error: 'Too many studio actions from this connection. Please wait a minute.' }, 429, {
         'Retry-After': minuteRetryAfter,
       });
     }
     if (ipLimit.blocked === 'day') {
-      await refundStudioSpend(c.env, reservations);
+      await spend.refund();
       return c.json({ error: 'Daily studio action limit reached. Try again tomorrow.' }, 429, {
         'Retry-After': String(fixedWindowRetryAfter(DAY_SECONDS, rateLimitNow)),
       });
     }
-    const providerReservation = await reserveStudioSpend(
-      c.env,
+    const providerReservation = await spend.reserve(
       workspace.id,
       'provider-day',
       DAY_SECONDS,
@@ -1910,7 +1931,7 @@ export function registerStudioApi(app: StudioApp): void {
       rateLimitNow
     );
     if (!providerReservation) {
-      await refundStudioSpend(c.env, reservations);
+      await spend.refund();
       return c.json({ error: 'Daily provider-check limit reached. Try again tomorrow.' }, 429, {
         'Retry-After': String(fixedWindowRetryAfter(DAY_SECONDS, rateLimitNow)),
       });
