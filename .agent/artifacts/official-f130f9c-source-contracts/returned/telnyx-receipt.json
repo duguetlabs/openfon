@@ -1,0 +1,53 @@
+{
+  "state": "OWNER_UNTRACKED_DOCUMENT_EXACT_RECEIVED",
+  "at": "2026-09-16T05:33:43.637732+00:00",
+  "owner": "existing pC telephony",
+  "owner_document": ".agent/artifacts/telnyx-disabled-f130f9c/source-contract.md",
+  "owner_commit_claimed": false,
+  "contract_sha256": "9b1b0ceeb7a7ae168e7dd81ee884db9585d6b6d4f046625686d73a1652131a11",
+  "source_identity_count": 8,
+  "integration_committed_working_matched": true,
+  "source_records": [
+    {
+      "path": "src/index.ts",
+      "bytes": 76784,
+      "sha256": "7d21900e2bc6ace0af34c9b0b4f745eeb0f3285249f469575fd7eb6b31e5e9d4"
+    },
+    {
+      "path": "src/telnyx-routes.ts",
+      "bytes": 8299,
+      "sha256": "2351a3bcdca548785d439ae32be2cdfb64be6148e1d1c03a681281b8b2d73c41"
+    },
+    {
+      "path": "src/telnyx-webhook.ts",
+      "bytes": 9092,
+      "sha256": "fba2355f23073ae5fdaa2ae4f4d056cb4e27dca67c49dad18c7f3c15d66a97e5"
+    },
+    {
+      "path": "src/telnyx-webhook-admission.ts",
+      "bytes": 1925,
+      "sha256": "fc043545b374aa6b6d378faf64a51006df6bfb9ebc752535dcaa62807c777e24"
+    },
+    {
+      "path": "src/telnyx-control.ts",
+      "bytes": 25052,
+      "sha256": "00a3ae80f7c3f79e700a58e58548d8e70f4410b0eea175c0e860e12e9fee845c"
+    },
+    {
+      "path": "src/telnyx-admission.ts",
+      "bytes": 6408,
+      "sha256": "259de6b3f8eb3d6787e1d6a7bce2e23fbca461fdcaf90a357ef1486335b2bc63"
+    },
+    {
+      "path": "docs/telephony.md",
+      "bytes": 10215,
+      "sha256": "62f3ac9910d7f51623e3a4b602c3f43c753aa1d963fc099a6ef8dd26cabec871"
+    },
+    {
+      "path": "test/telnyx-control.test.ts",
+      "bytes": 61703,
+      "sha256": "e72ab0cafde73700880f7483b3076e70c21edf54d3a7787cb015ae3c1587a7c9"
+    }
+  ],
+  "QA": "Pending one aggregate audit after pF actual return; no separate QA dispatch."
+}

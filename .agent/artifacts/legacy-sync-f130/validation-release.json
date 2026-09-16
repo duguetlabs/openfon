@@ -1,0 +1,42 @@
+{
+  "state": "EXPLICIT_RELEASED_VALIDATION_COMPLETE",
+  "at": "2026-09-16T10:12:42.970148+00:00",
+  "issuer": "openfon-integration",
+  "base": "f130f9c56ad3c69e6679c69fc65cb45c2c25d98f",
+  "grant_sha256": "8cc14d71b7ad1aadad41497dec1fa00e5f18bb2c2647234cb60c611d6a47d6f1",
+  "grant_state": "CONSUMED_ONCE_COMPLETE_NONREUSABLE",
+  "slot": "8812/9252 EXPLICITLY RELEASED",
+  "supervisor_exit": 0,
+  "external_exit": 0,
+  "closure_verification_sha256": "c209361fa10bb37cc1167c42455036637aabe2163c294a1ee21c9330e2f1e463",
+  "external_verification_sha256": "0cf1498c3b428fc9a563ce2e7d4d44aaa0eb2a693a31a9daff5f6dcf38d1af33",
+  "external_verification_at": "2026-09-16T10:10:18.889544+00:00",
+  "command_exits": [
+    1,
+    1,
+    0,
+    0,
+    0,
+    0
+  ],
+  "source": "Shared f130 all1311base original2+absent2; isolated fixed4 restored;1780modes checked",
+  "dependency_records": 6325,
+  "retained_prior_records": 4000,
+  "native_tmp": "Both empty",
+  "nonnative_tmp_files_retained": 114,
+  "candidate_link": "absent",
+  "owner_link": "retained exact",
+  "sampled_owned_identities": 30,
+  "blocking": 0,
+  "reserved": 0,
+  "sampled_remaining": 0,
+  "exact_historical_exclusions": 5,
+  "release_scope": "One completed legacy validation only. No future vacancy or new grant. No shared apply or publication yet.",
+  "limits": [
+    "SourceQA886e35a and controllerQAf25321c transfer; actual complete evidence audit remains independent QA.",
+    "Expected original15API/native1 failures preserved; fixed26API/9controls/Worker/native6groups9captures.",
+    "API/compiler temporary files retained, not empty/deleted; old897/36tmp and3068/110tmp immutable.",
+    "162 final closure records rehashed; snapshots and sampled ownership nonexhaustive, no kernel/continuous absence proof.",
+    "No browser/fullWorker/provider/inference/production or permanent typed ownership claim;596/ABA/fresh repair/rebuilt/history limits retained."
+  ]
+}

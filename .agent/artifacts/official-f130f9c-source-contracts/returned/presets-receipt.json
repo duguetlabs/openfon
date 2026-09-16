@@ -1,0 +1,19 @@
+{
+  "state": "ACTUAL_OWNER_COMMITTED_WORKING_RECEIVED_EXACT",
+  "owner_commit": "f7e0454e5146a7cf70f403c68c13223f4db3d8a2",
+  "head": "f130f9c56ad3c69e6679c69fc65cb45c2c25d98f",
+  "files": [
+    {
+      "path": ".agent/artifacts/legacy-knowledge-f130/contract.md",
+      "sha256": "be2e1dd7f79ef65a3b4e6086f2503d816fecb9ffa44e25656025589364700882",
+      "bytes": 16222
+    },
+    {
+      "path": ".agent/artifacts/legacy-knowledge-f130/source-identities.json",
+      "sha256": "435aeabc60f322491d3b3ddcb7e8344ab2395a6dbc9b7d5aee13ddf17853a2b1",
+      "bytes": 14187
+    }
+  ],
+  "source_identity_count": 65,
+  "no_runtime": true
+}

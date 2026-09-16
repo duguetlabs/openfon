@@ -148,3 +148,33 @@ continue to satisfy the guards, including legacy JSON projection and foundation
 repair. An invalid direct import now fails. Keep guards installed on code rollback;
 use compatible code or an explicitly coordinated database-and-code recovery that
 accounts for intervening writes. Do not treat a Worker rollback as a schema undo.
+
+
+## Legacy knowledge synchronization conflicts
+
+Legacy services and FAQ synchronization checks that its observed source, sync
+marker, default collection and complete affected imported rows still match
+before applying a replacement. If another request changes them while a plan is
+waiting, the request returns a conflict instead of replacing the newer content.
+For example, a delayed workspace read cannot overwrite a source save followed by
+a typed knowledge edit using the read's older projection. The caller must read
+the current state before deciding whether to submit another change; no automatic
+retry is added.
+
+The guard covers the associated source, marker, item and quota writes in the
+same D1 batch, including missing-default repair. It does not undo foundation
+work that completed in an earlier batch. Equivalent cleanup, empty replacement
+and no-op synchronization keep their existing behavior. Tenant and editing
+quota checks still apply, and this correction requires no schema migration.
+
+This is a conflict check against observed values, not permanent ownership of
+legacy-derived rows by the typed editor. A later fresh legacy repair can still
+intentionally replace an already-observed typed edit. An exact return to the
+previous values is indistinguishable from no change (ABA); no revision counter
+or protection against every unrelated business-field merge is introduced. Old
+Worker code does not gain these checks from the database schema.
+
+The focused validation uses synthetic interleavings through Node HTTP handlers
+and local workerd D1. It distinguishes statement failure from whole-batch
+rollback, but does not establish production concurrency, remote migration or
+backup recovery behavior. Those require their own release-specific evidence.

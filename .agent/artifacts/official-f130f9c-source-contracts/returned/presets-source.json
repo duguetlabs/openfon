@@ -1,0 +1,416 @@
+{
+  "state": "SOURCE_ONLY_NO_PREPARATION_OR_RUNTIME",
+  "head": "f130f9c56ad3c69e6679c69fc65cb45c2c25d98f",
+  "authorities": [
+    {
+      "role": "selection",
+      "sha256": "b4898ab639ad7634d561ac1899c870aeac5f5dad22fb6f8b70b8b5b5653c5d83",
+      "bytes": 2387
+    },
+    {
+      "role": "citation-map",
+      "sha256": "ba5c4805e6b8638e47945cc968aa9a2ad5b92791bc0a9a21793255c7f98e2d6b",
+      "bytes": 3508
+    },
+    {
+      "role": "original-comment",
+      "sha256": "e90c7c779a3a1de4813e05fa4c5333abc668b301948423a2be874513e84a89e3",
+      "bytes": 13202
+    }
+  ],
+  "files": [
+    {
+      "path": "migrations/0001_init.sql",
+      "sha256": "14d6ffa48d6f8db76de9aa6f66e3ff92cf5452a9ce0d6e0a439590f988b1d0cd",
+      "bytes": 2608,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0002_engine.sql",
+      "sha256": "0ff3a484e2ec808e380f8a071e3fc0f6c7459eb65a9c2d457a0055c273ed82e2",
+      "bytes": 297,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0003_realtime_model.sql",
+      "sha256": "923cc7c5ca28e3006c7a2296e43ca5d3860eb99899b20636a823254f3ca86cf1",
+      "bytes": 222,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0004_realtime_voice.sql",
+      "sha256": "06d1d9eda8a6ba5b0bcae183edcdbe84e4bdebd0c5c601e42237e2c0824d3272",
+      "bytes": 270,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0005_closures.sql",
+      "sha256": "3967db151fc6f8dff49c519d99a9dd39dadb52f8b511de4aff9a0cb4015b14c0",
+      "bytes": 198,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0006_engine_profiles.sql",
+      "sha256": "2a7fe291606d07b5b6c42bdb9df81eff2934ac6d9050a4d1bbf4cd64ed23844b",
+      "bytes": 769,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0007_abuse_limits.sql",
+      "sha256": "ad34c6a80b0549ca7dcd3561b8efdb65a936c9ad2194e8f0d3ec53087f78bf57",
+      "bytes": 4481,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0008_calm_studio_foundation.sql",
+      "sha256": "203a7c136fb7508bf383de4f3ae9ca844dbbb1f70a551dd04f508ffdee0d79cb",
+      "bytes": 15028,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0009_telnyx_inbound.sql",
+      "sha256": "742632a1ddf10fe1932fcab14542fdff89e3dea9e57ebfe0f3cefbca753375d1",
+      "bytes": 1495,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0010_provider_capabilities.sql",
+      "sha256": "6ed6fd7a965e07a185d21cf5dfec4a746646cf7d934781f719d08938eccbe800",
+      "bytes": 878,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0011_asterisk_inbound.sql",
+      "sha256": "b9051d6705d69ff3914c36fa9f0cd67b689087ac3323244fd59f77d9962add62",
+      "bytes": 583,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0012_assistant_essentials.sql",
+      "sha256": "bf09fc6c6607b21a6233d3ca7e0bb74b8a79fd664333d1e30a6fca2788e9ed24",
+      "bytes": 2118,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0013_knowledge_budgets.sql",
+      "sha256": "d5ea763f2013707cab473a68fc8495ace1751e50a66c21a3addc94f8a5e1cbb4",
+      "bytes": 5742,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0014_asterisk_credentials.sql",
+      "sha256": "7df5b324b629e332cf6d3081aba89e02113e17a6fbd67c014b4dc54b11d209e3",
+      "bytes": 590,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0015_assistant_budgets.sql",
+      "sha256": "5faa7a48d605beccdfdcf0dfae5114ead33da545e23fd7b04ac6e27a6841c6e4",
+      "bytes": 4701,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0016_engine_profile_credentials.sql",
+      "sha256": "355c1bac4e0a2aa8471b10d5acc2ccd66733bfb158fbe9d088798a3d7e5611f5",
+      "bytes": 2215,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0017_preset_budgets.sql",
+      "sha256": "d894c7360978a4243ff2bc743b164d80be3675455c947c55d03e1c7bbf893c24",
+      "bytes": 7888,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0018_engine_profile_compatibility.sql",
+      "sha256": "119e7c88d7228f887ca2ac22ca921f3f01c8b520f8be35228481cfb5d26e4726",
+      "bytes": 2419,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0019_missing_legacy_activation.sql",
+      "sha256": "4c4c6d507d2540bdea4eaf3d787c7cce8691f49f779f026fe1331072b0c9c842",
+      "bytes": 594,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0020_browser_ticket_claim.sql",
+      "sha256": "3c205cc454e588d3b87c11e1e51001c5d42a55747c893ee5d86203bfe550b5ee",
+      "bytes": 356,
+      "committed_working_identical": true
+    },
+    {
+      "path": "migrations/0021_knowledge_tenant_guards.sql",
+      "sha256": "b1b7aabd2f39b3ea565a30ca939bb8348624cc28580180ea47797c43e290902a",
+      "bytes": 2804,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/account-api.ts",
+      "sha256": "ba040d9af67ba3340f994ab4184dfe67831f999bda1f0dfc20d06cfecfb3ecbe",
+      "bytes": 16925,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/account-auth-budget.ts",
+      "sha256": "06155564622254a220dbc4fdd7d1c035639bca36159887e4835e765dd3f603e4",
+      "bytes": 932,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/assistant-write-snapshot.ts",
+      "sha256": "e37594eed016483b0eb5e40800ccf7df284c1bf00611de7f741a9793147a55aa",
+      "bytes": 807,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/asterisk-auth-budget.ts",
+      "sha256": "36cae583735064dabfb977e447f01e734e5ae3f93f2ec3d87f67d44f3f10410f",
+      "bytes": 931,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/asterisk-control.ts",
+      "sha256": "f6e314bf97f70de409a0af56640bc73585a202a785f6377337183a39ac1a24d9",
+      "bytes": 14926,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/asterisk-media.ts",
+      "sha256": "89b7448be299211ec7a016e96b4cdc0be58b4640f7cf501780c9888f1be2a583",
+      "bytes": 9713,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/asterisk-routes.ts",
+      "sha256": "9fa57ea79eb905b63df9b3c0d6e09dce03e0fbca59d44a4c78a55e6a68be2c63",
+      "bytes": 5999,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/asterisk-websocket.ts",
+      "sha256": "8a3c603cdc5808255bd2615429b3b73686b343d9d081b7112739abf8c4878811",
+      "bytes": 700,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/auth.ts",
+      "sha256": "92c3260be1980a8af4283e38c49dee68648d2d5ff85cfa0e71687b5b32c5e71d",
+      "bytes": 3628,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/call-knowledge.ts",
+      "sha256": "da86cab7796348304456f6ca63dd6dd792ca849220961c36d4db26d87b388cef",
+      "bytes": 2500,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/call-session.ts",
+      "sha256": "8c884f8a6f39d7db83b22ff40eb9d0233436eb0391866b0701a7a09c2d18b413",
+      "bytes": 109017,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/contact.ts",
+      "sha256": "4ccd8822ba2b99252b9a8a94a25c0bd9a5cd6c238c6571dcb881fedcab9e3d84",
+      "bytes": 370,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/index.ts",
+      "sha256": "7d21900e2bc6ace0af34c9b0b4f745eeb0f3285249f469575fd7eb6b31e5e9d4",
+      "bytes": 76784,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/media-output-debt.ts",
+      "sha256": "c64be7586ab4b804fcb7158144e322a95061f0504fe080052475b1fabba8c5a4",
+      "bytes": 1127,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/piper-catalog.ts",
+      "sha256": "63f7923bafa6e9fc0f220b636fa20b1381391920b0f17c4cf47e605cee4fe274",
+      "bytes": 6314,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/preset-budgets.ts",
+      "sha256": "ce11ac81fae7bc37fe8b69f98aee1229cabced06dea654bd1499660cfff3f252",
+      "bytes": 5350,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/preset-write-snapshot.ts",
+      "sha256": "59a3136f0aa9f82f270937eaf192485008c4bc7faf4dad8ac1e4869e7fe9d54f",
+      "bytes": 1333,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/prompt.ts",
+      "sha256": "5090d3d61ab63b96f4a622738986ba66f2db6d2fde43a03968b03e7ae781a251",
+      "bytes": 11310,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/provider-response.ts",
+      "sha256": "7dba2fa2361876a813580fe1fb4d1b45b1ec42525977a52a2ba469e21db09bad",
+      "bytes": 3488,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/provider-settings.ts",
+      "sha256": "1be5872fa2d85c9ec48194b5d52f3143d36c4a15643b1aa663fde4e9341fa035",
+      "bytes": 9320,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/providers.ts",
+      "sha256": "8a3b941f17d9d7250cde355b46ed10a90e9bdbc63b85ab14fb012fe50edb5fe7",
+      "bytes": 22076,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/realtime-input.ts",
+      "sha256": "a342502b2a975fd384d5aa68de68c4f8e8c43c7eaa4bc23f7bb2c948dea9d98e",
+      "bytes": 2827,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/realtime-output.ts",
+      "sha256": "b0174aa67bbd646915c66136c69d211da6b36b480c065b84d2a3f72a75304c6d",
+      "bytes": 5600,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/realtime-providers.ts",
+      "sha256": "3dbaafdc7de38bbca7cd24f5d11bf26c3e75b8b4dbd36f705b4ee89e720963d0",
+      "bytes": 4784,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/request-validation.ts",
+      "sha256": "cd87621174f39ab3b363422567d88781c21b03e71ffb80373adcbe6cbb44094a",
+      "bytes": 2112,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/studio-api.ts",
+      "sha256": "62723612359a1a7f8a83c8887c46a0ae6ea1d83ac5e5c04a730d922dd46bd0fd",
+      "bytes": 102826,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/telephony-audio.ts",
+      "sha256": "cb06b9da26edbb1d37a1d601049ddb2eff5e1cf9618abdadcd0f5e6e68aedd4e",
+      "bytes": 5975,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/telnyx-admission.ts",
+      "sha256": "259de6b3f8eb3d6787e1d6a7bce2e23fbca461fdcaf90a357ef1486335b2bc63",
+      "bytes": 6408,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/telnyx-control.ts",
+      "sha256": "00a3ae80f7c3f79e700a58e58548d8e70f4410b0eea175c0e860e12e9fee845c",
+      "bytes": 25052,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/telnyx-media-admission.ts",
+      "sha256": "7bb30b1b06467197dac366e357d9f4687fbdd46b38048fe159663e59a881f265",
+      "bytes": 767,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/telnyx-media.ts",
+      "sha256": "e34f6146cf35e17f3bbc76baec61e2b647f8aa3e668bc8b8146dcd9dc6a59740",
+      "bytes": 17217,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/telnyx-routes.ts",
+      "sha256": "2351a3bcdca548785d439ae32be2cdfb64be6148e1d1c03a681281b8b2d73c41",
+      "bytes": 8299,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/telnyx-webhook-admission.ts",
+      "sha256": "fc043545b374aa6b6d378faf64a51006df6bfb9ebc752535dcaa62807c777e24",
+      "bytes": 1925,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/telnyx-webhook.ts",
+      "sha256": "fba2355f23073ae5fdaa2ae4f4d056cb4e27dca67c49dad18c7f3c15d66a97e5",
+      "bytes": 9092,
+      "committed_working_identical": true
+    },
+    {
+      "path": "src/types.ts",
+      "sha256": "f970c83e843fd07309389027824ee8d3b60dcfadc5c107ad1bb80eea5ec258de",
+      "bytes": 4086,
+      "committed_working_identical": true
+    },
+    {
+      "path": "web/src/pages/Studio.tsx",
+      "sha256": "23ebbb9cae00b8640609dd0947f5fdc8f50d0fb5b3a5f75779bacb2982a8be8e",
+      "bytes": 41107,
+      "committed_working_identical": true
+    },
+    {
+      "path": "web/src/api.ts",
+      "sha256": "a737158ee2d5fc69a22876555fedf8243480a9b1ea459b14ac3175269a9f5188",
+      "bytes": 13889,
+      "committed_working_identical": true
+    },
+    {
+      "path": "web/src/service-rows.ts",
+      "sha256": "19883445744dc1452778072c2de2918bee37ba79529aeb0ee25ec060c710674f",
+      "bytes": 859,
+      "committed_working_identical": true
+    },
+    {
+      "path": "test/studio-api.test.ts",
+      "sha256": "190804f0f073eaae9e4448e857058a48134bcfca7fccc863d9942386d4c371ed",
+      "bytes": 119904,
+      "committed_working_identical": true
+    },
+    {
+      "path": "test/knowledge-budget.test.ts",
+      "sha256": "74733ebb0fb46d3cb97391954ab63890a14f2311dde6d4aa24764d18a3c2a4b6",
+      "bytes": 9827,
+      "committed_working_identical": true
+    },
+    {
+      "path": "test/knowledge-concurrency.test.ts",
+      "sha256": "a6a9ad6df73c25b7121bdc54a1762a95a05ccb419022d5fbe50c09893a2b273a",
+      "bytes": 9907,
+      "committed_working_identical": true
+    },
+    {
+      "path": "test/knowledge-tenant-guards.test.ts",
+      "sha256": "228b65f0d44486b1a6f0b51e26a65c4bddebd72c604e984e4cbd76ba23fded2e",
+      "bytes": 16407,
+      "committed_working_identical": true
+    },
+    {
+      "path": "test/sqlite-d1.ts",
+      "sha256": "63c2e296be05e1857d448bfd5b5d323e05836e366a48af80953c051447de1a01",
+      "bytes": 4632,
+      "committed_working_identical": true
+    },
+    {
+      "path": "docs/migration-compatibility.md",
+      "sha256": "71eef295255de3bc2c30afbbefd98d4c379e62eebb2cbad6e74ab3be71d81c5f",
+      "bytes": 9769,
+      "committed_working_identical": true
+    }
+  ],
+  "count": 65,
+  "scope": "All current src and migrations for writer inventory; selected UI/tests/docs read as source. Identity equality is not runtime validation.",
+  "review_limits": "596 omitted review paths; all earlier evidence/uncertainty/rebuilt limits remain."
+}

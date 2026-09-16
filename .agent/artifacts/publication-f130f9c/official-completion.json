@@ -1,0 +1,70 @@
+{
+  "state": "COMPLETE_PUBLISHED_EXPLICIT_RELEASE_NO_CLEARANCE",
+  "at": "2026-09-16T05:29:02.520838+00:00",
+  "completion_sha256": "ddc9b1e47b9ae9732188531bd796d55f01b3da69e807cda3635f0953e4851523",
+  "release_sha256": "989a63082ed43e70125b757296dc1a6c968986b890cd77c6dac5f2d7e5f035a5",
+  "completion": {
+    "at": "2026-09-16T05:24:20.259655+00:00",
+    "head": "f130f9c56ad3c69e6679c69fc65cb45c2c25d98f",
+    "attempt_id": "f130f9c-path-prefix-1",
+    "status": "complete",
+    "reviewer_elapsed_s": 207.4,
+    "launcher_elapsed_s": 211.195,
+    "runtime_exit_reported": 0,
+    "reviewer_stderr_bytes_reported": 0,
+    "launcher_stderr_bytes": 0,
+    "original_sha256": "e90c7c779a3a1de4813e05fa4c5333abc668b301948423a2be874513e84a89e3",
+    "original_bytes": 13202,
+    "original_characters": 13160,
+    "public_comment": 5692471142,
+    "public_url": "https://github.com/duguetlabs/openfon/pull/16#issuecomment-5692471142",
+    "fullbody_sha256": "025ba68dff2c2d95ff39f1b730c4200762232d27069527f8ecb4cee1b6b8d781",
+    "exact_original_public_readback": true,
+    "omissions": {
+      "listed": 50,
+      "additional": 546,
+      "total": 596
+    },
+    "security": "Actual original preserved; findings not adjudicated by execution closure, no security/major clearance.",
+    "release": {
+      "at": "2026-09-16T05:24:20.257920+00:00",
+      "state": "EXPLICIT_RELEASED",
+      "head": "f130f9c56ad3c69e6679c69fc65cb45c2c25d98f",
+      "attempt_id": "f130f9c-path-prefix-1",
+      "grant_state": "CONSUMED_ONCE_COMPLETE_PUBLISHED_RELEASED",
+      "launcher_exit": 0,
+      "publisher_exit": 0,
+      "observed_process_count": 2,
+      "observed_remaining": 0,
+      "scoped_process_matches": 0,
+      "reserved_listeners": 0,
+      "unrelated_exact_identity_exclusions": 5,
+      "nonexhaustive": "Two observed launcher/publisher PIDs absent in point-in-time process table and scoped scan; no exhaustive descendant or transport teardown proof.",
+      "source_files_unchanged": 515,
+      "runtime_identities_unchanged": 522,
+      "application_paths_unchanged": 223,
+      "dependency_or_source_cleanup": "None created or changed; private original evidence retained."
+    },
+    "limits": [
+      "Prior574/558/542/528/497/432/430/417 omissions historical",
+      "Prior failed2926stderr contents/cause and historicalQA PATH remain unproved",
+      "Rebuilt132versions match; former binary/build/site-file identity unproved",
+      "No retry/fallback/settings/model/source change or application replay",
+      "Findings not independently adjudicated by this execution closure"
+    ]
+  },
+  "independent_integration_readback": "Full public body and exact original suffix verified; fresh PR OPEN/head/ref/body unchanged.69catalogued mixed raw/derived/input/harness records hashes/bytes/modes checked; not69raw reviewer outputs.",
+  "catalogs": [
+    {
+      "name": "qa-official-f130f9c-path-prefix-1",
+      "count": 37,
+      "sha256": "6cbe1e0414c88552b57b8397e44bc87d7791209a906183a59ff24b1058250fde"
+    },
+    {
+      "name": "qa-preflight-f130f9c-path-prefix-1",
+      "count": 32,
+      "sha256": "eabf14277e4cf5f239988a46bc9a12d8da6c359ef849520b6a64bc144ea5420b"
+    }
+  ],
+  "completion_QA": "c685c87"
+}
