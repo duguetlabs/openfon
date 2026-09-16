@@ -1,0 +1,66 @@
+{
+  "state": "CURRENT_CHECKPOINT_INSERTION_NO_OPACITY_TRANSFORMATION",
+  "source_head": "a7dccb452381e399b887c6deecfe5fb3e8d37b30",
+  "path": ".agent/workstreams/integration.md",
+  "before": {
+    "sha256": "a93dd68f3525370ed89de5104eac3606dd12901240c8997bb66db223bd305415",
+    "bytes": 282985
+  },
+  "candidate": {
+    "sha256": "5b362b450b2dcee49995f9c06926eab02f9786167cec51bba56de7c6516d33c5",
+    "bytes": 286644
+  },
+  "insertion_bytes": 3667,
+  "heading_before": "## CURRENT STATUS \u2014 f8 dispositions and confirmed account deletion correction",
+  "heading_after": "## Historical f8 dispositions and confirmed account deletion correction",
+  "historical_suffix_after_first_heading": {
+    "sha256": "7e8298ca6cec793d779b23c45c0e7f08a9b400afcd5100ceec5746105b60c715",
+    "bytes": 282879
+  },
+  "preservation": "Remove exact inserted block and restore one heading to recover entire prior checkpoint.",
+  "catalog": {
+    "path": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+    "before": {
+      "sha256": "b470f0c70321dfbe771e19c36c2fac825555e39fcc825f955c1f0e3301479379",
+      "bytes": 234481
+    },
+    "candidate": {
+      "sha256": "ab0f2783721dff786268232b8f81febc00d776d7810cbe90b034d0498ec5d8a1",
+      "bytes": 234481
+    },
+    "only_prior_fields": {
+      "current_public_sha256": "a93dd68f3525370ed89de5104eac3606dd12901240c8997bb66db223bd305415",
+      "current_public_bytes": 282985,
+      "current_identity_lineage": ".agent/artifacts/official-f8e8b76-source-contracts/checkpoint-lineage.json"
+    }
+  },
+  "prior_lineage": ".agent/artifacts/official-f8e8b76-source-contracts/checkpoint-lineage.json",
+  "old_hash_consumers": [
+    {
+      "path": ".agent/artifacts/reservation-cleanup-2413/assembly-parent-inventory.json",
+      "sha256": "67663b1440a1ba4abe9121f31474f891c61c2ae4c57144983d2be540a707eff8",
+      "bytes": 335446
+    },
+    {
+      "path": ".agent/artifacts/official-f8e8b76-source-contracts/checkpoint-lineage.json",
+      "sha256": "0aed00be6522cf976f6e2a0f0a00a75b799dcc1a5ef80a55eaae6e809ca4d24b",
+      "bytes": 2874
+    },
+    {
+      "path": ".agent/artifacts/publication-confirmed-deletion-f8/final-documentation-assembly.json",
+      "sha256": "9b7a17a3e160328d7662af7c30527b37b0a9a0d18d5094a8d0fe08449aa97dce",
+      "bytes": 7873
+    },
+    {
+      "path": ".agent/artifacts/publication-confirmed-deletion-f8/final-documentation-manifest.json",
+      "sha256": "21c94535151aa27cc1344e65db7ca6ce3889399e6eda388b785b96a7ae36784b",
+      "bytes": 253261
+    },
+    {
+      "path": ".agent/artifacts/metadata-hygiene-49df/derivation.json",
+      "sha256": "b470f0c70321dfbe771e19c36c2fac825555e39fcc825f955c1f0e3301479379",
+      "bytes": 234481
+    }
+  ],
+  "consumer_rule": "Only three current catalog fields change; earlier consumers retain historical/precondition identities. New manifest and lineage are additive."
+}

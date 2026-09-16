@@ -1,0 +1,43 @@
+{
+  "state": "RECEIVED_SOURCE_ONLY_OWNER_HANDOFF_IDENTITIES_VERIFIED",
+  "head": "2413ac285754202c791178d4bf713a50116d8acc",
+  "provenance": "Same pC two-part user-relayed narrative and identity attachment; no claimed owner-file byte-copy",
+  "count": 7,
+  "records": [
+    {
+      "path": "src/telnyx-routes.ts",
+      "sha256": "2351a3bcdca548785d439ae32be2cdfb64be6148e1d1c03a681281b8b2d73c41",
+      "bytes": 8299
+    },
+    {
+      "path": "src/telnyx-webhook.ts",
+      "sha256": "fba2355f23073ae5fdaa2ae4f4d056cb4e27dca67c49dad18c7f3c15d66a97e5",
+      "bytes": 9092
+    },
+    {
+      "path": "src/telnyx-webhook-admission.ts",
+      "sha256": "fc043545b374aa6b6d378faf64a51006df6bfb9ebc752535dcaa62807c777e24",
+      "bytes": 1925
+    },
+    {
+      "path": "src/telnyx-control.ts",
+      "sha256": "00a3ae80f7c3f79e700a58e58548d8e70f4410b0eea175c0e860e12e9fee845c",
+      "bytes": 25052
+    },
+    {
+      "path": "src/telnyx-admission.ts",
+      "sha256": "259de6b3f8eb3d6787e1d6a7bce2e23fbca461fdcaf90a357ef1486335b2bc63",
+      "bytes": 6408
+    },
+    {
+      "path": "docs/telephony.md",
+      "sha256": "62f3ac9910d7f51623e3a4b602c3f43c753aa1d963fc099a6ef8dd26cabec871",
+      "bytes": 10215
+    },
+    {
+      "path": "test/telnyx-control.test.ts",
+      "sha256": "e72ab0cafde73700880f7483b3076e70c21edf54d3a7787cb015ae3c1587a7c9",
+      "bytes": 61703
+    }
+  ]
+}

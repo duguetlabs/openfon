@@ -1,0 +1,111 @@
+{
+  "state": "2413_RESERVATION_SOURCE_EVIDENCE_ASSEMBLY_CLOSED_FINAL_DOCS_PENDING",
+  "at": "2026-09-16T03:57:20.369813+00:00",
+  "head": "2413ac285754202c791178d4bf713a50116d8acc",
+  "publication": {
+    "state": "PUBLISHED_EXACT_READBACK",
+    "at": "2026-09-15T16:02:37.411848+00:00",
+    "head": "2413ac285754202c791178d4bf713a50116d8acc",
+    "body_sha256": "b6d92cd7d395fca63766eba90dd4b2f227f043f3d422c794ded7f169729d7e7c",
+    "disposition_comment": 5683588341,
+    "disposition_sha256": "20a9e1b6afd19798b4e7ebf1e80f5eb39b1980eb70e083c3caa641d1b05ac630",
+    "push": "one exact push",
+    "official_grant": null
+  },
+  "content_QA": "eff21cdfbc58cd1f7ca457d6f614e1100a7305ef",
+  "assembly_QA": "69a6111ff6db8a0358d9fbc76aa973952b1e8056",
+  "source_QA": "fbbb0f9",
+  "next": "Final docs content/exact assembly QA, publication/readback/freshCI, separately gated unchanged latest-head official review.",
+  "plan_sha256": "6ce801e1ed718b1c45119ed921b07659665d56d27930c79c01a285d949d04ab1",
+  "pending_CI": [
+    34992444939,
+    34992459730
+  ],
+  "plan_QA": "50934dcef2f44f6e11874d5c218469ca81971dab",
+  "CI": [
+    {
+      "id": 34992444939,
+      "jobs": {
+        "bench-realtime": "success",
+        "check": "success",
+        "bench-scoring": "success",
+        "browser": "success",
+        "deploy": "skipped"
+      }
+    },
+    {
+      "id": 34992459730,
+      "jobs": {
+        "bench-scoring": "success",
+        "bench-realtime": "success",
+        "browser": "success",
+        "check": "success",
+        "deploy": "skipped"
+      }
+    }
+  ],
+  "grant_sha256": "c1c60ef9a0bdd4f2b4d5e2641b4ffd5ebbd11bddcaa5b4b5ab0dcfe9b6472308",
+  "freeze": "Published2413original/evidence immutable; local exact3correction assembled. Documentation candidates not yet applied; no runtime grant remains.",
+  "launch_at": "2026-09-15T16:12:15+00:00",
+  "grant": {
+    "attempt_id": "2413ac2-path-prefix-1",
+    "count": 1,
+    "state": "CONSUMED_ONCE_COMPLETE_PUBLISHED_RELEASED"
+  },
+  "official_comment": 5683817963,
+  "original_sha256": "59caa88d5f9d5fd9e49d7477d10d2d95be4a4610684b142f8a1ac796afcf1fba",
+  "fullbody_sha256": "5ef57a6193b4ae903fa730f20246e6919d2d77fa90013207f3134f2b4adea824",
+  "omissions": {
+    "listed": 50,
+    "additional": 524,
+    "total": 574
+  },
+  "release": {
+    "at": "2026-09-15T16:17:20.218702+00:00",
+    "state": "EXPLICIT_RELEASED",
+    "head": "2413ac285754202c791178d4bf713a50116d8acc",
+    "attempt_id": "2413ac2-path-prefix-1",
+    "grant_state": "CONSUMED_ONCE_COMPLETE_PUBLISHED_RELEASED",
+    "launcher_exit": 0,
+    "publisher_exit": 0,
+    "observed_process_count": 2,
+    "observed_remaining": 0,
+    "scoped_process_matches": 0,
+    "reserved_listeners": 0,
+    "unrelated_exact_identity_exclusions": 5,
+    "nonexhaustive": "Two observed launcher/publisher PIDs absent in point-in-time process table and scoped scan; no exhaustive descendant or transport teardown proof.",
+    "source_files_unchanged": 515,
+    "runtime_identities_unchanged": 522,
+    "application_paths_unchanged": 221,
+    "dependency_or_source_cleanup": "None created or changed; private original evidence retained."
+  },
+  "completion_sha256": "110fdddb08fcdb78481efbde2227f7fd15ca17b3e7d7130d25b8687d3ed830fe",
+  "completion_QA": "4afd6523ab455dacbaa8d9a10af2e5ce3a58831d",
+  "source_contracts": {
+    "selection": "Root653a7f5",
+    "request": ".agent/artifacts/official-2413ac2-source-contracts/qa-request.json",
+    "identities": "27+12+18+7=64records/57unique",
+    "state": "FOUR_QUALIFIED_AGREEMENTS_CLOSED_f4b779b; reservation correction assembled; matching-client policy retained"
+  },
+  "local_source_head": "a7dccb452381e399b887c6deecfe5fb3e8d37b30",
+  "correction": {
+    "head": "a7dccb452381e399b887c6deecfe5fb3e8d37b30",
+    "source_QA": "9f694bb",
+    "controller_QA": "5e62654",
+    "evidence_QA": "17011bb",
+    "assembly_QA": "db0d79515c3803381668f6549e3aaf966b8a2d61",
+    "release": "2026-09-16T02:43:49.253294+00:00",
+    "state": "CLOSED"
+  },
+  "historical_source_phase": {
+    "state": "COMPLETE_RELEASED_SOURCE_CONTRACT_QA_ACTIVE",
+    "at": "2026-09-15T16:27:16.939669+00:00",
+    "next": "Existing QA independent source agreements, then precise reconciliation before any correction/policy preparation selection. No runtime/publication grant.",
+    "source_contracts": {
+      "selection": "Root653a7f5",
+      "request": ".agent/artifacts/official-2413ac2-source-contracts/qa-request.json",
+      "identities": "27+12+18+7=64records/57unique",
+      "state": "FOUR_ACTUAL_CONTRACTS_ROUTED_ONCE_TO_EXISTING_QA"
+    }
+  }
+}

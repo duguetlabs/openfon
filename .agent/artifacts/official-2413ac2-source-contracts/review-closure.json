@@ -1,0 +1,26 @@
+{
+  "state": "2413_SOURCE_DISPOSITIONS_AND_RESERVATION_CORRECTION_CLOSED_LATEST_HEAD_REVIEW_REQUIRED",
+  "review_head": "2413ac285754202c791178d4bf713a50116d8acc",
+  "source_head": "a7dccb452381e399b887c6deecfe5fb3e8d37b30",
+  "official_comment": 5683817963,
+  "original_sha256": "59caa88d5f9d5fd9e49d7477d10d2d95be4a4610684b142f8a1ac796afcf1fba",
+  "fullbody_sha256": "5ef57a6193b4ae903fa730f20246e6919d2d77fa90013207f3134f2b4adea824",
+  "source_QA": "f4b779b",
+  "correction_QA": [
+    "9f694bb",
+    "5e62654",
+    "17011bb",
+    "db0d79515c3803381668f6549e3aaf966b8a2d61"
+  ],
+  "disposition": {
+    "sha256": "76a6b939f190def21fe258d5b6a8fd28b78fb13ab782f81036917a3138189222",
+    "bytes": 9343
+  },
+  "release_record": {
+    "sha256": "24c1b2d904fdbb48aa3c6ef5cfc510be8c0c44612aae96a64d4806892a6f108b",
+    "bytes": 7525
+  },
+  "omissions": 574,
+  "policy": "Matching receipt-capable clients required; old/cached no-ACK limitation accepted. No new protocol/early rejection/support/waiver.",
+  "status": "Final documentation candidates; content/exact assembly QA and publication/freshCI/separately gated official review remain. No grant or security/major clearance."
+}

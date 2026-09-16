@@ -1,0 +1,86 @@
+{
+  "state": "SOURCE_CONTRACT_ONLY_NO_PREPARATION_OR_RUNTIME",
+  "base": "2413ac285754202c791178d4bf713a50116d8acc",
+  "owner_head_at_read": "72e8cface8c3860ff988ef9b2413c23dd222e97b",
+  "selection_sha256": "a0b32c894f59f8c17c49b1f9848320e6d6aa5cf97b58e9af1a3719e75f050b66",
+  "citation_map_sha256": "606f8c4126bddcf39ec199ddeef943eb6cdfedeeb67fca0a00d4c187c05928e1",
+  "original_comment": 5683817963,
+  "original_sha256": "59caa88d5f9d5fd9e49d7477d10d2d95be4a4610684b142f8a1ac796afcf1fba",
+  "original_bytes": 9637,
+  "original_omissions": 574,
+  "sources": [
+    {
+      "path": "src/studio-api.ts",
+      "sha256": "9855b8c59b8eda0f7a27f19ab282ab0edc1ea4c5dd03f418a3cf7914ab2f91cc",
+      "bytes": 102236,
+      "committed_equals_working": true
+    },
+    {
+      "path": "src/index.ts",
+      "sha256": "7d21900e2bc6ace0af34c9b0b4f745eeb0f3285249f469575fd7eb6b31e5e9d4",
+      "bytes": 76784,
+      "committed_equals_working": true
+    },
+    {
+      "path": "src/providers.ts",
+      "sha256": "8a3b941f17d9d7250cde355b46ed10a90e9bdbc63b85ab14fb012fe50edb5fe7",
+      "bytes": 22076,
+      "committed_equals_working": true
+    },
+    {
+      "path": "src/provider-response.ts",
+      "sha256": "7dba2fa2361876a813580fe1fb4d1b45b1ec42525977a52a2ba469e21db09bad",
+      "bytes": 3488,
+      "committed_equals_working": true
+    },
+    {
+      "path": "test/studio-api.test.ts",
+      "sha256": "190804f0f073eaae9e4448e857058a48134bcfca7fccc863d9942386d4c371ed",
+      "bytes": 119904,
+      "committed_equals_working": true
+    },
+    {
+      "path": "test/sqlite-d1.ts",
+      "sha256": "63c2e296be05e1857d448bfd5b5d323e05836e366a48af80953c051447de1a01",
+      "bytes": 4632,
+      "committed_equals_working": true
+    },
+    {
+      "path": "test/test-call-cancellation.test.ts",
+      "sha256": "45e052476d02760ba58319cade0c8c451e0fc832dfd9e342dab50b966bc8c468",
+      "bytes": 3076,
+      "committed_equals_working": true
+    },
+    {
+      "path": "migrations/0007_abuse_limits.sql",
+      "sha256": "ad34c6a80b0549ca7dcd3561b8efdb65a936c9ad2194e8f0d3ec53087f78bf57",
+      "bytes": 4481,
+      "committed_equals_working": true
+    },
+    {
+      "path": "migrations/0013_knowledge_budgets.sql",
+      "sha256": "d5ea763f2013707cab473a68fc8495ace1751e50a66c21a3addc94f8a5e1cbb4",
+      "bytes": 5742,
+      "committed_equals_working": true
+    },
+    {
+      "path": "migrations/0015_assistant_budgets.sql",
+      "sha256": "5faa7a48d605beccdfdcf0dfae5114ead33da545e23fd7b04ac6e27a6841c6e4",
+      "bytes": 4701,
+      "committed_equals_working": true
+    },
+    {
+      "path": "migrations/0017_preset_budgets.sql",
+      "sha256": "d894c7360978a4243ff2bc743b164d80be3675455c947c55d03e1c7bbf893c24",
+      "bytes": 7888,
+      "committed_equals_working": true
+    },
+    {
+      "path": "migrations/0021_knowledge_tenant_guards.sql",
+      "sha256": "b1b7aabd2f39b3ea565a30ca939bb8348624cc28580180ea47797c43e290902a",
+      "bytes": 2804,
+      "committed_equals_working": true
+    }
+  ],
+  "limits": "Byte identities and source inspection only. No application/fixture preparation, runtime, imports, tests, SQL execution, types, dependency changes, review or inference. Integration routes independent QA once."
+}

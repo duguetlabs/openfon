@@ -1,0 +1,242 @@
+{
+  "state": "VALIDATED_EXTERNAL_VERIFIED_AWAITING_INTEGRATION_RELEASE",
+  "release": false,
+  "base": "2413ac285754202c791178d4bf713a50116d8acc",
+  "grant_sha256": "6bc7206cc04c9286e63b92e247447a0c5d687a749e91b1458408b8f44b12ecf5",
+  "source_identities": {
+    "prepared-manifest.json": "f9e7f401c2b23a6a117a947d3f6d3b5b736396318d8d4c751f6d264ff3a78a65",
+    "delivery.patch": "97aa69426c7b64d55d8303bfe36a69caf84d6a5aef762811d232263a209124cd",
+    "reporter-recovery/controller.py": "006b64663e9d3c027b7c4bf2eb50c94d378557dae2a100e2c177d646e5b9e1fc",
+    "reporter-recovery/capture.py": "04e72fb148701669722eb134df49dd304959c028ae8e197ebb25027937e2560b",
+    "reporter-recovery/payload-schema.json": "a0ae3c56638118d89148bbe32368e0e4aff84cedc6f2e930bdd889be31dcc7a7",
+    "reporter-recovery/plan.json": "3d27eccf2a633f8a4a660174d315085aa452a01754ca9b89ad18b1705d454733",
+    "src/studio-api.ts": "62723612359a1a7f8a83c8887c46a0ae6ea1d83ac5e5c04a730d922dd46bd0fd",
+    "test/studio-reservation-cleanup.test.ts": "0c3436a1884fc0339b9bb1e5c412cbaaf638d7129e6d72253d85eca69bc741e9",
+    "scripts/studio-reservation-smoke.mjs": "ca5522caaf83a3dc4bd1b787c55469958561ddff196f2567e989c38641a4968e"
+  },
+  "commands": {
+    "original-api": {
+      "exit": 1,
+      "elapsed_seconds": 0.9030548329901649,
+      "adjudication": {
+        "kind": "API",
+        "passed": 0,
+        "failed": 16,
+        "skipped": 18,
+        "selected_titles": [
+          "[original-negative] ticket ip-minute before preserves only unconfirmed current spend",
+          "[original-negative] ticket ip-minute after preserves only unconfirmed current spend",
+          "[original-negative] ticket ip-day before preserves only unconfirmed current spend",
+          "[original-negative] ticket ip-day after preserves only unconfirmed current spend",
+          "[original-negative] provider ip-minute before preserves only unconfirmed current spend",
+          "[original-negative] provider ip-minute after preserves only unconfirmed current spend",
+          "[original-negative] provider ip-day before preserves only unconfirmed current spend",
+          "[original-negative] provider ip-day after preserves only unconfirmed current spend",
+          "[original-negative] provider provider-day before preserves only unconfirmed current spend",
+          "[original-negative] provider provider-day after preserves only unconfirmed current spend",
+          "[original-negative] acquisition error owns one cleanup when refund before",
+          "[original-negative] acquisition error owns one cleanup when refund after",
+          "[original-negative] acquisition error owns one cleanup when refund late-abort",
+          "[original-negative] peers and original windows survive a partial helper failure across midnight",
+          "[original-negative] definite failure permits one explicit retry without leaked spend",
+          "[original-negative] provider acquisition cleanup retains completed foundation reconstruction"
+        ],
+        "first_assertion_limits": true
+      },
+      "retained_tmp_files": 36
+    },
+    "original-native": {
+      "exit": 1,
+      "elapsed_seconds": 1.6339542079949751,
+      "adjudication": {
+        "kind": "native",
+        "outcomes": [
+          {
+            "name": "partial-ip-before",
+            "status": "FAIL",
+            "message": "Expected values to be strictly deep-equal:\n+ actual - expected\n... Skipped lines\n\n  [\n    {\n      name: 'agent_settings',\n      rows: [\n        {\n...\n          bucket: 'studio:minute:biz',\n+         count: 3,\n-         count: 2,\n          starts: 7,\n          window_start: 1789516740\n        },\n        {\n          bucket: 'studio:ip-minute:198.51.100.241',\n+         count: 3,\n-         count: 2,\n          starts: 7,\n          window_start: 1789516740\n        },\n        {\n          bucket: 'studio:ip-day:198.51.100.241',\n"
+          }
+        ],
+        "limits": "Node handlers/workerd D1; synthetic faults; no whole-Worker concurrency"
+      },
+      "retained_tmp_files": 0
+    },
+    "fixed-api": {
+      "exit": 0,
+      "elapsed_seconds": 0.9073716249986319,
+      "adjudication": {
+        "kind": "API",
+        "passed": 34,
+        "failed": 0,
+        "skipped": 0,
+        "selected_titles": [
+          "[original-negative] ticket ip-minute before preserves only unconfirmed current spend",
+          "[original-negative] ticket ip-minute after preserves only unconfirmed current spend",
+          "[original-negative] ticket ip-day before preserves only unconfirmed current spend",
+          "[original-negative] ticket ip-day after preserves only unconfirmed current spend",
+          "[original-negative] provider ip-minute before preserves only unconfirmed current spend",
+          "[original-negative] provider ip-minute after preserves only unconfirmed current spend",
+          "[original-negative] provider ip-day before preserves only unconfirmed current spend",
+          "[original-negative] provider ip-day after preserves only unconfirmed current spend",
+          "[original-negative] provider provider-day before preserves only unconfirmed current spend",
+          "[original-negative] provider provider-day after preserves only unconfirmed current spend",
+          "ticket workspace before never invents current ownership",
+          "ticket workspace after never invents current ownership",
+          "provider workspace before never invents current ownership",
+          "provider workspace after never invents current ownership",
+          "[original-negative] acquisition error owns one cleanup when refund before",
+          "[original-negative] acquisition error owns one cleanup when refund after",
+          "[original-negative] acquisition error owns one cleanup when refund late-abort",
+          "[original-negative] peers and original windows survive a partial helper failure across midnight",
+          "[original-negative] definite failure permits one explicit retry without leaked spend",
+          "provider concurrent null minute refunds only prior tokens with captured Retry-After",
+          "provider concurrent null ip-minute refunds only prior tokens with captured Retry-After",
+          "provider concurrent null ip-day refunds only prior tokens with captured Retry-After",
+          "provider concurrent null provider-day refunds only prior tokens with captured Retry-After",
+          "provider success attempt retains four admitted charges",
+          "provider http attempt retains four admitted charges",
+          "provider network attempt retains four admitted charges",
+          "later ticket before preserves existing refund and ambiguous call semantics",
+          "later ticket after preserves existing refund and ambiguous call semantics",
+          "known full IP is read-only and does not acquire or refund",
+          "invalid provider config has no Studio admission or provider attempt",
+          "missing owned ticket target has no Studio admission",
+          "[original-negative] provider acquisition cleanup retains completed foundation reconstruction",
+          "later ticket foundation failure refunds once without changing the primary error",
+          "null-gate refund rejection does not cause a second refund attempt"
+        ],
+        "first_assertion_limits": true
+      },
+      "retained_tmp_files": 36
+    },
+    "affected-controls": {
+      "exit": 0,
+      "elapsed_seconds": 0.8038788749981904,
+      "adjudication": {
+        "kind": "API",
+        "passed": 4,
+        "failed": 0,
+        "skipped": 60,
+        "selected_titles": [
+          "shares the per-minute studio allowance between test calls and provider checks",
+          "keeps a failed provider-day reservation and retry timing in the captured request window",
+          "refunds workspace and IP reservations when ticket insertion throws",
+          "refunds every broader reservation when the race-safe test insert finds a newly full day"
+        ],
+        "first_assertion_limits": true
+      },
+      "retained_tmp_files": 37
+    },
+    "worker-types": {
+      "exit": 0,
+      "elapsed_seconds": 0.7709859590104315,
+      "adjudication": {
+        "kind": "Worker compiler",
+        "exit": 0
+      },
+      "retained_tmp_files": 1
+    },
+    "fixed-native": {
+      "exit": 0,
+      "elapsed_seconds": 6.762077209001291,
+      "adjudication": {
+        "kind": "native",
+        "outcomes": [
+          {
+            "name": "partial-ip-before",
+            "status": "PASS"
+          },
+          {
+            "name": "partial-ip-after",
+            "status": "PASS"
+          },
+          {
+            "name": "provider-day-before",
+            "status": "PASS"
+          },
+          {
+            "name": "refund-before",
+            "status": "PASS"
+          },
+          {
+            "name": "refund-after",
+            "status": "PASS"
+          },
+          {
+            "name": "refund-late-abort",
+            "status": "PASS"
+          },
+          {
+            "name": "peer-window",
+            "status": "PASS"
+          },
+          {
+            "name": "null-and-attempt",
+            "status": "PASS"
+          }
+        ],
+        "limits": "Node handlers/workerd D1; synthetic faults; no whole-Worker concurrency"
+      },
+      "retained_tmp_files": 0
+    }
+  },
+  "supervisor": {
+    "exit": 0,
+    "elapsed_seconds": 70.14116808300605,
+    "primary_failure": null,
+    "cleanup_errors": []
+  },
+  "external": {
+    "exit": 0,
+    "state": "VERIFIED_READY_FOR_INTEGRATION_RELEASE",
+    "at": "2026-09-16T02:35:01.604267+00:00",
+    "release": false
+  },
+  "diagnostics": {
+    "original_complete_payloads": 16,
+    "fixed_payloads": 34,
+    "original_schema_gate": "passed in supervisor and external verifier; complete unique case mapping, all11 fields and case-specific observed snapshots/journals/extras; no source-filled values",
+    "original_native_captures": 1,
+    "fixed_native_groups": 8,
+    "fixed_native_captures": 9
+  },
+  "cleanup": {
+    "fixed_targets_restored": 3,
+    "candidate_link_absent": true,
+    "owner_link_preserved": true,
+    "dependency_records_revalidated_by_external": 6325,
+    "named_cache_files_restored": 19,
+    "cache_restored_state": "EXACT_PRIOR_CACHE_CONTENT_AND_MODES_RESTORED",
+    "native_disposal_completed_both": true,
+    "native_tmp_files": 0,
+    "retained_non_native_tmp_files": 110,
+    "tmp_disposition": "Private evidence retained without runtime reuse or deletion; API/compiler temporary files are not claimed empty.",
+    "external_scan_at": "2026-09-16T02:35:01.588401+00:00",
+    "exact_historical_identities": 5,
+    "blocking": 0,
+    "reserved_listeners": 0,
+    "sampled_remaining": 0,
+    "sampled_identity_count": 23,
+    "scan_classifications": 16,
+    "scanner_stderr_files": 705,
+    "scanner_nonempty_stderr": 0
+  },
+  "history": {
+    "old_mapped_records_rehashed_unchanged": 897,
+    "old_api_tmp_files_retained": 36,
+    "old_grant_nonreusable": "569430ee4fd0ea1fa8b4b862c6ca2fab71adb88b8f35a193ac4298e926b11ed8"
+  },
+  "limits": [
+    "Original first assertions stop later assertions; full preassertion observations retained separately.",
+    "Native evidence uses Node production handlers with workerd/D1 and synthetic failures, not whole-Worker concurrency or real providers.",
+    "Only returned confirmed tokens are refundable; ambiguous acquisition/refund and later ticket commit-then-reject limits remain.",
+    "Prior foundation work is retained; cleanup is not a whole-request rollback.",
+    "Process sampling and point-in-time vacancy are nonexhaustive; no continuing vacancy or self-release claimed.",
+    "Original574/rebuilt/history limits remain. No browser/web/broad or old-suite execution.",
+    "All six commands ran once without timeout/retry/edit; negative command exit1 is expected.",
+    "Evidence packaging inspection initially called keys() on a list after reading temp counts and raised AttributeError; corrected read-only shape inspection. No runtime rerun or evidence change.",
+    "Private parent directories restrict access; cache and temp copies may retain baseline file modes, not uniformly0600."
+  ],
+  "private_evidence_records": 3068,
+  "private_mapping_sha256": "6e1099ad9d4f918f8d0c2ac74fdd916f4820b6e1bc64ec95ec6f922c3b5f54c4"
+}

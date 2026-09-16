@@ -1,0 +1,149 @@
+{
+  "state": "SOURCE_EVIDENCE_EXACT3_ASSEMBLY_CLOSED",
+  "source_head": "a7dccb452381e399b887c6deecfe5fb3e8d37b30",
+  "parent": "2413ac285754202c791178d4bf713a50116d8acc",
+  "source_QA": "9f694bb",
+  "controller_QA": "5e62654",
+  "evidence_QA": "17011bb",
+  "assembly_QA": "db0d79515c3803381668f6549e3aaf966b8a2d61",
+  "summary": {
+    "sha256": "361fdc0866da0e08d87b23ca43ecf6a6ecb89ca5f1053c49414f40ccad078cd7",
+    "bytes": 12321
+  },
+  "catalog": {
+    "sha256": "1a6f2ac3438a58f27a76ba6b313953eb6fcff1168f776d8e2fd6baff6f1feebb",
+    "bytes": 559932
+  },
+  "assembly_receipt": {
+    "sha256": "c4f12602efbca866208173bf70515ff7802f993d2ffe9ed1a7de76bd2aeab75b",
+    "bytes": 1631
+  },
+  "targets": [
+    {
+      "path": "src/studio-api.ts",
+      "original_sha256": "9855b8c59b8eda0f7a27f19ab282ab0edc1ea4c5dd03f418a3cf7914ab2f91cc",
+      "sha256": "62723612359a1a7f8a83c8887c46a0ae6ea1d83ac5e5c04a730d922dd46bd0fd",
+      "bytes": 102826,
+      "mode": "100644"
+    },
+    {
+      "path": "test/studio-reservation-cleanup.test.ts",
+      "original_sha256": null,
+      "sha256": "0c3436a1884fc0339b9bb1e5c412cbaaf638d7129e6d72253d85eca69bc741e9",
+      "bytes": 17139,
+      "mode": "100644"
+    },
+    {
+      "path": "scripts/studio-reservation-smoke.mjs",
+      "original_sha256": null,
+      "sha256": "ca5522caaf83a3dc4bd1b787c55469958561ddff196f2567e989c38641a4968e",
+      "bytes": 13760,
+      "mode": "100644"
+    }
+  ],
+  "release": {
+    "state": "EXPLICIT_RELEASED_VALIDATION_COMPLETE",
+    "at": "2026-09-16T02:43:49.253294+00:00",
+    "head": "2413ac285754202c791178d4bf713a50116d8acc",
+    "grant_sha256": "6bc7206cc04c9286e63b92e247447a0c5d687a749e91b1458408b8f44b12ecf5",
+    "grant_state": "CONSUMED_ONCE_COMPLETE_NONREUSABLE",
+    "slot": "8812/9252 EXPLICITLY RELEASED",
+    "supervisor_exit": 0,
+    "external_exit": 0,
+    "command_exits": [
+      1,
+      1,
+      0,
+      0,
+      0,
+      0
+    ],
+    "results": "Original16API intendedFAIL18SKIP/full16payload gate; originalnative1 intendedFAIL. Fixed34API+4controlsPASS60SKIP, Worker typesPASS, native8groups9capturesPASS. Evidence QA pending.",
+    "restoration_readback_sha256": "ebeb75a8a01ec8437b976e48e6c3ab61bdcd747f409d5d4f34073fa0b22f76b0",
+    "cleanup": {
+      "fixed_targets_restored": 3,
+      "candidate_link_absent": true,
+      "owner_link_preserved": true,
+      "dependency_records_revalidated_by_external": 6325,
+      "named_cache_files_restored": 19,
+      "cache_restored_state": "EXACT_PRIOR_CACHE_CONTENT_AND_MODES_RESTORED",
+      "native_disposal_completed_both": true,
+      "native_tmp_files": 0,
+      "retained_non_native_tmp_files": 110,
+      "tmp_disposition": "Private evidence retained without runtime reuse or deletion; API/compiler temporary files are not claimed empty.",
+      "external_scan_at": "2026-09-16T02:35:01.588401+00:00",
+      "exact_historical_identities": 5,
+      "blocking": 0,
+      "reserved_listeners": 0,
+      "sampled_remaining": 0,
+      "sampled_identity_count": 23,
+      "scan_classifications": 16,
+      "scanner_stderr_files": 705,
+      "scanner_nonempty_stderr": 0
+    },
+    "process_evidence": {
+      "capture_at": "2026-09-16T02:35:01.588401+00:00",
+      "scoped_blocking": 0,
+      "reserved": 0,
+      "sampled_absent": 23,
+      "supervisor_absent": true,
+      "nonexhaustive": true,
+      "new_capture_by_integration": false
+    },
+    "evidence": {
+      "summary_sha256": "361fdc0866da0e08d87b23ca43ecf6a6ecb89ca5f1053c49414f40ccad078cd7",
+      "catalog_sha256": "1a6f2ac3438a58f27a76ba6b313953eb6fcff1168f776d8e2fd6baff6f1feebb",
+      "mapping_sha256": "6e1099ad9d4f918f8d0c2ac74fdd916f4820b6e1bc64ec95ec6f922c3b5f54c4",
+      "records_verified": 3068,
+      "modes": {
+        "0600": 3030,
+        "0644": 38
+      },
+      "old_records_rehashed": 897,
+      "old_tmp_retained": 36,
+      "current_api_compiler_tmp_retained": 110
+    },
+    "receipts": {
+      "external-verification.json": "caeff99ce3b28345c31844f5f74fc3a9016d2795966d838e21968980e797f49e",
+      "supervisor-exit.json": "c3911817baf8f71042fb052bc78ff251d80d0f92150af02221719caa2c3a979b",
+      "restored.json": "65e8711f2527b1a378af2198f82f09662cd6a1005cd68ef27dd819c6f87dec2c",
+      "cache-restored.json": "de7f022d3d9604165406a2952b45b03963ea2e4975abcbea62c3ff43a79057de",
+      "scan-external-003-external-final-classification.json": "5410f02b847319efc7c7e2d7c3b6fc5c5219d364b13a3bf23c1b82671d24c49b"
+    },
+    "limits": [
+      "Original first assertions stop later assertions; full preassertion observations retained separately.",
+      "Native evidence uses Node production handlers with workerd/D1 and synthetic failures, not whole-Worker concurrency or real providers.",
+      "Only returned confirmed tokens are refundable; ambiguous acquisition/refund and later ticket commit-then-reject limits remain.",
+      "Prior foundation work is retained; cleanup is not a whole-request rollback.",
+      "Process sampling and point-in-time vacancy are nonexhaustive; no continuing vacancy or self-release claimed.",
+      "Original574/rebuilt/history limits remain. No browser/web/broad or old-suite execution.",
+      "All six commands ran once without timeout/retry/edit; negative command exit1 is expected.",
+      "Evidence packaging inspection initially called keys() on a list after reading temp counts and raised AttributeError; corrected read-only shape inspection. No runtime rerun or evidence change.",
+      "Private parent directories restrict access; cache and temp copies may retain baseline file modes, not uniformly0600."
+    ],
+    "next": "Single existing pK actual evidence audit; no shared assembly until evidence acceptance. No runner/replay or new grant."
+  },
+  "history": {
+    "old_mapped_records_rehashed_unchanged": 897,
+    "old_api_tmp_files_retained": 36,
+    "old_grant_nonreusable": "569430ee4fd0ea1fa8b4b862c6ca2fab71adb88b8f35a193ac4298e926b11ed8"
+  },
+  "private_records": 3068,
+  "private_modes": {
+    "0600": 3030,
+    "0644": 38
+  },
+  "private_record_meaning": "Mixed raw/derived/input/cache/temp records, not3068 tests. Two private enclosing roots0700; tested fixtures0600 and safe/working0644 remain nonexecutable.",
+  "limits": [
+    "Original first assertions stop later assertions; full preassertion observations retained separately.",
+    "Native evidence uses Node production handlers with workerd/D1 and synthetic failures, not whole-Worker concurrency or real providers.",
+    "Only returned confirmed tokens are refundable; ambiguous acquisition/refund and later ticket commit-then-reject limits remain.",
+    "Prior foundation work is retained; cleanup is not a whole-request rollback.",
+    "Process sampling and point-in-time vacancy are nonexhaustive; no continuing vacancy or self-release claimed.",
+    "Original574/rebuilt/history limits remain. No browser/web/broad or old-suite execution.",
+    "All six commands ran once without timeout/retry/edit; negative command exit1 is expected.",
+    "Evidence packaging inspection initially called keys() on a list after reading temp counts and raised AttributeError; corrected read-only shape inspection. No runtime rerun or evidence change.",
+    "Private parent directories restrict access; cache and temp copies may retain baseline file modes, not uniformly0600."
+  ],
+  "next": "Final documentation content/exact assembly QA, publication/readback/fresh CI, then separately gated unchanged latest-head official review. No additional combined local run absent a new concern."
+}
