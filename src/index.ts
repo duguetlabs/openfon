@@ -23,6 +23,7 @@ import {
   registerStudioApi,
   sameLegacyKnowledgeProjection,
   syncLegacyKnowledge,
+  LegacyKnowledgeConflictError,
 } from './studio-api';
 
 export { CallSession, TelnyxCall, AsteriskCall };
@@ -32,6 +33,7 @@ type Ctx = Context<{ Bindings: Env; Variables: Vars }>;
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 app.onError((error, c) => {
   if (error instanceof HTTPException) return error.getResponse();
+  if (error instanceof LegacyKnowledgeConflictError) return c.json({ error: error.message }, 409);
   if (error.message.includes('OPENFON_PRESET_STORAGE_LIMIT')) {
     return c.json({ error: 'Workspace presets are limited to 64 presets and 512 KiB per compatibility table. Delete or shorten presets first.' }, 409);
   }
@@ -562,8 +564,10 @@ app.post('/api/me/business', async (c) => {
   try {
     await syncLegacyKnowledge(c.env, {
       id, services_json: body.services_json ?? '[]', faqs_json: body.faqs_json ?? '[]',
-    }, collectionId, { services: true, faqs: true }, createStatements);
+    }, collectionId, { services: true, faqs: true }, createStatements, { expectedSource: null });
   } catch (error) {
+    // A stale knowledge plan is not a duplicate-create recovery signal.
+    if (error instanceof LegacyKnowledgeConflictError) throw error;
     // Concurrent retries race at the database trigger. The winner already
     // persisted the same onboarding stage, so return that canonical workspace
     // instead of turning a harmless retry into a dead end.
@@ -616,7 +620,7 @@ app.put('/api/me/business/:id', async (c) => {
       id: biz.id,
       services_json: servicesJson,
       faqs_json: faqsJson,
-    }, undefined, { services: servicesChanged, faqs: faqsChanged }, [businessUpdate]);
+    }, undefined, { services: servicesChanged, faqs: faqsChanged }, [businessUpdate], { expectedSource: biz });
   } else await businessUpdate.run();
   return c.json({ ok: true });
 });

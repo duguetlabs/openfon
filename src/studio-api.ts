@@ -337,20 +337,102 @@ function expectedLegacyKnowledge(
   return rows;
 }
 
+// Only knowledge provenance participates: agent_snapshot has independent writers.
+// A single SELECT observes source, marker, chosen collections and the full imported
+// row set together. Row guards use ordinary binds (six rows/84 parameters), not a
+// potentially multi-megabyte escaped JSON aggregate or a timestamp revision.
+const LEGACY_KNOWLEDGE_STATE_SQL = `SELECT b.id AS source_id,
+  b.services_json AS source_services, b.faqs_json AS source_faqs,
+  sync.business_id AS marker_id, sync.services_json AS marker_services,
+  sync.faqs_json AS marker_faqs, sync.collection_id AS marker_collection,
+  (SELECT id FROM knowledge_collections WHERE business_id=target.id AND is_default=1
+    ORDER BY created_at,id LIMIT 1) AS default_id,
+  CASE WHEN NOT EXISTS (SELECT 1 FROM knowledge_collections WHERE business_id=target.id AND is_default=1)
+    THEN (SELECT id FROM knowledge_collections WHERE business_id=target.id AND name='Workspace knowledge'
+      ORDER BY created_at,id LIMIT 1) ELSE NULL END AS named_id
+ FROM (SELECT ? AS id) target
+ LEFT JOIN businesses b ON b.id=target.id
+ LEFT JOIN compatibility_sync_state sync ON sync.business_id=target.id`;
+const LEGACY_KNOWLEDGE_STATE_FIELDS = ['source_id','source_services','source_faqs',
+  'marker_id','marker_services','marker_faqs','marker_collection','default_id','named_id'] as const;
+const LEGACY_KNOWLEDGE_ROW_FIELDS = ['id','business_id','collection_id','kind','status',
+  'title','question','answer','content','source_call_id','source_turn_id',
+  'created_at','updated_at','activated_at'] as const;
+type LegacyKnowledgeState = Record<typeof LEGACY_KNOWLEDGE_STATE_FIELDS[number], string | null>;
+type LegacyKnowledgeSnapshot = { state: LegacyKnowledgeState; rows: KnowledgeItem[] };
+type LegacyKnowledgeSource = Pick<Business, 'id' | 'services_json' | 'faqs_json'>;
+
+export class LegacyKnowledgeConflictError extends Error {
+  constructor() { super('Workspace knowledge changed. Reload and retry.'); }
+}
+
+async function readLegacyKnowledgeSnapshot(env: Env, businessId: string): Promise<LegacyKnowledgeSnapshot> {
+  // UNION emits provenance once, rather than repeating up to four source JSON
+  // strings for every imported item. It is still one SQLite read snapshot.
+  const { results } = await env.DB.prepare(`WITH state AS (${LEGACY_KNOWLEDGE_STATE_SQL})
+    SELECT 'state' AS row_type, state.*,
+      ${LEGACY_KNOWLEDGE_ROW_FIELDS.map(field => `NULL AS ${field}`).join(', ')} FROM state
+    UNION ALL
+    SELECT 'item', ${LEGACY_KNOWLEDGE_STATE_FIELDS.map(() => 'NULL').join(', ')},
+      ${LEGACY_KNOWLEDGE_ROW_FIELDS.map(field => `item.${field}`).join(', ')}
+    FROM knowledge_items item WHERE item.business_id=? AND (
+      instr(item.id,?)=1 OR instr(item.id,?)=1 OR instr(item.id,?)=1 OR instr(item.id,?)=1)
+    ORDER BY row_type, id`)
+    .bind(businessId, businessId, `ki_service_${businessId}_`, `legacy_${businessId}_service_`,
+      `ki_faq_${businessId}_`, `legacy_${businessId}_faq_`).all<LegacyKnowledgeState & KnowledgeItem & { row_type: 'state' | 'item' }>();
+  const header = results.find(row => row.row_type === 'state')!;
+  const state = Object.fromEntries(LEGACY_KNOWLEDGE_STATE_FIELDS.map(field => [field, header[field]])) as LegacyKnowledgeState;
+  const rows = results.filter(row => row.row_type === 'item').map(row => Object.fromEntries(
+    LEGACY_KNOWLEDGE_ROW_FIELDS.map(field => [field, row[field]])
+  ) as unknown as KnowledgeItem);
+  return { state, rows };
+}
+
+function checkLegacyKnowledgeSource(snapshot: LegacyKnowledgeSnapshot, expected: LegacyKnowledgeSource | null): void {
+  if (snapshot.state.source_id !== (expected?.id ?? null) ||
+      snapshot.state.source_services !== (expected?.services_json ?? null) ||
+      snapshot.state.source_faqs !== (expected?.faqs_json ?? null)) throw new LegacyKnowledgeConflictError();
+}
+
+function legacyKnowledgeGuards(env: Env, businessId: string, snapshot: LegacyKnowledgeSnapshot,
+  changed: { services: boolean; faqs: boolean }): D1PreparedStatement[] {
+  const servicePrefixes = [`ki_service_${businessId}_`, `legacy_${businessId}_service_`];
+  const faqPrefixes = [`ki_faq_${businessId}_`, `legacy_${businessId}_faq_`];
+  const rows = snapshot.rows.filter(row =>
+    (changed.services && servicePrefixes.some(prefix => row.id.startsWith(prefix))) ||
+    (changed.faqs && faqPrefixes.some(prefix => row.id.startsWith(prefix))));
+  const refuse = "json_extract('[0]', '$[OPENFON_LEGACY_KNOWLEDGE_CONFLICT]')";
+  const statements = [env.DB.prepare(`SELECT CASE WHEN
+      ${LEGACY_KNOWLEDGE_STATE_FIELDS.map(field => `${field} IS ?`).join(' AND ')}
+      AND (SELECT COUNT(*) FROM knowledge_items WHERE business_id=? AND (
+        (? AND (instr(id,?)=1 OR instr(id,?)=1)) OR (? AND (instr(id,?)=1 OR instr(id,?)=1))))=?
+      THEN 1 ELSE ${refuse} END FROM (${LEGACY_KNOWLEDGE_STATE_SQL}) state`)
+    .bind(...LEGACY_KNOWLEDGE_STATE_FIELDS.map(field => snapshot.state[field]), businessId,
+      Number(changed.services), ...servicePrefixes, Number(changed.faqs), ...faqPrefixes, rows.length, businessId)];
+  for (let offset = 0; offset < rows.length; offset += 6) {
+    const group = rows.slice(offset, offset + 6);
+    statements.push(env.DB.prepare(`SELECT CASE WHEN ${group.map(() =>
+      `EXISTS (SELECT 1 FROM knowledge_items WHERE ${LEGACY_KNOWLEDGE_ROW_FIELDS.map(field => `${field} IS ?`).join(' AND ')})`
+    ).join(' AND ')} THEN 1 ELSE ${refuse} END`)
+      .bind(...group.flatMap(row => LEGACY_KNOWLEDGE_ROW_FIELDS.map(field => row[field]))));
+  }
+  return statements;
+}
+
 export async function syncLegacyKnowledge(
   env: Env,
   workspace: Pick<Business, 'id' | 'services_json' | 'faqs_json'>,
   collectionId?: string,
   changed: { services: boolean; faqs: boolean } = { services: true, faqs: true },
-  leadingStatements: D1PreparedStatement[] = []
+  leadingStatements: D1PreparedStatement[] = [],
+  observation: { snapshot?: LegacyKnowledgeSnapshot; expectedSource?: LegacyKnowledgeSource | null } = {}
 ): Promise<void> {
-  const collection = collectionId
-    ? { id: collectionId }
-    : await env.DB.prepare(
-        'SELECT id FROM knowledge_collections WHERE business_id = ? AND is_default = 1 ORDER BY created_at, id LIMIT 1'
-      )
-        .bind(workspace.id)
-        .first<{ id: string }>();
+  const snapshot = observation.snapshot ?? await readLegacyKnowledgeSnapshot(env, workspace.id);
+  // Requested NEW JSON may differ from OLD business JSON. Callers carrying an
+  // earlier source read must pass that expected OLD value; new creation pins absence.
+  if (observation.expectedSource !== undefined) checkLegacyKnowledgeSource(snapshot, observation.expectedSource);
+  const selectedId = collectionId || snapshot.state.default_id;
+  const collection = selectedId ? { id: selectedId } : null;
   if (!collection) {
     if (leadingStatements.length) throw new Error('OPENFON_KNOWLEDGE_COLLECTION_MISSING');
     return;
@@ -377,7 +459,10 @@ export async function syncLegacyKnowledge(
       AND window_start=CAST(strftime('%s',datetime('now')) AS INTEGER)/86400*86400`)
     .bind(`knowledge:${workspace.id}`).first<{ count: number }>();
   if ((budget?.count ?? 0) + replacement.length > 500) throw new Error('OPENFON_KNOWLEDGE_WRITE_LIMIT');
-  const statements: D1PreparedStatement[] = [...leadingStatements];
+  // Every assertion precedes every mutation. A failing SELECT aborts this D1
+  // batch, including leading source/repair writes and all trigger charges.
+  // Empty deletes and unchanged markers need no changes()>0 sentinel.
+  const statements: D1PreparedStatement[] = [...legacyKnowledgeGuards(env, workspace.id, snapshot, changed), ...leadingStatements];
   if (changed.services) {
     statements.push(
       env.DB.prepare(
@@ -423,22 +508,29 @@ export async function syncLegacyKnowledge(
          synced_at=datetime('now')`
     ).bind(workspace.id, workspace.services_json, workspace.faqs_json, collection.id, workspace.id)
   );
-  await env.DB.batch(statements);
+  try {
+    await env.DB.batch(statements);
+  } catch (error) {
+    let cause: unknown = error;
+    for (let depth = 0; depth < 5 && cause instanceof Error; depth++) {
+      if (cause.message.includes('[OPENFON_LEGACY_KNOWLEDGE_CONFLICT]')) throw new LegacyKnowledgeConflictError();
+      cause = cause.cause;
+    }
+    throw error;
+  }
 }
 
 export async function ensureWorkspaceFoundation(
   env: Env,
   workspace: Pick<Business, 'id' | 'slug' | 'services_json' | 'faqs_json'>
 ): Promise<void> {
-  let [legacy, assistant, provider, presetReconciliation, defaultCollection] = await Promise.all([
+  let [legacy, assistant, provider, presetReconciliation] = await Promise.all([
     env.DB.prepare('SELECT * FROM agent_settings WHERE business_id = ?').bind(workspace.id).first<AgentSettings>(),
     env.DB.prepare('SELECT * FROM assistants WHERE business_id = ? AND public_slug = ? LIMIT 1')
       .bind(workspace.id, workspace.slug)
       .first<Assistant>(),
     env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?').bind(workspace.id).first<ProviderSettings>(),
     env.DB.prepare(PRESET_RECONCILIATION_SQL).bind(workspace.id).first<{ needed: number }>(),
-    env.DB.prepare('SELECT id FROM knowledge_collections WHERE business_id=? AND is_default=1 LIMIT 1')
-      .bind(workspace.id).first<{ id: string }>(),
   ]);
   if (!legacy) {
     if (assistant) {
@@ -496,6 +588,12 @@ export async function ensureWorkspaceFoundation(
       .first<AgentSettings>();
   }
   if (!legacy) throw new Error('Could not restore workspace settings');
+
+  // Earlier missing-legacy reconstruction may already have committed. The
+  // knowledge plan starts after it, against one coherent source/marker/row read.
+  const knowledgeSnapshot = await readLegacyKnowledgeSnapshot(env, workspace.id);
+  checkLegacyKnowledgeSource(knowledgeSnapshot, workspace);
+  const defaultCollection = knowledgeSnapshot.state.default_id ? { id: knowledgeSnapshot.state.default_id } : null;
 
   const [syncState, legacyLiveCall] = await Promise.all([
     env.DB.prepare(
@@ -698,15 +796,13 @@ export async function ensureWorkspaceFoundation(
   if (!defaultCollection) {
     // Do not publish an empty repaired collection before its knowledge is restored.
     // A deterministic ID alone cannot distinguish a completed repair on retry.
-    const named = await env.DB.prepare(
-      "SELECT id FROM knowledge_collections WHERE business_id=? AND name='Workspace knowledge' ORDER BY created_at,id LIMIT 1"
-    ).bind(workspace.id).first<{ id: string }>();
-    const collectionId = named?.id ?? `kc_default_${workspace.id}`;
+    const collectionId = knowledgeSnapshot.state.named_id ?? `kc_default_${workspace.id}`;
     const attach = env.DB.prepare(
       `INSERT OR IGNORE INTO assistant_knowledge_collections (assistant_id,collection_id)
        SELECT assistants.id,? FROM assistants WHERE assistants.business_id=? AND assistants.public_slug=?`
     ).bind(collectionId,workspace.id,workspace.slug);
-    await syncLegacyKnowledge(env, workspace, collectionId, { services: true, faqs: true }, [...statements,attach,...(legacyCallRepair ? [legacyCallRepair] : [])]);
+    await syncLegacyKnowledge(env, workspace, collectionId, { services: true, faqs: true }, [...statements,attach,...(legacyCallRepair ? [legacyCallRepair] : [])],
+      { snapshot: knowledgeSnapshot, expectedSource: workspace });
     return;
   }
   if (statements.length > 0) await env.DB.batch(statements);
@@ -715,7 +811,7 @@ export async function ensureWorkspaceFoundation(
   )
     .bind(workspace.id)
     .first<{ id: string }>();
-  if (!collection) throw new Error('Could not restore workspace knowledge');
+  if (!collection || collection.id !== knowledgeSnapshot.state.default_id) throw new LegacyKnowledgeConflictError();
   if (!syncState || !assistant || !defaultCollection || syncState.collection_id !== collection.id) {
     await env.DB.prepare(
       `INSERT OR IGNORE INTO assistant_knowledge_collections (assistant_id, collection_id)
@@ -725,16 +821,17 @@ export async function ensureWorkspaceFoundation(
       .bind(collection.id, workspace.id, workspace.slug)
       .run();
   }
-  const collectionChanged = !defaultCollection || !syncState || syncState.collection_id !== collection.id;
+  const marker = knowledgeSnapshot.state;
+  const collectionChanged = !defaultCollection || marker.marker_id === null || marker.marker_collection !== collection.id;
   const servicesChanged =
-    !syncState || !sameLegacyKnowledgeProjection('service', syncState.services_json, workspace.services_json);
+    marker.marker_id === null || !sameLegacyKnowledgeProjection('service', marker.marker_services!, workspace.services_json);
   const faqsChanged =
-    !syncState || !sameLegacyKnowledgeProjection('faq', syncState.faqs_json, workspace.faqs_json);
+    marker.marker_id === null || !sameLegacyKnowledgeProjection('faq', marker.marker_faqs!, workspace.faqs_json);
   if (collectionChanged || servicesChanged || faqsChanged) {
     await syncLegacyKnowledge(env, workspace, collection.id, {
       services: collectionChanged || servicesChanged,
       faqs: collectionChanged || faqsChanged,
-    });
+    }, [], { snapshot: knowledgeSnapshot, expectedSource: workspace });
   }
   // Keep the prior raw marker when only formatting, unsupported fields, or
   // malformed/nonprojected siblings changed. The projection comparison above
