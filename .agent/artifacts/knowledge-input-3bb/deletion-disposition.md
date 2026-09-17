@@ -1,7 +1,0 @@
-Qualified source disposition for the repeated **Unsafe Deletion / NULL-provenance integrity** concern in the [original3bb6c299 review](https://github.com/duguetlabs/openfon/pull/16#issuecomment-5659175083): the hypothetical NULL fields are excluded by the shipped applied schema.
-
-Exact migration0001 defines channel TEXT NOT NULL DEFAULTweb, and0020 adds browser_claim_required INTEGER NOT NULL DEFAULT0 CHECK(0,1). Old rows and old writers omitting the new field retain0, notNULL; modern issuers alone opt into1. The atomic pre-DO claim protects the unused-ticket exception. The existing migration/bootstrap regression explicitly reads claim0 for an old active NULL-connected call and requires account deletion409. A nullable/custom/corrupted schema would need separate analysis; no remote schema inspection is claimed.
-
-All six schema/guard/issuer/test files are byte-identical between3ea3ad18 and3bb6c299. Independent QA reconfirmed this applied-schema disposition; no SQL edit or duplicate fixture run was selected. Both exact3bb CI runs passed all required jobs. The SQL NULL comparison observation is valid in isolation, but no supported current row with those NULL constrained fields was established.
-
-The separate cursor security finding is supported and has a bounded correction in preparation. This disposition does not supply security/major reviewer clearance or close that separate finding.

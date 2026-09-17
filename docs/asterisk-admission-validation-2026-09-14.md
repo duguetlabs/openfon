@@ -7,7 +7,7 @@ INSERT. Conflicts return403 without a D1 call or session dispatch; the Durable
 Object still writes its replay/retirement state. CallSession continues to reload
 settings at pickup. This does not freeze configuration after reservation.
 
-Serial validation in the integration-granted slot:
+Local validation:
 
 - Original source with17 new targeted admission cases:11 failed,6 passed,
   54 existing cases deliberately skipped. The existing engine guard already
@@ -43,6 +43,4 @@ is not claimed. Other VM or forwarded Unix-socket topologies remain unsupported
 operator-locality conditions, not universally detectable refusals. No live AI,
 physical microphone, SIP trunk, PSTN, account, staging or production action ran.
 
-Original and fixed logs/hashes are retained in the owner's committed
-`.agent/artifacts/asterisk-1ba-evidence/` and validation manifest. This scoped
-validation does not substitute for integration's current-head PR-Agent/CI gates.
+These historical local results do not replace current-commit review and CI, or a real carrier pilot.

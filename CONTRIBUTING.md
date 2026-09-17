@@ -17,7 +17,7 @@ npm run typecheck
 npm test
 ```
 
-Use free ports assigned to your workstream if collaborating. The example serves the built UI with the Worker; rebuild after UI edits. Never run `npm run deploy` as a preview: it applies remote migrations.
+Choose unused local ports. The example serves the built UI with the Worker; rebuild after UI edits. Never run `npm run deploy` as a preview: it applies remote migrations.
 
 Run checks relevant to your change. Provider/media changes also need the appropriate synthetic/runtime suite and, before claiming service compatibility, a consented real-provider test. `npm run test:telnyx` uses local simulated services; `npm run test:e2e` uses isolated local state and its own server. Inspect their port configuration before running concurrent suites. Install Playwright’s matching Chromium with `npx playwright install chromium` when needed.
 
@@ -25,7 +25,7 @@ Run checks relevant to your change. Provider/media changes also need the appropr
 
 Explain the concrete problem, changed behavior and exact validation results, including skips and failures. Distinguish unit/synthetic tests, local Worker runtime, real AI-provider audio and real telephone calls. Include provider/model/version and a sanitized reproduction for compatibility claims. A successful model list or text reply alone does not establish realtime or telephone support.
 
-Review every finding against the code and respond with a fix or a reason. Repository review requirements apply; integration owns consolidation during coordinated work. Do not merge around unresolved security findings or claim checks that did not run.
+Review every finding against the code and respond with a fix or a reason. Required CI and review checks apply. Do not merge around unresolved security findings or claim checks that did not run.
 
 Use [provider compatibility](docs/providers.md) and the [pilot evaluation](docs/launch/pilot-evaluation.md) for adapter acceptance. Keep carrier lifecycle and media conversion separate from assistant knowledge/conversation logic. Avoid hidden provider fallback or routing credentials to a different endpoint.
 

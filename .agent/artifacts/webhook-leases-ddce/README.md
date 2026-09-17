@@ -1,7 +1,0 @@
-# Isolate-local webhook admission
-
-Exact4fileffaf375 over closed ticket8e88800 plus27documentation paths. Independent QA25caafb closes bounded source/evidence/assembly. Patch1dc6fc61 routes2351a3bc/helperfc043545/test13656346/native74ca3bdd match tested bytes. Owner manifest.json is an immutable HISTORICAL source-preparation receipt; evidence/validation.json and assembly-identity.json record actual execution and closure. Its protected index hash is exactddce; integration intentionally retains newer closed ticket7d21900e.
-
-Original unit13FAIL2PASS (11first400vs503,2cancel0vs1), native4first415vs503 failures with17buffers. Fixed207/Worker types pass. Native2PASS2UNAVAILABLE0FAIL: actual HTTP saturation/refill and synthetic held-dispatch pass; late callbacks unobserved after gate release in finite windows remain unavailable, without proven teardown cause/eventual-refill/fully-settled-quarantine claims. Fourteen evidence hashes plus validation retained; all8runtimes disposed0clients/errors[],5sessions exited and owner release/scans read. No replay or source edits during runs.
-
-Sixteen leases track full route/read/cancel-fulfilled/successful-lock cleanup. Timeout alone never releases. Failed cleanup and lost callbacks can deny the isolate indefinitely. No downstream deadline, global heap/GC/opaque pull/TCP limit or physical termination guarantee. Pre-review missing-brace fixture/patch preserved: source-detected, never executed as a setup failure. Repeated Promise resolution attempts are not replayed actual callbacks.

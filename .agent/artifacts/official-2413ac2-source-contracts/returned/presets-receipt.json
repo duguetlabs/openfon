@@ -1,7 +1,0 @@
-{
-  "state": "ACTUAL_WORKING_OWNER_CONTRACT_COMPLETE_COMMIT_APPROVAL_PENDING",
-  "owner_head_at_copy": "72e8cface8c3860ff988ef9b2413c23dd222e97b",
-  "contract_sha256": "226305d9ab9396cf609a3f2eec961bcd7d9a4f71390e2d11fae16af2c93db9e2",
-  "source_sha256": "83debce424df8ba1cc69836c71ab05d3523c1cb51d8a5f3e8ee2733fc065dbfd",
-  "provenance": "Read actual completed working contract/source while existing owner waits on checkpoint/artifact-only Git approval; no dialog operation or repeat work. Later commit identity is provenance only if bytes remain exact."
-}

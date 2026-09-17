@@ -1,5 +1,0 @@
-# f8 review dispositions and confirmed account deletion
-
-Current disposition and closure are disposition.md and review-closure.json. map.json, integration-contract.md, integration-source.json, reconciliation.json and returned/ preserve the source-only phase byte-exact, including then-pending/preparation wording and original f8 source identities. They are historical source contracts, not current execution state. confirmed-account-deletion-f8/release-record.json establishes the completed correction; validation/summary.json is immutable delivery evidence and retains its historical QA-pending label. publication-f8e8b76/official-completion.json remains exact completed original provenance.
-
-Raw outputs, private originals/mappings/controllers/grants and duplicate executable fixtures remain outside this publication. Historical artifacts and their defects, resource lineage, public source/configuration vocabulary and old receipts remain intact. This is no general privacy, revocation, availability, production or security/major clearance.

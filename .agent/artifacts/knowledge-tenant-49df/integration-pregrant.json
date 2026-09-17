@@ -1,7 +1,0 @@
-{
-  "timestamp_utc": "2026-09-14T20:15:07.128622+00:00",
-  "process_matches": 0,
-  "reserved_listeners": 0,
-  "prior_release": "Telnyx d0b924f completed/released before reboot; no surviving grant assumed",
-  "scope": "Fresh read-only scan excluding scan ancestry; no process cleanup/termination"
-}
