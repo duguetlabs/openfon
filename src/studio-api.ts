@@ -1739,7 +1739,13 @@ export function registerStudioApi(app: StudioApp): void {
   app.delete('/api/me/knowledge/items/:itemId', async (c) => {
     const item = await ownedItem(c.env, c.get('userId'), c.req.param('itemId'));
     if (!item) return c.json({ error: 'Not found' }, 404);
-    await c.env.DB.prepare('DELETE FROM knowledge_items WHERE id = ?').bind(item.id).run();
+    const deleted = await c.env.DB.prepare(
+      `DELETE FROM knowledge_items WHERE id=? AND business_id=?
+       AND collection_id IS ? AND kind IS ? AND status IS ?
+       AND title IS ? AND question IS ? AND answer IS ? AND content IS ?`
+    ).bind(item.id, item.business_id, item.collection_id, item.kind, item.status,
+      item.title, item.question, item.answer, item.content).run();
+    if (!deleted.meta.changes) return c.json({ error: 'Knowledge item changed. Reload and retry.' }, 409);
     return c.json({ ok: true });
   });
 

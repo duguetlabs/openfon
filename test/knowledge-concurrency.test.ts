@@ -41,7 +41,7 @@ afterEach(() => { db.close(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 // Hold exactly the requested UPDATE after reads/preflight, before any batch BEGIN.
 // bind mutates and returns the same adapter statement, so the run spy survives it.
-function holdWrite(kind: Kind) {
+function holdWrite(kind: Kind, operation: 'UPDATE' | 'DELETE' = 'UPDATE') {
   let entered!: () => void, release!: () => void, held = false;
   const reached = new Promise<void>(resolve => { entered = resolve; });
   const gate = new Promise<void>(resolve => { release = resolve; });
@@ -50,7 +50,7 @@ function holdWrite(kind: Kind) {
   const prepare = db.prepare.bind(db), batch = db.batch.bind(db);
   const spy = vi.spyOn(db, 'prepare').mockImplementation(sql => {
     const statement = prepare(sql);
-    if (sql.startsWith(`UPDATE ${table(kind)} SET`)) {
+    if (sql.startsWith(operation === 'UPDATE' ? `UPDATE ${table(kind)} SET` : `DELETE FROM ${table(kind)} WHERE`)) {
       if (kind === 'item') targets.add(statement);
       const run = statement.run.bind(statement);
       vi.spyOn(statement, 'run').mockImplementation(async () => {
@@ -71,6 +71,24 @@ const itemChanges = [
   ['collection_id', 'two'], ['kind', 'faq'], ['status', 'active'], ['title', 'B title'],
   ['question', 'B question'], ['answer', 'B answer'], ['content', 'B content'],
 ] as const;
+it.each(itemChanges)('item deletion preserves a concurrent %s edit and allows a fresh retry', async (field, value) => {
+  const timestamp = row('item').updated_at;
+  const hold = holdWrite('item', 'DELETE');
+  const pending = request(path('item'), undefined, 'DELETE');
+  try {
+    await hold.reached;
+    expect((await save('item', { [field]: value })).status).toBe(200);
+    expect(row('item').updated_at).toBe(timestamp);
+    const afterEdit = snapshot();
+    hold.release();
+    expect((await pending).status).toBe(409);
+    expect(snapshot()).toEqual(afterEdit);
+    hold.restore();
+    expect((await request(path('item'), undefined, 'DELETE')).status).toBe(200);
+    expect(row('item')).toBeUndefined();
+  } finally { hold.release(); await pending; hold.restore(); }
+});
+
 for (const kind of ['item', 'collection'] as const) {
   const changes = kind === 'item' ? itemChanges : [['name', 'B name'], ['description', 'B description']] as const;
   const ownField = kind === 'item' ? 'title' : 'name';
