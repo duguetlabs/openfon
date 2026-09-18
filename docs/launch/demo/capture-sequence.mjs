@@ -3,6 +3,7 @@
 export class CaptureSequence {
   #turn;
   #responses = new Set();
+  #chunks = new Set();
   #playback = new Map();
 
   beginTurn(turnId, acceptTranscript) {
@@ -30,7 +31,8 @@ export class CaptureSequence {
   // Call before scheduling each decoded playback chunk. IDs must be unique per call.
   audioQueued({ responseId, chunkId }) {
     if (!responseId || !chunkId) return this.#fail('Uncorrelated audio cannot establish response completion');
-    if (this.#playback.has(chunkId)) return this.#fail('Duplicate playback chunk ID');
+    if (this.#chunks.has(chunkId)) return this.#fail('Duplicate playback chunk ID');
+    this.#chunks.add(chunkId);
     this.#playback.set(chunkId, responseId);
     const response = this.#turn?.response;
     if (response?.responseId !== responseId || this.#turn.settled) return;

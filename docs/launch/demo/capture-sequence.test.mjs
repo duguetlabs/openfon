@@ -132,3 +132,16 @@ test('caller playback failure rejects instead of scheduling a next prompt', asyn
   const s = new CaptureSequence();
   await assert.rejects(capturePrompt(s, { turnId: 't', acceptTranscript: acceptsRefusal, playCaller: async () => { throw new Error('fixture decode failed'); } }), /fixture decode failed/);
 });
+
+test('reusing a completed chunk ID cannot let an old callback finish a later response', async () => {
+  const s = new CaptureSequence();
+  s.beginTurn('old', acceptsRefusal); start(s, 'old', 'old-response');
+  s.audioQueued({ responseId: 'old-response', chunkId: 'chunk' });
+  finish(s, 'old-response'); s.playbackEnded({ chunkId: 'chunk' });
+  await s.waitForResponse();
+  s.beginTurn('new', acceptsRefusal); start(s, 'new', 'new-response');
+  s.audioQueued({ responseId: 'new-response', chunkId: 'chunk' });
+  finish(s, 'new-response');
+  s.playbackEnded({ chunkId: 'chunk' }); // delayed duplicate from the old source
+  await assert.rejects(s.waitForResponse(), /Duplicate playback chunk ID/);
+});
