@@ -5,6 +5,13 @@ The deployment command builds, applies pending D1 migrations, then uploads the
 Worker. A failed upload can therefore leave the previous Worker serving the new
 schema. A backup and a successful rehearsal are required before deployment.
 
+Budget triggers in 0013, 0015 and 0017 use `SELECT RAISE(...) WHERE ...`.
+Keep this form: the remote D1 query path used by `wrangler d1 migrations apply`
+rejects nested `CASE ... END` in trigger bodies with `incomplete input`, even
+though local SQLite accepts it. The WHERE form preserves the same conditions,
+errors, counters and statement rollback. Existing databases that already applied
+these migrations need no data rewrite; this correction enables pending upgrades.
+
 Migration 0016 removes obsolete URL/key snapshots from engine profiles. Older
 Workers copy those fields when applying a profile, so an unguarded scrub could
 erase a working provider configuration before the upload completes.
