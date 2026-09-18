@@ -52,6 +52,7 @@ Defaults live in `wrangler.jsonc` under `vars`; secrets via `wrangler secret put
 | `DEFAULT_STT_BASE_URL` | OpenAI-compatible `/audio/transcriptions` API | `https://api.kataleptic.com/v1` |
 | `DEFAULT_STT_MODEL` | Transcription model | `whisper-large-v3-turbo` |
 | `DEFAULT_STT_API_KEY` | *(secret)* key for the STT API | — |
+| `STT_TIMEOUT_MS` | Total transcription deadline including compatibility retry (1000–120000 ms) | `60000` |
 | `DEFAULT_TTS_PROVIDER` | `azure` or `browser` | `azure` |
 | `AZURE_SPEECH_KEY` | *(secret)* Azure Speech key (only for `azure` TTS) | — |
 | `AZURE_SPEECH_REGION` | Azure Speech region | `westeurope` |

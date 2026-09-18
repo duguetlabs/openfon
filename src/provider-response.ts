@@ -8,7 +8,8 @@ export class ProviderResponseError extends Error {
   constructor() { super('Provider response unavailable, invalid, too large, or timed out'); }
 }
 
-export async function fetchProviderJson(url: string, init: RequestInit): Promise<{ response: Response; data: unknown }> {
+export async function fetchProviderJson(url: string, init: RequestInit, timeoutMs = PROVIDER_RESPONSE_TIMEOUT_MS): Promise<{ response: Response; data: unknown }> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 120_000 || init.signal?.aborted) throw new ProviderResponseError();
   const controller = new AbortController();
   let response: Response | undefined;
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
@@ -18,12 +19,13 @@ export async function fetchProviderJson(url: string, init: RequestInit): Promise
     // cancellation, but never await it as part of enforcing the deadline.
     try { void (reader ? reader.cancel() : body?.cancel())?.catch(() => {}); } catch { /* already closed */ }
   };
-  const expiresAt = Date.now() + PROVIDER_RESPONSE_TIMEOUT_MS;
+  const expiresAt = Date.now() + timeoutMs;
+  let abortRequest: () => void = () => {};
   let timer!: ReturnType<typeof setTimeout>;
   const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      controller.abort(); cancel(); reject(new ProviderResponseError());
-    }, PROVIDER_RESPONSE_TIMEOUT_MS);
+    abortRequest = () => { controller.abort(); cancel(); reject(new ProviderResponseError()); };
+    timer = setTimeout(abortRequest, timeoutMs);
+    init.signal?.addEventListener('abort', abortRequest, { once: true });
   });
   const checkDeadline = () => {
     if (finished || controller.signal.aborted || Date.now() >= expiresAt) {
@@ -65,6 +67,7 @@ export async function fetchProviderJson(url: string, init: RequestInit): Promise
     throw new ProviderResponseError();
   } finally {
     finished = true; clearTimeout(timer); controller.abort();
+    init.signal?.removeEventListener('abort', abortRequest);
     try { reader?.releaseLock(); } catch { /* cancelled read */ }
   }
 }

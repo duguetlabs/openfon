@@ -2105,7 +2105,7 @@ describe('telephone audio capabilities', () => {
     vi.spyOn(socket, 'send').mockImplementation(data => {
       send(data);
       if (typeof data === 'string' && JSON.parse(data).type === 'ready') {
-        queueMicrotask(() => { queuedAtReady = socket.sent[socket.sent.findIndex(value => typeof value === 'string' && JSON.parse(value).type === 'ready') + 1] === audio; });
+        queueMicrotask(() => { const first = socket.sent[socket.sent.findIndex(value => typeof value === 'string' && JSON.parse(value).type === 'ready') + 1]; queuedAtReady = first instanceof ArrayBuffer && first.byteLength === audio.byteLength; });
       }
     });
     release(audio);
@@ -2830,7 +2830,7 @@ describe('synthesized carrier greeting size admission', () => {
     vi.spyOn(socket, 'send').mockImplementation(data => {
       send(data); adapter.sessionMessage(data);
       if (typeof data === 'string' && JSON.parse(data).type === 'ready') {
-        queueMicrotask(() => { queuedAtReady = socket.sent[socket.sent.findIndex(value => typeof value === 'string' && JSON.parse(value).type === 'ready') + 1] === audio; });
+        queueMicrotask(() => { const first = socket.sent[socket.sent.findIndex(value => typeof value === 'string' && JSON.parse(value).type === 'ready') + 1]; queuedAtReady = first instanceof ArrayBuffer && first.byteLength === 24000; });
       }
     });
     release(audio); await flush(100);
@@ -2839,7 +2839,7 @@ describe('synthesized carrier greeting size admission', () => {
     expect(ended).not.toHaveBeenCalled(); expect(carrierFrames).toBe(0);
     vi.advanceTimersByTime(20);
     expect(carrierFrames).toBeGreaterThan(0); expect(carrierFrames).toBeLessThanOrEqual(5);
-    vi.advanceTimersByTime(10000);
+    await vi.advanceTimersByTimeAsync(10000);
     expect(carrierFrames).toBeGreaterThanOrEqual(499); expect(carrierFrames).toBeLessThanOrEqual(500);
     expect(ended).not.toHaveBeenCalled(); adapter.close();
     socket.receive({ type: 'hangup' }); await flush(100);
@@ -2861,6 +2861,7 @@ describe('synthesized carrier greeting size admission', () => {
     expect(callUpdates().some(w => w.args.includes('Telephone greeting audio must be valid PCM and no longer than 10 seconds. Shorten the greeting and retry.'))).toBe(true);
   });
   it('preserves browser synthesized audio above the carrier frame limit', async () => {
+    vi.useFakeTimers();
     const { session } = newSession('realtime', {}, { DEFAULT_TTS_PROVIDER: 'azure', AZURE_SPEECH_KEY: 'synthetic-unit-test-key' });
     vi.spyOn(session as never, 'startRealtime').mockResolvedValue(true as never);
     vi.spyOn(session as never, 'engineGreets').mockReturnValue(false as never);
@@ -2869,12 +2870,41 @@ describe('synthesized carrier greeting size admission', () => {
     await session.fetch(upgradeRequest()); const socket = serverSockets[0];
     socket.receive({ type: 'start' }); await flush(100);
     expect(socket.countOf('ready')).toBe(1); expect(socket.binaryCount()).toBe(1);
-    expect(socket.countOf('error')).toBe(0); expect(socket.sent).toContain(audio);
+    expect(socket.countOf('error')).toBe(0);
+    await vi.advanceTimersByTimeAsync(10500);
+    expect(socket.sent.reduce<number>((n, value) => n + (value instanceof ArrayBuffer ? value.byteLength : 0), 0)).toBe(audio.byteLength);
     socket.receive({ type: 'hangup' }); await flush(100);
   });
 });
 
+it('hangup aborts slow transcription without a late transcript or failed-call verdict', async () => {
+  vi.useFakeTimers();
+  const { session, callUpdates } = newSession('pipeline');
+  await session.fetch(upgradeRequest());
+  const caller = serverSockets[0]; caller.receive({ type: 'start' }); await flush(100);
+  const previousFetch = globalThis.fetch;
+  let signal: AbortSignal | undefined;
+  globalThis.fetch = vi.fn((url, init) => {
+    if (String(url).endsWith('/audio/transcriptions')) {
+      signal = init?.signal ?? undefined;
+      return new Promise<Response>(() => {});
+    }
+    return previousFetch(url, init);
+  });
+  caller.emit('message', { data: new ArrayBuffer(2) }); await flush(100);
+  expect(signal?.aborted).toBe(false);
+  caller.receive({ type: 'hangup' }); await flush(150);
+  expect(signal?.aborted).toBe(true);
+  expect(caller.countOf('error')).toBe(0);
+  expect(caller.countOf('transcript')).toBe(0);
+  expect(callUpdates().some(w => w.args[0] === 'failed')).toBe(false);
+  await vi.advanceTimersByTimeAsync(120000);
+  expect(caller.countOf('error')).toBe(0);
+});
+
 describe('realtime output cumulative and receipt bounds', () => {
+  beforeEach(() => vi.useFakeTimers());
+  const pcmBytes = (caller: FakeSocket) => caller.sent.reduce<number>((n, value) => n + (value instanceof ArrayBuffer ? value.byteLength : 0), 0);
   const large = 'A'.repeat(640000); // exactly 480000 decoded PCM bytes
   async function connected(protocol: 'openai' | 'gateway' = 'openai', carrier = false) {
     const sockets = [new FakeSocket(), new FakeSocket()]; let connects = 0;
@@ -2896,13 +2926,56 @@ describe('realtime output cumulative and receipt bounds', () => {
   }
   function receipts(caller: FakeSocket) { return caller.messages().filter(m => m.type === 'audio_receipt'); }
 
-  it.each(['openai', 'gateway'] as const)('negative control: refuses a same-turn %s exact-limit flood before third decode', async protocol => {
+  it('paces a fast thirty-second answer without terminating or dropping queued PCM', async () => {
+    vi.useFakeTimers();
+    const { caller, up } = await connected();
+    for (let i = 0; i < 3; i++) delta(up);
+    up.receive({ type: 'response.done' });
+    await flush(100);
+    const bytes = () => caller.sent.reduce((n, value) => n + (value instanceof ArrayBuffer ? value.byteLength : 0), 0);
+    expect(caller.countOf('error')).toBe(0);
+    expect(bytes()).toBeLessThanOrEqual(24000);
+    await vi.advanceTimersByTimeAsync(30500);
+    expect(bytes()).toBe(1440000);
+    expect(caller.countOf('error')).toBe(0);
+    caller.receive({ type: 'hangup' }); await flush(100);
+  });
+
+  it('discards queued speech on interruption and waits for queued goodbye before ending', async () => {
+    vi.useFakeTimers();
+    const { caller, up } = await connected();
+    delta(up);
+    up.receive({ type: 'input_audio_buffer.speech_started' });
+    const before = caller.binaryCount();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(caller.binaryCount()).toBe(before);
+    delta(up);
+    up.receive({ type: 'response.function_call_arguments.done', name: 'end_call' });
+    await flush(100);
+    expect(caller.countOf('ending')).toBe(0);
+    await vi.advanceTimersByTimeAsync(10500);
+    expect(caller.countOf('ending')).toBe(1);
+    caller.receive({ type: 'hangup' }); await flush(100);
+  });
+
+  it('releases queued PCM and timers on caller hangup', async () => {
+    const { caller, up } = await connected();
+    delta(up); delta(up);
+    caller.receive({ type: 'hangup' }); await flush(100);
+    const delivered = pcmBytes(caller);
+    await vi.advanceTimersByTimeAsync(90000);
+    expect(pcmBytes(caller)).toBe(delivered);
+    expect(caller.countOf('error')).toBe(0);
+    expect(up.closed).not.toBeNull();
+  });
+
+  it.each(['openai', 'gateway'] as const)('negative control: refuses a same-turn %s exact-limit flood before seventh decode', async protocol => {
     const { caller, up, callUpdates } = await connected(protocol);
     const decode = vi.spyOn(globalThis, 'atob');
     try {
-      delta(up); delta(up); delta(up); delta(up);
-      expect(decode).toHaveBeenCalledTimes(2);
-      expect(caller.binaryCount()).toBe(2);
+      for (let i = 0; i < 8; i++) delta(up);
+      expect(decode).toHaveBeenCalledTimes(6);
+      expect(pcmBytes(caller)).toBe(24000);
       expect(up.closed).not.toBeNull();
       await flush(100);
       expect(caller.countOf('error')).toBe(1);
@@ -2912,11 +2985,11 @@ describe('realtime output cumulative and receipt bounds', () => {
 
   it('negative control: cannot mint credit with done, flush or changing item IDs', async () => {
     const { caller, up } = await connected();
-    delta(up, large, 'first'); delta(up, large, 'second');
+    for (let i = 0; i < 6; i++) delta(up, large, String(i));
     up.receive({ type: 'response.done' });
     up.receive({ type: 'input_audio_buffer.speech_started' });
     delta(up, 'AAAAAA==', 'third');
-    expect(caller.binaryCount()).toBe(2);
+    expect(pcmBytes(caller)).toBe(24000);
     expect(up.closed).not.toBeNull();
     await flush(100);
   });
@@ -2977,11 +3050,11 @@ describe('realtime output cumulative and receipt bounds', () => {
     up.receive({ type: 'session.expiring' }); await flush(50);
     delta(replacement); // still unacknowledged: no decode, output or budget charge
     expect(caller.binaryCount()).toBe(1); expect(up.closed).toBeNull();
-    delta(up); // old socket remains usable during replacement handshake
+    for (let i = 0; i < 5; i++) delta(up); // old socket remains usable during replacement handshake
     replacement.receive({ type: 'session.updated', session: replacement.messages().find(m => m.type === 'session.update')!.session });
     await flush(50);
     delta(replacement, 'AAAAAA==');
-    expect(caller.binaryCount()).toBe(2); expect(replacement.closed).not.toBeNull();
+    expect(pcmBytes(caller)).toBe(24000); expect(replacement.closed).not.toBeNull();
     await flush(100);
   });
 
@@ -2993,7 +3066,7 @@ describe('realtime output cumulative and receipt bounds', () => {
       up.receive({ type: 'response.done' });
       await vi.advanceTimersByTimeAsync(10000);
     }
-    expect(caller.binaryCount()).toBe(20); expect(caller.countOf('error')).toBe(0);
+    expect(pcmBytes(caller)).toBe(20 * 480000); expect(caller.countOf('error')).toBe(0);
     caller.receive({ type: 'hangup' }); await flush(100);
   });
 
@@ -3004,7 +3077,7 @@ describe('realtime output cumulative and receipt bounds', () => {
       delta(up); await flush(50); await vi.advanceTimersByTimeAsync(10000);
     }
     delta(up, 'AAAAAA==');
-    expect(caller.binaryCount()).toBe(6); expect(up.closed).not.toBeNull();
+    expect(pcmBytes(caller)).toBe(6 * 480000); expect(up.closed).not.toBeNull();
     await flush(100);
   });
 

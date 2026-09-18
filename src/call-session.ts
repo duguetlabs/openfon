@@ -1,5 +1,5 @@
 import { normalizeCallerPhone } from './contact';
-import { RealtimeOutputBudget, RealtimeOutputError, RealtimeAudioReceipts, MAX_UNRECEIVED_AUDIO_BYTES } from './realtime-output';
+import { RealtimeOutputBudget, RealtimeAudioQueue, RealtimeOutputError, RealtimeAudioReceipts, MAX_UNRECEIVED_AUDIO_BYTES } from './realtime-output';
 // CallSession Durable Object: one instance per live call.
 // Owns the WebSocket to the caller's browser and runs the voice loop:
 //   caller audio -> STT -> LLM -> TTS -> caller.
@@ -722,6 +722,9 @@ export class CallSession implements DurableObject {
   }
 
   private closeUpstream(): void {
+    this.clearRealtimeQueue();
+    if (this.queueHangupTimer !== undefined) clearTimeout(this.queueHangupTimer);
+    this.queueHangupTimer = undefined;
     if (this.audioReceiptTimer !== undefined) clearTimeout(this.audioReceiptTimer);
     this.audioReceiptTimer = undefined;
     this.audioReceipts.clear();
@@ -748,6 +751,11 @@ export class CallSession implements DurableObject {
   private static readonly MAX_TOTAL_RECONNECTS = 5;
   private greetingGuardUntil = 0; // ignore barge-in flushes while our greeting plays
   private realtimeOutputBudget = new RealtimeOutputBudget(Date.now());
+  private audioQueue = new RealtimeAudioQueue(Date.now());
+  private audioQueueTimer: ReturnType<typeof setTimeout> | undefined;
+  private hangupAfterQueue = false;
+  private queueHangupTimer: ReturnType<typeof setTimeout> | undefined;
+  private transcriptionAbort: AbortController | undefined;
   private audioReceipts = new RealtimeAudioReceipts();
   private audioReceiptTimer: ReturnType<typeof setTimeout> | undefined;
   private cancelRequests = new WeakMap<WebSocket, Map<string, number>>();
@@ -1063,6 +1071,15 @@ export class CallSession implements DurableObject {
 
   private beginHangup(): void {
     if (this.ended || this.endingSent) return;
+    if (this.audioQueue.pending) {
+      this.hangupAfterQueue = true;
+      // Even repeated new response IDs cannot defer a requested hangup forever.
+      this.queueHangupTimer ??= setTimeout(() => void this.finalize(), 75_000);
+      return;
+    }
+    if (this.queueHangupTimer !== undefined) clearTimeout(this.queueHangupTimer);
+    this.queueHangupTimer = undefined;
+    this.hangupAfterQueue = false;
     this.endingSent = true;
     console.log(`call ${this.callId}: agent ending the call`);
     this.send({ type: 'ending' });
@@ -1362,7 +1379,31 @@ export class CallSession implements DurableObject {
     this.audioReceipts.check(bytes, additionalFrames);
   }
 
+  private clearRealtimeQueue(): void {
+    if (this.audioQueueTimer !== undefined) clearTimeout(this.audioQueueTimer);
+    this.audioQueueTimer = undefined;
+    this.audioQueue.clear();
+  }
+
   private sendRealtimeAudio(audio: ArrayBuffer): void {
+    this.audioQueue.push(audio);
+    this.drainRealtimeQueue();
+  }
+
+  private drainRealtimeQueue(): void {
+    if (this.ended) return;
+    if (this.audioQueueTimer !== undefined) clearTimeout(this.audioQueueTimer);
+    this.audioQueueTimer = undefined;
+    try {
+      let audio: ArrayBuffer | undefined;
+      while ((audio = this.audioQueue.take(Date.now())) !== undefined) this.deliverRealtimeAudio(audio);
+      if (this.audioQueue.pending) {
+        this.audioQueueTimer = setTimeout(() => this.drainRealtimeQueue(), 100);
+      } else if (this.hangupAfterQueue) this.beginHangup();
+    } catch { this.failRealtimeOutput(); }
+  }
+
+  private deliverRealtimeAudio(audio: ArrayBuffer): void {
     if (!audio.byteLength) return;
     this.checkAudioReceiver(audio.byteLength);
     const id = this.audioReceipts.sent(audio.byteLength, Date.now());
@@ -1373,10 +1414,16 @@ export class CallSession implements DurableObject {
     this.armAudioReceiptDeadline();
   }
 
-  private sendRealtimeControl(value: unknown): boolean {
+  private sendRealtimeControl(value: { type: string; who?: string }): boolean {
     if (this.ended) return false;
     try {
       this.realtimeOutputBudget.control(Date.now());
+      if (value.type === 'flush') {
+        this.clearRealtimeQueue();
+        this.hangupAfterQueue = false;
+        if (this.queueHangupTimer !== undefined) clearTimeout(this.queueHangupTimer);
+        this.queueHangupTimer = undefined;
+      }
       const wire = JSON.stringify(value);
       const bytes = new TextEncoder().encode(wire).byteLength;
       this.checkAudioReceiver(bytes);
@@ -1397,7 +1444,8 @@ export class CallSession implements DurableObject {
       // Admission is synchronous and precedes atob/PCM allocation. Do not let
       // an async rejection microtask leave the rest of a same-turn burst live.
       const bytes = this.realtimeOutputBudget.reserve(msg.delta ?? '', Date.now(), from, msg.response_id);
-      this.checkAudioReceiver(bytes + (this.nativeGreeting?.bytes ?? 0), this.nativeGreeting?.frames.length ?? 0);
+      this.audioQueue.check(bytes);
+      this.checkAudioReceiver(Math.min(bytes, 24000) + (this.nativeGreeting?.bytes ?? 0), this.nativeGreeting?.frames.length ?? 0);
       if (!msg.delta) return;
       const audio = decodeRealtimeAudio(msg.delta);
       if (this.realtimeConfig?.protocol === 'openai' && msg.item_id) {
@@ -1546,12 +1594,15 @@ export class CallSession implements DurableObject {
   }
 
   private async handleUtterance(audio: ArrayBuffer): Promise<void> {
-    if (this.busy || !this.biz) return; // drop overlapping speech while we respond
+    if (this.ended || this.busy || !this.biz) return; // drop overlapping speech while we respond
     this.busy = true;
     try {
       this.send({ type: 'thinking' });
       const vocab = this.biz && this.settings ? sttVocab(this.biz, this.settings, this.knowledge) : undefined;
-      const { text, language } = await transcribe(this.env, audio, this.pendingContentType, vocab, this.settings);
+      const abort = new AbortController();
+      this.transcriptionAbort = abort;
+      const { text, language } = await transcribe(this.env, audio, this.pendingContentType, vocab, this.settings, abort.signal);
+      if (this.ended) return;
       if (!text) {
         this.busy = false;
         return;
@@ -1560,7 +1611,11 @@ export class CallSession implements DurableObject {
       if (language) this.lang = language; // follow the caller's language
       this.send({ type: 'transcript', text });
       await this.respondInner(text);
+    } catch (error) {
+      // Hanging up cancels STT; its rejection must not relabel a normal call as failed.
+      if (!this.ended) throw error;
     } finally {
+      this.transcriptionAbort = undefined;
       this.busy = false;
     }
   }
@@ -1959,6 +2014,7 @@ export class CallSession implements DurableObject {
 
   private async runFinalize(): Promise<void> {
     this.ended = true;
+    this.transcriptionAbort?.abort();
     this.closeUpstream();
     // Anything still attached has to be told, and then actually closed. Leaving
     // it open means `ended` silently drops every later message and the caller

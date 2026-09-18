@@ -20,3 +20,23 @@ This release is not approval to deploy production or claim live telephone readin
 The [corrective staging recording](demo/corrected/README.md) demonstrates canonical opening hours, missing-phone handling and persisted messages with a disclosed synthetic caller. Its interruption follow-up is inconclusive. The [original recording](demo/audible/README.md) remains labeled with its failures.
 
 Local tests cover provider configuration, stale knowledge writes, confirmed deletion, reservation cleanup, and realtime transport bounds. Past synthetic and silent-browser checks do not establish live-provider, microphone, physical audibility or PSTN acceptance. See [audio harness](demo/capture-harness.md) for reproducible local commands.
+
+### Model-independent audio checks — 2026-09-18
+
+Development tests reproduced rapid-output cutoffs and rejected transcription
+prompts before correction. With bounded output pacing, local workerd calls using
+real Kataleptic `gpt-realtime-2.1-mini` and `llama-3.3-70b` delivered all generated
+PCM without output errors; the mini answer lasted 28.2 seconds. A separate actual
+Chrome AudioContext test played 30 seconds of synthetic PCM and released all
+buffers (peak queued playback about 1.25 seconds). Run it with
+`node test/realtime-playout-smoke.mjs`; optionally set
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE` to a local Chrome executable.
+
+The actual transcription helper passed German audio against
+`whisper-large-v3-turbo`, `gpt-4o-transcribe`, `gpt-transcribe`, and
+`gpt-4o-transcribe-diarize`. Diarization took approximately 7.3 seconds on this
+single-speaker sample; this is not a speaker-separation test or latency guarantee.
+The earlier streaming `/listen` probes returned upstream-unreachable errors;
+those protocols remain outside the multipart transcription adapter. Physical
+speaker/microphone interruption quality, independent-provider and PSTN acceptance
+remain separate checks.
