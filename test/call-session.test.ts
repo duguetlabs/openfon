@@ -3095,7 +3095,6 @@ describe('gateway header transport contract', () => {
     expect(new Headers(init.headers).get('Upgrade')).toBe('websocket');
     expect(init.redirect).toBe('manual');
     expect(init.signal).toBeInstanceOf(AbortSignal);
-    expect(AbortSignal.timeout).toHaveBeenCalledWith(5000);
   }
   async function cleanup(caller: FakeSocket) {
     // Release owned pending fake fetches even if the test's first assertion
@@ -3104,6 +3103,28 @@ describe('gateway header transport contract', () => {
     caller.receive({ type: 'hangup' });
     await flush(100);
   }
+
+  it('keeps an upgraded realtime socket alive beyond the HTTP connection deadline', async () => {
+    vi.useFakeTimers();
+    const { session } = newSession('realtime', gatewaySettings, gatewayEnv);
+    await session.fetch(upgradeRequest());
+    const caller = serverSockets[0];
+    try {
+      caller.receive({ type: 'start' }); await flush(100);
+      const signal = gatewayRequests[0].init.signal!;
+      const up = upstreamSockets[0];
+      // Native workerd retains the request signal after WebSocket Upgrade.
+      signal.addEventListener('abort', () => up.close(1000, 'request aborted'));
+      up.emit('open', {}); await flush(100);
+      expect(caller.countOf('ready')).toBe(1);
+      await vi.advanceTimersByTimeAsync(6000); await flush(100);
+      expect(signal.aborted).toBe(false);
+      expect(up.closed).toBeNull();
+      up.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' }); await flush(100);
+      expect(caller.binaryCount()).toBe(1);
+      expect(gatewayRequests).toHaveLength(1);
+    } finally { await cleanup(caller); }
+  });
 
   it.each(['web', 'telnyx'])('[gateway-header-negative] starts %s through header Upgrade with gateway readiness and PCM', async channel => {
     vi.useFakeTimers();
