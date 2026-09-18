@@ -78,3 +78,28 @@ For an **independent provider** claim, remove all Kataleptic credentials and blo
 Engine presets now store behavior only, validate against the currently selected realtime provider before application, and never copy workspace credentials. Migration0016 erases obsolete legacy profile URL/key snapshots while preserving current workspace credentials. Its [compatibility barrier](migration-compatibility.md) refuses inconsistent legacy/provider rows and blocks unsafe old-Worker writes after the scrub. PBX operators must follow the [migration0014 rotation instructions](asterisk.md#configure-an-existing-installation); prior fast hashes no longer authenticate. These migrations have not changed staging or production.
 
 Engine preset storage and compatibility reconciliation now have [workspace quotas and historical recovery limits](preset-limits.md), introduced by migration0017.
+
+## Audio generation and transcription limits
+
+Realtime output is paced as PCM16 mono at 24 kHz, independent of model name or
+provider chunk size. The server permits at most 60 seconds of queued PCM and
+500 ms of delivery credit. Per-response size, aggregate generation rate, event
+work and receipt limits still apply. Interruption discards queued speech, and
+agent hangup waits for the queued goodbye. Browser and carrier receipt messages
+retain their existing meaning: buffer admission, not proof of audible playback.
+A suspended consumer remains subject to its own bounded playback buffer.
+
+Pipeline transcription has a separate 60-second total deadline; operators may
+set `STT_TIMEOUT_MS` from 1000 to 120000 ms (larger values are capped). The deadline
+includes headers, body reads and a possible compatibility retry. Slower models,
+including diarizing transcribers, therefore do not inherit the 15-second chat
+budget. This allows more processing time; it cannot make a provider faster.
+Hanging up cancels a pending transcription.
+
+Vocabulary prompts are optional. If a transcription endpoint rejects a prompted
+request with 400 or 422, OpenFon retries once without the prompt, using the same
+model, audio, endpoint and remaining deadline. It does not inspect or expose the
+provider error body, or retry authentication, rate-limit, network or timeout
+failures. No model-name allowlist or potentially inaccurate catalog capability
+flag is required. OpenFon consumes the returned text; it does not yet expose
+speaker labels or implement streaming `/listen` transcription protocols.

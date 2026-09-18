@@ -344,7 +344,7 @@ export function detectLang(text: string): string | null {
 // Language is auto-detected per utterance so callers can speak any supported
 // language regardless of the business's configured default. `prompt` biases
 // recognition toward business-specific vocabulary.
-export async function transcribe(env: Env, audio: ArrayBuffer, contentType: string, prompt?: string, settings?: WorkspaceSpeechSettings | null): Promise<Transcription> {
+export async function transcribe(env: Env, audio: ArrayBuffer, contentType: string, prompt?: string, settings?: WorkspaceSpeechSettings | null, signal?: AbortSignal): Promise<Transcription> {
   const custom = settings?.stt_provider && settings.stt_provider !== 'instance';
   const baseUrl = custom ? settings.stt_base_url || '' : env.DEFAULT_STT_BASE_URL;
   const apiKey = custom ? settings.stt_api_key || '' : env.DEFAULT_STT_API_KEY || '';
@@ -360,12 +360,24 @@ export async function transcribe(env: Env, audio: ArrayBuffer, contentType: stri
   form.append('file', new Blob([audio], { type: contentType }), `utterance.${ext}`);
   form.append('model', model);
   if (prompt) form.append('prompt', prompt);
-  const { response: res, data } = await fetchProviderJson(providerUrl(baseUrl, '/audio/transcriptions'), {
-    method: 'POST',
-    redirect: 'manual',
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: form,
-  });
+  // Diarization and slower transcribers need a different budget from chat.
+  // One absolute deadline covers both attempts; no model-name assumptions and
+  // no retry on authentication, rate limits, network errors or timeouts.
+  const configured = Number(env.STT_TIMEOUT_MS);
+  const timeout = Number.isFinite(configured) && configured >= 1000
+    ? Math.min(configured, 120_000) : 60_000;
+  const expiresAt = Date.now() + timeout;
+  const request = () => fetchProviderJson(providerUrl(baseUrl, '/audio/transcriptions'), {
+    method: 'POST', redirect: 'manual', signal,
+    headers: { Authorization: `Bearer ${apiKey}` }, body: form,
+  }, expiresAt - Date.now());
+  let { response: res, data } = await request();
+  if (prompt && (res.status === 400 || res.status === 422)) {
+    // Optional vocabulary is an optimization, not a prerequisite for speech.
+    // Error bodies remain unread: they may reflect credentials or private URLs.
+    form.delete('prompt');
+    ({ response: res, data } = await request());
+  }
   if (!res.ok) {
     throw new Error(`STT error ${res.status}: provider request failed`);
   }

@@ -4,7 +4,9 @@ import { MAX_REALTIME_AUDIO_BASE64 } from './realtime-input';
 // allowing successive response IDs, flushes or upstream rotations to mint more
 // output credit. These are per-call constants, not provider-supplied limits.
 export const REALTIME_PCM_BYTES_PER_SECOND = 48000;
-export const REALTIME_AUDIO_BURST_BYTES = 20 * REALTIME_PCM_BYTES_PER_SECOND;
+// Generation may be much faster than playback. Admission permits one bounded
+// minute ahead; a separate pacer below controls what reaches the receiver.
+export const REALTIME_AUDIO_BURST_BYTES = 60 * REALTIME_PCM_BYTES_PER_SECOND;
 export const MAX_REALTIME_RESPONSE_BYTES = 60 * REALTIME_PCM_BYTES_PER_SECOND;
 export const REALTIME_AUDIO_EVENT_BURST = 400;
 export const REALTIME_AUDIO_EVENTS_PER_SECOND = 100;
@@ -110,4 +112,39 @@ export class RealtimeAudioReceipts {
 
   get deadline(): number | undefined { return this.pending[0]?.deadline; }
   clear(): void { this.pending = []; this.bytes = 0; }
+}
+
+// Existing receivers acknowledge admission, not playback. Pace every provider's
+// PCM on the server, independent of chunk size/model, keeping only 500ms ahead
+// of wall time. Receiver-side byte/source bounds still cover suspended playback.
+export const REALTIME_PLAYOUT_WINDOW_BYTES = REALTIME_PCM_BYTES_PER_SECOND / 2;
+export class RealtimeAudioQueue {
+  private frames: { audio: ArrayBuffer; offset: number }[] = [];
+  private bytes = 0;
+  private credit = REALTIME_PLAYOUT_WINDOW_BYTES;
+  private updatedAt: number;
+  constructor(now: number) { this.updatedAt = now; }
+
+  check(bytes: number): void {
+    if (this.bytes + bytes > MAX_REALTIME_RESPONSE_BYTES || this.frames.length >= 4096) throw new RealtimeOutputError();
+  }
+  push(audio: ArrayBuffer): void {
+    if (!audio.byteLength) return;
+    this.check(audio.byteLength);
+    this.frames.push({ audio, offset: 0 }); this.bytes += audio.byteLength;
+  }
+  take(now: number): ArrayBuffer | undefined {
+    const elapsed = Math.max(0, now - this.updatedAt);
+    this.updatedAt = Math.max(now, this.updatedAt);
+    this.credit = Math.min(REALTIME_PLAYOUT_WINDOW_BYTES, this.credit + elapsed * REALTIME_PCM_BYTES_PER_SECOND / 1000);
+    const frame = this.frames[0];
+    if (!frame || this.credit < 2) return;
+    const length = Math.min(frame.audio.byteLength - frame.offset, Math.floor(this.credit / 2) * 2);
+    const audio = frame.audio.slice(frame.offset, frame.offset + length);
+    frame.offset += length; this.bytes -= length; this.credit -= length;
+    if (frame.offset === frame.audio.byteLength) this.frames.shift();
+    return audio;
+  }
+  get pending(): boolean { return this.frames.length > 0; }
+  clear(): void { this.frames = []; this.bytes = 0; } // flush never creates rate credit
 }

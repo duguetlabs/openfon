@@ -21,6 +21,8 @@ export interface Env {
   DEFAULT_STT_BASE_URL: string;
   DEFAULT_STT_MODEL: string;
   DEFAULT_STT_API_KEY?: string;
+  /** Total transcription wait, including compatibility retry: 1000–120000ms; default 60000. */
+  STT_TIMEOUT_MS?: string;
   // TTS: "azure" (server-side) or "browser" (client speechSynthesis, zero cost)
   DEFAULT_TTS_PROVIDER: string;
   AZURE_SPEECH_KEY?: string;

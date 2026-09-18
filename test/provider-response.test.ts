@@ -18,6 +18,7 @@ const flush = async () => { for (let i = 0; i < 40; i++) await Promise.resolve()
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 for (const kind of ['chat', 'stt']) describe(`${kind} bounded provider response`, () => {
+  const timeout = kind === 'chat' ? TIMEOUT : 60000;
   it('preserves normal structured/multibyte responses and request configuration', async () => {
     const encoded = new TextEncoder().encode(JSON.stringify(content(kind)));
     const fetcher = vi.fn(async () => new Response(new ReadableStream({ start(c) {
@@ -87,7 +88,7 @@ for (const kind of ['chat', 'stt']) describe(`${kind} bounded provider response`
     vi.stubGlobal('fetch', vi.fn((_url, init) => { signal = init.signal; return new Promise<Response>(done => { resolve = done; }); }));
     let result: unknown;
     const task = request(kind).catch(error => { result = error; });
-    await vi.advanceTimersByTimeAsync(TIMEOUT);
+    await vi.advanceTimersByTimeAsync(timeout);
     expect(result instanceof Error).toBe(true);
     expect(signal?.aborted).toBe(true);
     const cancel = vi.fn(); resolve(new Response(new ReadableStream({ cancel })));
@@ -102,11 +103,11 @@ for (const kind of ['chat', 'stt']) describe(`${kind} bounded provider response`
     let signal: AbortSignal | undefined;
     vi.stubGlobal('fetch', vi.fn((_url, init) => {
       signal = init.signal;
-      return new Promise<Response>(resolve => setTimeout(() => resolve(new Response(new ReadableStream({ cancel }))), TIMEOUT - 1000));
+      return new Promise<Response>(resolve => setTimeout(() => resolve(new Response(new ReadableStream({ cancel }))), timeout - 1000));
     }));
     let result: unknown;
     const task = request(kind).catch(error => { result = error; });
-    await vi.advanceTimersByTimeAsync(TIMEOUT - 1); expect(result).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(timeout - 1); expect(result).toBeUndefined();
     await vi.advanceTimersByTimeAsync(1); await task;
     expect(result instanceof Error).toBe(true);
     expect(cancel.mock.calls.length).toBeGreaterThan(0);
