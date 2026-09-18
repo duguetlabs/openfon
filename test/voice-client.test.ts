@@ -56,6 +56,46 @@ function prepareConnection() {
   return { stop, socket };
 }
 
+describe('browser speech routing and language', () => {
+  async function connected(mode: string, greeting = '') {
+    const { socket } = prepareConnection();
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: async () => { throw Error('no microphone'); } } });
+    const german = { name: 'German voice', lang: 'de-DE' };
+    const french = { name: 'French voice', lang: 'fr-FR' };
+    const speak = vi.fn();
+    vi.stubGlobal('speechSynthesis', { speak, cancel: vi.fn(), getVoices: () => [{ name: 'English default', lang: 'en-US' }, german, french] });
+    vi.stubGlobal('SpeechSynthesisUtterance', class { lang = ''; voice = null; constructor(public text: string) {} });
+    const voice = new VoiceCall(); await voice.connect('test');
+    socket.onmessage!({ data: JSON.stringify({ type: 'ready', mode, ttsMode: 'browser', language: 'de', greeting }) });
+    return { voice, socket, speak, german, french };
+  }
+
+  it('does not synthesize realtime transcripts over provider audio', async () => {
+    const { voice, socket, speak } = await connected('realtime');
+    const listener = vi.fn(); voice.on(listener);
+    socket.onmessage!({ data: JSON.stringify({ type: 'agent_text', text: 'Guten Tag!' }) });
+    expect(listener).toHaveBeenCalledWith({ type: 'agent_text', text: 'Guten Tag!' });
+    expect(speak).not.toHaveBeenCalled();
+    voice.hangup();
+  });
+
+  it('uses the pipeline greeting language and follows reply language changes', async () => {
+    const { voice, socket, speak, german, french } = await connected('pipeline', 'Guten Tag!');
+    expect(speak.mock.calls[0][0]).toMatchObject({ text: 'Guten Tag!', lang: 'de', voice: german });
+    socket.onmessage!({ data: JSON.stringify({ type: 'agent_text', text: 'Bonjour!', language: 'fr' }) });
+    expect(speak.mock.calls[1][0]).toMatchObject({ text: 'Bonjour!', lang: 'fr', voice: french });
+    voice.hangup();
+  });
+
+  it('retains a local cascade greeting but does not repeat its streamed responses', async () => {
+    const { voice, socket, speak, german } = await connected('realtime', 'Guten Tag!');
+    expect(speak.mock.calls[0][0]).toMatchObject({ lang: 'de', voice: german });
+    socket.onmessage!({ data: JSON.stringify({ type: 'agent_text', text: 'Wie kann ich helfen?' }) });
+    expect(speak).toHaveBeenCalledTimes(1);
+    voice.hangup();
+  });
+});
+
 describe('browser voice resource lifetime', () => {
   it('releases the microphone when socket construction throws', async () => {
     const { stop } = prepareConnection();

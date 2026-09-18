@@ -43,6 +43,7 @@ export class VoiceCall {
   private recording = false;
   private agentSpeaking = false;
   private ttsMode: 'server' | 'browser' = 'browser';
+  private speechLanguage = '';
   private mimeType = 'audio/webm';
   private player: HTMLAudioElement | null = null;
   private playerUrl: string | null = null;
@@ -154,6 +155,7 @@ export class VoiceCall {
           text?: string;
           greeting?: string;
           ttsMode?: string;
+          language?: string;
           message?: string;
           mode?: string;
           who?: 'caller' | 'agent' | 'none';
@@ -183,6 +185,7 @@ export class VoiceCall {
             this.audioReceipts = msg.audioReceipts === true;
             this.mode = msg.mode === 'realtime' ? 'realtime' : 'pipeline';
             this.ttsMode = msg.ttsMode === 'server' ? 'server' : 'browser';
+            if (msg.language) this.speechLanguage = msg.language;
             this.emit({ type: 'status', status: 'live' });
             if (msg.engine) this.emit({ type: 'engine', label: msg.engine });
             if (msg.greeting) {
@@ -216,7 +219,9 @@ export class VoiceCall {
             break;
           case 'agent_text':
             this.emit({ type: 'agent_text', text: msg.text ?? '' });
-            if (this.ttsMode === 'browser' && msg.text) this.speakLocally(msg.text);
+            if (msg.language) this.speechLanguage = msg.language;
+            // Realtime transcripts describe audio already streamed by the provider.
+            if (this.mode === 'pipeline' && this.ttsMode === 'browser' && msg.text) this.speakLocally(msg.text);
             break;
           case 'error':
             this.emit({ type: 'status', status: 'error', detail: msg.message });
@@ -449,6 +454,14 @@ export class VoiceCall {
     this.agentSpeaking = true;
     this.emit({ type: 'speaking', who: 'agent' });
     const u = new SpeechSynthesisUtterance(text);
+    if (this.speechLanguage) {
+      u.lang = this.speechLanguage;
+      const language = this.speechLanguage.toLowerCase();
+      const voices = speechSynthesis.getVoices();
+      const voice = voices.find(v => v.lang.toLowerCase() === language)
+        ?? voices.find(v => v.lang.toLowerCase().split('-')[0] === language.split('-')[0]);
+      if (voice) u.voice = voice;
+    }
     u.onend = u.onerror = () => {
       if (this.ended) return;
       this.agentSpeaking = false;
