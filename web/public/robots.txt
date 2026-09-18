@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /ws/
+Disallow: /auth
+Disallow: /overview
+Disallow: /assistants
+Disallow: /knowledge
+Disallow: /test
+Disallow: /settings
+Disallow: /calls
+Disallow: /call/
+Disallow: /account

@@ -1,4 +1,4 @@
-node_modules/
+node_modules
 dist/
 .wrangler/
 .dev.vars
@@ -7,6 +7,7 @@ dist/
 .env
 .env.*
 .claude/
+references/
 
 # Benchmark audio corpora — regenerate with bench/quality/prepare/ recipes
 # (see docs/research/voice-eval-datasets.md). Never commit the audio itself.
@@ -17,3 +18,10 @@ bench/**/data/
 # Do not widen the rule above to cover it.
 __pycache__/
 *.pyc
+
+# Browser verification artifacts (may contain synthetic session state)
+playwright-report/
+test-results/
+
+# Generated coordination records are not release content.
+.agent/

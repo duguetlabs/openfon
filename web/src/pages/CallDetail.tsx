@@ -1,26 +1,57 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, type CallDetail } from '../api';
-import { Card, Spinner, fmtDuration, fmtTime } from '../ui';
+import { api, ApiError, bookingRequestContact, takenMessage, type CallDetail, type KnowledgeCollection } from '../api';
+import { Button, Card, Spinner, fmtDuration, fmtTime } from '../ui';
 
 export default function CallDetailPage() {
   const { callId } = useParams();
   const [call, setCall] = useState<CallDetail | null>(null);
   const [error, setError] = useState('');
+  const [draftError, setDraftError] = useState('');
+  const [reload, setReload] = useState(0);
+  const [collections, setCollections] = useState<KnowledgeCollection[]>([]);
+  const [collectionId, setCollectionId] = useState('');
+  const [drafting, setDrafting] = useState<number | null>(null);
+  const [saved, setSaved] = useState('');
+  useEffect(() => { void api.knowledgeCollections().then(c => { setCollections(c); setCollectionId(c[0]?.id || ''); }).catch(() => {}); }, []);
+  useEffect(() => { setDraftError(''); setSaved(''); }, [callId]);
 
   useEffect(() => {
-    if (callId) void api.call(callId).then(setCall).catch((e) => setError(e.message));
-  }, [callId]);
+    let active = true;
+    setCall(null); setError('');
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let failures = 0;
+    async function refreshCall() {
+      if (!callId) return;
+      try {
+        const next = await api.call(callId);
+        if (!active) return;
+        failures = 0; setCall(next); setError('');
+        if (next.status === 'active') timer = setTimeout(refreshCall, 1500);
+      } catch (e) {
+        if (active) {
+          setError(e instanceof Error ? e.message : 'Could not refresh call.');
+          failures++;
+          const transient = !(e instanceof ApiError) || e.status === 429 || e.status >= 500;
+          if (transient && failures < 3) timer = setTimeout(refreshCall, 3000);
+        }
+      }
+    }
+    void refreshCall();
+    return () => { active = false; clearTimeout(timer); };
+  }, [callId, reload]);
 
-  if (error) return <p className="text-rose">{error}</p>;
+  const retry = <Button variant="ghost" onClick={() => setReload(n => n + 1)}>Retry call</Button>;
+  if (error && !call) return <div><p role="alert" className="text-rose">{error}</p>{retry}</div>;
   if (!call) return <Spinner />;
 
-  const message = call.message_json ? (JSON.parse(call.message_json) as { caller_name?: string; caller_phone?: string; message?: string }) : null;
+  const message = takenMessage(call.message_json);
+  const booking = message ? null : bookingRequestContact(call);
 
   return (
     <div className="mx-auto max-w-2xl">
       <Link
-        to="/"
+        to="/calls"
         className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-faint transition-colors hover:text-iris"
       >
         ← Call log
@@ -40,6 +71,8 @@ export default function CallDetailPage() {
         <div className="callline-accent mt-3 w-16" />
       </div>
 
+      {call.status === 'active' && <p role="status">Waiting for the conversation to finish saving…</p>}
+      {error && <div><p role="alert" className="text-rose">{error}</p>{retry}</div>}
       {message && (
         <Card className="rise rise-1 mb-8 border-rose/20 bg-wash-rose">
           <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-rose">☎ Message taken</p>
@@ -51,6 +84,18 @@ export default function CallDetailPage() {
         </Card>
       )}
 
+      {booking && (
+        <Card className="rise rise-1 mb-8 border-iris/20 bg-wash-iris">
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-iris">Booking requested</p>
+          <p className="mt-2.5 text-sm text-ink">
+            {booking.caller_name && <strong>{booking.caller_name}</strong>}
+            {booking.caller_phone && <span className="font-mono text-ink-soft"> · {booking.caller_phone}</span>}
+          </p>
+        </Card>
+      )}
+
+      {call.failure_message && <Card className="mb-5"><p>Call issue: {call.failure_message}</p></Card>}
+      <div className="mb-6"><p className="text-sm text-ink-soft">Save a caller’s question as a knowledge draft, then write and approve the answer in Knowledge.</p>{collections.length > 0 && <label className="mt-3 block text-sm">Save drafts to <select className="ml-3 rounded border border-line p-2" value={collectionId} onChange={e=>setCollectionId(e.target.value)}>{collections.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}{draftError && <p role="alert" className="mt-3 text-rose">{draftError}</p>}{saved && <p role="status" className="mt-3 text-sm">{saved} <Link to="/knowledge" className="text-iris underline">Review knowledge →</Link></p>}</div>
       <div className="rise rise-2 space-y-3">
         {call.turns.map((t, i) => (
           <div key={i} className={`flex ${t.role === 'agent' ? 'justify-start' : 'justify-end'}`}>
@@ -68,7 +113,8 @@ export default function CallDetailPage() {
               >
                 {t.role === 'agent' ? 'agent' : 'caller'}
               </p>
-              {t.text}
+              <p className="whitespace-pre-wrap">{t.text}</p>
+              {t.role === 'caller' && <button disabled={drafting !== null} className="mt-3 block text-xs text-iris underline disabled:opacity-50" onClick={async()=>{setDrafting(t.id);setDraftError('');setSaved('');try{await api.draftKnowledgeFromTurn({callId:call.id,turnId:t.id,...(collectionId?{collectionId}:{})});setSaved('Question saved as a draft.');}catch(e){setDraftError(e instanceof Error?e.message:'Could not save draft.');}finally{setDrafting(null);}}}>{drafting===t.id?'Saving…':'Save question to knowledge'}</button>}
             </div>
           </div>
         ))}

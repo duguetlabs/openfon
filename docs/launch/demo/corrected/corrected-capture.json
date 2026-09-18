@@ -1,0 +1,72 @@
+{
+  "started": 1789215964604,
+  "ended": 1789216032528,
+  "callId": "722e6aff-a154-4d86-ad80-a80e83cf7dec",
+  "actions": [
+    {
+      "action": "greeting-playback-drained",
+      "t": 10.384
+    },
+    {
+      "action": "hours",
+      "t": 10.384
+    },
+    {
+      "action": "hours-playback-drained",
+      "t": 22.835
+    },
+    {
+      "action": "services",
+      "t": 22.838
+    },
+    {
+      "action": "interrupt",
+      "t": 27.72
+    },
+    {
+      "action": "interruption-response-playback-drained",
+      "t": 32.15
+    },
+    {
+      "action": "unknown",
+      "t": 32.151
+    },
+    {
+      "action": "unknown-playback-drained",
+      "t": 44.247
+    },
+    {
+      "action": "message",
+      "t": 44.248
+    },
+    {
+      "action": "message-playback-drained",
+      "t": 66.431
+    }
+  ],
+  "syntheticCaller": true,
+  "actualProvider": true,
+  "staging_source": "526be52ab15785dfa4ec0c7c87a958295a5ce4b6",
+  "worker_version": "a1bc90ea-dad0-4677-abc0-e8e34cdc9c51",
+  "provider": "Kataleptic",
+  "model": "gpt-realtime-2",
+  "voice": "blank; provider default; resolved ID not recorded",
+  "summary_model": "llama-3.3-70b",
+  "original_audio_seconds": 67.49866666666667,
+  "video_seconds": 79.2,
+  "video_audio_offset_seconds": 1,
+  "alignment": "approximate; not latency evidence",
+  "physical_microphone": false,
+  "pstn": false,
+  "live_direct_openai": false,
+  "authorized_corrective_calls_used": 1,
+  "original_artifact_preserved": "../audible/",
+  "acceptance": {
+    "canonical_hours": "pass",
+    "missing_phone_persistence_and_display": "pass",
+    "unknown_service": "pass for the fixture",
+    "message_and_summary": "pass",
+    "final_audio_playback_drain": "pass",
+    "interruption_followup": "inconclusive; recorder advanced after old queued audio drained"
+  }
+}

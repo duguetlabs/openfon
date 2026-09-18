@@ -2,6 +2,14 @@ export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
   CALL_SESSION: DurableObjectNamespace;
+  ASTERISK_CALL?: DurableObjectNamespace;
+  ASTERISK_ENABLED?: string;
+  TELNYX_CALL?: DurableObjectNamespace;
+  TELNYX_ENABLED?: string;
+  TELNYX_API_KEY?: string;
+  TELNYX_PUBLIC_KEY?: string;
+  TELNYX_CONNECTION_ID?: string;
+  TELNYX_PUBLIC_ORIGIN?: string;
   // LLM (any OpenAI-compatible API)
   DEFAULT_LLM_BASE_URL: string;
   DEFAULT_LLM_MODEL: string;
@@ -19,6 +27,7 @@ export interface Env {
   AZURE_SPEECH_REGION: string;
   DEFAULT_TTS_VOICE: string;
   // Realtime engine (any OpenAI Realtime-compatible WebSocket endpoint)
+  REALTIME_PROVIDER?: 'kataleptic' | 'openai' | 'custom';
   REALTIME_BASE_URL: string;
   REALTIME_MODEL: string;
   REALTIME_API_KEY?: string; // falls back to DEFAULT_LLM_API_KEY
@@ -42,7 +51,17 @@ export interface Business {
   max_calls_per_day: number;
 }
 
-export interface AgentSettings {
+export interface WorkspaceSpeechSettings {
+  realtime_provider?: 'instance' | 'kataleptic' | 'openai' | 'custom';
+  realtime_base_url?: string;
+  realtime_api_key?: string;
+  stt_provider?: 'instance' | 'openai' | 'custom';
+  stt_base_url?: string;
+  stt_api_key?: string;
+  stt_model?: string;
+}
+
+export interface AgentSettings extends WorkspaceSpeechSettings {
   business_id: string;
   agent_name: string;
   greeting: string;
@@ -57,6 +76,69 @@ export interface AgentSettings {
   engine: string; // 'pipeline' | 'realtime'
   realtime_model: string; // empty = instance default (REALTIME_MODEL)
   realtime_voice: string; // tier-specific voice id, passed verbatim; empty = tier default
+}
+
+export type AssistantState = 'draft' | 'active' | 'paused';
+export type CallEnvironment = 'test' | 'live';
+export type CallDirection = 'inbound' | 'outbound';
+export type KnowledgeKind = 'faq' | 'service' | 'note';
+export type KnowledgeStatus = 'draft' | 'active';
+
+export interface Assistant {
+  id: string;
+  business_id: string;
+  public_slug: string;
+  state: AssistantState;
+  name: string;
+  greeting: string;
+  persona: string;
+  language: string;
+  voice: string;
+  take_messages: number;
+  custom_instructions: string;
+  engine: string;
+  realtime_model: string;
+  realtime_voice: string;
+  llm_model: string;
+  created_at: string;
+  updated_at: string;
+  activated_at: string | null;
+}
+
+export interface ProviderSettings extends WorkspaceSpeechSettings {
+  llm_model?: string;
+  business_id: string;
+  llm_base_url: string;
+  llm_api_key: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeCollection {
+  id: string;
+  business_id: string;
+  name: string;
+  description: string;
+  is_default: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeItem {
+  id: string;
+  business_id: string;
+  collection_id: string;
+  kind: KnowledgeKind;
+  status: KnowledgeStatus;
+  title: string;
+  question: string;
+  answer: string;
+  content: string;
+  source_call_id: string | null;
+  source_turn_id: number | null;
+  created_at: string;
+  updated_at: string;
+  activated_at: string | null;
 }
 
 export interface LlmConfig {

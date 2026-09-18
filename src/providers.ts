@@ -1,11 +1,15 @@
+import { fetchProviderJson, ProviderResponseError } from './provider-response';
+import { piperVoiceFromCatalog } from './piper-catalog';
 // Pluggable AI providers. LLM and STT speak the OpenAI-compatible wire format,
 // so OpenFon works with Kataleptic (default), OpenAI, Azure OpenAI, Groq, Ollama,
 // vLLM, or anything else that implements /chat/completions and /audio/transcriptions.
-import type { Env, AgentSettings, ChatMessage, LlmConfig } from './types';
+import type { Env, AgentSettings, ChatMessage, LlmConfig, WorkspaceSpeechSettings } from './types';
 
 // Raised when a business's AI-provider settings cannot be turned into a usable
 // config. Callers surface the message to the user instead of failing opaquely.
 export class LlmConfigError extends Error {}
+// Only these locally composed messages may be shown by connection checks.
+export class LlmRequestError extends Error {}
 
 // Two base URLs mean the same endpoint if only a trailing slash or host casing
 // differs — otherwise "https://api.host/v1/" would count as a custom endpoint
@@ -147,13 +151,13 @@ export function validateLlmBaseUrl(raw: string, allowInsecure = false): string |
 // The trailing slash goes for the same reason it always did: "…/v1/" would
 // otherwise build "…/v1//chat/completions", which providers used to paper over
 // with a 301 that fetch followed, and redirects are off below.
-function completionsUrl(baseUrl: string): string {
+function providerUrl(baseUrl: string, endpoint: '/chat/completions' | '/audio/transcriptions'): string {
   try {
     const u = new URL(baseUrl.trim());
-    u.pathname = `${u.pathname.replace(/\/+$/, '')}/chat/completions`;
+    u.pathname = `${u.pathname.replace(/\/+$/, '')}${endpoint}`;
     return u.toString();
   } catch {
-    return `${baseUrl.trim().replace(/\/+$/, '')}/chat/completions`;
+    return `${baseUrl.trim().replace(/\/+$/, '')}${endpoint}`;
   }
 }
 
@@ -162,7 +166,7 @@ export async function chatComplete(
   messages: ChatMessage[],
   opts: { maxTokens?: number; temperature?: number; json?: boolean } = {}
 ): Promise<string> {
-  const res = await fetch(completionsUrl(cfg.baseUrl), {
+  const { response: res, data } = await fetchProviderJson(providerUrl(cfg.baseUrl, '/chat/completions'), {
     method: 'POST',
     // Every endpoint rule above is checked against the URL that was saved, so a
     // followed redirect would walk straight around them: a host that passes
@@ -180,17 +184,28 @@ export async function chatComplete(
     }),
   });
   if (res.status >= 300 && res.status < 400) {
-    // The target can name an internal host or carry signed query parameters,
-    // and these errors surface on a public socket — log it, don't throw it.
-    console.error(`LLM endpoint redirected to ${res.headers.get('location') ?? 'an undisclosed location'}`);
+    // A redirect Location may contain userinfo or signed query credentials.
+    // The status is enough to diagnose an unsupported provider response; never
+    // copy the target into logs or an API error.
+    console.error(`LLM endpoint returned redirect status ${res.status}; target redacted`);
     throw new Error(`LLM error ${res.status}: endpoint redirected; redirects are not followed`);
   }
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`LLM error ${res.status}: ${body.slice(0, 300)}`);
+    // Provider bodies are untrusted and may reflect the Authorization header,
+    // signed query data, or internal diagnostics. Call failures are logged and
+    // stored for the owner, so carry only the status across that boundary.
+    const hint = res.status === 401 || res.status === 403 ? 'check the API key and model permissions'
+      : res.status === 402 ? 'check your provider billing or credits'
+      : res.status === 404 ? 'check the base URL and model identifier'
+      : res.status === 429 ? 'provider rate limit or quota reached; retry later or check your quota'
+      : res.status === 400 ? 'check model support for chat completions and JSON responses' : 'provider request failed; retry later';
+    throw new LlmRequestError(`LLM error ${res.status}: ${hint}`);
   }
-  const data = (await res.json()) as { choices: { message: { content: string } }[] };
-  return data.choices[0]?.message?.content ?? '';
+  const choices = (data as { choices?: { message?: { content?: unknown } }[] } | null)?.choices;
+  if (!Array.isArray(choices)) throw new ProviderResponseError();
+  const content = choices[0]?.message?.content;
+  if (content != null && typeof content !== 'string') throw new ProviderResponseError();
+  return content ?? '';
 }
 
 // Languages OpenFon speaks. Keys are ISO 639-1; values are Azure neural voices.
@@ -232,27 +247,9 @@ export const PIPER_BY_LANG: Record<string, string> = {
   ru: 'ru_RU-irina-medium',
 };
 
-// Live per-language voice map from the engine's public catalog endpoint
-// (<realtime base>/voices), cached per isolate; PIPER_BY_LANG is the fallback
-// when the endpoint is missing (self-hosters pointing at other providers).
-let piperCatalog: { map: Record<string, string>; fetchedAt: number } | null = null;
-
+// Endpoint-scoped, bounded public catalog; fixed language defaults on failure.
 export async function piperVoiceFor(env: Env, lang: string): Promise<string> {
-  const fallback = PIPER_BY_LANG[lang] ?? '';
-  try {
-    if (!piperCatalog || Date.now() - piperCatalog.fetchedAt > 3_600_000) {
-      const url = env.REALTIME_BASE_URL.replace(/^ws/, 'http') + '/voices';
-      const res = await fetch(url, { signal: AbortSignal.timeout(1500) });
-      if (res.ok) {
-        const data = (await res.json()) as { 'kataleptic-realtime'?: { voices_by_language?: Record<string, string> } };
-        const map = data['kataleptic-realtime']?.voices_by_language;
-        if (map && typeof map === 'object') piperCatalog = { map, fetchedAt: Date.now() };
-      }
-    }
-    return piperCatalog?.map[lang] ?? fallback;
-  } catch {
-    return fallback;
-  }
+  return piperVoiceFromCatalog(env.REALTIME_BASE_URL, lang, PIPER_BY_LANG[lang] ?? '');
 }
 
 // STT backends report language as ISO codes ("de") or names ("german").
@@ -347,23 +344,36 @@ export function detectLang(text: string): string | null {
 // Language is auto-detected per utterance so callers can speak any supported
 // language regardless of the business's configured default. `prompt` biases
 // recognition toward business-specific vocabulary.
-export async function transcribe(env: Env, audio: ArrayBuffer, contentType: string, prompt?: string): Promise<Transcription> {
+export async function transcribe(env: Env, audio: ArrayBuffer, contentType: string, prompt?: string, settings?: WorkspaceSpeechSettings | null): Promise<Transcription> {
+  const custom = settings?.stt_provider && settings.stt_provider !== 'instance';
+  const baseUrl = custom ? settings.stt_base_url || '' : env.DEFAULT_STT_BASE_URL;
+  const apiKey = custom ? settings.stt_api_key || '' : env.DEFAULT_STT_API_KEY || '';
+  const model = custom ? settings.stt_model || '' : env.DEFAULT_STT_MODEL;
+  if (custom) {
+    const bad = validateLlmBaseUrl(baseUrl);
+    if (bad) throw new LlmConfigError(`STT URL ${bad}`);
+    if (!apiKey || !model) throw new LlmConfigError('STT provider needs its own API key and model.');
+    if (settings.stt_provider === 'openai' && baseUrl !== 'https://api.openai.com/v1') throw new LlmConfigError('OpenAI STT endpoint must be https://api.openai.com/v1');
+  }
   const form = new FormData();
   const ext = contentType.includes('mp4') ? 'mp4' : contentType.includes('wav') ? 'wav' : 'webm';
   form.append('file', new Blob([audio], { type: contentType }), `utterance.${ext}`);
-  form.append('model', env.DEFAULT_STT_MODEL);
+  form.append('model', model);
   if (prompt) form.append('prompt', prompt);
-  const res = await fetch(`${env.DEFAULT_STT_BASE_URL}/audio/transcriptions`, {
+  const { response: res, data } = await fetchProviderJson(providerUrl(baseUrl, '/audio/transcriptions'), {
     method: 'POST',
-    headers: { Authorization: `Bearer ${env.DEFAULT_STT_API_KEY || ''}` },
+    redirect: 'manual',
+    headers: { Authorization: `Bearer ${apiKey}` },
     body: form,
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`STT error ${res.status}: ${body.slice(0, 300)}`);
+    throw new Error(`STT error ${res.status}: provider request failed`);
   }
-  const data = (await res.json()) as { text: string; language?: string };
-  return { text: (data.text ?? '').trim(), language: normalizeLang(data.language) };
+  const result = data as { text?: unknown; language?: unknown } | null;
+  if (!result || typeof result !== 'object' || Array.isArray(result) ||
+    (result.text != null && typeof result.text !== 'string') ||
+    (result.language != null && typeof result.language !== 'string')) throw new ProviderResponseError();
+  return { text: (result.text ?? '').trim(), language: normalizeLang(result.language ?? undefined) };
 }
 
 // Pick the voice for a reply: the business's custom voice only applies to its
@@ -392,7 +402,7 @@ export async function synthesize(env: Env, text: string, voice: string, format: 
     body: ssml,
   });
   if (!res.ok) {
-    console.error(`TTS error ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    console.error(`TTS error ${res.status}: provider response redacted`);
     return null;
   }
   return res.arrayBuffer();

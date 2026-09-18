@@ -603,6 +603,48 @@ class TestReportCheckerCoversEveryFigureRow(unittest.TestCase):
             bad, out = self.run_check(r)
             self.assertEqual(bad, 0, f"{r.name}\n{out}")
 
+    def test_semantic_vad_model_table_checks_tail_and_split_counts(self):
+        report = self.docs / "realtime-21-2026-08.md"
+        original = report.read_text()
+        for before, after in (("p90 +3490 ms", "p90 +99999 ms"),
+                              ("| **0/12** | median +106", "| **1/12** | median +106")):
+            self.assertIn(before, original)
+            bad, out = self.run_check(self.rewritten(report, original.replace(before, after, 1)))
+            self.assertGreater(bad, 0, out)
+            self.assertIn("DRIFTED", out)
+
+    def test_missing_compound_positions_and_empty_cells_fail(self):
+        ev = self.c.evidence(("v21-ttfa",))
+        arms = ["gw-21-semantic", "gw-21-server"]
+        for spec, good, bad_cells in (
+            ((("slower", "faster"), "ttfa_ms"), "13 / 7", ("13", "7", "—", "13 / 7 / 7")),
+            ((("p10", "p90"), "ttfa_ms"), "−336 / +3490", ("−336", "+3490", "", "—")),
+        ):
+            self.assertEqual(self.c.check_cell(ev, good, arms, spec, None), set())
+            for cell in bad_cells:
+                self.assertTrue(self.c.check_cell(ev, cell, arms, spec, None), cell)
+        # This spec means one of two statistical families, not a compound.
+        self.assertEqual(self.c.check_cell(ev, "1.000", arms,
+            (("p_adj", "mcnemar_p_adj"), "ttfa_ms"), None), set())
+
+    def test_statistic_cannot_disappear_from_a_report(self):
+        report = self.docs / "realtime-21-2026-08.md"
+        original = report.read_text()
+        for replacement in ("—", "", "**−336**"):
+            edited = original.replace("**−336 / +3490**", replacement, 1)
+            self.assertNotEqual(edited, original)
+            bad, out = self.run_check(self.rewritten(report, edited))
+            self.assertGreater(bad, 0, out)
+            self.assertIn("DRIFTED", out)
+        # Removing every number must not remove the row from coverage.
+        edited = re.sub(r"^\| `gpt-realtime-2\.1` \|.*$",
+                        "| `gpt-realtime-2.1` | — | — | — |", original,
+                        count=1, flags=re.MULTILINE)
+        self.assertNotEqual(edited, original)
+        bad, out = self.run_check(self.rewritten(report, edited))
+        self.assertGreater(bad, 0, out)
+        self.assertIn("missing statistic", out)
+
     def test_every_row_is_verified_allowlisted_or_reported(self):
         """Coverage by identity: the three buckets must exhaust the rows, and
         the total must equal the count declared outside the parser."""
@@ -667,7 +709,8 @@ class TestReportCheckerCoversEveryFigureRow(unittest.TestCase):
                 # The hand-counted numerator is the declared exemption, so
                 # `6/20` -> `20/20` is expected to pass here; the denominator
                 # and percentage have their own tests.
-                if tbl.header.strip() in self.c.MANUAL_COUNT_TABLES:
+                if (tbl.header.strip() in self.c.MANUAL_COUNT_TABLES
+                        or tbl.header.strip() in self.c.UNCHECKABLE_TABLES):
                     continue
                 for n, line in tbl.body:
                     if not self.c.figures(line) or self.c.allowlisted_row(line):
@@ -848,7 +891,8 @@ class TestReportCheckerCoversEveryFigureRow(unittest.TestCase):
             text = r.read_text()
             lines = text.split("\n")
             for tbl in self.c.tables(text):
-                if tbl.header.strip() in self.c.MANUAL_COUNT_TABLES:
+                if (tbl.header.strip() in self.c.MANUAL_COUNT_TABLES
+                        or tbl.header.strip() in self.c.UNCHECKABLE_TABLES):
                     continue
                 head = tbl.head_cells
                 for n, line in tbl.body:
@@ -997,10 +1041,13 @@ class TestReportCheckerCoversEveryFigureRow(unittest.TestCase):
             self.c.check_manual_count(ev, "**1/40 — 2.5%**", ["gw-hd-server"]), "")
 
     def test_no_allowlist_entry_is_wider_than_it_needs_to_be(self):
-        """`UNCHECKABLE_TABLES` is empty because every entry it once held was
-        either exempting a derivable denominator or exempting a table with no
-        figures at all. An entry has to name the part that is unverifiable."""
-        self.assertEqual(self.c.UNCHECKABLE_TABLES, {})
+        """Only live configuration echo counts lack analyzer evidence.
+
+        Model aliases now expose this table, too; latency and split statistics
+        must never be included in its exemption.
+        """
+        self.assertEqual(set(self.c.UNCHECKABLE_TABLES), {
+            "| tier | echoed `semantic_vad` | echoed `server_vad` |"})
         for allow in (self.c.MANUAL_COUNT_TABLES, self.c.UNCHECKABLE_ROWS):
             for key, reason in allow.items():
                 self.assertTrue(reason.strip(),

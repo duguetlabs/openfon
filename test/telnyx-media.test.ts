@@ -1,0 +1,288 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TelnyxMediaAdapter, createTelnyxMediaBridge } from '../src/telnyx-media';
+import { encodePcmuFrame, Pcmu8ToPcm24 } from '../src/telephony-audio';
+const identity = { callControlId: 'control', callSessionId: 'session', callLegId: 'leg', authToken: 'opaque-secret' };
+const connected = { event: 'connected', version: '1.0.0', connected: { 'x-telnyx-streaming-auth-token': identity.authToken } };
+const start = { event: 'start', stream_id: 'stream', sequence_number: '1', start: { call_control_id: 'control', call_session_id: 'session', media_format: { encoding: 'PCMU', sample_rate: 8000, channels: 1 } } };
+const payload = encodePcmuFrame(new Uint8Array(160).fill(255));
+const media = (chunk = 1, overrides = {}) => ({ event: 'media', stream_id: 'stream', sequence_number: String(chunk + 1), media: { chunk: String(chunk), timestamp: String((chunk - 1) * 20), track: 'inbound', payload, ...overrides } });
+const ready = { type: 'ready', mode: 'realtime', ttsMode: 'browser', greeting: '' };
+const pcm = (frames = 1) => new ArrayBuffer(frames * 960);
+const mark = (name: string) => ({ event: 'mark', stream_id: 'stream', mark: { name } });
+function fixture(onStart?: () => Promise<void> | void) {
+  const carrier: Array<Record<string, any>> = [];
+  const session: Array<string | ArrayBuffer> = [];
+  const onEnd = vi.fn();
+  const adapter = new TelnyxMediaAdapter({ expected: identity, carrierSend: raw => carrier.push(JSON.parse(raw)), sessionSend: raw => session.push(raw), onStart, onEnd });
+  const receive = (msg: unknown) => adapter.carrierMessage(JSON.stringify(msg));
+  const server = (msg: unknown) => adapter.sessionMessage(msg instanceof ArrayBuffer ? msg : JSON.stringify(msg));
+  const boot = async () => { await receive(connected); await receive(start); server(ready); };
+  return { adapter, carrier, session, onEnd, receive, server, boot };
+}
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => vi.useRealTimers());
+
+describe('Telnyx media bridge', () => {
+  it('authenticates connected/start before session start and buffers only validated pre-ready input', async () => {
+    let release!: () => void;
+    const f = fixture(() => new Promise<void>(resolve => { release = resolve; }));
+    await f.receive(connected);
+    const starting = f.receive(start);
+    await f.receive(media());
+    expect(f.session).toEqual([]);
+    release(); await starting;
+    expect(f.session).toEqual(['{"type":"start"}']);
+    f.server(ready);
+    expect(f.session[1]).toEqual(new ArrayBuffer(960));
+    expect(f.carrier).toEqual([]);
+  });
+
+  it('retains only the latest second while a provider handshake receives continuous carrier audio', async () => {
+    const f = fixture();
+    await f.receive(connected);
+    await f.receive(start);
+    for (let chunk = 1; chunk <= 150; chunk++) {
+      await f.receive(media(chunk));
+      vi.advanceTimersByTime(20);
+    }
+    expect(f.onEnd).not.toHaveBeenCalled();
+    expect(f.session).toEqual(['{"type":"start"}']);
+    f.server(ready);
+    const buffered = f.session.filter((value): value is ArrayBuffer => value instanceof ArrayBuffer);
+    expect(buffered.reduce((bytes, frame) => bytes + frame.byteLength, 0)).toBe(48000);
+    await f.receive(media(151));
+    expect(f.session.at(-1)).toEqual(new ArrayBuffer(960));
+    expect(f.onEnd).not.toHaveBeenCalled();
+    f.adapter.close();
+  });
+
+  it.each([
+    { ...connected, version: '9.0' },
+    { ...connected, connected: { 'x-telnyx-streaming-auth-token': 'wrong' } },
+    { ...connected, connected: undefined },
+  ])('rejects invalid connected envelope without starting a session', async bad => {
+    const f = fixture(); await f.receive(bad);
+    expect(f.onEnd).toHaveBeenCalledTimes(1);
+    expect(f.session).not.toContain('{"type":"start"}');
+  });
+
+  it('rejects pre-start audio, mismatched identity, unsupported format, and duplicate starts', async () => {
+    const cases = [media(), { ...start, start: { ...start.start, call_control_id: 'other' } },
+      { ...start, start: { ...start.start, call_session_id: 'other' } },
+      { ...start, start: { ...start.start, media_format: { encoding: 'PCMA', sample_rate: 8000, channels: 1 } } },
+      { ...start, start: { ...start.start, media_format: { encoding: 'PCMU', sample_rate: 24000, channels: 2 } } }];
+    for (const bad of cases) { const f = fixture(); await f.receive(connected); await f.receive(bad); expect(f.onEnd).toHaveBeenCalledTimes(1); }
+    const f = fixture(); await f.boot(); await f.receive(start); expect(f.onEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('reorders chunks, ignores duplicates and skips missing packets after bounded delay', async () => {
+    const f = fixture(); await f.boot();
+    await f.receive(media(2)); expect(f.session).toHaveLength(1);
+    await f.receive(media(1)); expect(f.session).toHaveLength(3);
+    await f.receive(media(1)); expect(f.session).toHaveLength(3);
+    await f.receive(media(4)); vi.advanceTimersByTime(99); expect(f.session).toHaveLength(3);
+    vi.advanceTimersByTime(1); expect(f.session).toHaveLength(4);
+    await f.receive(media(3)); expect(f.session).toHaveLength(4);
+    expect(f.onEnd).not.toHaveBeenCalled();
+  });
+
+  it('keeps actual PCM order across reordered non-silent carrier chunks', async () => {
+    const f = fixture(); await f.boot();
+    const a = encodePcmuFrame(new Uint8Array(160).fill(191));
+    const b = encodePcmuFrame(new Uint8Array(160).fill(63));
+    await f.receive(media(2, { payload: b })); await f.receive(media(1, { payload: a }));
+    const reference = new Pcmu8ToPcm24();
+    expect(f.session.slice(1)).toEqual([reference.push(a).buffer, reference.push(b).buffer]);
+  });
+
+  it('rejects malformed/bounded frame, sequence and queue violations', async () => {
+    for (const bad of [media(12), media(1, { payload: 'AB==' }), media(1, { chunk: '-1' }),
+      media(1, { timestamp: 'NaN' }), media(1, { track: 'outbound' }), { ...media(), stream_id: 'other' }]) {
+      const f = fixture(); await f.boot(); await f.receive(bad); expect(f.onEnd).toHaveBeenCalledTimes(1);
+    }
+    for (const raw of ['{', ' '.repeat(8193), new ArrayBuffer(10), '[]']) {
+      const f = fixture(); await f.adapter.carrierMessage(raw); expect(f.onEnd).toHaveBeenCalledTimes(1);
+    }
+    const f = fixture(); await f.boot();
+    f.server(pcm(500)); f.server(pcm(2));
+    expect(f.onEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('paces playback at 20ms without leaking session transcripts or other controls', async () => {
+    const f = fixture(); await f.boot();
+    for (const type of ['transcript', 'agent_text', 'tool', 'speaking']) f.server({ type, text: 'private content' });
+    f.server(pcm(3)); expect(f.carrier).toEqual([]);
+    vi.advanceTimersByTime(19); expect(f.carrier).toEqual([]);
+    vi.advanceTimersByTime(1); expect(f.carrier.map(x => x.event)).toEqual(['media', 'mark']);
+    vi.advanceTimersByTime(40); expect(f.carrier.filter(x => x.event === 'media')).toHaveLength(3);
+    expect(JSON.stringify(f.carrier)).not.toContain('private content');
+  });
+
+  it('clear discards queued/partial audio and stale marks cannot complete a new generation', async () => {
+    const f = fixture(); await f.boot(); f.server(pcm(3)); vi.advanceTimersByTime(20);
+    const oldMark = f.carrier[1].mark.name;
+    f.server({ type: 'flush' }); expect(f.carrier.at(-2)).toEqual({ event: 'clear' }); expect(f.carrier.at(-1)!.event).toBe('mark');
+    f.server(pcm()); f.server({ type: 'ending' }); vi.advanceTimersByTime(240);
+    await f.receive(mark(oldMark)); expect(f.onEnd).not.toHaveBeenCalled();
+    const currentMarks = f.carrier.filter(x => x.event === 'mark' && x.mark.name !== oldMark);
+    for (const item of currentMarks) await f.receive(mark(item.mark.name));
+    expect(f.onEnd).toHaveBeenCalledWith('playback_complete');
+    expect(f.session.at(-1)).toBe('{"type":"hangup"}');
+  });
+
+  it('stops direct and pending reordered input while delivering the complete goodbye', async () => {
+    const f = fixture(); await f.boot();
+    await f.receive(media(1));
+    await f.receive(media(3)); // missing chunk 2 arms loss recovery
+    const before = f.session.slice();
+    expect(before.filter(x => x instanceof ArrayBuffer)).toHaveLength(1);
+    f.server({ type: 'ending' });
+    await f.receive(media(2)); // must not release either buffered or new audio
+    vi.advanceTimersByTime(100); // original gap callback would forward chunk 3
+    await f.receive(media(4));
+    expect(f.session).toEqual(before);
+    expect(f.onEnd).not.toHaveBeenCalled();
+    f.server(pcm(3)); // goodbye generation remains accepted after ending
+    vi.advanceTimersByTime(100);
+    await f.receive(media(5));
+    f.server(pcm(2)); // more goodbye PCM resets the quiet drain period
+    vi.advanceTimersByTime(240);
+    expect(f.session).toEqual(before);
+    expect(f.carrier.filter(x => x.event === 'media')).toHaveLength(6); // five frames plus padded FIR tail
+    expect(f.carrier.some(x => x.event === 'clear')).toBe(false);
+    expect(f.onEnd).not.toHaveBeenCalled();
+    const marks = f.carrier.filter(x => x.event === 'mark');
+    for (const item of marks.slice(0, -1)) await f.receive(mark(item.mark.name));
+    expect(f.onEnd).not.toHaveBeenCalled();
+    await f.receive(mark(marks.at(-1)!.mark.name));
+    expect(f.onEnd).toHaveBeenCalledExactlyOnceWith('playback_complete');
+    expect(f.session.at(-1)).toBe('{"type":"hangup"}');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('discards a pending input gap when ending starts without another carrier packet', async () => {
+    const f = fixture(); await f.boot(); await f.receive(media(2));
+    const before = f.session.slice();
+    f.server({ type: 'ending' });
+    vi.advanceTimersByTime(100);
+    expect(f.session).toEqual(before);
+    f.server(pcm());
+    vi.advanceTimersByTime(12000);
+    expect(f.onEnd).toHaveBeenCalledExactlyOnceWith('drain_timeout');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('times out missing playback acknowledgements and bounds queued output', async () => {
+    const f = fixture(); await f.boot(); f.server(pcm()); f.server({ type: 'ending' }); vi.advanceTimersByTime(12000);
+    expect(f.onEnd).toHaveBeenCalledWith('drain_timeout');
+    const g = fixture(); await g.boot(); g.server(pcm(500)); g.server(pcm());
+    expect(g.onEnd).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(20000); expect(g.onEnd).toHaveBeenCalledTimes(1); expect(g.carrier).toEqual([]);
+  });
+
+  it('handles session/transport/start failures once and cancels pending work', async () => {
+    const f = fixture(() => Promise.reject(new Error('secret upstream response')));
+    await f.receive(connected); await f.receive(start); expect(f.onEnd).toHaveBeenCalledWith('invalid_carrier_frame');
+    const g = fixture(); vi.advanceTimersByTime(10000); expect(g.onEnd).toHaveBeenCalledWith('start_timeout');
+    const h = fixture(); await h.boot(); h.server({ ...ready, mode: 'pipeline' });
+    expect(h.onEnd).toHaveBeenCalledTimes(1);
+    h.adapter.close(); h.server(pcm()); await h.receive(media()); vi.advanceTimersByTime(20000);
+    expect(h.onEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('distinguishes session failure from normal completion', async () => {
+    const f = fixture(); await f.boot(); f.server({type:'error',message:'private failure'});
+    expect(f.onEnd).toHaveBeenCalledWith('session_error');
+  });
+
+  it.each([
+    ['carrier', 'close', 1000, 'socket_closed'],
+    ['carrier', 'close', 1005, 'socket_closed'],
+    ['carrier', 'close', 1006, 'socket_error'],
+    ['carrier', 'error', 1000, 'socket_error'],
+    ['session', 'close', 1000, 'session_socket_closed'],
+    ['session', 'error', 1000, 'socket_error'],
+  ])('distinguishes %s %s %s termination', (side, type, code, reason) => {
+    class Socket extends EventTarget {
+      readyState = 1; binaryType = 'blob';
+      send() {}
+      close() { this.readyState = 3; this.dispatchEvent(new Event('close')); }
+    }
+    const carrier = new Socket(), session = new Socket(), onEnded = vi.fn();
+    createTelnyxMediaBridge({carrier:carrier as unknown as WebSocket,session:session as unknown as WebSocket,callId:'call',callControlId:'control',callLegId:'leg',callSessionId:'session',streamToken:identity.authToken,onEnded});
+    const event = new Event(type); Object.defineProperty(event,'code',{value:code});
+    (side === 'carrier' ? carrier : session).dispatchEvent(event);
+    expect(onEnded).toHaveBeenCalledExactlyOnceWith(reason);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('socket wrapper forwards close once and removes all owned listeners', async () => {
+    class Socket extends EventTarget {
+      binaryType = 'blob';
+      readyState = 1; bufferedAmount = 0; sent: unknown[] = [];
+      send(data: unknown) { this.sent.push(data); }
+      close() { this.readyState = 3; this.dispatchEvent(new Event('close')); }
+    }
+    const carrier = new Socket(); const session = new Socket(); const onEnded = vi.fn();
+    const bridge = createTelnyxMediaBridge({ carrier: carrier as unknown as WebSocket, session: session as unknown as WebSocket, callId: 'call', callControlId: 'control', callSessionId: 'session', callLegId: 'leg', streamToken: identity.authToken, onEnded });
+    expect(session.binaryType).toBe('arraybuffer');
+    carrier.close(); bridge.close();
+    carrier.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(connected) }));
+    vi.advanceTimersByTime(20000);
+    expect(onEnded).toHaveBeenCalledTimes(1); expect(session.readyState).toBe(3);
+  });
+});
+
+describe('Telnyx internal audio receipts', () => {
+  const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const receipt = (bytes: number) => ({ type: 'audio_receipt', id, bytes });
+  const acknowledgements = (f: ReturnType<typeof fixture>) => f.session.filter(x => typeof x === 'string').map(x => JSON.parse(x as string)).filter(x => x.type === 'audio_received');
+  it('negative control: acknowledges admitted PCM privately without replacing playback marks', async () => {
+    const f = fixture(); await f.boot();
+    f.server(pcm()); f.server(receipt(960));
+    expect(acknowledgements(f)).toEqual([{ type: 'audio_received', id }]);
+    expect(JSON.stringify(f.carrier)).not.toContain(id);
+    vi.advanceTimersByTime(20);
+    expect(f.carrier.some(m => m.event === 'mark')).toBe(true);
+    expect(f.onEnd).not.toHaveBeenCalled(); f.adapter.close();
+  });
+  it('refuses overflow before acknowledging further audio', async () => {
+    const f = fixture(); await f.boot();
+    f.server(pcm(500)); f.server(receipt(480000));
+    f.server(pcm(500)); f.server(receipt(480000));
+    expect(acknowledgements(f)).toHaveLength(1); expect(f.onEnd).toHaveBeenCalledOnce();
+  });
+  it.each(['no-frame', 'wrong-size', 'duplicate'])('rejects a %s receipt', async how => {
+    const f = fixture(); await f.boot();
+    if (how !== 'no-frame') f.server(pcm());
+    if (how === 'duplicate') f.server(receipt(960));
+    f.server(receipt(how === 'wrong-size' ? 2 : 960));
+    expect(f.onEnd).toHaveBeenCalledOnce();
+  });
+});
+
+describe('Telnyx flush transport debt', () => {
+  it('negative control: repeated audio, pump and flush without returned marks stays bounded', async () => {
+    const f = fixture(); await f.boot();
+    for (let i = 0; i < 510; i++) {
+      f.server(pcm()); vi.advanceTimersByTime(20); f.server({ type: 'flush' });
+    }
+    expect(f.onEnd).toHaveBeenCalledOnce();
+    expect(f.carrier.filter(m => m.event === 'mark').length).toBeLessThanOrEqual(500);
+  });
+  it('returned post-clear barriers allow repeated normal interruptions', async () => {
+    const f = fixture(); await f.boot();
+    for (let i = 0; i < 510; i++) {
+      f.server(pcm()); vi.advanceTimersByTime(20); f.server({ type: 'flush' });
+      const last = f.carrier.filter(m => m.event === 'mark').at(-1)!;
+      await f.receive(mark(last.mark.name));
+    }
+    expect(f.onEnd).not.toHaveBeenCalled(); f.adapter.close();
+  });
+  it.each(['binary', 'flush'])('rejects %s between negotiated audio and marker', async kind => {
+    const f = fixture(); await f.receive(connected); await f.receive(start);
+    f.server({ ...ready, audioReceipts: true }); f.server(pcm());
+    f.server(kind === 'binary' ? pcm() : { type: 'flush' });
+    expect(f.onEnd).toHaveBeenCalledOnce();
+  });
+});
