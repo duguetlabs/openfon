@@ -319,6 +319,20 @@ function newSession(engine: 'pipeline' | 'realtime' = 'pipeline', settings: Part
 
 // ---------- tests ----------
 
+it('announces the browser speech language for pipeline greetings and replies', async () => {
+  const { session } = newSession('pipeline', { language: 'de' });
+  globalThis.fetch = vi.fn(async () => ({ ok: true, status: 200,
+    headers: new Headers({ 'Content-Type': 'application/json' }),
+    body: jsonStream({ choices: [{ message: { content: 'Guten Tag!' } }] }),
+  })) as unknown as typeof fetch;
+  await session.fetch(upgradeRequest());
+  const caller = serverSockets[0]; caller.receive({ type: 'start' }); await flush(80);
+  expect(caller.messages().find(m => m.type === 'ready')).toMatchObject({ language: 'de', ttsMode: 'browser' });
+  caller.receive({ type: 'text', text: 'Hallo' }); await flush(80);
+  expect(caller.messages().find(m => m.type === 'agent_text')).toMatchObject({ language: 'de', text: 'Guten Tag!' });
+  caller.receive({ type: 'hangup' }); await flush(80);
+});
+
 describe('second attach to a live call', () => {
   it('is refused, so the first caller keeps the stream', async () => {
     const { session } = newSession();

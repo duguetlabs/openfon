@@ -504,7 +504,7 @@ export class CallSession implements DurableObject {
     // would file a call that ran perfectly well as failed — and a working call
     // disappearing from the owner's counts gives them nothing to notice.
     this.failure = null;
-    this.send({ type: 'ready', ...payload, ...(payload.mode === 'realtime' ? { audioReceipts: true } : {}) });
+    this.send({ type: 'ready', language: this.lang, ...payload, ...(payload.mode === 'realtime' ? { audioReceipts: true } : {}) });
   }
 
   private async runStart(): Promise<void> {
@@ -1579,7 +1579,7 @@ export class CallSession implements DurableObject {
     const reply = raw.replace(/\s*<?END_CALL>?\s*/gi, ' ').trim();
     this.reserveTranscript(reply);
     this.history.push({ role: 'assistant', content: reply });
-    this.send({ type: 'agent_text', text: reply });
+    this.send({ type: 'agent_text', text: reply, language: this.lang });
     await this.saveTurn('agent', reply);
     await this.speak(reply);
     if (wantsEnd) this.beginHangup();
