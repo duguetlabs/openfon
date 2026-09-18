@@ -1120,13 +1120,20 @@ export class CallSession implements DurableObject {
     const connection = realtimeConnection({ ...config, model: this.realtimeModel });
     let upgraded: WebSocket | null = null;
     if (connection.headers) {
+      const controller = new AbortController();
+      const connectTimer = setTimeout(() => controller.abort(), 5000);
       try {
         const response = await fetch(connection.url, {
-          headers: connection.headers, redirect: 'manual', signal: AbortSignal.timeout(5000),
+          headers: connection.headers, redirect: 'manual', signal: controller.signal,
         });
         if (response.status !== 101 || !response.webSocket) return false;
         upgraded = response.webSocket;
       } catch { return false; }
+      finally {
+        // workerd keeps the request signal attached to the upgraded socket.
+        // The deadline bounds connection setup, not the lifetime of the call.
+        clearTimeout(connectTimer);
+      }
     }
     return new Promise<boolean>((resolve) => {
       let settled = false;
