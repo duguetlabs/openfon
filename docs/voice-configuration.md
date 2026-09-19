@@ -134,6 +134,29 @@ parameter advertised by a provider, such as VAD thresholds, codec selection or
 token limits. These are different from the user's language, model and voice
 choices. See [audio and transcription limits](providers.md#audio-generation-and-transcription-limits).
 
+### Background noise and interruptions
+
+Realtime keeps hands-free interruptions: the voice provider detects speech and
+can stop an answer before the model understands what was said. Nearby voices
+can therefore trigger an interruption. The shared assistant instructions cannot
+prevent that transport-level cancellation or reliably identify who is speaking.
+Interruption thresholds and waiting times have not been increased.
+
+Both architectures instruct the assistant to answer clear requests normally,
+avoid guessing from unclear fragments, and ask a concise clarification rather
+than repeat apologies. If difficulty persists and noise seems to be the cause,
+it can tentatively mention background sound and suggest moving the microphone
+closer or finding a quieter spot. Unrelated background fragments should not
+change the conversation language or become confirmed appointment details.
+These are model instructions, not a noise detector or a guarantee of compliance.
+
+Custom Pipeline retains its existing half-duplex browser behavior: it records
+utterances while the assistant is not speaking, then sends them for recognition.
+Its background-noise behavior depends on browser voice detection and the chosen
+transcription service. It does not offer Realtime's simultaneous barge-in.
+Neither mode can promise to separate the caller from nearby conversations on a
+smart-glasses microphone. See [noise acceptance checks](launch/readiness.md#background-noise-and-hands-free-interruptions).
+
 For a first comparison, keep the language, instructions and knowledge constant,
 then change one engine or component at a time. Check greeting pronunciation,
 response completion, interruptions, goodbye playback and the saved transcript.
