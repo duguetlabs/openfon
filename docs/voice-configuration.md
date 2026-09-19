@@ -151,23 +151,34 @@ The text connection check verifies saved text access only; it does not test voic
 
 ## Listen before saving
 
-In an assistant’s voice settings, choose a language, engine and voice, then click
-**Preview voice**. The sample uses your current, unsaved selection. Play it again
-with the audio controls, or click **Stop preview**. Changing the language, voice or
-engine stops and discards the previous sample. Previewing does not save the draft,
-use your microphone, or create a call, transcript or recording in call history.
+The small **play icon** beside the voice selector plays a short AI-generated
+sample in your chosen language. It becomes a stop icon during playback. There is
+no timeline or duration display. The sample uses the current, unsaved selection;
+it does not save the assistant, use your microphone or create a call record.
+
+The selected sample preloads once the selector is visible and your choice has
+settled. It never autoplays. Switching voices stops playback and cancels stale
+loads. Returning to a recently selected voice or replaying it uses the same
+sample, without generating another. Up to eight samples are retained in memory
+for ten minutes within the open editor; leaving it discards the cache. Other
+voices are not eagerly fetched. Browser speech stays on the device and starts
+only when you press play.
+
+Voice names include **♀ female**, **♂ male**, or **◇ unspecified**. Labels follow
+published provider metadata. The built-in Azure labels come from Microsoft’s
+[voice catalog](https://learn.microsoft.com/azure/ai-services/speech-service/language-support?tabs=tts).
+Kataleptic’s current native/Piper catalogs and OpenAI’s voice list publish no
+gender field, so those voices show unspecified. Custom IDs remain supported;
+OpenFon does not infer gender from a name or another engine’s voice mapping.
 
 Realtime samples come from the selected realtime model: native speech, Standard
 Piper, or HD Azure Voice Live. Pipeline samples use the workspace’s configured
-speech provider and model; Browser speech uses this device’s installed voice.
-Custom providers must support the same speech protocol used for calls. Samples
-are AI-generated and may vary in wording or delivery. They demonstrate voice
-character, not recognition quality, latency or interruption behavior in a call.
+speech provider and model. Custom providers must support the same speech protocol
+used for calls. Samples can vary in wording or delivery; they demonstrate voice
+character, not recognition quality or interruption behavior in a call.
 
-Previews use saved workspace provider credentials and can incur provider charges.
-OpenFon limits previews to 50 per workspace per day and shares the Studio’s
-10-action minute limit and connection-level limits. Realtime generation has a
-25-second deadline; Pipeline synthesis has a 30-second deadline. Samples contain
-at most 20 seconds of audio. If automatic playback is blocked by your browser,
-press Play in the audio controls. A failed preview can be retried; changing or
-previewing a voice never silently switches to a different speech engine.
+Prefetching and generating samples use saved workspace credentials and can incur
+provider charges. Limits remain 50 previews per workspace per day, with the
+shared Studio minute and connection limits. Realtime generation has a 25-second
+deadline, Pipeline synthesis 30 seconds, and samples at most 20 seconds of audio.
+If playback is blocked, press play again; cached audio is reused.
