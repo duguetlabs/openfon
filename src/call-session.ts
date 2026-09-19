@@ -464,7 +464,7 @@ export class CallSession implements DurableObject {
         try {
           this.audioReceipts.acknowledge(msg.id, Date.now());
           this.armAudioReceiptDeadline();
-        } catch { this.failRealtimeOutput(); }
+        } catch (error) { this.failRealtimeOutput(error); }
         break;
       case 'start':
         await this.handleStart();
@@ -608,7 +608,7 @@ export class CallSession implements DurableObject {
             // PCM immediately afterward, with no await or event-loop gap.
             this.sendReady({ mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
             try { for (const audio of pending.frames) this.sendRealtimeAudio(audio); }
-            catch { this.failRealtimeOutput(); }
+            catch (error) { this.failRealtimeOutput(error); }
           } else {
             this.sendReady({ mode: 'realtime', ttsMode, greeting: '', engine: engineLabel });
           }
@@ -653,8 +653,8 @@ export class CallSession implements DurableObject {
           this.greetingGuardUntil = Date.now() + (audio.byteLength / 48000) * 1000 + 500;
           try {
             this.sendRealtimeAudio(audio);
-          } catch {
-            this.failRealtimeOutput();
+          } catch (error) {
+            this.failRealtimeOutput(error);
           }
         }
         return;
@@ -1441,11 +1441,12 @@ export class CallSession implements DurableObject {
     }
   }
 
-  private failRealtimeOutput(): void {
+  private failRealtimeOutput(error?: unknown): void {
     // finalize() gates the call immediately but defers its body to claim its
     // single-flight slot. Stop provider ingress now, before another queued
     // event can even parse, while preserving that finalizer's D1 ordering.
-    this.failInternally(new RealtimeOutputError());
+    this.failInternally(error instanceof RealtimeOutputError ? error
+      : new RealtimeOutputError(error instanceof RealtimeInputError ? 'invalid_audio' : 'transport'));
     this.closeUpstream();
   }
 
@@ -1456,17 +1457,17 @@ export class CallSession implements DurableObject {
     if (deadline === undefined || this.ended) return;
     this.audioReceiptTimer = setTimeout(() => {
       this.audioReceiptTimer = undefined;
-      if (!this.ended) this.failRealtimeOutput();
+      if (!this.ended) this.failRealtimeOutput(new RealtimeOutputError('receipt_timeout'));
     }, Math.max(0, deadline - Date.now()));
   }
 
   private checkAudioReceiver(bytes: number, additionalFrames = 0): void {
-    if (!this.ws || this.ws.readyState !== WS_OPEN) throw new RealtimeOutputError();
+    if (!this.ws || this.ws.readyState !== WS_OPEN) throw new RealtimeOutputError('receiver_closed');
     // Useful on runtimes exposing it, but never our Workers safety boundary:
     // the unacknowledged byte/frame window is enforced even when absent.
     const buffered = (this.ws as WebSocket & { bufferedAmount?: number }).bufferedAmount;
     if (buffered !== undefined && (!Number.isFinite(buffered) || buffered < 0 ||
-        buffered + bytes > MAX_UNRECEIVED_AUDIO_BYTES)) throw new RealtimeOutputError();
+        buffered + bytes > MAX_UNRECEIVED_AUDIO_BYTES)) throw new RealtimeOutputError('receiver_buffer');
     this.audioReceipts.check(bytes, additionalFrames);
   }
 
@@ -1491,7 +1492,7 @@ export class CallSession implements DurableObject {
       if (this.audioQueue.pending) {
         this.audioQueueTimer = setTimeout(() => this.drainRealtimeQueue(), 100);
       } else if (this.hangupAfterQueue) this.beginHangup();
-    } catch { this.failRealtimeOutput(); }
+    } catch (error) { this.failRealtimeOutput(error); }
   }
 
   private deliverRealtimeAudio(audio: ArrayBuffer): void {
@@ -1521,8 +1522,8 @@ export class CallSession implements DurableObject {
       this.ws!.send(JSON.stringify({ type: 'control_receipt', id }));
       this.armAudioReceiptDeadline();
       return true;
-    } catch {
-      this.failRealtimeOutput();
+    } catch (error) {
+      this.failRealtimeOutput(error);
       return false;
     }
   }
@@ -1553,10 +1554,10 @@ export class CallSession implements DurableObject {
         pending.frames.push(audio); pending.bytes += audio.byteLength;
         pending.resolve(true);
       } else this.sendRealtimeAudio(audio);
-    } catch {
+    } catch (error) {
       // Never reflect socket/provider exception text. This closes every readable
       // upstream and the caller synchronously through the existing finalizer.
-      this.failRealtimeOutput();
+      this.failRealtimeOutput(error);
     }
   }
 
