@@ -19,7 +19,7 @@ try {
     workers: [{ name: 'create-response', modules: true, script: 'export default {fetch(){return new Response("local D1")}}', compatibilityDate: '2026-05-01', d1Databases: { DB: 'create-response' }, outboundService: async () => new Response('Network disabled', { status: 502 }) }] }));
   await mf.ready; const native = await mf.getD1Database('DB', 'create-response');
   const exec = sql => native.batch(unstable_splitSqlQuery(sql).map(s => native.prepare(s)));
-  const migrations = (await readdir(join(root, 'migrations'))).filter(n => /^\d{4}_.*\.sql$/.test(n) && Number(n.slice(0, 4)) <= 21).sort(); assert.equal(migrations.length, 21);
+  const migrations = (await readdir(join(root, 'migrations'))).filter(n => /^\d{4}_.*\.sql$/.test(n) && Number(n.slice(0, 4)) <= 22).sort(); assert.equal(migrations.length, 22);
   for (const file of migrations) await exec(await readFile(join(root, 'migrations', file), 'utf8'));
   const snapshot = async () => {
     const tables = (await native.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT GLOB '_cf_*' ORDER BY name").all()).results;

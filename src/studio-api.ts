@@ -1,3 +1,4 @@
+import { providerCatalog } from './provider-catalog';
 import { checkedPresetWriteSql, checkedPresetWrite, checkedPresetSourceSql, checkedPresetSource } from './preset-write-snapshot';
 import { CHECKED_ASSISTANT_SNAPSHOT_SQL, checkedAssistantSnapshot } from './assistant-write-snapshot';
 import { PRESET_RECONCILIATION_SQL, PRESET_CHANGED_SQL, assertPresetWriteBudget, PRESET_LIST_COLUMNS, PRESET_ROW_BYTES } from './preset-budgets';
@@ -5,7 +6,7 @@ import { CHECKED_REALTIME_PROVIDER_SQL, checkedRealtimeProvider, providerUpdate,
 import type { Hono } from 'hono';
 import { readWorkspaceBody } from './request-validation';
 import { newId } from './auth';
-import { chatComplete, LlmConfigError, LlmRequestError, resolveLlm, sameLlmEndpoint, validateLlmBaseUrl } from './providers';
+import { chatComplete, speechConfig, LlmConfigError, LlmRequestError, resolveLlm, sameLlmEndpoint, validateLlmBaseUrl } from './providers';
 import type {
   AgentSettings,
   Assistant,
@@ -1809,6 +1810,8 @@ export function registerStudioApi(app: StudioApp): void {
     return c.json({ ok: true });
   });
 
+  app.get('/api/me/provider/catalog', async c => c.json(await providerCatalog()));
+
   app.get('/api/me/provider', async (c) => {
     const workspace = await workspaceForUser(c.env, c.get('userId'));
     if (!workspace) return c.json({ error: 'Create a workspace first' }, 409);
@@ -1822,6 +1825,8 @@ export function registerStudioApi(app: StudioApp): void {
       workspaceApiKeyConfigured: Boolean(provider?.llm_api_key),
       model: provider?.llm_model ?? '',
       presets: TEXT_PRESETS,
+      instance_text_preset: TEXT_PRESETS.find(p => p.baseUrl && sameLlmEndpoint(p.baseUrl, c.env.DEFAULT_LLM_BASE_URL))?.id || 'custom',
+      instance_text_model: c.env.DEFAULT_LLM_MODEL,
       realtime_provider: provider?.realtime_provider ?? 'instance',
       realtime_base_url: provider?.realtime_base_url ?? '',
       // Key presence follows runtime selection; it is not a connection check.
@@ -1833,7 +1838,15 @@ export function registerStudioApi(app: StudioApp): void {
       stt_model: provider?.stt_model ?? '',
       stt_api_key_configured: Boolean((provider?.stt_provider || 'instance') === 'instance'
         ? c.env.DEFAULT_STT_API_KEY : provider?.stt_api_key),
-      tts_provider: c.env.DEFAULT_TTS_PROVIDER,
+      tts_provider: provider?.tts_provider || 'instance',
+      tts_base_url: provider?.tts_base_url || '',
+      tts_model: provider?.tts_model || '',
+      tts_api_key_configured: Boolean((provider?.tts_provider || 'instance') === 'instance' ? c.env.AZURE_SPEECH_KEY && c.env.DEFAULT_TTS_PROVIDER === 'azure' : provider?.tts_api_key),
+      effective_tts_provider: speechConfig(c.env, provider).provider,
+      effective_text_model: provider?.llm_model || c.env.DEFAULT_LLM_MODEL,
+      effective_stt_model: !provider?.stt_provider || provider.stt_provider === 'instance' ? c.env.DEFAULT_STT_MODEL : provider.stt_model,
+      effective_realtime_provider: !provider?.realtime_provider || provider.realtime_provider === 'instance' ? c.env.REALTIME_PROVIDER || 'kataleptic' : provider.realtime_provider,
+      effective_realtime_model: !provider?.realtime_provider || provider.realtime_provider === 'instance' ? c.env.REALTIME_MODEL : provider.realtime_provider === 'kataleptic' ? 'kataleptic-realtime' : 'gpt-realtime',
       updatedAt: provider?.updated_at ?? null,
     });
   });
@@ -1854,13 +1867,13 @@ export function registerStudioApi(app: StudioApp): void {
     // it at the write boundary, including a concurrently created/missing row.
     const fields = ['llm_base_url', 'llm_api_key', 'llm_model', 'realtime_provider',
       'realtime_base_url', 'realtime_api_key', 'stt_provider', 'stt_base_url',
-      'stt_api_key', 'stt_model'] as const;
+      'stt_api_key', 'stt_model', 'tts_provider', 'tts_base_url', 'tts_api_key', 'tts_model'] as const;
     const matches = fields.map(field => `${field} IS ?`).join(' AND ');
     const statements = [
       c.env.DB.prepare(
         `INSERT INTO provider_settings (business_id, llm_base_url, llm_api_key, llm_model,
-          realtime_provider, realtime_base_url, realtime_api_key, stt_provider, stt_base_url, stt_api_key, stt_model)
-         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          realtime_provider, realtime_base_url, realtime_api_key, stt_provider, stt_base_url, stt_api_key, stt_model, tts_provider, tts_base_url, tts_api_key, tts_model)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
          WHERE (?=0 AND NOT EXISTS(SELECT 1 FROM provider_settings WHERE business_id=?))
             OR (?=1 AND EXISTS(SELECT 1 FROM provider_settings WHERE business_id=? AND ${matches}))
          ON CONFLICT(business_id) DO UPDATE SET
@@ -1868,9 +1881,10 @@ export function registerStudioApi(app: StudioApp): void {
            realtime_provider=excluded.realtime_provider, realtime_base_url=excluded.realtime_base_url,
            realtime_api_key=excluded.realtime_api_key, stt_provider=excluded.stt_provider,
            stt_base_url=excluded.stt_base_url, stt_api_key=excluded.stt_api_key, stt_model=excluded.stt_model,
+           tts_provider=excluded.tts_provider, tts_base_url=excluded.tts_base_url, tts_api_key=excluded.tts_api_key, tts_model=excluded.tts_model,
            updated_at=datetime('now')`
       ).bind(workspace.id, baseUrl, apiKey, next.llm_model, next.realtime_provider, next.realtime_base_url,
-        next.realtime_api_key, next.stt_provider, next.stt_base_url, next.stt_api_key, next.stt_model,
+        next.realtime_api_key, next.stt_provider, next.stt_base_url, next.stt_api_key, next.stt_model, next.tts_provider, next.tts_base_url, next.tts_api_key, next.tts_model,
         current ? 1 : 0, workspace.id, current ? 1 : 0, workspace.id, ...fields.map(field => current?.[field] ?? null)),
       // Abort the entire transaction on a failed first write. Later cleanup
       // statements can legitimately affect zero rows, so a changes() chain

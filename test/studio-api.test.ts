@@ -352,7 +352,7 @@ describe('Calm Studio API foundation', () => {
       applyMigrations(db, 1, 15);
       // Keep pre-barrier legacy writes possible in these compatibility fixtures,
       // while supplying the independent ticket-provenance column current issuers use.
-      applyMigrations(db, 20, 20);
+      applyMigrations(db, 20, 20); applyMigrations(db, 22, 22);
     } else applyMigrations(db);
     db.exec(`
       INSERT INTO users (id, email, password_hash) VALUES

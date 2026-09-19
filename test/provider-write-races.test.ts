@@ -268,7 +268,7 @@ it('provider PUT refuses stale OpenAI restore after custom switch and active cus
   } finally { hold.release(); await pending; hold.restore(); }
 });
 
-it.each(['same requested next', 'text rotation', 'STT rotation'])('provider PUT pins the captured row (%s)', async change => {
+it.each(['same requested next', 'text rotation', 'STT rotation', 'TTS rotation'])('provider PUT pins the captured row (%s)', async change => {
   await setup();
   const hold = holdProviderPut();
   const pending = request('/api/me/provider', change === 'same requested next' ? openai : { model: 'stale-partial' });
@@ -276,6 +276,7 @@ it.each(['same requested next', 'text rotation', 'STT rotation'])('provider PUT 
     await hold.reached;
     const edit = change === 'same requested next' ? openai : change === 'text rotation'
       ? { apiKey: 'synthetic-concurrent-text' }
+      : change === 'TTS rotation' ? { tts_provider: 'openai', tts_base_url: 'https://api.openai.com/v1', tts_model: 'tts-1', tts_api_key: 'synthetic-speech' }
       : { stt_provider: 'openai', stt_base_url: 'https://api.openai.com/v1', stt_model: 'whisper-1', stt_api_key: 'synthetic-concurrent-stt' };
     expect((await request('/api/me/provider', edit)).status).toBe(200);
     const expected = snapshot();

@@ -1,4 +1,4 @@
-import { fetchProviderJson, ProviderResponseError } from './provider-response';
+import { fetchProviderBytes, fetchProviderJson, ProviderResponseError } from './provider-response';
 import { piperVoiceFromCatalog } from './piper-catalog';
 // Pluggable AI providers. LLM and STT speak the OpenAI-compatible wire format,
 // so OpenFon works with Kataleptic (default), OpenAI, Azure OpenAI, Groq, Ollama,
@@ -395,10 +395,63 @@ export function voiceForReply(env: Env, lang: string, defaultLang: string, custo
   return SUPPORTED_LANGUAGES[lang]?.voice ?? env.DEFAULT_TTS_VOICE;
 }
 
-// Azure Speech TTS via REST. Returns audio bytes (MP3 for the pipeline player,
-// raw PCM16@24kHz for the realtime stream), or null when TTS is configured for
-// browser mode (client falls back to speechSynthesis).
-export async function synthesize(env: Env, text: string, voice: string, format: 'mp3' | 'pcm24' = 'mp3'): Promise<ArrayBuffer | null> {
+export function speechConfig(env: Env, settings?: WorkspaceSpeechSettings | null) {
+  const selection = settings?.tts_provider || 'instance';
+  if (selection === 'instance') return env.DEFAULT_TTS_PROVIDER === 'azure' && env.AZURE_SPEECH_KEY
+    ? { provider: 'azure' as const, baseUrl: `https://${env.AZURE_SPEECH_REGION}.tts.speech.microsoft.com`, key: env.AZURE_SPEECH_KEY, model: '' }
+    : { provider: 'browser' as const, baseUrl: '', key: '', model: '' };
+  if (selection === 'browser') return { provider: 'browser' as const, baseUrl: '', key: '', model: '' };
+  if (!['azure', 'openai', 'custom'].includes(selection)) throw new LlmConfigError('Unsupported speech provider.');
+  const baseUrl = settings?.tts_base_url || '';
+  const error = speechEndpointError(selection, baseUrl);
+  if (error || !settings?.tts_api_key || (selection !== 'azure' && !settings.tts_model)) {
+    throw new LlmConfigError(error || 'Speech synthesis needs its own API key and model.');
+  }
+  return { provider: selection, baseUrl, key: settings.tts_api_key, model: settings.tts_model || '' };
+}
+
+export function speechEndpointError(provider: string, baseUrl: string): string | null {
+  const bad = validateLlmBaseUrl(baseUrl);
+  if (bad) return `Speech URL ${bad}`;
+  const url = new URL(baseUrl);
+  if (url.search || url.hash) return 'Speech URL must not include query parameters or fragments.';
+  if (provider === 'openai' && baseUrl !== 'https://api.openai.com/v1') return 'OpenAI speech requires https://api.openai.com/v1';
+  if (provider === 'azure' && (!/^[a-z0-9-]+\.tts\.speech\.microsoft\.com$/.test(url.hostname) || url.port || !['', '/'].includes(url.pathname))) {
+    return 'Azure speech requires a regional https://REGION.tts.speech.microsoft.com endpoint.';
+  }
+  return null;
+}
+
+export function speechVoice(env: Env, language: string, settings: AgentSettings | null): string {
+  const config = speechConfig(env, settings);
+  if (config.provider === 'openai' || config.provider === 'custom') return settings?.voice || 'alloy';
+  return voiceForReply(env, language, settings?.language || 'en', settings?.voice || '');
+}
+
+// Explicit workspace providers never borrow operator credentials or silently
+// fall back to browser speech. Body, redirects, read work and latency are bounded.
+export async function synthesize(env: Env, text: string, voice: string, format: 'mp3' | 'pcm24' = 'mp3', settings?: WorkspaceSpeechSettings | null, signal?: AbortSignal): Promise<ArrayBuffer | null> {
+  if (!settings) return synthesizeInstance(env, text, voice, format);
+  const config = speechConfig(env, settings);
+  if (config.provider === 'browser') return null;
+  const azure = config.provider === 'azure';
+  const v = voice || (azure ? env.DEFAULT_TTS_VOICE : 'alloy');
+  const lang = v.split('-').slice(0, 2).join('-') || 'en-US';
+  const body = azure
+    ? `<speak version='1.0' xml:lang='${escapeXml(lang)}'><voice name='${escapeXml(v)}'>${escapeXml(text)}</voice></speak>`
+    : JSON.stringify({ model: config.model, input: text, voice: v, response_format: format === 'pcm24' ? 'pcm' : 'mp3' });
+  const { response, bytes } = await fetchProviderBytes(config.baseUrl.replace(/\/$/, '') + (azure ? '/cognitiveservices/v1' : '/audio/speech'), {
+    method: 'POST', redirect: 'manual', signal,
+    headers: azure ? { 'Ocp-Apim-Subscription-Key': config.key, 'Content-Type': 'application/ssml+xml',
+      'X-Microsoft-OutputFormat': format === 'pcm24' ? 'raw-24khz-16bit-mono-pcm' : 'audio-24khz-48kbitrate-mono-mp3', 'User-Agent': 'openfon' }
+      : { Authorization: `Bearer ${config.key}`, 'Content-Type': 'application/json' }, body,
+  }, 30_000, 2880000);
+  if (!response.ok || !bytes?.byteLength || (format === 'pcm24' && bytes.byteLength % 2)) throw new LlmConfigError('Speech synthesis failed or returned invalid audio.');
+  return bytes.slice().buffer as ArrayBuffer;
+}
+
+// Keep the existing realtime greeting path independent of workspace pipeline speech.
+async function synthesizeInstance(env: Env, text: string, voice: string, format: 'mp3' | 'pcm24' = 'mp3'): Promise<ArrayBuffer | null> {
   if (env.DEFAULT_TTS_PROVIDER !== 'azure' || !env.AZURE_SPEECH_KEY) return null;
   const v = voice || env.DEFAULT_TTS_VOICE;
   const lang = v.split('-').slice(0, 2).join('-') || 'en-US';

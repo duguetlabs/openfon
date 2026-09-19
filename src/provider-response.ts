@@ -8,7 +8,8 @@ export class ProviderResponseError extends Error {
   constructor() { super('Provider response unavailable, invalid, too large, or timed out'); }
 }
 
-export async function fetchProviderJson(url: string, init: RequestInit, timeoutMs = PROVIDER_RESPONSE_TIMEOUT_MS): Promise<{ response: Response; data: unknown }> {
+export async function fetchProviderBytes(url: string, init: RequestInit, timeoutMs = PROVIDER_RESPONSE_TIMEOUT_MS, maxBytes = MAX_PROVIDER_JSON_BYTES): Promise<{ response: Response; bytes: Uint8Array | undefined }> {
+  if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > 4 * 1024 * 1024) throw new ProviderResponseError();
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 120_000 || init.signal?.aborted) throw new ProviderResponseError();
   const controller = new AbortController();
   let response: Response | undefined;
@@ -38,10 +39,10 @@ export async function fetchProviderJson(url: string, init: RequestInit, timeoutM
     checkDeadline();
     // Status handling belongs to the caller; preserve its actionable hints.
     // Never consume an error/redirect body, which may reflect credentials.
-    if (!response.ok) { cancel(); return { response, data: undefined }; }
-    if (!response.body || Number(response.headers.get('content-length')) > MAX_PROVIDER_JSON_BYTES) throw new ProviderResponseError();
+    if (!response.ok) { cancel(); return { response, bytes: undefined }; }
+    if (!response.body || Number(response.headers.get('content-length')) > maxBytes) throw new ProviderResponseError();
     reader = response.body.getReader();
-    const bytes = new Uint8Array(MAX_PROVIDER_JSON_BYTES);
+    const bytes = new Uint8Array(maxBytes);
     let size = 0, reads = 0;
     for (;;) {
       // Empty chunks consume no byte budget. Bound read work too, including a
@@ -50,11 +51,10 @@ export async function fetchProviderJson(url: string, init: RequestInit, timeoutM
       const { value, done } = await reader.read();
       checkDeadline();
       if (done) break;
-      if (value.byteLength > MAX_PROVIDER_JSON_BYTES - size) throw new ProviderResponseError();
+      if (value.byteLength > maxBytes - size) throw new ProviderResponseError();
       bytes.set(value, size); size += value.byteLength;
     }
-    const data: unknown = JSON.parse(new TextDecoder().decode(bytes.subarray(0, size)));
-    return { response, data };
+    return { response, bytes: bytes.subarray(0, size) };
   };
   try {
     // One deadline reaction for the whole operation, not one retained reaction
@@ -70,4 +70,10 @@ export async function fetchProviderJson(url: string, init: RequestInit, timeoutM
     init.signal?.removeEventListener('abort', abortRequest);
     try { reader?.releaseLock(); } catch { /* cancelled read */ }
   }
+}
+
+export async function fetchProviderJson(url: string, init: RequestInit, timeoutMs = PROVIDER_RESPONSE_TIMEOUT_MS, maxBytes = MAX_PROVIDER_JSON_BYTES): Promise<{ response: Response; data: unknown }> {
+  const { response, bytes } = await fetchProviderBytes(url, init, timeoutMs, maxBytes);
+  try { return { response, data: bytes === undefined ? undefined : JSON.parse(new TextDecoder().decode(bytes)) }; }
+  catch { throw new ProviderResponseError(); }
 }

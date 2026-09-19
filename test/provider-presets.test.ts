@@ -159,3 +159,13 @@ it.each(['custom', 'kataleptic'])('rejects realtime query/fragment URLs atomical
   expect(db.database.prepare('SELECT realtime_base_url FROM provider_settings WHERE business_id=?').get('b1'))
     .toEqual({ realtime_base_url: 'wss://other.example/v1/realtime' });
 });
+
+it.each([
+  ['https://api.openai.com/v1', 'openai'], ['https://api.kataleptic.com/v1', 'kataleptic'],
+  ['https://operator.example/v1', 'custom'],
+])('classifies instance text suggestions without assuming Kataleptic: %s', async (url, preset) => {
+  env.DEFAULT_LLM_BASE_URL = url; env.DEFAULT_LLM_MODEL = 'operator-model';
+  const result = await request('/api/me/provider');
+  expect(result.status).toBe(200);
+  expect(await result.json()).toMatchObject({ instance_text_preset: preset, instance_text_model: 'operator-model' });
+});
