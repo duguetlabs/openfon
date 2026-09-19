@@ -99,3 +99,59 @@ The user's historical silence was not reproduced; these checks do not establish
 physical audibility on the affected device. Confirm repeated calls there before
 closing that acceptance item. Unreliable automated voice-presentation estimates
 remain unclassified pending a reviewed listening assessment.
+
+### Background noise and hands-free interruptions
+
+The shared prompt now gives concise unclear-speech guidance and permits a
+cautious noise explanation when appropriate. Hands-free Realtime interruption,
+VAD thresholds, silence windows and browser microphone processing are unchanged.
+This instruction change is not a provider noise-cancellation fix.
+
+A controlled German test used actual local workerd/D1 and real Kataleptic,
+with a paced PCM receiver. The inputs were three overlapping synthetic preview
+voices plus white noise, a question at nominal +10 dB foreground/background RMS,
+an intentional interruption during queued playback, and a clean recovery
+question after the noise stopped. The background includes intelligible greeting
+fragments; these tests cannot prove the model can distinguish nearby people from
+the caller. The final prompt was exercised separately on all six realtime configurations.
+Each run returned new audio after the interruption and
+after the recovery question, with no reported output error. Calls were manually
+ended by the harness; this does not test natural goodbye or physical audibility.
+
+| Realtime mode | Noisy question and interruption follow-up | Clean recovery | Remaining observation |
+| --- | --- | --- | --- |
+| Standard | Relevant German answer, then answered the interruption | German answer and new audio | Tool-format marker in the background-response transcript |
+| HD | Relevant answer, then answered the interruption | German answer and new audio | Responded to background-only speech |
+| Native 2 | Relevant answer, then answered the interruption | German answer and new audio | Attempted clarification of background-only speech |
+| Native 2.1 | Relevant answer, then answered the interruption | German answer and new audio | Responded to background-only speech |
+| Native 2.1 Mini | Relevant answer, then answered the interruption | German answer and new audio | Responded to background-only speech |
+| Standard with `llama-3.3-70b` | Relevant answer, then answered the interruption | German answer and new audio | Background speech and formatting remain acceptance risks |
+
+Playback flush followed the synthetic intentional interruption in 112–327 ms
+across these runs. This is a single observed sample per mode, not a latency
+promise. No repeated-apology loop occurred, but background-only speech elicited
+a response in every mode. Keep restaurant/smart-glasses acceptance open;
+model instructions alone do not provide speaker separation or prevent VAD
+cancellation. Standard language consistency and custom-model spoken formatting
+also need acceptance before recommending those configurations for rollout. An
+old-prompt Standard comparison also produced English replies to German questions
+and a tool-format marker; these are not established regressions from this change.
+The initial custom-model greeting transcript contained formatting text as well.
+
+Actual Chrome tests used a synthetic Web Audio microphone stream, the real
+browser recording/playback code, local workerd/D1 and real Kataleptic services.
+Native 2 interrupted active PCM playback and spoke the follow-up and recovery
+answers; the audio context stayed running. Pipeline used Whisper transcription,
+Llama chat and installed browser speech. With initial guidance it prematurely
+requested closure after background speech. After explicitly instructing it to
+wait for the caller to finish the conversation, it stayed live through the noisy
+question and clean recovery, with all four browser utterances reaching their end
+events. Speech overlapping its answer was ignored, preserving half-duplex behavior.
+These are observed model outcomes, not deterministic prompt guarantees. The first
+final Pipeline run did not wait long enough to observe asynchronous D1 finalization;
+its active-row readback is not classified as a completed-call check. A second
+final Pipeline run repeated the noise sequence, recognized an intentional German
+goodbye, finished browser speech before closing, and persisted a completed call
+without a failure code. No physical
+microphone, acoustic echo cancellation, arbitrary BYOK provider or PSTN acceptance
+is implied.
