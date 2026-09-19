@@ -87,6 +87,22 @@ describe('browser speech routing and language', () => {
     voice.hangup();
   });
 
+  it.each([false, true])('waits for every queued local utterance and reports speech failure: %s', async failed => {
+    vi.useFakeTimers();
+    const { voice, socket, speak } = await connected('pipeline', 'Guten Tag!');
+    socket.onmessage!({ data: JSON.stringify({ type: 'agent_text', text: 'Auf Wiederhören.' }) });
+    const id = '00000000-0000-4000-8000-000000000001';
+    socket.onmessage!({ data: JSON.stringify({ type: 'ending', id }) });
+    const sent = () => socket.send.mock.calls.map(([s]) => JSON.parse(s)).filter(m => m.type.startsWith('playback_'));
+    speak.mock.calls[0][0].onend();
+    expect(sent()).toEqual([]);
+    speak.mock.calls[1][0][failed ? 'onerror' : 'onend']();
+    expect(sent()).toEqual([{ type: failed ? 'playback_failed' : 'playback_complete', id }]);
+    speak.mock.calls[1][0].onend();
+    expect(sent()).toHaveLength(1);
+    voice.hangup();
+  });
+
   it('retains a local cascade greeting but does not repeat its streamed responses', async () => {
     const { voice, socket, speak, german } = await connected('realtime', 'Guten Tag!');
     expect(speak.mock.calls[0][0]).toMatchObject({ lang: 'de', voice: german });
@@ -169,6 +185,24 @@ describe('browser voice resource lifetime', () => {
     expect(revoke).toHaveBeenCalledExactlyOnceWith('blob:test');
   });
 
+  it('reports an HTMLAudio play rejection as failure and ignores callbacks after teardown', async () => {
+    vi.useFakeTimers();
+    const { socket } = prepareConnection();
+    let reject!: (reason: Error) => void;
+    vi.stubGlobal('URL', { createObjectURL: () => 'blob:closing', revokeObjectURL: vi.fn() });
+    vi.stubGlobal('Audio', vi.fn(function () { return { play: () => new Promise((_, r) => { reject = r; }), pause: vi.fn(), onended: null, onerror: null }; }));
+    const voice = new VoiceCall(); await voice.connect('test');
+    socket.onmessage!({ data: new ArrayBuffer(10) });
+    const id = '00000000-0000-4000-8000-000000000001';
+    socket.onmessage!({ data: JSON.stringify({ type: 'ending', id }) });
+    expect(socket.send).not.toHaveBeenCalled();
+    reject(Error('autoplay blocked')); await Promise.resolve(); await Promise.resolve();
+    expect(socket.send).toHaveBeenCalledWith(JSON.stringify({ type: 'playback_failed', id }));
+    voice.hangup(); socket.send.mockClear();
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(socket.send).not.toHaveBeenCalled();
+  });
+
   it('does not prompt for a microphone on a call already cancelled', async () => {
     prepareConnection();
     const getUserMedia = vi.fn();
@@ -244,6 +278,17 @@ describe('bounded realtime browser playback receipts', () => {
     const acknowledgements = () => socket.send.mock.calls.map(([raw]) => JSON.parse(raw)).filter(msg => msg.type === 'audio_received');
     return { socket, voice, nodes, createBuffer, pcm, marker, acknowledgements, receive };
   }
+
+  it('closing guard: acknowledges actual playback end, separately from audio receipt', async () => {
+    const f = await connected();
+    f.pcm(4800); f.marker(4800);
+    f.receive({ data: JSON.stringify({ type: 'ending', id }) });
+    const completions = () => f.socket.send.mock.calls.map(([raw]) => JSON.parse(raw)).filter(m => m.type === 'playback_complete');
+    expect(completions()).toHaveLength(0);
+    f.nodes[0].onended!();
+    expect(completions()).toEqual([{ type: 'playback_complete', id }]);
+    f.voice.hangup();
+  });
 
   it('negative control: acknowledges accepted audio only after bounded playback admission', async () => {
     const f = await connected();

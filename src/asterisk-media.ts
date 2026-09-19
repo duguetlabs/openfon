@@ -16,6 +16,7 @@ export class AsteriskMediaAdapter {
   private closed = false;
   private paused = false;
   private ending = false;
+  private endingId: string | undefined;
   private drained = false;
   private drainPending = false;
   private generation = 0;
@@ -117,6 +118,10 @@ export class AsteriskMediaAdapter {
       } else if (msg.type === 'speaking') {
         this.controlReceiptPending = this.audioReceipts;
       } else if (msg.type === 'ending') {
+        if (msg.id !== undefined) {
+          if (typeof msg.id !== 'string' || !/^[0-9a-f-]{36}$/.test(msg.id) || this.endingId) throw Error('invalid_playback_barrier');
+          this.endingId = msg.id;
+        }
         if (!this.ready) throw Error();
         if (!this.ending) { this.ending = true; this.deadline = setTimeout(() => this.close('drain_timeout'), 12000); }
         this.armDrain();
@@ -180,6 +185,9 @@ export class AsteriskMediaAdapter {
     for (const timer of [this.startup, this.quiet, this.deadline]) if (timer) clearTimeout(timer);
     this.drainPending = false; this.queue = []; this.marks.clear(); this.up.reset(); this.down.reset();
     try { this.command('HANGUP'); } catch { /* disconnected */ }
+    if (this.endingId) {
+      try { this.options.sessionSend(JSON.stringify({ type: reason === 'playback_complete' ? 'playback_complete' : 'playback_failed', id: this.endingId })); } catch { /* transport gone */ }
+    }
     try { this.options.sessionSend(JSON.stringify({ type: 'hangup' })); } catch { /* disconnected */ }
     this.options.onEnd(reason);
   }

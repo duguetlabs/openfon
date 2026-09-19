@@ -40,3 +40,25 @@ The earlier streaming `/listen` probes returned upstream-unreachable errors;
 those protocols remain outside the multipart transcription adapter. Physical
 speaker/microphone interruption quality, independent-provider and PSTN acceptance
 remain separate checks.
+
+### Graceful closing checks — 2026-09-19
+
+The [closing controller](../call-closing.md) passed 1,777 tests, both TypeScript
+checks and the production build. Original regressions reproduced immediate
+closure after a tool-only response and before late goodbye audio. Tests cover
+one replacement farewell, cancellation, provider loss/rotation, timeouts,
+playback IDs and browser speech errors. Actual Chrome played 30 seconds of
+synthetic PCM: eight nodes remained at the ending marker, and acknowledgement
+arrived only after they finished (672 ms later, zero remaining buffers).
+Actual workerd Asterisk playback preserved mark/flow-control drainage and emitted
+the matching completion acknowledgement; the PBX and audio were synthetic.
+
+Local workerd/D1 calls against real Kataleptic `gpt-realtime-2` and
+`llama-3.3-70b` completed Spanish farewells. A separate realtime-v2 tool-only
+response triggered exactly one generated farewell, saved it to the transcript,
+and completed normally. The proxy had a missing-audio fault option armed but
+suppressed zero events in that run. Inputs were synthetic text and playback was
+a paced simulated consumer; these runs do not prove physical audibility or PSTN
+acceptance. An earlier v2 run completed the protocol successfully but its final
+transcript-export query failed on a fixture column name; that failure remains
+separate from the subsequent successful calls.

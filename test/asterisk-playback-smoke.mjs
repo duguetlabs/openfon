@@ -11,7 +11,7 @@ const bundle=await build({stdin:{resolveDir:root,loader:'ts',contents:`
 import { AsteriskMediaAdapter } from './src/asterisk-media';
 export default {fetch(){
   const pair=new WebSocketPair(), socket=pair[1];socket.accept();let frames=0;
-  const adapter=new AsteriskMediaAdapter({carrierSend:data=>{if(data instanceof ArrayBuffer)frames++;socket.send(data);},sessionSend:()=>{},onEnd:reason=>{socket.send(JSON.stringify({probe:'ended',reason}));socket.close(1000,'finished');}});
+  const adapter=new AsteriskMediaAdapter({carrierSend:data=>{if(data instanceof ArrayBuffer)frames++;socket.send(data);},sessionSend:data=>{socket.send(JSON.stringify({probe:'session',message:JSON.parse(data)}));},onEnd:reason=>{socket.send(JSON.stringify({probe:'ended',reason}));socket.close(1000,'finished');}});
   adapter.carrierMessage(JSON.stringify({event:'MEDIA_START',connection_id:'fixture',channel:'fixture',format:'ulaw',optimal_frame_size:160,ptime:20}));
   adapter.sessionMessage(JSON.stringify({type:'ready',mode:'realtime',greeting:''}));
   socket.addEventListener('message',event=>{
@@ -20,7 +20,7 @@ export default {fetch(){
     else if(msg.probe==='load'){adapter.sessionMessage(new ArrayBuffer(480000));socket.send(JSON.stringify({probe:'loaded',frames}));}
     else if(msg.event==='MEDIA_XOFF'){adapter.carrierMessage(event.data);socket.send(JSON.stringify({probe:'paused',frames}));}
     else if(msg.probe==='flush'){adapter.sessionMessage(JSON.stringify({type:'flush'}));socket.send(JSON.stringify({probe:'flushed',frames}));}
-    else if(msg.probe==='finish'){adapter.sessionMessage(new ArrayBuffer(960));adapter.sessionMessage(JSON.stringify({type:'ending'}));socket.send(JSON.stringify({probe:'finishQueued',frames}));}
+    else if(msg.probe==='finish'){adapter.sessionMessage(new ArrayBuffer(960));adapter.sessionMessage(JSON.stringify({type:'ending',id:'00000000-0000-4000-8000-000000000001'}));socket.send(JSON.stringify({probe:'finishQueued',frames}));}
     else adapter.carrierMessage(event.data);
   });
   socket.addEventListener('close',()=>adapter.close());
@@ -54,6 +54,7 @@ try{
   send({event:'MEDIA_XON'});
   const ended=await wait(()=>messages.find(x=>x.probe==='ended'),'final marks/drain');assert.equal(ended.reason,'playback_complete');
   assert.ok(messages.some(x=>x.command==='HANGUP'));
+  assert.deepEqual(messages.filter(x=>x.probe==='session' && x.message.type.startsWith('playback_')).map(x=>x.message),[{type:'playback_complete',id:'00000000-0000-4000-8000-000000000001'}]);
   const tailResponse=await mf.dispatchFetch('http://local.test/media',{headers:{Upgrade:'websocket'}});
   assert.equal(tailResponse.status,101);socket=tailResponse.webSocket;socket.accept();socket.binaryType='arraybuffer';
   const tailMessages=[];let tailFrames=0;

@@ -333,6 +333,51 @@ it('announces the browser speech language for pipeline greetings and replies', a
   caller.receive({ type: 'hangup' }); await flush(80);
 });
 
+describe('pipeline closing guard', () => {
+  it.each([
+    { first: 'Your message is saved. <END_CALL>', second: 'Hasta luego.', expected: 'Your message is saved. Hasta luego.', calls: 2 },
+    { first: 'Auf Wiederhören. <END_CALL>', second: '', expected: 'Auf Wiederhören.', calls: 1 },
+    { first: '<END_CALL>', second: '', expected: undefined, calls: 2 },
+  ])('preserves useful speech and bounds the farewell request: $first', async ({ first, second, expected, calls }) => {
+    vi.useFakeTimers();
+    const { session } = newSession('pipeline');
+    let requests = 0;
+    globalThis.fetch = vi.fn(async () => ({ ok: true, status: 200,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      body: jsonStream({ choices: [{ message: { content: ++requests === 1 ? first : second } }] }),
+    })) as unknown as typeof fetch;
+    await session.fetch(upgradeRequest());
+    const caller = serverSockets[0]; caller.receive({ type: 'start' }); await flush(100);
+    caller.receive({ type: 'text', text: 'Eso es todo, gracias.' }); await flush(150);
+    expect(requests).toBe(calls + (expected === undefined ? 1 : 0)); // finalization also summarizes
+    if (expected) {
+      expect(caller.messages().find(m => m.type === 'agent_text')?.text).toBe(expected);
+      expect(caller.countOf('ending')).toBe(1);
+      expect(caller.closed).toBeNull();
+      caller.receive({ type: 'playback_complete', id: caller.messages().find(m => m.type === 'ending')!.id });
+      await flush(100);
+    } else expect(caller.countOf('ending')).toBe(0);
+    expect(caller.countOf('ended')).toBe(1);
+  });
+
+  it('does not emit a late farewell after the caller hangs up', async () => {
+    vi.useFakeTimers();
+    const { session } = newSession('pipeline');
+    let finish!: (value: unknown) => void;
+    let requests = 0;
+    const response = (text: string) => ({ ok: true, status: 200, headers: new Headers({ 'Content-Type': 'application/json' }), body: jsonStream({ choices: [{ message: { content: text } }] }) });
+    globalThis.fetch = vi.fn(async () => ++requests === 1 ? response('<END_CALL>') : requests === 2 ? new Promise(resolve => { finish = resolve; }) : response('{}')) as unknown as typeof fetch;
+    await session.fetch(upgradeRequest());
+    const caller = serverSockets[0]; caller.receive({ type: 'start' }); await flush(100);
+    caller.receive({ type: 'text', text: 'Goodbye.' }); await flush(100);
+    expect(requests).toBe(2);
+    caller.receive({ type: 'hangup' }); await flush(100);
+    finish(response('Goodbye.')); await flush(100);
+    expect(caller.countOf('agent_text')).toBe(0);
+    expect(caller.countOf('ending')).toBe(0);
+  });
+});
+
 describe('second attach to a live call', () => {
   it('is refused, so the first caller keeps the stream', async () => {
     const { session } = newSession();
@@ -2205,7 +2250,9 @@ describe('direct OpenAI realtime independence', () => {
     upstream.receive({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'Please call me tomorrow.' });
     await flush();
     upstream.receive({ type: 'response.output_audio_transcript.done', transcript: 'I will pass along your message. Goodbye.' });
+    upstream.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' });
     upstream.receive({ type: 'response.function_call_arguments.done', name: 'end_call', call_id: 'tool-1', arguments: '{}' });
+    upstream.receive({ type: 'response.done' });
     await flush();
     expect(caller.countOf('ending')).toBe(1);
     caller.receive({ type: 'hangup' });
@@ -2699,6 +2746,8 @@ describe('transcript budget preserves native farewell ordering', () => {
     ctl.callerTurnGate = new Promise<void>(resolve => { release = resolve; });
     up.receive({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'Thanks, goodbye.' });
     up.receive({ type: 'response.output_audio_transcript.done', transcript: 'Goodbye.' });
+    up.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' });
+    up.receive({ type: 'response.done' });
     await flush(100);
     expect(caller.countOf('ending')).toBe(1);
     expect(caller.countOf('transcript')).toBe(1); // caller insert is still pending
@@ -2926,6 +2975,104 @@ describe('realtime output cumulative and receipt bounds', () => {
   }
   function receipts(caller: FakeSocket) { return caller.messages().filter(m => m.type === 'audio_receipt'); }
 
+  it('closing guard: tool-only ending generates one farewell before permitting playback completion', async () => {
+    const { caller, up } = await connected();
+    up.receive({ type: 'response.created', response: { id: 'tool-response' } });
+    up.receive({ type: 'response.function_call_arguments.done', name: 'end_call', response_id: 'tool-response', call_id: 'tool-call' });
+    expect(caller.countOf('ending')).toBe(0);
+    up.receive({ type: 'response.done', response: { id: 'tool-response', status: 'completed' } }); await flush(100);
+    const requests = up.messages().filter(m => m.type === 'response.create' && m.response?.tool_choice === 'none');
+    expect(requests).toHaveLength(1);
+    up.receive({ type: 'response.created', response: { id: 'farewell' } });
+    up.receive({ type: 'response.output_audio.delta', response_id: 'farewell', delta: 'A'.repeat(6400) });
+    up.receive({ type: 'response.output_audio_transcript.done', response_id: 'farewell', transcript: 'Hasta luego.' });
+    expect(caller.countOf('ending')).toBe(0);
+    up.receive({ type: 'response.done', response: { id: 'farewell', status: 'completed' } }); await flush(100);
+    const ending = caller.messages().find(m => m.type === 'ending');
+    expect(ending?.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(caller.closed).toBeNull();
+    caller.receive({ type: 'playback_complete', id: ending!.id }); await flush(100);
+    expect(caller.countOf('ended')).toBe(1);
+  });
+
+  it('closing guard: waits for audio that arrives after the hangup tool', async () => {
+    const { caller, up } = await connected();
+    up.receive({ type: 'response.created', response: { id: 'goodbye' } });
+    up.receive({ type: 'response.function_call_arguments.done', name: 'end_call', response_id: 'goodbye' });
+    expect(caller.countOf('ending')).toBe(0);
+    await vi.advanceTimersByTimeAsync(1500);
+    up.receive({ type: 'response.output_audio.delta', response_id: 'goodbye', delta: 'A'.repeat(6400) });
+    up.receive({ type: 'response.output_audio_transcript.done', response_id: 'goodbye', transcript: 'Auf Wiederhören.' });
+    up.receive({ type: 'response.done', response: { id: 'goodbye', status: 'completed' } }); await flush(100);
+    expect(caller.countOf('ending')).toBe(1);
+    expect(up.messages().filter(m => m.type === 'response.create' && m.response?.tool_choice === 'none')).toHaveLength(0);
+    caller.receive({ type: 'hangup' }); await flush(100);
+  });
+
+  it('closing guard: missing generation is bounded and records why it ended', async () => {
+    const { caller, up } = await connected();
+    const log = vi.spyOn(console, 'info');
+    up.receive({ type: 'response.created', response: { id: 'missing' } });
+    up.receive({ type: 'response.function_call_arguments.done', name: 'end_call', response_id: 'missing' });
+    await vi.advanceTimersByTimeAsync(30001); await flush(100);
+    expect(caller.countOf('ending')).toBe(0);
+    expect(caller.countOf('ended')).toBe(1);
+    const record = log.mock.calls.map(([raw]) => { try { return JSON.parse(String(raw)); } catch { return {}; } }).find(m => m.event === 'call_closing');
+    expect(record).toMatchObject({ trigger: 'model_tool', result: 'generation_timeout' });
+    expect(record.endedAt).toBeGreaterThanOrEqual(record.requestedAt + 30000);
+    log.mockRestore();
+  });
+
+  it('closing guard: wrong playback markers cannot acknowledge the goodbye', async () => {
+    const { caller, up } = await connected();
+    up.receive({ type: 'response.output_audio.delta', response_id: 'bye', delta: 'A'.repeat(6400) });
+    up.receive({ type: 'response.output_audio_transcript.done', response_id: 'bye', transcript: 'Goodbye.' });
+    up.receive({ type: 'response.done', response: { id: 'bye', status: 'completed' } });
+    up.receive({ type: 'response.function_call_arguments.done', name: 'end_call', response_id: 'bye' }); await flush(100);
+    expect(caller.countOf('ending')).toBe(1);
+    caller.receive({ type: 'playback_complete', id: 'wrong' }); await flush(100);
+    expect(caller.closed).toBeNull();
+    await vi.advanceTimersByTimeAsync(25001); await flush(100);
+    expect(caller.countOf('ended')).toBe(1);
+  });
+
+  it('does not rotate away from the farewell when an earlier reconnect becomes ready', async () => {
+    const { caller, up, replacement } = await connected();
+    up.receive({ type: 'session.expiring' }); await flush(100);
+    up.receive({ type: 'response.created', response: { id: 'bye' } });
+    up.receive({ type: 'response.function_call_arguments.done', name: 'end_call', response_id: 'bye' });
+    replacement.receive({ type: 'session.updated', session: replacement.messages().find(m => m.type === 'session.update')!.session }); await flush(100);
+    expect(replacement.closed).not.toBeNull();
+    expect(up.closed).toBeNull();
+    up.receive({ type: 'response.output_audio.delta', response_id: 'bye', delta: 'A'.repeat(6400) });
+    up.receive({ type: 'response.output_audio_transcript.done', response_id: 'bye', transcript: 'Goodbye.' });
+    up.receive({ type: 'response.done', response: { id: 'bye', status: 'completed' } }); await flush(100);
+    expect(caller.countOf('ending')).toBe(1);
+    caller.receive({ type: 'playback_complete', id: caller.messages().find(m => m.type === 'ending')!.id }); await flush(100);
+    expect(caller.countOf('ended')).toBe(1);
+  });
+
+  it.each([false, true])('closing provider disconnect preserves only complete generation: %s', async complete => {
+    const { caller, up } = await connected();
+    up.receive({ type: 'response.created', response: { id: 'bye' } });
+    up.receive({ type: 'response.function_call_arguments.done', name: 'end_call', response_id: 'bye' });
+    if (complete) {
+      up.receive({ type: 'response.output_audio.delta', response_id: 'bye', delta: 'A'.repeat(64000) });
+      up.receive({ type: 'response.output_audio_transcript.done', response_id: 'bye', transcript: 'Goodbye.' });
+      up.receive({ type: 'response.done', response: { id: 'bye', status: 'completed' } });
+      await flush(100);
+    }
+    up.close(); await flush(100);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    if (complete) {
+      expect(caller.closed).toBeNull();
+      await vi.advanceTimersByTimeAsync(1500); await flush(100);
+      expect(caller.countOf('ending')).toBe(1);
+      caller.receive({ type: 'playback_complete', id: caller.messages().find(m => m.type === 'ending')!.id }); await flush(100);
+    }
+    expect(caller.countOf('ended')).toBe(1);
+  });
+
   it('paces a fast thirty-second answer without terminating or dropping queued PCM', async () => {
     vi.useFakeTimers();
     const { caller, up } = await connected();
@@ -2950,7 +3097,9 @@ describe('realtime output cumulative and receipt bounds', () => {
     await vi.advanceTimersByTimeAsync(2000);
     expect(caller.binaryCount()).toBe(before);
     delta(up);
+    up.receive({ type: 'response.output_audio_transcript.done', transcript: 'Goodbye.' });
     up.receive({ type: 'response.function_call_arguments.done', name: 'end_call' });
+    up.receive({ type: 'response.done' });
     await flush(100);
     expect(caller.countOf('ending')).toBe(0);
     await vi.advanceTimersByTimeAsync(10500);
@@ -3124,7 +3273,9 @@ describe('realtime output cumulative and receipt bounds', () => {
     up.receive({ type: 'input_audio_buffer.speech_started' });
     delta(up, 'A'.repeat(6400)); await flush(100);
     expect(caller.countOf('control_receipt')).toBe(2);
+    up.receive({ type: 'response.output_audio_transcript.done', transcript: 'Goodbye.' });
     up.receive({ type: 'response.function_call_arguments.done', name: 'end_call' });
+    up.receive({ type: 'response.done' });
     await vi.advanceTimersByTimeAsync(500); await flush(100);
     expect(ended).toHaveBeenCalledOnce();
     expect(caller.countOf('error')).toBe(0);

@@ -50,6 +50,7 @@ export class TelnyxMediaAdapter {
   private endingDeadline?: ReturnType<typeof setTimeout>;
   private endQuiet?: ReturnType<typeof setTimeout>;
   private ending = false;
+  private endingId: string | undefined;
   private drained = false;
   private nextChunk = 1;
   private lastTimestamp = -1;
@@ -223,6 +224,10 @@ export class TelnyxMediaAdapter {
       } else if (msg.type === 'speaking') {
         this.controlReceiptPending = this.audioReceipts;
       } else if (msg.type === 'ending') {
+        if (msg.id !== undefined) {
+          if (typeof msg.id !== 'string' || !/^[0-9a-f-]{36}$/.test(msg.id) || this.endingId) throw Error('invalid_playback_barrier');
+          this.endingId = msg.id;
+        }
         if (!this.ready) throw new Error('not_ready');
         if (!this.ending) {
           this.ending = true;
@@ -280,6 +285,9 @@ export class TelnyxMediaAdapter {
     for (const timer of [this.startup, this.gap, this.tick, this.endingDeadline, this.endQuiet]) if (timer !== undefined) clearTimeout(timer);
     this.queue = []; this.preReady = []; this.reorder.clear(); this.pendingMarks.clear();
     this.up.reset(); this.down.reset();
+    if (this.endingId) {
+      try { this.options.sessionSend(JSON.stringify({ type: reason === 'playback_complete' ? 'playback_complete' : 'playback_failed', id: this.endingId })); } catch { /* transport gone */ }
+    }
     try { this.options.sessionSend(JSON.stringify({ type: 'hangup' })); } catch { /* transport already gone */ }
     this.options.onEnd(reason);
   }

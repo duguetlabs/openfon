@@ -1,3 +1,4 @@
+import { RealtimeClosingGuard } from './call-closing';
 import { normalizeCallerPhone } from './contact';
 import { RealtimeOutputBudget, RealtimeAudioQueue, RealtimeOutputError, RealtimeAudioReceipts, MAX_UNRECEIVED_AUDIO_BYTES } from './realtime-output';
 // CallSession Durable Object: one instance per live call.
@@ -48,12 +49,13 @@ interface UpstreamMessage {
   type: string;
   delta?: string;
   response_id?: unknown;
-  response?: { id?: unknown };
+  response?: { id?: unknown; status?: unknown };
   item_id?: string;
   content_index?: number;
   transcript?: string;
   language?: string;
-  item?: { type?: string; name?: string };
+  item?: { type?: string; name?: string; call_id?: unknown };
+  call_id?: unknown;
   name?: string;
   session?: SessionConfig;
   error?: { type?: unknown; code?: unknown; event_id?: unknown; message?: unknown };
@@ -433,6 +435,7 @@ export class CallSession implements DurableObject {
     if (this.ended) return;
     this.lastActivity = Date.now(); // feeds the idle watchdog
     if (typeof ev.data !== 'string') {
+      if (this.closingTimeline) return;
       if (this.nativeGreeting) return; // carrier input cannot overtake the native greeting
       const audio = await toArrayBuffer(ev.data);
       if (this.mode === 'realtime') {
@@ -444,6 +447,16 @@ export class CallSession implements DurableObject {
     }
     const msg = JSON.parse(ev.data) as { type: string; text?: string; contentType?: string; id?: unknown };
     switch (msg.type) {
+      case 'playback_complete':
+      case 'playback_failed':
+        if (!this.endingSent || !this.playbackId || msg.id !== this.playbackId) break;
+        if (Date.now() >= this.closingTimeline!.serverDrainedAt! + 25_000 || Date.now() >= this.closingTimeline!.requestedAt + 90_000) {
+          this.closingTimeline!.result = 'playback_timeout'; await this.finalize(); break;
+        }
+        this.closingTimeline!.result = msg.type === 'playback_complete' ? 'playback_complete' : 'playback_failed';
+        if (msg.type === 'playback_complete') this.closingTimeline!.playbackCompletedAt = Date.now();
+        await this.finalize();
+        break;
       case 'audio_received':
         try {
           this.audioReceipts.acknowledge(msg.id, Date.now());
@@ -454,12 +467,14 @@ export class CallSession implements DurableObject {
         await this.handleStart();
         break;
       case 'text':
+        if (this.closingTimeline) break;
         if (msg.text?.trim()) {
           if (this.mode === 'realtime') this.sendCallerText(msg.text.trim());
           else await this.respond(msg.text.trim());
         }
         break;
       case 'hangup':
+        if (this.closingTimeline) this.closingTimeline.result ??= 'caller_or_legacy_hangup';
         // finalize() owns the whole teardown: engine, client socket, DB row.
         // Its errors are caught here rather than reaching failInternally: a row
         // that fails to write is retried by the watchdog and is not the call
@@ -723,8 +738,8 @@ export class CallSession implements DurableObject {
 
   private closeUpstream(): void {
     this.clearRealtimeQueue();
-    if (this.queueHangupTimer !== undefined) clearTimeout(this.queueHangupTimer);
-    this.queueHangupTimer = undefined;
+    for (const timer of [this.closingTimer, this.generationTimer, this.playbackTimer]) if (timer !== undefined) clearTimeout(timer);
+    this.closingTimer = this.generationTimer = this.playbackTimer = undefined;
     if (this.audioReceiptTimer !== undefined) clearTimeout(this.audioReceiptTimer);
     this.audioReceiptTimer = undefined;
     this.audioReceipts.clear();
@@ -754,7 +769,17 @@ export class CallSession implements DurableObject {
   private audioQueue = new RealtimeAudioQueue(Date.now());
   private audioQueueTimer: ReturnType<typeof setTimeout> | undefined;
   private hangupAfterQueue = false;
-  private queueHangupTimer: ReturnType<typeof setTimeout> | undefined;
+  private closingGuard = new RealtimeClosingGuard();
+  private closingSource: WebSocket | undefined;
+  private closingToolCall: string | undefined;
+  private closingTimer: ReturnType<typeof setTimeout> | undefined;
+  private generationTimer: ReturnType<typeof setTimeout> | undefined;
+  private playbackTimer: ReturnType<typeof setTimeout> | undefined;
+  private playbackId: string | undefined;
+  private closingLogged = false;
+  private closingTimeline: { trigger: string; requestedAt: number; generationRequestedAt?: number;
+    generationCompletedAt?: number; serverDrainedAt?: number; playbackCompletedAt?: number;
+    endedAt?: number; result?: string } | undefined;
   private transcriptionAbort: AbortController | undefined;
   private audioReceipts = new RealtimeAudioReceipts();
   private audioReceiptTimer: ReturnType<typeof setTimeout> | undefined;
@@ -946,7 +971,7 @@ export class CallSession implements DurableObject {
                 {
                   type: 'function',
                   name: 'end_call',
-                  description: 'Hang up the phone call. Call this right after saying goodbye, when the conversation is finished.',
+                  description: 'Request call closure after a brief spoken goodbye. OpenFon waits for the response and playback to finish before hanging up.',
                   parameters: { type: 'object', properties: {} },
                 },
               ],
@@ -1069,22 +1094,77 @@ export class CallSession implements DurableObject {
   // them firing on the same call is the normal case rather than the odd one.
   private endingSent = false;
 
+  private startClosing(trigger: string): void {
+    if (this.closingTimeline) return;
+    this.closingTimeline = { trigger, requestedAt: Date.now() };
+    console.info(JSON.stringify({ event: 'call_closing_requested', callId: this.callId, trigger, at: Date.now() }));
+    this.closingTimer = setTimeout(() => {
+      if (this.closingTimeline) this.closingTimeline.result = 'closing_timeout';
+      void this.finalize();
+    }, 90_000);
+  }
+
+  private generationDeadline(): void {
+    if (this.generationTimer !== undefined) clearTimeout(this.generationTimer);
+    this.generationTimer = setTimeout(() => {
+      if (this.closingTimeline) this.closingTimeline.result = 'generation_timeout';
+      void this.finalize();
+    }, 30_000);
+  }
+
+  private requestRealtimeHangup(msg: UpstreamMessage, source: WebSocket): void {
+    if (this.ended || this.endingSent) return;
+    const callId = msg.call_id ?? msg.item?.call_id;
+    if (!this.closingToolCall && typeof callId === 'string' && callId.length <= 128) this.closingToolCall = callId;
+    if (!this.closingGuard.requested) {
+      this.startClosing(msg.name === 'end_call' || msg.item?.name === 'end_call' ? 'model_tool' : 'caller_farewell');
+      this.closingSource = source;
+      this.closingGuard.request(source, msg.response_id);
+      this.generationDeadline();
+    }
+    this.advanceClosing();
+  }
+
+  private advanceClosing(): void {
+    if (this.ended) return;
+    const action = this.closingGuard.advance();
+    if (action === 'generate') {
+      this.closingTimeline!.generationRequestedAt = Date.now();
+      this.generationDeadline();
+      if (this.closingToolCall) this.sendUpstream({ type: 'conversation.item.create', item: {
+        type: 'function_call_output', call_id: this.closingToolCall,
+        output: 'Closing requested. Say a brief polite goodbye before disconnecting.',
+      } }, this.closingSource ?? this.upstream);
+      this.sendUpstream({ type: 'response.create', response: {
+        instructions: 'The conversation is finished. Say one short, polite goodbye in the language of the most recent caller message. Do not ask questions, add business facts, or call any tools.',
+        tool_choice: 'none',
+      } }, this.closingSource ?? this.upstream);
+    } else if (action === 'ready') {
+      if (this.generationTimer !== undefined) clearTimeout(this.generationTimer);
+      this.generationTimer = undefined;
+      this.closingTimeline!.generationCompletedAt = Date.now();
+      this.beginHangup();
+    } else if (action === 'failed') {
+      this.closingTimeline!.result = 'farewell_unavailable';
+      void this.finalize();
+    }
+  }
+
   private beginHangup(): void {
     if (this.ended || this.endingSent) return;
-    if (this.audioQueue.pending) {
-      this.hangupAfterQueue = true;
-      // Even repeated new response IDs cannot defer a requested hangup forever.
-      this.queueHangupTimer ??= setTimeout(() => void this.finalize(), 75_000);
-      return;
-    }
-    if (this.queueHangupTimer !== undefined) clearTimeout(this.queueHangupTimer);
-    this.queueHangupTimer = undefined;
+    this.startClosing(this.mode === 'pipeline' ? 'pipeline' : 'turn_limit');
+    if (this.audioQueue.pending) { this.hangupAfterQueue = true; return; }
     this.hangupAfterQueue = false;
     this.endingSent = true;
-    console.log(`call ${this.callId}: agent ending the call`);
-    this.send({ type: 'ending' });
-    // Safety net: if the client never drains playback and hangs up itself.
-    setTimeout(() => void this.finalize(), 15_000);
+    this.closingTimeline!.serverDrainedAt = Date.now();
+    this.playbackId = crypto.randomUUID();
+    this.send({ type: 'ending', id: this.playbackId });
+    // An acknowledgement is browser completion or carrier mark drainage, never
+    // a claim that a human heard the audio. Legacy clients may still hang up.
+    this.playbackTimer = setTimeout(() => {
+      this.closingTimeline!.result = 'playback_timeout';
+      void this.finalize();
+    }, 25_000);
   }
 
   private async startRealtime(systemPrompt: string, greeting: string): Promise<boolean> {
@@ -1180,6 +1260,7 @@ export class CallSession implements DurableObject {
       }, 5000);
       const ready = () => {
         if (abandoned || opened) return;
+        if (this.closingTimeline) { abandoned = true; clearTimeout(timer); this.abandonUpstream(ws); settle(false); return; }
         clearTimeout(timer);
         opened = true;
         this.upstream = ws;
@@ -1192,6 +1273,7 @@ export class CallSession implements DurableObject {
       let configured = false;
       const onOpen = () => {
         if (abandoned || configured) return;
+        if (this.closingTimeline) { abandoned = true; clearTimeout(timer); this.abandonUpstream(ws); settle(false); return; }
         configured = true;
         // Snapshot now, not at dial time. The outgoing connection stayed live
         // through the connect window, so `history` may have gained turns since
@@ -1259,7 +1341,12 @@ export class CallSession implements DurableObject {
         if (this.nativeGreeting) { this.nativeGreeting.failed = true; this.nativeGreeting.resolve(false); return; }
         if (this.mode === 'realtime' && !this.ended && this.upstream === ws) {
           this.upstream = null;
-          void this.recoverUpstream();
+          if (this.closingTimeline) {
+            if (!this.closingTimeline.generationCompletedAt) {
+              this.closingTimeline.result = 'provider_disconnect';
+              void this.finalize();
+            }
+          } else void this.recoverUpstream();
         }
       });
       if (upgraded) { ws.accept(); onOpen(); }
@@ -1291,7 +1378,7 @@ export class CallSession implements DurableObject {
   }
 
   private async runRecovery(): Promise<void> {
-    while (!this.ended) {
+    while (!this.ended && !this.closingTimeline) {
       // `reconnects` is the per-rotation budget, which session.expiring resets;
       // `totalReconnects` bounds a flapping engine over the whole call.
       if (this.reconnects >= 1 || this.totalReconnects >= CallSession.MAX_TOTAL_RECONNECTS) {
@@ -1421,8 +1508,6 @@ export class CallSession implements DurableObject {
       if (value.type === 'flush') {
         this.clearRealtimeQueue();
         this.hangupAfterQueue = false;
-        if (this.queueHangupTimer !== undefined) clearTimeout(this.queueHangupTimer);
-        this.queueHangupTimer = undefined;
       }
       const wire = JSON.stringify(value);
       const bytes = new TextEncoder().encode(wire).byteLength;
@@ -1448,6 +1533,7 @@ export class CallSession implements DurableObject {
       this.checkAudioReceiver(Math.min(bytes, 24000) + (this.nativeGreeting?.bytes ?? 0), this.nativeGreeting?.frames.length ?? 0);
       if (!msg.delta) return;
       const audio = decodeRealtimeAudio(msg.delta);
+      this.closingGuard.audio(from, msg.response_id, audio.byteLength);
       if (this.realtimeConfig?.protocol === 'openai' && msg.item_id) {
         if (this.outputAudio?.itemId !== msg.item_id || this.outputAudio.socket !== from) {
           this.outputAudio = { socket: from, itemId: msg.item_id, contentIndex: msg.content_index ?? 0, startedAt: Date.now(), bytes: 0 };
@@ -1472,14 +1558,23 @@ export class CallSession implements DurableObject {
 
   private async onUpstreamMessage(msg: UpstreamMessage, from: WebSocket): Promise<void> {
     if (this.ended) return;
+    const responseId = msg.response_id ?? msg.response?.id;
+    if (msg.type.startsWith('response.') && !this.closingGuard.accepts(from, responseId)) return;
     switch (msg.type) {
+      case 'response.created':
+        this.closingGuard.created(from, responseId);
+        break;
       case 'response.output_audio.delta':
         this.receiveRealtimeAudio(msg, from);
         break;
       case 'response.done':
         this.realtimeOutputBudget.responseDone(from, msg.response?.id);
+        this.closingGuard.done(from, msg.response?.id, msg.response?.status);
+        this.advanceClosing();
         break;
       case 'input_audio_buffer.speech_started':
+        if (this.closingGuard.requested) break;
+        this.closingGuard.startTurn(from);
         // Barge-in: the server cancels its in-flight response; we flush caller
         // playback — except while our own greeting is playing, where a noise
         // blip would cut off the agent's opening line for nothing.
@@ -1529,7 +1624,7 @@ export class CallSession implements DurableObject {
             // Event ordering isn't guaranteed: if the sign-off reply's
             // transcript never arrives (cancelled response, race), end anyway.
             setTimeout(() => {
-              if (this.endPending && !this.ended) this.beginHangup();
+              if (this.endPending && !this.ended) this.requestRealtimeHangup({ type: 'caller_farewell' }, from);
             }, 8000);
           }
           await this.saveTurn('caller', text);
@@ -1539,22 +1634,23 @@ export class CallSession implements DurableObject {
         break;
       case 'response.output_audio_transcript.done':
         if (msg.transcript?.trim()) {
+          this.closingGuard.transcript(from, msg.response_id, msg.transcript);
           const text = msg.transcript.trim();
           this.reserveTranscript(text);
           this.history.push({ role: 'assistant', content: text });
           await this.saveTurn('agent', text);
           if (this.ended) return;
           this.send({ type: 'agent_text', text });
-          if (this.endPending) this.beginHangup();
+          if (this.endPending) this.requestRealtimeHangup(msg, from);
         }
         break;
       case 'response.output_item.done':
-        if (msg.item?.type === 'function_call' && msg.item?.name === 'end_call') this.beginHangup();
+        if (msg.item?.type === 'function_call' && msg.item?.name === 'end_call') this.requestRealtimeHangup(msg, from);
         break;
       case 'response.function_call_arguments.done':
         // Some paths (e.g. narration-to-call conversion) synthesize only this
         // event without a function_call output item.
-        if (msg.name === 'end_call') this.beginHangup();
+        if (msg.name === 'end_call') this.requestRealtimeHangup(msg, from);
         break;
       case 'session.updated':
         // Read back what the service actually applied. Nothing else in the
@@ -1562,6 +1658,7 @@ export class CallSession implements DurableObject {
         this.checkSessionEcho(msg.session, from);
         break;
       case 'session.expiring':
+        if (this.closingTimeline) break;
         // Vendor extension: the engine warns a minute before its hard session
         // cutoff — reconnect proactively instead of dropping mid-sentence.
         console.log(`call ${this.callId}: upstream session expiring, rotating connection`);
@@ -1581,6 +1678,7 @@ export class CallSession implements DurableObject {
   }
 
   private sendCallerText(text: string): void {
+    if (this.upstream) this.closingGuard.startTurn(this.upstream);
     this.reserveTranscript(text);
     this.maybeSwitchVoice(text);
     this.sendUpstream({
@@ -1637,19 +1735,42 @@ export class CallSession implements DurableObject {
     this.history.push({ role: 'user', content: callerText });
     const llm = resolveLlm(this.env, this.settings);
     const raw = (await chatComplete(llm, this.history, { maxTokens: 200, temperature: 0.6 })).trim();
+    if (this.ended) return;
     const wantsEnd = /<?END_CALL>?/i.test(raw);
-    const reply = raw.replace(/\s*<?END_CALL>?\s*/gi, ' ').trim();
+    let reply = raw.replace(/\s*<?END_CALL>?\s*/gi, ' ').trim();
+    if (wantsEnd) {
+      this.startClosing('pipeline');
+      this.generationDeadline();
+      if (!isFarewell(reply)) {
+        this.closingTimeline!.generationRequestedAt = Date.now();
+        const farewell = (await chatComplete(llm, [...this.history, { role: 'system', content:
+          'The conversation is finished. Say only one short, polite goodbye in the language of the most recent caller message. Do not add facts, ask questions or output END_CALL.' }], { maxTokens: 80 })).replace(/\s*<?END_CALL>?\s*/gi, ' ').trim();
+        if (this.ended) return;
+        if (!farewell) { this.closingTimeline!.result = 'farewell_unavailable'; await this.finalize(); return; }
+        reply = [reply, farewell].filter(Boolean).join(' ');
+      }
+      if (this.ended) return;
+      if (!reply) { this.closingTimeline!.result = 'farewell_unavailable'; await this.finalize(); return; }
+      this.closingTimeline!.generationCompletedAt = Date.now();
+    }
     this.reserveTranscript(reply);
     this.history.push({ role: 'assistant', content: reply });
     this.send({ type: 'agent_text', text: reply, language: this.lang });
     await this.saveTurn('agent', reply);
-    await this.speak(reply);
-    if (wantsEnd) this.beginHangup();
+    const speechAvailable = await this.speak(reply);
+    if (this.ended) return;
+    if (wantsEnd) {
+      if (this.generationTimer !== undefined) clearTimeout(this.generationTimer);
+      this.generationTimer = undefined;
+      if (!speechAvailable) { this.closingTimeline!.result = 'farewell_unavailable'; await this.finalize(); }
+      else this.beginHangup();
+    }
   }
 
-  private async speak(text: string): Promise<void> {
+  private async speak(text: string): Promise<boolean> {
     const voice = voiceForReply(this.env, this.lang, this.settings?.language ?? 'en', this.settings?.voice || '');
     const audio = await synthesize(this.env, text, voice);
+    if (this.ended) return false;
     if (audio && this.ws) {
       try {
         this.ws.send(audio);
@@ -1657,6 +1778,7 @@ export class CallSession implements DurableObject {
         /* socket gone */
       }
     }
+    return Boolean(audio?.byteLength) || !(this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY);
   }
 
   private reserveTranscript(text: string): void {
@@ -2014,6 +2136,12 @@ export class CallSession implements DurableObject {
 
   private async runFinalize(): Promise<void> {
     this.ended = true;
+    if (this.closingTimeline && !this.closingLogged) {
+      this.closingLogged = true;
+      this.closingTimeline.endedAt = Date.now();
+      this.closingTimeline.result ??= this.failure ? 'call_error' : 'caller_or_transport_disconnect';
+      console.info(JSON.stringify({ event: 'call_closing', callId: this.callId, ...this.closingTimeline }));
+    }
     this.transcriptionAbort?.abort();
     this.closeUpstream();
     // Anything still attached has to be told, and then actually closed. Leaving

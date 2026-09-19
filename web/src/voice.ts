@@ -62,6 +62,11 @@ export class VoiceCall {
   private lastPcmBytes: number | null = null;
   private pcmCarry: Uint8Array | null = null; // odd trailing byte awaiting its other half
   private pingTimer: number | null = null;
+  private endingId: string | undefined;
+  private playbackCompletionSent = false;
+  private playbackFailed = false;
+  private pendingSpeech = 0;
+  private completionTimer: ReturnType<typeof setTimeout> | undefined;
   private hangupWhenDone = false; // agent said goodbye: end once playback drains
 
   on(fn: Listener): void {
@@ -138,6 +143,7 @@ export class VoiceCall {
       if (this.ended || this.ws !== ws) return;
       try {
         if (typeof ev.data !== 'string') {
+          if (this.endingId) throw new Error('audio_after_playback_barrier');
           if (this.mode === 'realtime') {
             if (this.audioReceipts && (this.lastPcmBytes !== null || this.controlReceiptPending)) throw new Error('missing_audio_receipt');
             if (!(ev.data instanceof ArrayBuffer)) throw new Error('invalid_audio');
@@ -201,11 +207,13 @@ export class VoiceCall {
             this.flushPlayback();
             this.controlReceiptPending = this.audioReceipts;
             break;
-          case 'ending': // agent is hanging up: let the goodbye finish, then end
-            this.hangupWhenDone = true;
-            if (!this.agentSpeaking && this.liveSources.size === 0) {
-              setTimeout(() => this.hangup(), 1200);
+          case 'ending': // final generation and server queue have both drained
+            if (msg.id !== undefined) {
+              if (typeof msg.id !== 'string' || !/^[0-9a-f-]{36}$/.test(msg.id) || this.endingId) throw new Error('invalid_playback_barrier');
+              this.endingId = msg.id;
             }
+            this.hangupWhenDone = true;
+            this.finishClosingPlayback(1200);
             break;
           case 'speaking':
             this.controlReceiptPending = this.audioReceipts;
@@ -218,6 +226,7 @@ export class VoiceCall {
             this.emit({ type: 'thinking' });
             break;
           case 'agent_text':
+            if (this.endingId && this.mode === 'pipeline') throw new Error('speech_after_playback_barrier');
             this.emit({ type: 'agent_text', text: msg.text ?? '' });
             if (msg.language) this.speechLanguage = msg.language;
             // Realtime transcripts describe audio already streamed by the provider.
@@ -401,7 +410,7 @@ export class VoiceCall {
       this.queuedPcmBytes -= retainedBytes;
       if (this.liveSources.size === 0) {
         this.emit({ type: 'speaking', who: 'none' });
-        if (this.hangupWhenDone) setTimeout(() => this.hangup(), 600);
+        this.finishClosingPlayback();
       }
     };
   }
@@ -434,10 +443,12 @@ export class VoiceCall {
       this.releasePlayer();
       this.agentSpeaking = false;
       this.emit({ type: 'speaking', who: 'none' });
-      if (this.hangupWhenDone) setTimeout(() => this.hangup(), 600);
+      this.finishClosingPlayback();
     };
-    this.player.onended = this.player.onerror = finished;
-    void this.player.play().catch(finished);
+    const failed = () => { if (this.ended || this.playerUrl !== url) return; this.playbackFailed = true; finished(); };
+    this.player.onended = finished;
+    this.player.onerror = failed;
+    void this.player.play().catch(failed);
   }
 
   private releasePlayer(): void {
@@ -452,6 +463,7 @@ export class VoiceCall {
 
   private speakLocally(text: string): void {
     this.agentSpeaking = true;
+    this.pendingSpeech++;
     this.emit({ type: 'speaking', who: 'agent' });
     const u = new SpeechSynthesisUtterance(text);
     if (this.speechLanguage) {
@@ -462,18 +474,36 @@ export class VoiceCall {
         ?? voices.find(v => v.lang.toLowerCase().split('-')[0] === language.split('-')[0]);
       if (voice) u.voice = voice;
     }
-    u.onend = u.onerror = () => {
-      if (this.ended) return;
-      this.agentSpeaking = false;
-      this.emit({ type: 'speaking', who: 'none' });
-      if (this.hangupWhenDone) setTimeout(() => this.hangup(), 600);
+    let finished = false;
+    const finish = (failed: boolean) => {
+      if (this.ended || finished) return;
+      finished = true;
+      this.playbackFailed ||= failed;
+      this.pendingSpeech--;
+      this.agentSpeaking = this.pendingSpeech > 0;
+      if (!this.agentSpeaking) this.emit({ type: 'speaking', who: 'none' });
+      this.finishClosingPlayback();
     };
-    speechSynthesis.speak(u);
+    u.onend = () => finish(false);
+    u.onerror = () => finish(true);
+    try { speechSynthesis.speak(u); } catch { finish(true); }
+  }
+
+  private finishClosingPlayback(legacyDelay = 600): void {
+    if (this.ended || !this.hangupWhenDone || this.agentSpeaking || this.liveSources.size || this.playbackCompletionSent) return;
+    this.playbackCompletionSent = true;
+    if (this.endingId && this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: this.playbackFailed || this.pcmCarry ? 'playback_failed' : 'playback_complete', id: this.endingId }));
+    }
+    // Server normally closes immediately after the acknowledgement. Retain a
+    // bounded local cleanup if the transport disappears, and legacy behavior.
+    this.completionTimer = setTimeout(() => this.hangup(), this.endingId ? 2000 : legacyDelay);
   }
 
   private teardown(status: 'ended'): void {
     if (this.ended) return;
     this.ended = true;
+    if (this.completionTimer !== undefined) clearTimeout(this.completionTimer);
     if (this.vadTimer) clearInterval(this.vadTimer);
     if (this.pingTimer) clearInterval(this.pingTimer);
     if (this.recorder) {
