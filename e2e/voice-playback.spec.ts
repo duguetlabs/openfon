@@ -11,6 +11,8 @@ test('saved voice persists and six calls release audio, including suspended play
   await page.getByRole('button', { name: 'Continue →' }).click();
   await page.getByRole('button', { name: 'Continue →' }).click();
   await page.getByRole('button', { name: /Create.*assistant|Save.*assistant|Open.*studio/i }).click();
+  // Onboarding is already mounted at /overview; wait for its final save/refresh.
+  await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
   await expect(page).toHaveURL('/overview');
   const { assistants } = await (await page.request.get('/api/me/bootstrap')).json();
   const id = assistants[0].id;
