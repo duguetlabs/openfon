@@ -159,15 +159,15 @@ export default function Onboarding() {
           <fieldset disabled={busy || refreshPending} className="space-y-5">
           {step === 0 && (
             <>
-              <Field label="Business name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Riverside Dental" />
+              <Field label="Business name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Zahnarztpraxis Dr. Gruber" />
               <TextArea
                 label="What do you do?"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Family dental practice offering checkups, cleanings, and cosmetic dentistry."
+                placeholder="Zahnarztpraxis für Vorsorge, professionelle Zahnreinigung und Zahnerhalt."
               />
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="12 River St, Vienna" />
+                <Field label="Address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Musterstraße 12, Wien" />
                 <Field label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+43 1 234 5678" />
               </div>
             </>
