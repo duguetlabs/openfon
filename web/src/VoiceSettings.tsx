@@ -16,16 +16,17 @@ const LANGUAGES = [{ id: 'en', label: 'English' }, { id: 'de', label: 'Deutsch' 
 export function CatalogSelect({ label, value, onChange, options, defaultLabel = 'Automatic / default', allowDefault = true, hint }: {
   label: string; value: string; onChange: (value: string) => void; options: Option[]; defaultLabel?: string; allowDefault?: boolean; hint?: string;
 }) {
-  const [custom, setCustom] = useState(false); const [search, setSearch] = useState(''); const id = useId();
+  const [customValue, setCustomValue] = useState<string | null>(null);
+  const custom = customValue === value; const [search, setSearch] = useState(''); const id = useId();
   const known = !value || options.some(o => o.id === value);
   const filtered = options.filter(o => o.id === value || `${o.label} ${o.id}`.toLowerCase().includes(search.toLowerCase()));
   return <div className="space-y-2">
     {options.length > 12 && <Field label={`Search ${label.toLowerCase()} options`} value={search} onChange={e => setSearch(e.target.value)} />}
     <label className="block text-sm" htmlFor={id}>{label}</label>
     <select id={id} className={`${inputClass} w-full min-w-0`} value={custom || !known ? '__custom' : value} onChange={e => {
-      if (e.target.value === '__custom') setCustom(true); else { setCustom(false); onChange(e.target.value); }
+      if (e.target.value === '__custom') setCustomValue(value); else { setCustomValue(null); onChange(e.target.value); }
     }}><option value="" disabled={!allowDefault}>{defaultLabel}</option>{filtered.map(o => <option key={o.id} value={o.id}>{o.label === o.id ? o.id : `${o.label} — ${o.id}`}</option>)}<option value="__custom">Custom ID…</option></select>
-    {(custom || !known) && <Field label={`Custom ${label.toLowerCase()}`} value={value} onChange={e => onChange(e.target.value)} hint="Advanced: enter an ID supported by this provider. Existing custom values are preserved." />}
+    {(custom || !known) && <Field label={`Custom ${label.toLowerCase()}`} value={value} onChange={e => { setCustomValue(e.target.value); onChange(e.target.value); }} hint="Advanced: enter an ID supported by this provider. Existing custom values are preserved." />}
     {hint && <p className="studio-muted">{hint}</p>}
   </div>;
 }
@@ -66,13 +67,13 @@ export function AssistantVoiceSettings({ assistant: a, onChange }: { assistant: 
     {a.engine === 'pipeline' ? <>
       <p className="studio-muted">Transcribe → think → speak. Each component can use a separate provider and API key in <Link to="/settings#providers">workspace provider settings</Link>. Shared by this workspace; keys never live in presets.</p>
       <p className="studio-muted">Transcription: {provider?.effective_stt_model || 'workspace default'} · Speech: {speech === 'unknown' ? 'workspace configuration unavailable' : speech}</p>
-      {speech === 'browser' ? <p className="studio-muted">Browser speech chooses an installed voice matching the reply language. Choose a speech provider in Settings for a specific server voice.</p> : <CatalogSelect label="Speech voice" value={a.voice} onChange={voice => onChange({ voice })} options={speechVoices} defaultLabel={speech === 'openai' || speech === 'custom' ? 'Provider default — alloy' : 'Automatic language-matched voice'} />}
+      {speech === 'browser' ? <p className="studio-muted">Browser speech chooses an installed voice matching the reply language. Choose a speech provider in Settings for a specific server voice.</p> : <CatalogSelect key={`${speech}:${provider?.tts_model}`} label="Speech voice" value={a.voice} onChange={voice => onChange({ voice })} options={speechVoices} defaultLabel={speech === 'openai' || speech === 'custom' ? 'Provider default — alloy' : 'Automatic language-matched voice'} />}
     </> : <>
-      {selected === 'custom' && <CatalogSelect label="Realtime model" value={a.realtime_model} onChange={realtime_model => onChange({ realtime_model })} options={kataleptic ? textModels : choices(['gpt-realtime', 'gpt-realtime-mini'])} />}
+      {selected === 'custom' && <CatalogSelect key={realtimeProvider} label="Realtime model" value={a.realtime_model} onChange={realtime_model => onChange({ realtime_model })} options={kataleptic ? textModels : choices(['gpt-realtime', 'gpt-realtime-mini'])} />}
       <p className="studio-muted">{family === 'hd' ? 'Azure Voice Live manages recognition and the conversation model. Choose an Azure voice.' : family === 'native' ? 'Native speech-to-speech. The conversation model is built in; voices are multilingual.' : kataleptic ? 'Kataleptic streams recognition, chat and Piper speech. Choose an automatic language-matched voice or pin a Piper voice.' : 'Custom realtime uses the OpenAI GA protocol. Model and voice IDs depend on your provider.'}</p>
-      <CatalogSelect label="Realtime voice" value={a.realtime_voice} onChange={realtime_voice => onChange({ realtime_voice })} options={family === 'hd' ? AZURE_VOICES : family === 'native' ? catalog?.voices.native || choices(['marin', 'cedar', 'alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse']) : kataleptic ? catalog?.voices.cascade || choices(['en_US-lessac-medium', 'de_DE-thorsten-medium', 'fr_FR-siwis-medium', 'es_ES-sharvard-medium']) : []} />
+      <CatalogSelect key={`${realtimeProvider}:${effectiveModel}`} label="Realtime voice" value={a.realtime_voice} onChange={realtime_voice => onChange({ realtime_voice })} options={family === 'hd' ? AZURE_VOICES : family === 'native' ? catalog?.voices.native || choices(['marin', 'cedar', 'alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse']) : kataleptic ? catalog?.voices.cascade || choices(['en_US-lessac-medium', 'de_DE-thorsten-medium', 'fr_FR-siwis-medium', 'es_ES-sharvard-medium']) : []} />
     </>}
-    <CatalogSelect label={a.engine === 'pipeline' ? 'Language model' : 'Summary language model'} value={a.llm_model} onChange={llm_model => onChange({ llm_model })} options={provider?.baseUrl?.startsWith('https://api.kataleptic.com/') ? textModels : provider?.baseUrl === 'https://api.openai.com/v1' ? choices(['gpt-4.1-mini', 'gpt-4o-mini']) : []} defaultLabel={`Workspace default${provider?.effective_text_model ? ` — ${provider.effective_text_model}` : ''}`} hint={a.engine === 'realtime' ? 'Used for call summaries, not the realtime conversation brain.' : 'Generates conversational replies and call summaries.'} />
+    <CatalogSelect key={provider?.baseUrl} label={a.engine === 'pipeline' ? 'Language model' : 'Summary language model'} value={a.llm_model} onChange={llm_model => onChange({ llm_model })} options={provider?.baseUrl?.startsWith('https://api.kataleptic.com/') ? textModels : provider?.baseUrl === 'https://api.openai.com/v1' ? choices(['gpt-4.1-mini', 'gpt-4o-mini']) : []} defaultLabel={`Workspace default${provider?.effective_text_model ? ` — ${provider.effective_text_model}` : ''}`} hint={a.engine === 'realtime' ? 'Used for call summaries, not the realtime conversation brain.' : 'Generates conversational replies and call summaries.'} />
     {(catalogUnavailable || (catalog && !catalog.live)) && <p className="studio-muted">Showing built-in suggestions; live Kataleptic catalog is temporarily unavailable.</p>}
     <p className="studio-muted"><Link to="/settings#providers">Manage providers and separate API keys →</Link></p>
   </div>;

@@ -14,7 +14,10 @@ test('custom pipeline saves separate BYOK components and guided voices without e
   await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
   await expect(page).toHaveURL('/overview');
   await page.goto('/settings');
+  await fillCatalog(page, 'Workspace text model', 'previous-custom-model');
   await page.getByLabel('Text provider preset', { exact: true }).selectOption('openai');
+  await expect(page.getByLabel('Workspace text model', { exact: true })).toHaveValue('gpt-4.1-mini');
+  await expect(page.getByLabel('Custom workspace text model', { exact: true })).toHaveCount(0);
   await page.getByLabel('Text API key', { exact: true }).fill('synthetic-text-private');
   await page.getByLabel('Transcription provider', { exact: true }).selectOption('openai');
   await page.getByLabel('Transcription API key', { exact: true }).fill('synthetic-stt-private');
@@ -85,7 +88,10 @@ test('guided Kataleptic tiers show matching voices and preserve unknown saved va
   await page.getByLabel('Realtime voice', { exact: true }).selectOption('de-DE-SeraphinaMultilingualNeural');
   for (const model of ['gpt-realtime-2','gpt-realtime-2.1','gpt-realtime-2.1-mini']) {
     await engine.selectOption(model);
+    await expect(page.getByLabel('Realtime voice', { exact: true })).toHaveValue('');
+    await expect(page.getByLabel('Custom realtime voice', { exact: true })).toHaveCount(0);
     await page.getByLabel('Realtime voice', { exact: true }).selectOption('marin');
+    await fillCatalog(page, 'Realtime voice', 'old-family-custom-voice');
     await expect(page.getByLabel('Speech voice', { exact: true })).toHaveCount(0);
     await expect(page.getByLabel('Summary language model', { exact: true })).toBeVisible();
   }
