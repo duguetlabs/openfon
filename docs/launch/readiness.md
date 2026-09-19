@@ -73,8 +73,16 @@ speech acceptance remains pending; see [configuration and rollout](component-byo
 
 ### Independent summary configuration
 
-Migration 0023 and the separate workspace Call summaries settings require staging
-migration/deployment authorization. The existing staging release above has not
-changed. Before production rollout, verify a completed call with the selected
-summary provider and confirm its saved summary; local synthetic routing tests
-alone do not establish live-provider acceptance.
+Migration 0023 and independent Call summaries settings are deployed to staging
+at application release `d0ddf750bedadb015c9f88bbfe565ba8cf692ac7`
+(2026-09-19), version `37311060-a7bc-4356-9e00-c5da504995e0`, at 100%.
+This supersedes the component-BYOK staging release recorded above. The fresh
+backup restored successfully; rehearsal preserved all existing rows and columns.
+Remote integrity/FK checks, deployment bindings, health, exact built HTML/JS/CSS,
+and unauthenticated summary-route rejection passed. No summary settings were
+created: existing calls retain compatibility behavior until the owner chooses
+independent summaries. Production is unchanged.
+
+Before production rollout, verify a completed call with the selected summary
+provider and confirm its saved summary; deployment verification and synthetic
+routing tests do not establish live-provider acceptance.
