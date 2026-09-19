@@ -107,6 +107,7 @@ test('one pending create admits one POST and one persisted id with confirmed no-
 for (const draft of ['Newer name', 'Created profile']) {
   test(`create acknowledgement preserves later name revision and assistant draft (${draft})`, async ({ page }) => {
     const { path } = await setup(page);
+    await page.getByRole('radio', { name: /^Pipeline/ }).check();
     await page.getByLabel('Assistant text model override', { exact: true }).fill('captured-model');
     const gate = await hold(page, request => matches(request, 'POST', path));
     try {

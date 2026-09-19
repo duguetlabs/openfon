@@ -101,7 +101,8 @@ test('guided Kataleptic tiers show matching voices and preserve unknown saved va
     await page.getByLabel('Realtime voice', { exact: true }).selectOption('marin');
     await fillCatalog(page, 'Realtime voice', 'old-family-custom-voice');
     await expect(page.getByLabel('Speech voice', { exact: true })).toHaveCount(0);
-    await expect(page.getByLabel('Summary language model', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Summary language model', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Configure call summaries in workspace settings →' })).toBeVisible();
   }
   await fillCatalog(page, 'Realtime voice', 'future-voice');
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();

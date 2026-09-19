@@ -1,3 +1,4 @@
+import { loadSummaryLlm } from './summary-settings';
 import { RealtimeClosingGuard } from './call-closing';
 import { normalizeCallerPhone } from './contact';
 import { RealtimeOutputBudget, RealtimeAudioQueue, RealtimeOutputError, RealtimeAudioReceipts, MAX_UNRECEIVED_AUDIO_BYTES } from './realtime-output';
@@ -2199,7 +2200,7 @@ export class CallSession implements DurableObject {
           .slice(1)
           .map((m) => `${m.role === 'user' ? 'Caller' : 'Agent'}: ${m.content}`)
           .join('\n');
-        const llm = resolveLlm(this.env, this.settings);
+        const llm = await loadSummaryLlm(this.env, call.business_id, this.settings);
         const raw = await chatComplete(
           llm,
           [

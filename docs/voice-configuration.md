@@ -21,7 +21,7 @@ your account. It does not rank models by measured latency or call quality.
 | Assistant choice | Technology behind the conversation | What you choose in OpenFon | Components managed by the voice provider |
 | --- | --- | --- | --- |
 | **Standard** — `kataleptic-realtime` | Whisper speech recognition → chat model → Piper speech | Language, instructions, an automatic or explicit Piper voice; use “Standard with a chosen chat model” to select another chat model ID | Streaming recognition, synthesis and turn handling are combined by Kataleptic |
-| **HD** — `kataleptic-realtime-hd` | Azure Voice Live through Kataleptic | Language, instructions and Azure neural voice | Recognition, conversation model and speech are managed by the HD backend; the summary model field does not replace its conversation model |
+| **HD** — `kataleptic-realtime-hd` | Azure Voice Live through Kataleptic | Language, instructions and Azure neural voice | Recognition, conversation model and speech are managed by the HD backend; the workspace summary model does not replace its conversation model |
 | **Native** — `gpt-realtime-2` | Native speech-to-speech model through Azure AI Foundry and Kataleptic | Model tier, language, instructions and a supported native voice | Conversation reasoning and speech generation belong to the integrated model |
 | **Native** — `gpt-realtime-2.1` | Another native speech-to-speech generation through the same gateway | Model tier, language, instructions and a supported native voice | Same integration boundaries as Native 2; a newer ID is not a guarantee of better behavior for your calls |
 | **Native Mini** — `gpt-realtime-2.1-mini` | Native Mini speech-to-speech tier through the same gateway | Model tier, language, instructions and a supported native voice | Same integration boundaries; compare cost and behavior using your own calls |
@@ -39,11 +39,35 @@ also be wrong. A transcript alone is not an exact record of what a caller heard.
 | Component | Its job | Configuration | When it is used |
 | --- | --- | --- | --- |
 | **Transcription / STT** | Convert the caller's recorded speech into text | Workspace transcription provider, base URL, model and separate key | Custom Pipeline microphone input; realtime uses its own recognition path |
-| **Language model / LLM** | Produce replies from instructions, caller text and knowledge | Workspace text provider, base URL, model and key; optional assistant model override | Pipeline replies and call summaries |
+| **Language model / LLM** | Produce replies from instructions, caller text and knowledge | Workspace text provider, base URL, model and key; optional assistant model override | Pipeline conversational replies |
 | **Speech synthesis / TTS** | Convert a reply into audible speech | Workspace speech provider, endpoint, model where applicable and separate key; assistant voice | Pipeline output; browser speech is a keyless alternative |
 | **Realtime conversation model** | Conduct a streaming voice conversation | Workspace realtime provider, WebSocket endpoint and key; assistant realtime model and voice | Realtime calls, including the named Kataleptic tiers |
-| **Summary language model** | Produce the saved post-call summary | The workspace text configuration and optional assistant text-model override | Also used after realtime calls; it does not change the realtime conversation brain |
+| **Summary model** | Produce the saved post-call summary | Settings → Call summaries: workspace text provider or separate provider, model and key | Shared across assistants and engines; independent of voice profiles after leaving compatibility mode |
 | **Language, personality and instructions** | Set the opening language, role and business behavior | Assistant editor, plus attached knowledge | Both architectures; these settings cannot turn an unsupported model or voice into a supported one |
+
+### Call summaries are workspace settings
+
+Use **Settings → Call summaries** to choose the post-call model. It is separate
+from voice settings and works after both Pipeline and Realtime calls:
+
+- **Workspace text provider:** use the saved text endpoint/key, with a dedicated
+  summary model or the workspace text-model default. Assistant model overrides
+  do not apply. Changing the Pipeline reply model does not change a dedicated
+  summary model.
+- **Separate provider:** choose Kataleptic, OpenAI, OpenRouter or a custom
+  OpenAI-compatible endpoint and supply its own key and model. Even a matching
+  instance endpoint requires a separate key in this mode. To remove that key,
+  switch to Workspace text provider and save.
+- **Keep existing behavior (compatibility):** the initial setting preserves
+  existing assistant-specific text-model routing for summaries. Select either
+  option above to decouple it. Existing voice profiles and presets are not
+  rewritten; there is no new per-assistant summary override.
+
+The summary configuration is read when the call is finalized, including after
+session recovery. Changing it can affect a call already in progress. Pipeline's
+**Language model** remains in the voice editor for conversational replies;
+Realtime has no summary-model field in its voice settings. The search input
+above a long model dropdown only filters that dropdown's suggestions.
 
 ### Custom Pipeline and independent BYOK
 
@@ -122,4 +146,5 @@ The text connection check verifies saved text access only; it does not test voic
 - [Realtime voice catalog](https://api.kataleptic.com/v1/realtime/voices)
 - [Provider/channel compatibility](providers.md) and [direct realtime setup](realtime-providers.md)
 - [Component BYOK migration and rollback](launch/component-byok.md): migration
-  **0022** must precede the Worker that reads workspace speech settings.
+  **0022** must precede the Worker that reads workspace speech settings;
+  **0023** is required for independent call-summary settings.

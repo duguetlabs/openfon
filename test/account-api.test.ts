@@ -26,7 +26,7 @@ beforeEach(async ({ task }) => {
   else if (task.name.startsWith('exports historical owned data')) {
     applyMigrations(db, 1, 15);
     // Retain pre-credential-barrier rows while using the current export schema.
-    applyMigrations(db, 22, 22);
+    applyMigrations(db, 22, 23);
   }
   else applyMigrations(db);
   env = { ...fakeEnv(), DB: db as unknown as D1Database };
@@ -380,7 +380,7 @@ describe('account self service', () => {
     db.database.prepare('INSERT INTO knowledge_collections (id,business_id,name) VALUES (?,?,?)').run('large', 'biz-owner', 'Large notes');
     const insert = db.database.prepare('INSERT INTO knowledge_items (id,business_id,collection_id,kind,content) VALUES (?,?,?, ?,?)');
     for (let i = 0; i < 5; i++) insert.run(`large-${i}`, 'biz-owner', 'large', 'note', 'x'.repeat(1024 * 1024));
-    applyMigrations(db, 13, 13); applyMigrations(db, 22, 22);
+    applyMigrations(db, 13, 13); applyMigrations(db, 22, 23);
     db.database.function('json_object', { varargs: true }, () => { throw new Error('Rejected exports must not construct JSON'); });
     const response = await call('/api/me/account/export');
     expect(response.status).toBe(413);

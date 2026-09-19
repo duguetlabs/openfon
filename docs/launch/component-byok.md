@@ -58,3 +58,20 @@ bounds, current-schema migration, request cancellation, concurrency, exports,
 and actual Chrome/Worker configuration. They do not establish paid provider,
 physical microphone/speaker, language-quality or PSTN acceptance. Test the saved
 provider configuration with an actual call before enabling it for callers.
+
+## Independent call summaries (0023)
+
+Apply **0023_call_summaries.sql before deploying the summary-settings Worker**.
+It adds a workspace-owned table with cascading account deletion; no existing
+assistant, preset, provider or credential rows are rewritten. An absent row
+retains compatibility behavior. The new Settings → Call summaries section can
+select the workspace text provider/model or a separate endpoint/model/key.
+Explicit summary keys never inherit another component's or the instance's key.
+Exports include the summary mode and model, excluding endpoint, key and revision.
+
+Back up and verify restoration before a separately authorized remote migration.
+Before rolling back to a Worker without 0023 support, return each configured
+workspace to compatibility mode or pause calls: an old Worker ignores the new
+selection and uses assistant text settings for summaries. Keep the additive table
+during rollback. Local SQLite rehearsal and synthetic browser checks do not prove
+live summary-provider acceptance. Staging and production rollout remain pending.

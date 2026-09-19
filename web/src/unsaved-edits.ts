@@ -21,16 +21,22 @@ export function useUnsavedEdits(dirty: boolean): () => void {
     guards.add(current);
     return () => { guards.delete(current); };
   }, []);
-  const blocker = useBlocker(useCallback(() => guard.current.dirty && !guard.current.approved, []));
+  return () => { guard.current.dirty = false; guard.current.approved = false; };
+}
+
+// React Router supports one active navigation blocker. Register it once at the
+// app root and consult every mounted editor, including independently saved cards.
+export function useUnsavedNavigationGuard(): void {
+  const hasPending = useCallback(() => [...guards].some(guard => guard.dirty && !guard.approved), []);
+  const blocker = useBlocker(hasPending);
   useEffect(() => {
     if (blocker.state !== 'blocked') return;
     if (window.confirm(message)) blocker.proceed();
     else blocker.reset();
   }, [blocker]);
   useBeforeUnload(useCallback((event) => {
-    if (!guard.current.dirty || guard.current.approved) return;
+    if (!hasPending()) return;
     event.preventDefault();
     event.returnValue = '';
-  }, []));
-  return () => { guard.current.dirty = false; guard.current.approved = false; };
+  }, [hasPending]));
 }

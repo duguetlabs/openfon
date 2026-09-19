@@ -2573,7 +2573,7 @@ describe('finalization duration on SQLite', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-12T12:01:00Z'));
     db = new SqliteD1();
-    applyMigrations(db, 1, 9);
+    applyMigrations(db, 1, 9); applyMigrations(db, 23, 23);
     db.exec(`INSERT INTO users (id,email,password_hash) VALUES ('duration-user','duration@test.invalid','hash');
       INSERT INTO businesses (id,user_id,slug,name) VALUES ('biz-1','duration-user','duration','Duration');`);
   });
@@ -2626,6 +2626,21 @@ describe('finalization duration on SQLite', () => {
     Object.assign(session, { history: [{ role: 'system', content: 'Receptionist' }, { role: 'user', content: 'Please call tomorrow' }, { role: 'assistant', content: 'Certainly' }] });
     globalThis.fetch = vi.fn(async () => ({ ok: true, status: 200, headers: new Headers(), body: jsonStream({ choices: [{ message: { content: JSON.stringify({ summary: 'Callback requested', intent: 'message', message: 'Please call tomorrow' }) } }] }) }) as never);
   }
+  it.each(['workspace', 'custom'])('finalizer sends summaries to the independent %s model and memoizes them', async mode => {
+    const { session } = seed('web', '2026-09-12 12:00:40');
+    conversation(session);
+    Object.assign(session, { settings: { llm_model: 'conversation-only', language: 'en' } });
+    db.database.prepare("INSERT INTO summary_settings(business_id,mode,base_url,api_key,model,revision) VALUES('biz-1',?,'https://summary.example/v1','summary-only','summary-model','r1')").run(mode);
+    if (mode === 'workspace') db.exec("INSERT INTO provider_settings(business_id,llm_base_url,llm_api_key) VALUES('biz-1','https://text.example/v1','workspace-only')");
+    await session.alarm();
+    expect(globalThis.fetch).toHaveBeenCalledWith(mode === 'custom' ? 'https://summary.example/v1/chat/completions' : 'https://text.example/v1/chat/completions', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: `Bearer ${mode === 'custom' ? 'summary-only' : 'workspace-only'}` }),
+      body: expect.stringContaining('"model":"summary-model"'),
+    }));
+    expect(details()).toMatchObject({ status: 'completed', summary: 'Callback requested' });
+    await session.alarm();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
   const details = () => db.database.prepare('SELECT * FROM calls WHERE id=?').get('call-1');
   const failedDetails = { status: 'failed', outcome: 'failed', ended_at: '2026-09-12 12:00:55', failure_code: 'asterisk_socket_error', failure_message: 'Socket failed', duration_s: 15, summary: 'Callback requested', intent: 'message' };
   it.each(['before lookup', 'during summary'])('recovers failed Asterisk conversation %s without changing its verdict', async when => {
@@ -2699,7 +2714,7 @@ describe('finalization duration on SQLite', () => {
 describe('persisted transcript byte budget on SQLite', () => {
   let db: SqliteD1;
   beforeEach(() => {
-    db = new SqliteD1(); applyMigrations(db, 1, 9);
+    db = new SqliteD1(); applyMigrations(db, 1, 9); applyMigrations(db, 23, 23);
     db.exec(`INSERT INTO users (id,email,password_hash) VALUES ('u','budget@test.invalid','hash');
       INSERT INTO businesses (id,user_id,slug,name) VALUES ('biz-1','u','budget','Budget');
       INSERT INTO agent_settings (business_id) VALUES ('biz-1');
