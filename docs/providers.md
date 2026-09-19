@@ -4,6 +4,11 @@ Evidence snapshot: **2026-09-12**, consolidated provider implementation at `486b
 
 Kataleptic is the default and is operated by the OpenFon founder. It is an optional paid service with a separate account. MIT covers OpenFon’s code, not inference, hosting or telephone service. Selecting a model through Kataleptic still uses Kataleptic; it is not an independent provider route.
 
+For current guided engine choices, technologies and configurable components, see
+[Choosing a conversation engine, models and voices](voice-configuration.md).
+Workspace synthesis BYOK was added in migration 0022; dated evidence below remains
+attributed to its original revision.
+
 ## AI capabilities
 
 | Capability / recipe | Engine and channel | Configuration | Verification / limitation |
@@ -11,8 +16,9 @@ Kataleptic is the default and is operated by the OpenFon founder. It is an optio
 | Kataleptic text + transcription | Pipeline, browser | `DEFAULT_LLM_*` and `DEFAULT_STT_*`; shipped models `llama-3.3-70b` / `whisper-large-v3-turbo` | Real llama-3.3-70b text preflight and call summary passed; pipeline transcription remains unverified. Earlier catalog 403 did not establish endpoint access. |
 | Custom chat completions endpoint | Text replies and summaries | Business text URL, model and matching key | Implemented and synthetic-tested; does not configure transcription, synthesis or realtime. No universal provider compatibility claim. |
 | Custom transcription endpoint | Pipeline microphone input | Workspace STT URL/model/key or instance defaults | Must implement the app’s `/audio/transcriptions` contract; verify audio formats/authentication with your service. |
-| Browser speech synthesis | Pipeline browser output | `DEFAULT_TTS_PROVIDER=browser` | Implemented; voices/device behavior vary. Cannot supply telephone audio. |
-| Azure speech synthesis | Pipeline output and current carrier greeting | Azure key, region and voice | Implemented; requires real audio verification with your account. |
+| Browser speech synthesis | Pipeline browser output | Workspace Browser speech selection, or operator browser default | Implemented; voices/device behavior vary. Cannot supply telephone audio. |
+| Azure speech synthesis | Workspace pipeline output; operator configuration still supplies applicable realtime/carrier greetings | Separate workspace speech key, resource-region endpoint and assistant voice; operator defaults remain available | Implemented; requires real audio verification with your account. |
+| OpenAI-compatible speech synthesis | Pipeline browser output | Workspace speech endpoint, model and separate key; assistant voice | Implemented in migration 0022; protocol compatibility and real audio require account-specific verification. |
 | Kataleptic realtime gateway | Realtime browser; experimental Telnyx | Instance `REALTIME_*`, business realtime model | Real browser audio captured using `gpt-realtime-2` and provider-default voice; known fixture/contact failures retained. Default model remains `llama-3.3-70b`; override it for this recipe. |
 | Direct OpenAI realtime | Independent realtime; browser and experimental telephone | Workspace provider, own realtime key, assistant model/voice; separate text key for summaries | Implemented; direct Authorization upgrade, native greeting, interruption, tools and persistence pass synthetic workerd tests without Kataleptic credentials. Live OpenAI access remains unverified. |
 | Groq, Ollama, vLLM or other custom services | Capability-specific candidates | Custom endpoint only where the protocol matches | Experimental until the complete intended workflow passes. A text-only server does not supply voice. |
@@ -40,7 +46,7 @@ The presets owner checked official [OpenRouter setup](https://openrouter.ai/docs
 ### Speech and realtime choices
 
 - **Pipeline transcription:** instance default, direct OpenAI (`https://api.openai.com/v1`, `whisper-1`) with its own key, or a custom `/audio/transcriptions` endpoint with its own URL/key/model.
-- **Pipeline synthesis:** remains operator-selected browser or Azure. OpenRouter/Hugging Face text presets do not establish speech support. Browser synthesis cannot provide telephone audio.
+- **Pipeline synthesis:** workspace instance default, browser speech, Azure Speech, OpenAI speech, or a compatible custom `/audio/speech` endpoint. Azure/OpenAI/custom selections use their own speech key. Apply migration `0022_workspace_speech.sql` before deploying the matching Worker; see the [BYOK rollout and rollback guide](launch/component-byok.md). Text presets do not establish speech support. Browser synthesis cannot provide telephone audio.
 - **Realtime:** instance default, explicit Kataleptic, direct OpenAI, or custom. Direct OpenAI pins `wss://api.openai.com/v1/realtime` and requires its own key. Custom requires its own public secure WebSocket URL/key and uses an experimental OpenAI GA protocol adapter; arbitrary realtime APIs are not interchangeable.
 - **Assistant realtime model and voice:** remain assistant settings. Switching to OpenAI clears known gateway presets, while arbitrary custom overrides are preserved. Check those overrides manually. The direct adapter uses `gpt-realtime` when the realtime model is blank and native provider audio for its greeting; Azure and pipeline STT are not needed for that direct call.
 
@@ -50,7 +56,7 @@ For a completely independent direct OpenAI conversation, configure **both** Open
 
 Keys are write-only through the API; settings responses expose configured flags rather than values. A blank or omitted key preserves the saved key at the same destination. Changing the destination or protocol requires a replacement key or an explicit clear action. Do not assume that selecting a new provider safely reuses the previous provider’s key.
 
-The existing text API uses `baseUrl`, `apiKey`, `clearApiKey`, with a new `model` field. Speech settings use `stt_provider`, `stt_base_url`, `stt_model`, `stt_api_key` and `realtime_provider`, `realtime_base_url`, `realtime_api_key`. Speech key removal accepts a null key or the corresponding `stt_clear_api_key` / `realtime_clear_api_key` flag. The operator-selected `tts_provider` is reported separately. Prefer the settings UI for normal setup.
+The existing text API uses `baseUrl`, `apiKey`, `clearApiKey`, with a new `model` field. Speech settings use `stt_provider`, `stt_base_url`, `stt_model`, `stt_api_key` and `realtime_provider`, `realtime_base_url`, `realtime_api_key`. Speech key removal accepts a null key or the corresponding `stt_clear_api_key` / `realtime_clear_api_key` flag. Synthesis settings use `tts_provider`, `tts_base_url`, `tts_model`, and `tts_api_key`; `tts_provider` reports the saved workspace selection and `effective_tts_provider` reports the resolved provider. Explicit speech providers require a key: select instance/browser synthesis and save to remove the workspace synthesis key. Prefer the settings UI for normal setup.
 
 ### Consolidated evidence
 
@@ -75,7 +81,7 @@ Record release commit, date, endpoint origin (no credentials), provider/adapter 
 
 For an **independent provider** claim, remove all Kataleptic credentials and block its endpoints in the test environment. Verify the voice catalog, greeting, transcription, response, summary, errors and saved results. Note any unsupported capability explicitly. Store a sanitized report alongside the [pilot evaluation](launch/pilot-evaluation.md); a mock transport or successful dropdown selection is insufficient.
 
-Engine presets now store behavior only, validate against the currently selected realtime provider before application, and never copy workspace credentials. Migration0016 erases obsolete legacy profile URL/key snapshots while preserving current workspace credentials. Its [compatibility barrier](migration-compatibility.md) refuses inconsistent legacy/provider rows and blocks unsafe old-Worker writes after the scrub. PBX operators must follow the [migration0014 rotation instructions](asterisk.md#configure-an-existing-installation); prior fast hashes no longer authenticate. These migrations have not changed staging or production.
+Engine presets now store behavior only, validate against the currently selected realtime provider before application, and never copy workspace credentials. Migration0016 erases obsolete legacy profile URL/key snapshots while preserving current workspace credentials. Its [compatibility barrier](migration-compatibility.md) refuses inconsistent legacy/provider rows and blocks unsafe old-Worker writes after the scrub. PBX operators must follow the [migration0014 rotation instructions](asterisk.md#configure-an-existing-installation); prior fast hashes no longer authenticate. Those compatibility details describe the migrations themselves; deployment status belongs in the [current release readiness](launch/readiness.md), rather than this historical evidence snapshot.
 
 Engine preset storage and compatibility reconciliation now have [workspace quotas and historical recovery limits](preset-limits.md), introduced by migration0017.
 

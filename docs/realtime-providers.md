@@ -5,8 +5,11 @@ independent transport: selecting an OpenAI model on Kataleptic still uses Katale
 
 ## Configuration
 
-Apply migration `0010_provider_capabilities.sql` before deploying this code. In
-workspace provider settings, choose OpenAI realtime and save its own API key.
+Migration `0010_provider_capabilities.sql` introduced workspace realtime settings.
+Current releases also require migration `0022_workspace_speech.sql`; apply pending
+migrations before deploying the matching Worker. See the [component guide](voice-configuration.md)
+and [migration/rollback instructions](launch/component-byok.md). In workspace
+provider settings, choose OpenAI realtime and save its own API key.
 Leave the assistant realtime model empty for `gpt-realtime`, or select a supported
 OpenAI realtime model. Use a native OpenAI voice such as `marin`; empty selects the
 provider default. Select the OpenAI text preset and supply its key/model as well:

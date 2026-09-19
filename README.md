@@ -38,6 +38,9 @@ The current launch branch adds a public website and a complete browser-call stud
 
 Follow the [quickstart](docs/quickstart.md) to deploy into **your own Cloudflare account**, configure a provider, and complete a private browser call before publishing a link. You need Node 22.13+, a Cloudflare account and valid provider access. Setup time and usage costs depend on your configuration; a working deployment alone does not verify voice.
 
+For the conversation-engine comparison, model/voice choices and independent
+component keys, see [the voice configuration guide](docs/voice-configuration.md).
+
 For local development and contributions, see [CONTRIBUTING.md](CONTRIBUTING.md). For a supervised trial, use the [pilot guide](docs/launch/pilot.md), [evaluation template](docs/launch/pilot-evaluation.md) and [cost worksheet](docs/launch/costs.md).
 
 ### Configuration

@@ -65,6 +65,8 @@ acceptance. An earlier v2 run completed the protocol successfully but its final
 transcript-export query failed on a fixture column name; that failure remains
 separate from the subsequent successful calls.
 
-Component BYOK adds migration 0022 and independent workspace speech settings.
-Remote migration/deployment and live custom-provider speech acceptance remain
-pending; see [configuration and rollout](component-byok.md).
+Component BYOK and migration 0022 are deployed to staging at application release
+`079f3ee` (2026-09-19). A fresh staging backup restored successfully; rehearsal
+preserved existing rows, and remote integrity, deployment bindings, health and
+built assets passed verification. Production is unchanged. Live custom-provider
+speech acceptance remains pending; see [configuration and rollout](component-byok.md).
