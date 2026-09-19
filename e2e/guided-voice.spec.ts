@@ -18,6 +18,11 @@ test('custom pipeline saves separate BYOK components and guided voices without e
   await page.getByLabel('Text API key', { exact: true }).fill('synthetic-text-private');
   await page.getByLabel('Transcription provider', { exact: true }).selectOption('openai');
   await page.getByLabel('Transcription API key', { exact: true }).fill('synthetic-stt-private');
+  await page.getByLabel('Speech synthesis provider', { exact: true }).selectOption('azure');
+  await expect(page.getByLabel('Speech synthesis base URL', { exact: true })).toHaveValue('');
+  await page.getByLabel('Speech synthesis API key', { exact: true }).fill('synthetic-azure-key');
+  await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Speech URL');
   await page.getByLabel('Speech synthesis provider', { exact: true }).selectOption('openai');
   await expect(page.getByLabel('Speech synthesis model', { exact: true })).toHaveValue('gpt-4o-mini-tts');
   await page.getByLabel('Speech synthesis API key', { exact: true }).fill('synthetic-speech-private');
