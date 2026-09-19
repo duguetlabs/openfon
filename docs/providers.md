@@ -6,6 +6,11 @@ Kataleptic is the default and is operated by the OpenFon founder. It is an optio
 
 For current guided engine choices, technologies and configurable components, see
 [Choosing a conversation engine, models and voices](voice-configuration.md).
+Independent call summaries use **Settings → Call summaries** (migration 0023):
+inherit the workspace text provider or select a separate model/endpoint/key.
+Compatibility mode preserves existing assistant-specific summary routing until
+changed. See [voice configuration](voice-configuration.md#call-summaries-are-workspace-settings).
+
 Workspace synthesis BYOK was added in migration 0022; dated evidence below remains
 attributed to its original revision.
 

@@ -1,3 +1,4 @@
+import { registerSummaryApi } from './summary-settings';
 import { providerCatalog } from './provider-catalog';
 import { checkedPresetWriteSql, checkedPresetWrite, checkedPresetSourceSql, checkedPresetSource } from './preset-write-snapshot';
 import { CHECKED_ASSISTANT_SNAPSHOT_SQL, checkedAssistantSnapshot } from './assistant-write-snapshot';
@@ -1053,6 +1054,7 @@ function normalizedCallTimestamp(raw: string): NormalizedTimestamp | null {
 }
 
 export function registerStudioApi(app: StudioApp): void {
+  registerSummaryApi(app);
   app.get('/api/me/bootstrap', async (c) => {
     const userId = c.get('userId');
     const account = await c.env.DB.prepare('SELECT id, email, created_at FROM users WHERE id = ?')

@@ -79,7 +79,7 @@ export default function ProviderSettings({ onSaved }: { onSaved: () => Promise<v
     {refreshPending && <Button type="button" disabled={busy} onClick={() => void run(async () => { setMessage(savedMessage); await refreshAfterSave(); })}>Refresh saved provider settings</Button>}
     <form onSubmit={e => { e.preventDefault(); if (!busy && !refreshPending) void run(save); }}>
       <fieldset disabled={busy || refreshPending} className="min-w-0 space-y-4">
-        <Card className="space-y-4"><h3 className="font-semibold">Text generation & call summaries</h3>
+        <Card className="space-y-4"><h3 className="font-semibold">Text generation (Pipeline replies)</h3>
           <label className="block text-sm">Text provider preset<select aria-label="Text provider preset" className={`${inputClassSm} w-full min-w-0 max-w-full`} value={preset} onChange={e => {
             const id = e.target.value; setPreset(id);
             const p = saved.presets.find(x => x.id === id)!;

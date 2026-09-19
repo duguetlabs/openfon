@@ -70,3 +70,11 @@ Component BYOK and migration 0022 are deployed to staging at application release
 preserved existing rows, and remote integrity, deployment bindings, health and
 built assets passed verification. Production is unchanged. Live custom-provider
 speech acceptance remains pending; see [configuration and rollout](component-byok.md).
+
+### Independent summary configuration
+
+Migration 0023 and the separate workspace Call summaries settings require staging
+migration/deployment authorization. The existing staging release above has not
+changed. Before production rollout, verify a completed call with the selected
+summary provider and confirm its saved summary; local synthetic routing tests
+alone do not establish live-provider acceptance.

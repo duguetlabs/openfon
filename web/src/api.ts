@@ -201,6 +201,14 @@ export interface KnowledgeItem {
   activated_at: string | null;
 }
 
+export interface SummaryView {
+  mode: 'legacy' | 'workspace' | 'custom';
+  baseUrl: string;
+  model: string;
+  apiKeyConfigured: boolean;
+  revision: string | null;
+}
+
 export interface ProviderUpdate {
   baseUrl?: string;
   model?: string;
@@ -351,6 +359,9 @@ export const api = {
   attachKnowledgeCollection: (assistantId: string, collectionId: string) => req<{ ok: true }>('POST', `/api/me/assistants/${assistantId}/knowledge-collections/${collectionId}`, {}),
   detachKnowledgeCollection: (assistantId: string, collectionId: string) => req<{ ok: true }>('DELETE', `/api/me/assistants/${assistantId}/knowledge-collections/${collectionId}`),
   providerCatalog: () => req<{ models: { id: string; label: string; kind: 'text' | 'transcription' | 'realtime' }[]; voices: VoiceCatalog; live: boolean }>('GET', '/api/me/provider/catalog'),
+  summarySettings: () => req<SummaryView>('GET', '/api/me/call-summaries'),
+  updateSummarySettings: (body: Pick<SummaryView, 'mode' | 'baseUrl' | 'model' | 'revision'> & { apiKey: string }) =>
+    req<SummaryView>('PUT', '/api/me/call-summaries', body),
   provider: () => req<ProviderView>('GET', '/api/me/provider'),
   updateProvider: (body: ProviderUpdate) =>
     req<{ ok: true; apiKeyConfigured: boolean; workspaceApiKeyConfigured: boolean }>('PUT', '/api/me/provider', body),

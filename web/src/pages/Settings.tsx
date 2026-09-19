@@ -1,3 +1,4 @@
+import SummarySettings from './SummarySettings';
 import ProviderSettings from './ProviderSettings';
 import { useEffect, useRef, useState } from 'react';
 import { api, type Agent, type Business, type EngineProfile, type VoiceCatalog } from '../api';
@@ -360,6 +361,7 @@ export default function Settings() {
         <div className="callline-accent mt-3 w-16" />
       </div>
       <ProviderSettings onSaved={refresh} />
+      <SummarySettings />
       <section className="rise">
         <SectionTitle sub="The facts your agent answers from.">Business</SectionTitle>
         <Card className="space-y-4">
@@ -678,7 +680,7 @@ export default function Settings() {
               </label>
             )}
           </div>
-          <Field label="Assistant text model override" value={agent.llm_model} onChange={e => setA({ llm_model: e.target.value })} hint="Blank uses the workspace text model above." />
+          {agent.engine === 'pipeline' && <Field label="Assistant text model override" value={agent.llm_model} onChange={e => setA({ llm_model: e.target.value })} hint="Pipeline replies only when independent summaries are configured. Blank uses the workspace text model above." />}
 
         </Card>
       </section>
