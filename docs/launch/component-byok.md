@@ -1,5 +1,8 @@
 # Guided voice configuration and component keys
 
+For the technology comparison, component settings and voice/language guidance, see
+[Choosing a conversation engine, models and voices](../voice-configuration.md).
+
 The assistant editor offers Kataleptic Standard (Whisper → chat → Piper), HD
 (Azure Voice Live), native GPT Realtime tiers, and Custom Pipeline. Available
 choices follow the workspace realtime provider. The text model used to summarize
