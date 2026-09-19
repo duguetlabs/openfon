@@ -3009,6 +3009,20 @@ describe('realtime output cumulative and receipt bounds', () => {
   }
   function receipts(caller: FakeSocket) { return caller.messages().filter(m => m.type === 'audio_receipt'); }
 
+  it('records a safe output category while withholding thrown transport details', async () => {
+    const { caller, up, callUpdates } = await connected();
+    const send = caller.send.bind(caller);
+    caller.send = (data: string | ArrayBuffer) => {
+      if (data instanceof ArrayBuffer) throw new Error('private-transport-token');
+      send(data);
+    };
+    delta(up, 'AAAAAA=='); await flush(100);
+    expect(JSON.stringify(callUpdates())).toContain('Realtime audio output failed (transport)');
+    expect(JSON.stringify(callUpdates())).not.toContain('private-transport-token');
+    expect(JSON.stringify(caller.messages())).not.toContain('transport');
+    expect(up.closed).not.toBeNull();
+  });
+
   it('closing guard: tool-only ending generates one farewell before permitting playback completion', async () => {
     const { caller, up } = await connected();
     up.receive({ type: 'response.created', response: { id: 'tool-response' } });
@@ -3206,6 +3220,8 @@ describe('realtime output cumulative and receipt bounds', () => {
     await vi.advanceTimersByTimeAsync(10001);
     expect(up.closed).not.toBeNull();
     expect(callUpdates().some(w => w.args[0] === 'failed')).toBe(true);
+    expect(JSON.stringify(callUpdates())).toContain('receipt_timeout');
+    expect(JSON.stringify(caller.messages())).not.toContain('receipt_timeout');
   });
 
   it.each(['wrong', 'out-of-order', 'replayed', 'expired'])('rejects %s receipt identity without returning credit', async kind => {
@@ -3223,6 +3239,7 @@ describe('realtime output cumulative and receipt bounds', () => {
       caller.receive({ type: 'audio_received', id }); await flush(100);
       expect(up.closed).not.toBeNull();
       expect(JSON.stringify(log.mock.calls)).not.toContain('private-reflected-value');
+      expect(JSON.stringify(log.mock.calls)).toContain(kind === 'expired' ? 'receipt_timeout' : 'receipt_identity');
     } finally { log.mockRestore(); }
   });
 

@@ -11,6 +11,7 @@ This release is not approval to deploy production or claim live telephone readin
 
 - [ ] Rehearse a fresh installation and production-shaped migration/preservation/recovery using separate disposable resources. A D1 backup does not restore Durable Object state. See [migration compatibility](../migration-compatibility.md).
 - [ ] Verify authenticated setup and an actual microphone conversation against an independently configured provider. Synthetic PCM and browser graph tests do not prove physical audio or provider behavior.
+- [ ] Resolve reported restaurant-background false interruptions and failed endings on the smart-glasses microphone. Generic historical output errors do not identify the failed guard; new call records distinguish receipt, queue, rate and response failures.
 - [ ] Verify interruption follow-up in an audible real-provider call: old playback stops, the matching new answer completes, and only then does the next prompt begin. Strict provider-explicit natural-VAD causality is not established by the existing recordings.
 - [ ] Complete a consented SIP/PSTN pilot with the chosen carrier, number and spending explicitly authorized. Telnyx setup still requires the authorized account login; the existing support appeal must not be duplicated. See [pilot evaluation](pilot-evaluation.md).
 - [ ] Before a separately approved production deployment, confirm operator/hostname/provider configuration, take a fresh backup, verify rollback/recovery, and explicitly enable only accepted routes. See [production preflight](production-preflight.md).

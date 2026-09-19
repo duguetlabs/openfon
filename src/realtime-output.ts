@@ -11,8 +11,18 @@ export const MAX_REALTIME_RESPONSE_BYTES = 60 * REALTIME_PCM_BYTES_PER_SECOND;
 export const REALTIME_AUDIO_EVENT_BURST = 400;
 export const REALTIME_AUDIO_EVENTS_PER_SECOND = 100;
 
+export type RealtimeOutputFailure =
+  | 'invalid_response_id' | 'response_count' | 'audio_after_response_done' | 'audio_frame_size'
+  | 'event_rate' | 'audio_rate' | 'response_size' | 'receipt_window' | 'receipt_identity'
+  | 'receipt_timeout' | 'receiver_closed' | 'receiver_buffer' | 'queue_size' | 'queue_frames'
+  | 'invalid_audio' | 'transport';
+
 export class RealtimeOutputError extends Error {
-  constructor() { super('Realtime audio output limit exceeded or caller not receiving audio'); }
+  constructor(readonly reason: RealtimeOutputFailure = 'transport') {
+    // Fixed categories only: provider payloads, URLs and thrown socket errors
+    // must never become diagnostic text in the owner's persisted call record.
+    super(`Realtime audio output failed (${reason})`);
+  }
 }
 
 /** Constant-space admission. Charge BEFORE decoding, including empty deltas. */
@@ -26,20 +36,20 @@ export class RealtimeOutputBudget {
   constructor(now: number) { this.updatedAt = now; }
 
   reserve(encoded: string, now: number, source: object = this, responseId?: unknown): number {
-    if (responseId !== undefined && (typeof responseId !== 'string' || !responseId || responseId.length > 128)) throw new RealtimeOutputError();
+    if (responseId !== undefined && (typeof responseId !== 'string' || !responseId || responseId.length > 128)) throw new RealtimeOutputError('invalid_response_id');
     const key = responseId === undefined ? '' : responseId as string;
     let responses = this.responses.get(source);
     let response = responses?.get(key);
     if (!response) {
       // Retain bounded tombstones, so done+same ID cannot restart a response.
       // Unlabelled gateway streams use one segment per socket instead.
-      if (this.responseCount >= 256) throw new RealtimeOutputError();
+      if (this.responseCount >= 256) throw new RealtimeOutputError('response_count');
       this.responseCount++;
       if (!responses) { responses = new Map(); this.responses.set(source, responses); }
       response = { bytes: 0, done: false }; responses.set(key, response);
     }
-    if (response.done) throw new RealtimeOutputError();
-    if (typeof encoded !== 'string' || encoded.length > MAX_REALTIME_AUDIO_BASE64) throw new RealtimeOutputError();
+    if (response.done) throw new RealtimeOutputError('audio_after_response_done');
+    if (typeof encoded !== 'string' || encoded.length > MAX_REALTIME_AUDIO_BASE64) throw new RealtimeOutputError('audio_frame_size');
     // Upper bound without allocating/decoding. Padding is the only discounted
     // input; embedded whitespace is charged, so it cannot bypass admission.
     const padding = encoded.endsWith('==') ? 2 : encoded.endsWith('=') ? 1 : 0;
@@ -48,9 +58,9 @@ export class RealtimeOutputBudget {
     this.updatedAt = Math.max(this.updatedAt, now); // rollback never mints credit
     this.bytes = Math.min(REALTIME_AUDIO_BURST_BYTES, this.bytes + elapsed * REALTIME_PCM_BYTES_PER_SECOND / 1000);
     this.events = Math.min(REALTIME_AUDIO_EVENT_BURST, this.events + elapsed * REALTIME_AUDIO_EVENTS_PER_SECOND / 1000);
-    if (this.events < 1 || bytes > this.bytes || response.bytes + bytes > MAX_REALTIME_RESPONSE_BYTES) {
-      throw new RealtimeOutputError();
-    }
+    if (this.events < 1) throw new RealtimeOutputError('event_rate');
+    if (bytes > this.bytes) throw new RealtimeOutputError('audio_rate');
+    if (response.bytes + bytes > MAX_REALTIME_RESPONSE_BYTES) throw new RealtimeOutputError('response_size');
     this.events--;
     this.bytes -= bytes;
     response.bytes += bytes;
@@ -62,7 +72,7 @@ export class RealtimeOutputBudget {
     this.updatedAt = Math.max(this.updatedAt, now);
     this.bytes = Math.min(REALTIME_AUDIO_BURST_BYTES, this.bytes + elapsed * REALTIME_PCM_BYTES_PER_SECOND / 1000);
     this.events = Math.min(REALTIME_AUDIO_EVENT_BURST, this.events + elapsed * REALTIME_AUDIO_EVENTS_PER_SECOND / 1000);
-    if (this.events < 1) throw new RealtimeOutputError();
+    if (this.events < 1) throw new RealtimeOutputError('event_rate');
     this.events--;
   }
 
@@ -90,7 +100,7 @@ export class RealtimeAudioReceipts {
 
   check(bytes: number, additionalFrames = 0): void {
     if (this.bytes + bytes > MAX_UNRECEIVED_AUDIO_BYTES ||
-        this.pending.length + additionalFrames >= MAX_UNRECEIVED_AUDIO_FRAMES) throw new RealtimeOutputError();
+        this.pending.length + additionalFrames >= MAX_UNRECEIVED_AUDIO_FRAMES) throw new RealtimeOutputError('receipt_window');
   }
 
   sent(bytes: number, now: number): string {
@@ -103,9 +113,10 @@ export class RealtimeAudioReceipts {
 
   acknowledge(id: unknown, now: number): void {
     const first = this.pending[0];
-    if (typeof id !== 'string' || id.length > 64 || !first || first.id !== id || now >= first.deadline) {
-      throw new RealtimeOutputError();
+    if (typeof id !== 'string' || id.length > 64 || !first || first.id !== id) {
+      throw new RealtimeOutputError('receipt_identity');
     }
+    if (now >= first.deadline) throw new RealtimeOutputError('receipt_timeout');
     this.bytes -= first.bytes;
     this.pending.shift();
   }
@@ -126,7 +137,8 @@ export class RealtimeAudioQueue {
   constructor(now: number) { this.updatedAt = now; }
 
   check(bytes: number): void {
-    if (this.bytes + bytes > MAX_REALTIME_RESPONSE_BYTES || this.frames.length >= 4096) throw new RealtimeOutputError();
+    if (this.bytes + bytes > MAX_REALTIME_RESPONSE_BYTES) throw new RealtimeOutputError('queue_size');
+    if (this.frames.length >= 4096) throw new RealtimeOutputError('queue_frames');
   }
   push(audio: ArrayBuffer): void {
     if (!audio.byteLength) return;
