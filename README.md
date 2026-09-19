@@ -34,6 +34,8 @@ The current launch branch adds a public website and a complete browser-call stud
 - 🌍 **Multi-language** — English, German, Spanish, French out of the box
 - 🪶 **Tiny footprint** — one Cloudflare Worker + D1; usage-based infrastructure; AI and speech provider charges are separate
 
+For ready-to-adapt German and English assistant prompts, see [local business examples](docs/example-prompts.md). You can also preview and use them directly in the assistant editor.
+
 ## Self-hosting
 
 Follow the [quickstart](docs/quickstart.md) to deploy into **your own Cloudflare account**, configure a provider, and complete a private browser call before publishing a link. You need Node 22.13+, a Cloudflare account and valid provider access. Setup time and usage costs depend on your configuration; a working deployment alone does not verify voice.
