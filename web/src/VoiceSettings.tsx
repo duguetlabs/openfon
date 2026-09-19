@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type Assistant, type ProviderView } from './api';
 import { Field, inputClass } from './ui';
+import { VoicePreview } from './VoicePreview';
 
 type Option = { id: string; label: string };
 export const choices = (ids: string[]) => ids.map(id => ({ id, label: id }));
@@ -73,6 +74,7 @@ export function AssistantVoiceSettings({ assistant: a, onChange }: { assistant: 
       <p className="studio-muted">{family === 'hd' ? 'Azure Voice Live manages recognition and the conversation model. Choose an Azure voice.' : family === 'native' ? 'Native speech-to-speech. The conversation model is built in; voices are multilingual.' : kataleptic ? 'Kataleptic streams recognition, chat and Piper speech. Choose an automatic language-matched voice or pin a Piper voice.' : 'Custom realtime uses the OpenAI GA protocol. Model and voice IDs depend on your provider.'}</p>
       <CatalogSelect key={`${realtimeProvider}:${effectiveModel}`} label="Realtime voice" value={a.realtime_voice} onChange={realtime_voice => onChange({ realtime_voice })} options={family === 'hd' ? AZURE_VOICES : family === 'native' ? catalog?.voices.native || choices(['marin', 'cedar', 'alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse']) : kataleptic ? catalog?.voices.cascade || choices(['en_US-lessac-medium', 'de_DE-thorsten-medium', 'fr_FR-siwis-medium', 'es_ES-sharvard-medium']) : []} />
     </>}
+    <VoicePreview key={JSON.stringify([a.id, a.engine, a.language, a.voice, a.realtime_model, a.realtime_voice, provider])} assistant={a} browserSpeech={a.engine === 'pipeline' && speech === 'browser'} disabled={!provider} />
     {a.engine === 'pipeline' && <CatalogSelect key={provider?.baseUrl} label="Language model" value={a.llm_model} onChange={llm_model => onChange({ llm_model })} options={provider?.baseUrl?.startsWith('https://api.kataleptic.com/') ? textModels : provider?.baseUrl === 'https://api.openai.com/v1' ? choices(['gpt-4.1-mini', 'gpt-4o-mini']) : []} defaultLabel={`Workspace default${provider?.effective_text_model ? ` — ${provider.effective_text_model}` : ''}`} hint="Generates Pipeline conversational replies. Configure post-call summaries separately in workspace settings." />}
     <p className="studio-muted"><Link to="/settings#call-summaries">Configure call summaries in workspace settings →</Link></p>
     {(catalogUnavailable || (catalog && !catalog.live)) && <p className="studio-muted">Showing built-in suggestions; live Kataleptic catalog is temporarily unavailable.</p>}
