@@ -148,3 +148,26 @@ The text connection check verifies saved text access only; it does not test voic
 - [Component BYOK migration and rollback](launch/component-byok.md): migration
   **0022** must precede the Worker that reads workspace speech settings;
   **0023** is required for independent call-summary settings.
+
+## Listen before saving
+
+In an assistant’s voice settings, choose a language, engine and voice, then click
+**Preview voice**. The sample uses your current, unsaved selection. Play it again
+with the audio controls, or click **Stop preview**. Changing the language, voice or
+engine stops and discards the previous sample. Previewing does not save the draft,
+use your microphone, or create a call, transcript or recording in call history.
+
+Realtime samples come from the selected realtime model: native speech, Standard
+Piper, or HD Azure Voice Live. Pipeline samples use the workspace’s configured
+speech provider and model; Browser speech uses this device’s installed voice.
+Custom providers must support the same speech protocol used for calls. Samples
+are AI-generated and may vary in wording or delivery. They demonstrate voice
+character, not recognition quality, latency or interruption behavior in a call.
+
+Previews use saved workspace provider credentials and can incur provider charges.
+OpenFon limits previews to 50 per workspace per day and shares the Studio’s
+10-action minute limit and connection-level limits. Realtime generation has a
+25-second deadline; Pipeline synthesis has a 30-second deadline. Samples contain
+at most 20 seconds of audio. If automatic playback is blocked by your browser,
+press Play in the audio controls. A failed preview can be retried; changing or
+previewing a voice never silently switches to a different speech engine.

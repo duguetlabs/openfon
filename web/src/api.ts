@@ -321,6 +321,18 @@ async function req<T>(method: string, path: string, body?: unknown, keepalive = 
 }
 
 export const api = {
+  voicePreview: async (assistant: Assistant, signal: AbortSignal): Promise<Blob> => {
+    const { engine, language, voice, realtime_model, realtime_voice } = assistant;
+    const res = await fetch(`/api/me/assistants/${encodeURIComponent(assistant.id)}/voice-preview`, {
+      method: 'POST', signal, headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ engine, language, voice, realtime_model, realtime_voice }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null) as { error?: string } | null;
+      throw new ApiError(data?.error || 'Voice preview could not load.', res.status);
+    }
+    return res.blob();
+  },
   changePassword: (body: { currentPassword: string; newPassword: string }) => req<{ ok: true }>('POST', '/api/me/account/password', body),
   exportAccount: () => req<AccountExport>('GET', '/api/me/account/export'),
   deleteAccount: (body: { currentPassword: string; confirmation: 'DELETE' }) => req<{ ok: true }>('DELETE', '/api/me/account', body),

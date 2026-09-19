@@ -1,3 +1,5 @@
+import { generateVoicePreview, PREVIEW_TEXT } from './voice-preview';
+import { resolveRealtime } from './realtime-providers';
 import { registerSummaryApi } from './summary-settings';
 import { providerCatalog } from './provider-catalog';
 import { checkedPresetWriteSql, checkedPresetWrite, checkedPresetSourceSql, checkedPresetSource } from './preset-write-snapshot';
@@ -1960,6 +1962,47 @@ export function registerStudioApi(app: StudioApp): void {
       } as ProviderSettings),
       workspaceApiKeyConfigured: Boolean(apiKey),
     });
+  });
+
+  app.post('/api/me/assistants/:assistantId/voice-preview', async (c) => {
+    const assistant = await ownedAssistant(c.env, c.get('userId'), c.req.param('assistantId'));
+    if (!assistant) return c.json({ error: 'Assistant not found.' }, 404);
+    const body = await readWorkspaceBody<Record<string, unknown>>(c.req);
+    const fields = ['engine', 'language', 'voice', 'realtime_model', 'realtime_voice'] as const;
+    if (Object.keys(body).some(key => !fields.includes(key as typeof fields[number])) ||
+        fields.some(key => typeof body[key] !== 'string' || (body[key] as string).length > 200) ||
+        !['pipeline', 'realtime'].includes(body.engine as string) ||
+        !Object.hasOwn(PREVIEW_TEXT, body.language as string)) {
+      return c.json({ error: 'Choose a supported language, engine and voice.' }, 400);
+    }
+    const provider = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
+      .bind(assistant.business_id).first<ProviderSettings>();
+    // Only these five draft fields are client controlled. Credentials and URLs
+    // come exclusively from the owned workspace, never from a preview request.
+    const draft = { ...assistant };
+    for (const key of fields) draft[key] = body[key] as string;
+    const settings = { ...provider, ...settingsForProvider(draft, provider) };
+    try {
+      if (settings.engine === 'realtime') resolveRealtime(c.env, settings);
+      else if (speechConfig(c.env, settings).provider === 'browser') {
+        return c.json({ error: 'Use the browser speech preview on this device.' }, 400);
+      }
+    } catch { return c.json({ error: 'Configure your saved speech provider before previewing.' }, 400); }
+    const now = Date.now(); const spend = new StudioSpendJournal(c.env);
+    const minute = await spend.reserve(assistant.business_id, 'minute', 60, STUDIO_SPEND_PER_MINUTE, now);
+    if (!minute) return c.json({ error: 'Too many previews. Please wait a minute.' }, 429,
+      { 'Retry-After': String(fixedWindowRetryAfter(60, now)) });
+    const ip = await reserveStudioIpSpend(spend, c.req.header('CF-Connecting-IP'), now);
+    const day = !ip.blocked && await spend.reserve(assistant.business_id, 'voice-preview-day', DAY_SECONDS, 50, now);
+    if (ip.blocked || !day) {
+      await spend.refund();
+      return c.json({ error: 'Voice preview limit reached. Please try again later.' }, 429,
+        { 'Retry-After': String(fixedWindowRetryAfter(ip.blocked === 'minute' ? 60 : DAY_SECONDS, now)) });
+    }
+    try {
+      const audio = await generateVoicePreview(c.env, settings, c.req.raw.signal);
+      return new Response(audio, { headers: { 'Content-Type': 'audio/wav', 'Cache-Control': 'no-store' } });
+    } catch { return c.json({ error: 'Voice preview failed. Check the model, voice and saved provider settings, then try again.' }, 502); }
   });
 
   app.post('/api/me/provider/check', async (c) => {
