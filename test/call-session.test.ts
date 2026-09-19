@@ -1171,9 +1171,9 @@ describe('upstream connect timeout', () => {
     const zombie = upstreamSockets[0];
     expect(zombie.closed).not.toBeNull(); // fake fetch disposed its pending socket on abort
 
-    // The call fell back to pipeline, which is what the client was told.
-    const ready = sock.messages().find((m) => m.type === 'ready');
-    expect(ready?.mode).toBe('pipeline');
+    // A selected realtime engine must not become a different browser voice.
+    expect(sock.countOf('ready')).toBe(0);
+    expect(sock.countOf('error')).toBe(1);
 
     // A late open must not push session.update at an engine we abandoned...
     zombie.readyState = 1;
@@ -3391,6 +3391,7 @@ describe('gateway header transport contract', () => {
       // Native workerd retains the request signal after WebSocket Upgrade.
       signal.addEventListener('abort', () => up.close(1000, 'request aborted'));
       up.emit('open', {}); await flush(100);
+      up.receive({ type: 'session.updated', session: up.messages().find(m => m.type === 'session.update')!.session }); await flush(100);
       expect(caller.countOf('ready')).toBe(1);
       await vi.advanceTimersByTimeAsync(6000); await flush(100);
       expect(signal.aborted).toBe(false);
@@ -3420,7 +3421,9 @@ describe('gateway header transport contract', () => {
       expect(update.output_modalities).toBeUndefined(); // gateway payload, not direct GA policy
       expect(update.audio.output.voice).toBe('marin');
       expect(update.audio.output.format.rate).toBe(24000);
-      expect(up.countOf('response.create')).toBe(1); // gateway needs no direct session.updated acknowledgement
+      expect(up.countOf('response.create')).toBe(0);
+      up.receive({ type: 'session.updated', session: update }); await flush(100);
+      expect(up.countOf('response.create')).toBe(1); // selected voice acknowledged
       expect(caller.countOf('ready')).toBe(channel === 'telnyx' ? 0 : 1);
       up.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' }); await flush(100);
       expect(caller.countOf('ready')).toBe(1);
@@ -3473,6 +3476,7 @@ describe('gateway header transport contract', () => {
       caller.receive({ type: 'start' }); await flush(100);
       expect(gatewayRequests).toHaveLength(1);
       const old = upstreamSockets[0]; old.emit('open', {}); await flush(100);
+      old.receive({ type: 'session.updated', session: old.messages().find(m => m.type === 'session.update')!.session }); await flush(100);
       expect(caller.countOf('ready')).toBe(1);
       old.receive({ type: 'session.expiring' }); await flush(100);
       expect(gatewayRequests).toHaveLength(2);
@@ -3488,6 +3492,8 @@ describe('gateway header transport contract', () => {
         const replacement = upstreamSockets[1];
         expect(replacement.sent).toHaveLength(0);
         replacement.emit('open', {}); await flush(100);
+        expect(old.closed).toBeNull(); // outgoing socket survives until selected voice confirmation
+        replacement.receive({ type: 'session.updated', session: replacement.messages().find(m => m.type === 'session.update')!.session }); await flush(100);
         expect(old.closed).not.toBeNull();
         expect(replacement.countOf('session.update')).toBe(1);
         expect(replacement.countOf('response.create')).toBe(0); // no repeated greeting
@@ -3507,5 +3513,44 @@ describe('gateway header transport contract', () => {
       expect(gatewayRequests).toHaveLength(2);
       expect(constructor).not.toHaveBeenCalled();
     } finally { await cleanup(caller); }
+  });
+});
+
+
+describe('selected voice confirmation', () => {
+  it.each([['matching', 'gpt-realtime-2', 'alloy'], ['substituted', 'gpt-realtime-2', 'alloy'], ['missing', 'gpt-realtime-2', 'alloy'], ['matching', 'kataleptic-realtime-hd', 'de-DE-SeraphinaMultilingualNeural'], ['matching', 'llama-3.3-70b', 'de_DE-thorsten-medium']])('holds generation until %s %s voice is confirmed', async (kind, model, voice) => {
+    vi.useFakeTimers();
+    const { session } = newSession('realtime', { realtime_model: model, realtime_voice: voice });
+    await session.fetch(upgradeRequest()); const caller = serverSockets[0];
+    caller.receive({ type: 'start' }); await flush(100);
+    const up = upstreamSockets[0]; up.emit('open', {}); await flush(100);
+    expect(up.countOf('response.create')).toBe(0);
+    expect(caller.countOf('ready')).toBe(0);
+    const sent = up.messages().find(m => m.type === 'session.update')!.session;
+    const echoed = structuredClone(sent) as any;
+    if (kind === 'substituted') echoed.audio.output.voice = 'marin';
+    if (kind === 'missing') delete echoed.audio.output.voice;
+    up.receive({ type: 'response.output_audio.delta', delta: 'AAAAAA==' }); await flush(100);
+    expect(caller.binaryCount()).toBe(0);
+    up.receive({ type: 'session.updated', session: echoed }); await flush(100);
+    if (kind !== 'matching') {
+      expect(up.countOf('response.create')).toBe(0);
+      expect(up.countOf('session.update')).toBe(2);
+      up.receive({ type: 'session.updated', session: sent }); await flush(100);
+    }
+    expect(up.countOf('response.create')).toBe(1);
+    expect(caller.countOf('ready')).toBe(1);
+    caller.receive({ type: 'hangup' }); await flush(100);
+  });
+  it('fails an unconfirmed selected voice without switching to browser speech', async () => {
+    vi.useFakeTimers();
+    const { session } = newSession('realtime', { realtime_model: 'gpt-realtime-2', realtime_voice: 'alloy' });
+    await session.fetch(upgradeRequest()); const caller = serverSockets[0];
+    caller.receive({ type: 'start' }); await flush(100);
+    const up = upstreamSockets[0]; up.emit('open', {}); await flush(100);
+    await vi.advanceTimersByTimeAsync(5001); await flush(100);
+    expect(caller.countOf('ready')).toBe(0);
+    expect(caller.countOf('error')).toBe(1);
+    expect(up.closed).not.toBeNull();
   });
 });

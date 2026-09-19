@@ -6,6 +6,7 @@
 export type VoiceEvent =
   | { type: 'status'; status: 'connecting' | 'live' | 'ended' | 'error'; detail?: string }
   | { type: 'engine'; label: string }
+  | { type: 'audio'; blocked: boolean }
   | { type: 'transcript'; text: string }
   | { type: 'agent_text'; text: string }
   | { type: 'thinking' }
@@ -54,6 +55,11 @@ export class VoiceCall {
   private captureCtx: AudioContext | null = null;
   private processor: ScriptProcessorNode | null = null;
   private playCtx: AudioContext | null = null;
+  private audioCheckTimer: ReturnType<typeof setTimeout> | undefined;
+  private audioBlocked = false;
+  private audioAttempt = 0;
+  private mediaBlocked = false;
+  private audioFailure = false;
   private nextPlayTime = 0;
   private liveSources = new Set<AudioBufferSourceNode>();
   private queuedPcmBytes = 0;
@@ -76,7 +82,40 @@ export class VoiceCall {
     for (const fn of this.listeners) fn(ev);
   }
 
+  private reportAudio(blocked: boolean): void {
+    if (this.ended) return;
+    this.audioBlocked = blocked || this.mediaBlocked || this.audioFailure;
+    this.emit({ type: 'audio', blocked: this.audioBlocked });
+  }
+
+  /** Call synchronously from the Start/Enable audio click, before network awaits. */
+  prepareAudio(): void {
+    if (this.ended) return;
+    const attempt = ++this.audioAttempt;
+    const report = (blocked: boolean) => { if (attempt === this.audioAttempt) this.reportAudio(blocked); };
+    try {
+      if (!this.playCtx) {
+        this.playCtx = new AudioContext({ sampleRate: 24000 });
+        this.playCtx.onstatechange = () => {
+          if (this.playCtx) this.reportAudio(this.playCtx.state !== 'running');
+        };
+      }
+      const ctx = this.playCtx;
+      if (this.audioCheckTimer !== undefined) clearTimeout(this.audioCheckTimer);
+      // Some browsers leave resume pending until a fresh user gesture.
+      this.audioCheckTimer = setTimeout(() => report(ctx.state !== 'running'), 750);
+      void ctx.resume().then(() => report(ctx.state !== 'running'), () => report(true));
+      if (this.player && this.audioBlocked) {
+        const player = this.player;
+        void player.play().then(() => {
+          if (this.player === player) { this.mediaBlocked = false; report(ctx.state !== 'running'); }
+        }, () => { if (this.player === player) this.reportAudio(true); });
+      }
+    } catch { this.reportAudio(true); }
+  }
+
   async start(slug: string): Promise<void> {
+    this.prepareAudio();
     this.emit({ type: 'status', status: 'connecting' });
     const res = await fetch('/api/public/call/start', {
       method: 'POST',
@@ -269,7 +308,9 @@ export class VoiceCall {
   // ---- voice activity detection ----
   private startVad(): void {
     if (!this.stream) return;
-    this.audioCtx = new AudioContext();
+    if (!this.playCtx) this.prepareAudio();
+    if (!this.playCtx) throw new Error('audio_unavailable');
+    this.audioCtx = this.playCtx;
     const src = this.audioCtx.createMediaStreamSource(this.stream);
     this.analyser = this.audioCtx.createAnalyser();
     this.analyser.fftSize = 1024;
@@ -345,7 +386,9 @@ export class VoiceCall {
 
   private startRealtimeCapture(): void {
     if (!this.stream) return;
-    this.captureCtx = new AudioContext();
+    if (!this.playCtx) this.prepareAudio();
+    if (!this.playCtx) throw new Error('audio_unavailable');
+    this.captureCtx = this.playCtx;
     const src = this.captureCtx.createMediaStreamSource(this.stream);
     this.processor = this.captureCtx.createScriptProcessor(2048, 1, 1);
     const mute = this.captureCtx.createGain();
@@ -387,9 +430,9 @@ export class VoiceCall {
       bytes = bytes.subarray(0, bytes.length - 1);
     }
     if (bytes.length < 2) return;
-    if (!this.playCtx) this.playCtx = new AudioContext({ sampleRate: 24000 });
+    if (!this.playCtx) this.prepareAudio();
     const ctx = this.playCtx;
-    void ctx.resume();
+    if (!ctx) throw new Error('audio_unavailable');
     const i16 = new Int16Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length));
     const audio = ctx.createBuffer(1, i16.length, 24000);
     const ch = audio.getChannelData(0);
@@ -407,6 +450,7 @@ export class VoiceCall {
     const retainedBytes = bytes.byteLength;
     node.onended = () => {
       if (!this.liveSources.delete(node)) return;
+      node.disconnect();
       this.queuedPcmBytes -= retainedBytes;
       if (this.liveSources.size === 0) {
         this.emit({ type: 'speaking', who: 'none' });
@@ -420,6 +464,7 @@ export class VoiceCall {
       node.onended = null;
       try {
         node.stop();
+        node.disconnect();
       } catch {
         /* already stopped */
       }
@@ -433,6 +478,7 @@ export class VoiceCall {
   // ---- agent audio playback ----
   private playAudio(buf: ArrayBuffer): void {
     this.releasePlayer();
+    this.audioFailure = false;
     this.agentSpeaking = true;
     this.emit({ type: 'speaking', who: 'agent' });
     const url = URL.createObjectURL(new Blob([buf], { type: 'audio/mpeg' }));
@@ -445,13 +491,21 @@ export class VoiceCall {
       this.emit({ type: 'speaking', who: 'none' });
       this.finishClosingPlayback();
     };
-    const failed = () => { if (this.ended || this.playerUrl !== url) return; this.playbackFailed = true; finished(); };
+    const failed = () => { if (this.ended || this.playerUrl !== url) return; this.playbackFailed = true; this.audioFailure = true; this.reportAudio(true); finished(); };
     this.player.onended = finished;
     this.player.onerror = failed;
-    void this.player.play().catch(failed);
+    const player = this.player;
+    void player.play().then(() => {
+      if (this.player === player) this.reportAudio(Boolean(this.playCtx && this.playCtx.state !== 'running'));
+    }).catch(error => {
+      if (this.ended || this.player !== player) return;
+      if (error?.name === 'NotAllowedError') { this.mediaBlocked = true; this.reportAudio(true); }
+      else { this.reportAudio(true); failed(); }
+    });
   }
 
   private releasePlayer(): void {
+    this.mediaBlocked = false;
     if (this.player) {
       this.player.onended = this.player.onerror = null;
       this.player.pause();
@@ -462,6 +516,7 @@ export class VoiceCall {
   }
 
   private speakLocally(text: string): void {
+    this.audioFailure = false;
     this.agentSpeaking = true;
     this.pendingSpeech++;
     this.emit({ type: 'speaking', who: 'agent' });
@@ -479,6 +534,7 @@ export class VoiceCall {
       if (this.ended || finished) return;
       finished = true;
       this.playbackFailed ||= failed;
+      if (failed) { this.audioFailure = true; this.reportAudio(true); }
       this.pendingSpeech--;
       this.agentSpeaking = this.pendingSpeech > 0;
       if (!this.agentSpeaking) this.emit({ type: 'speaking', who: 'none' });
@@ -518,11 +574,14 @@ export class VoiceCall {
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
     this.chunks = [];
-    void this.audioCtx?.close();
+    if (this.audioCheckTimer !== undefined) clearTimeout(this.audioCheckTimer);
     this.flushPlayback();
     this.processor?.disconnect();
-    void this.captureCtx?.close();
-    void this.playCtx?.close();
+    if (this.playCtx) {
+      this.playCtx.onstatechange = null;
+      void this.playCtx.close().catch(() => { /* already closed */ });
+    }
+    this.audioCtx = this.captureCtx = this.playCtx = null;
     this.releasePlayer();
     speechSynthesis.cancel();
     if (this.ws) {

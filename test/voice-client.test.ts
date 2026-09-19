@@ -266,7 +266,7 @@ describe('bounded realtime browser playback receipts', () => {
     });
     const context = { currentTime: 0, destination: {}, resume: async () => {}, close: async () => {}, createBuffer,
       createBufferSource: () => {
-        const node = { buffer: null, connect: vi.fn(), start: vi.fn(), stop: vi.fn(), onended: null as (() => void) | null };
+        const node = { buffer: null, connect: vi.fn(), disconnect: vi.fn(), start: vi.fn(), stop: vi.fn(), onended: null as (() => void) | null };
         nodes.push(node); return node;
       } };
     vi.stubGlobal('AudioContext', vi.fn(function () { return context; }));
@@ -351,4 +351,51 @@ describe('bounded realtime browser playback receipts', () => {
     const f = await connected(); f.pcm(4); f.voice.hangup(); f.marker(4);
     expect(f.acknowledgements()).toHaveLength(0);
   });
+});
+
+
+describe('audible playback recovery', () => {
+  it.each(['pending', 'rejected'])('reports a %s audio resume and permits gesture recovery without another context', async kind => {
+    vi.useFakeTimers();
+    const ctx = { state: 'suspended', onstatechange: null as null | (() => void), close: vi.fn(async () => {}),
+      resume: vi.fn(() => kind === 'pending' ? new Promise<void>(() => {}) : Promise.reject(Error('blocked'))) };
+    const AudioContext = vi.fn(function () { return ctx; }); vi.stubGlobal('AudioContext', AudioContext);
+    vi.stubGlobal('speechSynthesis', { cancel: vi.fn() });
+    const voice = new VoiceCall(); const events: any[] = []; voice.on(e => events.push(e));
+    voice.prepareAudio();
+    await vi.advanceTimersByTimeAsync(800);
+    expect(events).toContainEqual({ type: 'audio', blocked: true });
+    ctx.resume.mockImplementation(async () => { ctx.state = 'running'; ctx.onstatechange?.(); });
+    voice.prepareAudio(); await Promise.resolve();
+    expect(events.at(-1)).toEqual({ type: 'audio', blocked: false });
+    expect(AudioContext).toHaveBeenCalledTimes(1);
+    voice.hangup(); expect(ctx.close).toHaveBeenCalledTimes(1);
+    const count = events.length; await vi.advanceTimersByTimeAsync(1000); expect(events).toHaveLength(count);
+  });
+});
+
+
+it('retries a blocked Pipeline player in place without reporting false playback completion', async () => {
+  vi.useFakeTimers();
+  const { socket } = prepareConnection();
+  vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: async () => { throw Error('no microphone'); } } });
+  const ctx = { state: 'running', resume: async () => {}, close: async () => {} };
+  vi.stubGlobal('AudioContext', vi.fn(function () { return ctx; }));
+  const play = vi.fn().mockRejectedValueOnce(Object.assign(Error('blocked'), { name: 'NotAllowedError' })).mockResolvedValue(undefined);
+  const player = { play, pause: vi.fn(), onended: null as null | (() => void), onerror: null };
+  vi.stubGlobal('Audio', vi.fn(function () { return player; }));
+  const revoke = vi.fn(); vi.stubGlobal('URL', { createObjectURL: () => 'blob:synthetic', revokeObjectURL: revoke });
+  const voice = new VoiceCall(); const events: any[] = []; voice.on(e => events.push(e));
+  voice.prepareAudio(); await voice.connect('test');
+  socket.onmessage!({ data: new ArrayBuffer(4) });
+  await vi.advanceTimersByTimeAsync(800);
+  expect(events.at(-1)).toEqual({ type: 'audio', blocked: true });
+  expect(revoke).not.toHaveBeenCalled();
+  socket.onmessage!({ data: JSON.stringify({ type: 'ending', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }) });
+  expect(socket.send).not.toHaveBeenCalled();
+  voice.prepareAudio(); await vi.advanceTimersByTimeAsync(1);
+  expect(play).toHaveBeenCalledTimes(2); expect(events.at(-1)).toEqual({ type: 'audio', blocked: false });
+  player.onended!();
+  expect(socket.send).toHaveBeenCalledWith(JSON.stringify({ type: 'playback_complete', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }));
+  expect(revoke).toHaveBeenCalledOnce(); voice.hangup();
 });

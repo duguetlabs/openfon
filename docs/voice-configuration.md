@@ -171,6 +171,21 @@ Kataleptic’s current native/Piper catalogs and OpenAI’s voice list publish n
 gender field, so those voices show unspecified. Custom IDs remain supported;
 OpenFon does not infer gender from a name or another engine’s voice mapping.
 
+For catalogs without labels, vocal presentation needs a reviewed listening
+assessment. Automated acoustic labels can disagree even on control samples;
+uncertain voices remain unspecified rather than presenting those guesses as facts.
+
+A saved explicit realtime voice is confirmed by the provider before the call
+starts speaking, including after a reconnect. That same realtime engine speaks
+the greeting. If startup or voice confirmation fails, the call reports an error
+instead of silently substituting Pipeline/browser speech. Default selections
+continue to follow the provider's defaults.
+
+Browser calls open their audio context from the Start click and release it on
+hangup. If the browser suspends audio, **Enable audio** resumes the current call.
+Check your selected speaker/headset if transcripts continue but playback remains
+silent; browser playback state cannot establish physical audibility.
+
 Realtime samples come from the selected realtime model: native speech, Standard
 Piper, or HD Azure Voice Live. Pipeline samples use the workspace’s configured
 speech provider and model. Custom providers must support the same speech protocol

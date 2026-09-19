@@ -661,7 +661,7 @@ export class CallSession implements DurableObject {
       }
     }
 
-    if (this.requiresCarrierAudio || this.realtimeConfig?.protocol === 'openai') {
+    if (this.settings?.engine === 'realtime' || this.requiresCarrierAudio || this.realtimeConfig?.protocol === 'openai') {
       await this.failCarrierAudio('The realtime provider could not start this call.');
       return;
     }
@@ -825,7 +825,7 @@ export class CallSession implements DurableObject {
   // payload including tools: **nothing outside `transcription` diverges
   // anywhere.** Formats, turn detection, tools, tool_choice and voice come back
   // verbatim, so the wider net costs no noise.
-  private static readonly ENFORCED_SESSION_PATHS = ['audio.input.turn_detection', 'audio.input.format', 'audio.output.format'];
+  private static readonly ENFORCED_SESSION_PATHS = ['audio.input.turn_detection', 'audio.input.format', 'audio.output.format', 'audio.output.voice'];
 
   // Transcription is enforced everywhere it *can* be, which is everywhere but
   // the HD tier.
@@ -1063,6 +1063,9 @@ export class CallSession implements DurableObject {
   private outputAudio: { socket: WebSocket; itemId: string; contentIndex: number; startedAt: number; bytes: number } | null = null;
 
   private engineGreets(): boolean {
+    // An explicitly selected realtime voice must also speak the greeting.
+    // Instance Azure/browser synthesis could otherwise substitute another voice.
+    if (this.settings?.realtime_voice) return true;
     if (this.realtimeConfig) return realtimeCapabilities(this.realtimeConfig).engineGreeting;
     return this.realtimeModel === 'kataleptic-realtime' || this.realtimeModel.startsWith('gpt-realtime');
   }
@@ -1274,6 +1277,9 @@ export class CallSession implements DurableObject {
         }, ws);
         settle(true);
       };
+      // A native voice can become immutable after its first audio. Confirm an
+      // explicit selection before generation or handover to a rotated socket.
+      const confirmVoice = config.protocol === 'gateway' && Boolean(this.settings?.realtime_voice);
       let configured = false;
       const onOpen = () => {
         if (abandoned || configured) return;
@@ -1284,9 +1290,9 @@ export class CallSession implements DurableObject {
         // — and taking it before we route means the replacement is briefed on
         // everything that happened up to the moment it takes over.
         const briefing = typeof instructions === 'function' ? instructions() : instructions;
-        if (config.protocol === 'gateway') this.upstream = ws;
+        if (config.protocol === 'gateway' && !confirmVoice) this.upstream = ws;
         this.sendSessionUpdate(this.sessionVoice, briefing, ws);
-        if (config.protocol === 'gateway') ready();
+        if (config.protocol === 'gateway' && !confirmVoice) ready();
       };
       ws.addEventListener('open', onOpen);
       const rejectMessage = () => {
@@ -1320,10 +1326,18 @@ export class CallSession implements DurableObject {
             }
           } catch { /* malformed events are handled below without logging their payload */ }
         }
+        if (confirmVoice && !opened) {
+          if (event.type === 'error') { abandoned = true; clearTimeout(timer); this.abandonUpstream(ws); settle(false); return; }
+          const sent = this.sessionState.get(ws)?.sent;
+          if (event.type === 'session.updated' && sent && event.session?.instructions === sent.instructions) {
+            if (CallSession.at(event.session, 'audio.output.voice') === CallSession.at(sent, 'audio.output.voice')) ready();
+            else this.checkSessionEcho(event.session, ws);
+          }
+        }
         // This socket is readable for handshake events while pending, but
         // application output must remain inert until its own configuration is
         // confirmed. The acknowledged old socket remains live during rotation.
-        if (config.protocol === 'openai' && !opened) return;
+        if ((config.protocol === 'openai' || confirmVoice) && !opened) return;
         this.onUpstreamMessage(event, ws).catch(error => {
           if (error instanceof RealtimeInputError) rejectMessage();
           else console.error('upstream handler error: provider response redacted');
