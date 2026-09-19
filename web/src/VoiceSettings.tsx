@@ -34,9 +34,12 @@ export function AssistantVoiceSettings({ assistant: a, onChange }: { assistant: 
   const [provider, setProvider] = useState<ProviderView | null>(null);
   const [catalog, setCatalog] = useState<Awaited<ReturnType<typeof api.providerCatalog>> | null>(null);
   const [error, setError] = useState('');
+  const [catalogUnavailable, setCatalogUnavailable] = useState(false);
   useEffect(() => { let active = true;
-    void Promise.all([api.provider(), api.providerCatalog()]).then(([p, c]) => { if (active) { setProvider(p); setCatalog(c); } })
-      .catch(() => { if (active) setError('Provider choices could not load. Existing values are preserved; reload to retry, or use custom IDs.'); });
+    void api.provider().then(p => { if (active) setProvider(p); })
+      .catch(() => { if (active) setError('Provider settings could not load. Existing values are preserved; reload to retry, or use custom IDs.'); });
+    void api.providerCatalog().then(c => { if (active) setCatalog(c); })
+      .catch(() => { if (active) setCatalogUnavailable(true); });
     return () => { active = false; };
   }, []);
   const realtimeProvider = provider?.effective_realtime_provider || (provider?.realtime_provider === 'instance' ? 'kataleptic' : provider?.realtime_provider);
@@ -45,7 +48,7 @@ export function AssistantVoiceSettings({ assistant: a, onChange }: { assistant: 
   const family = kataleptic ? effectiveModel === 'kataleptic-realtime-hd' ? 'hd' : effectiveModel.startsWith('gpt-realtime') ? 'native' : 'cascade' : realtimeProvider === 'openai' ? 'native' : 'custom';
   const selected = a.engine === 'pipeline' ? 'pipeline' : !a.realtime_model ? 'default' : kataleptic && ['kataleptic-realtime', 'kataleptic-realtime-hd', 'gpt-realtime-2', 'gpt-realtime-2.1', 'gpt-realtime-2.1-mini'].includes(a.realtime_model) ? a.realtime_model : 'custom';
   const textModels = catalog?.models.filter(m => m.kind === 'text') || choices(['llama-3.3-70b', 'mistral-nemo-12b']);
-  const speech = provider?.effective_tts_provider || 'browser';
+  const speech = provider?.effective_tts_provider || 'unknown';
   const speechVoices = speech === 'azure' ? AZURE_VOICES : speech === 'openai' ? ['tts-1', 'tts-1-hd'].includes(provider?.tts_model || '') ? TTS_LEGACY_VOICES : TTS_VOICES : [];
   return <div className="studio-fields">
     {error && <p role="alert">{error}</p>}
@@ -62,15 +65,15 @@ export function AssistantVoiceSettings({ assistant: a, onChange }: { assistant: 
     </select></label>
     {a.engine === 'pipeline' ? <>
       <p className="studio-muted">Transcribe → think → speak. Each component can use a separate provider and API key in <Link to="/settings#providers">workspace provider settings</Link>. Shared by this workspace; keys never live in presets.</p>
-      <p className="studio-muted">Transcription: {provider?.effective_stt_model || 'workspace default'} · Speech: {speech}</p>
+      <p className="studio-muted">Transcription: {provider?.effective_stt_model || 'workspace default'} · Speech: {speech === 'unknown' ? 'workspace configuration unavailable' : speech}</p>
       {speech === 'browser' ? <p className="studio-muted">Browser speech chooses an installed voice matching the reply language. Choose a speech provider in Settings for a specific server voice.</p> : <CatalogSelect label="Speech voice" value={a.voice} onChange={voice => onChange({ voice })} options={speechVoices} defaultLabel={speech === 'openai' || speech === 'custom' ? 'Provider default — alloy' : 'Automatic language-matched voice'} />}
     </> : <>
       {selected === 'custom' && <CatalogSelect label="Realtime model" value={a.realtime_model} onChange={realtime_model => onChange({ realtime_model })} options={kataleptic ? textModels : choices(['gpt-realtime', 'gpt-realtime-mini'])} />}
       <p className="studio-muted">{family === 'hd' ? 'Azure Voice Live manages recognition and the conversation model. Choose an Azure voice.' : family === 'native' ? 'Native speech-to-speech. The conversation model is built in; voices are multilingual.' : kataleptic ? 'Kataleptic streams recognition, chat and Piper speech. Choose an automatic language-matched voice or pin a Piper voice.' : 'Custom realtime uses the OpenAI GA protocol. Model and voice IDs depend on your provider.'}</p>
-      <CatalogSelect label="Realtime voice" value={a.realtime_voice} onChange={realtime_voice => onChange({ realtime_voice })} options={family === 'hd' ? AZURE_VOICES : family === 'native' ? catalog?.voices.native || choices(['marin', 'cedar', 'alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse']) : kataleptic ? catalog?.voices.cascade || [] : []} />
+      <CatalogSelect label="Realtime voice" value={a.realtime_voice} onChange={realtime_voice => onChange({ realtime_voice })} options={family === 'hd' ? AZURE_VOICES : family === 'native' ? catalog?.voices.native || choices(['marin', 'cedar', 'alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse']) : kataleptic ? catalog?.voices.cascade || choices(['en_US-lessac-medium', 'de_DE-thorsten-medium', 'fr_FR-siwis-medium', 'es_ES-sharvard-medium']) : []} />
     </>}
     <CatalogSelect label={a.engine === 'pipeline' ? 'Language model' : 'Summary language model'} value={a.llm_model} onChange={llm_model => onChange({ llm_model })} options={provider?.baseUrl?.startsWith('https://api.kataleptic.com/') ? textModels : provider?.baseUrl === 'https://api.openai.com/v1' ? choices(['gpt-4.1-mini', 'gpt-4o-mini']) : []} defaultLabel={`Workspace default${provider?.effective_text_model ? ` — ${provider.effective_text_model}` : ''}`} hint={a.engine === 'realtime' ? 'Used for call summaries, not the realtime conversation brain.' : 'Generates conversational replies and call summaries.'} />
-    {catalog && !catalog.live && <p className="studio-muted">Showing built-in suggestions; live Kataleptic catalog is temporarily unavailable.</p>}
+    {(catalogUnavailable || (catalog && !catalog.live)) && <p className="studio-muted">Showing built-in suggestions; live Kataleptic catalog is temporarily unavailable.</p>}
     <p className="studio-muted"><Link to="/settings#providers">Manage providers and separate API keys →</Link></p>
   </div>;
 }

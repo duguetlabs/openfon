@@ -36,7 +36,10 @@ test('custom pipeline saves separate BYOK components and guided voices without e
   expect(JSON.stringify(view)).not.toContain('-private');
   const { assistants } = await (await page.request.get('/api/me/bootstrap')).json();
   const id = assistants[0].id;
+  // Optional discovery failure must not discard successfully loaded provider settings.
+  await page.route('**/api/me/provider/catalog', route => route.fulfill({ status: 503, json: { error: 'Synthetic catalog outage' } }));
   await page.goto(`/assistants/${id}`);
+  await expect(page.getByText(/live Kataleptic catalog is temporarily unavailable/)).toBeVisible();
   await page.getByLabel('Conversation engine', { exact: true }).selectOption('pipeline');
   await page.getByLabel('Default language', { exact: true }).selectOption('de');
   await page.getByLabel('Speech voice', { exact: true }).selectOption('coral');
