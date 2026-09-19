@@ -64,3 +64,7 @@ a paced simulated consumer; these runs do not prove physical audibility or PSTN
 acceptance. An earlier v2 run completed the protocol successfully but its final
 transcript-export query failed on a fixture column name; that failure remains
 separate from the subsequent successful calls.
+
+Component BYOK adds migration 0022 and independent workspace speech settings.
+Remote migration/deployment and live custom-provider speech acceptance remain
+pending; see [configuration and rollout](component-byok.md).

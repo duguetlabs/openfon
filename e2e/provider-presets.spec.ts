@@ -1,3 +1,4 @@
+import { fillCatalog, expectCatalog } from './catalog-fields';
 import { test, expect } from './fixtures';
 
 test('provider alternatives persist, keep custom models, and require a new key when endpoints change', async ({ page }) => {
@@ -20,13 +21,13 @@ test('provider alternatives persist, keep custom models, and require a new key w
     await expect(page.getByLabel('Text base URL', { exact: true })).toHaveValue(url);
   }
   await select.selectOption('openrouter');
-  await page.getByLabel('Workspace text model', { exact: true }).fill('custom/model:route');
+  await fillCatalog(page, 'Workspace text model', 'custom/model:route');
   await page.getByLabel('Text API key', { exact: true }).fill('synthetic-text-key');
   await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
   await expect(page.getByText('Provider settings saved.', { exact: false })).toBeVisible();
   await page.reload();
   await expect(select).toHaveValue('openrouter');
-  await expect(page.getByLabel('Workspace text model', { exact: true })).toHaveValue('custom/model:route');
+  await expectCatalog(page, 'Workspace text model', 'custom/model:route');
   await expect(page.getByLabel('Text API key', { exact: true })).toHaveValue('');
   await page.getByLabel('Text base URL', { exact: true }).fill('https://different.example/v1');
   await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
@@ -60,21 +61,20 @@ test('provider draft guards navigation and sign-out, then resets after discard o
   const navigation = page.getByRole('navigation', { name: 'Workspace' });
   await expect(navigation).toBeVisible();
   await navigation.getByRole('link', { name: 'Settings', exact: true }).click();
-  const model = page.getByLabel('Workspace text model', { exact: true });
   const key = page.getByLabel('Text API key', { exact: true });
-  await expect(model).toHaveValue('');
+  await expectCatalog(page, 'Workspace text model', '');
 
   // Ordinary edits are protected, and cancelling leaves the current draft intact.
-  await model.fill('unsaved-model');
+  await fillCatalog(page, 'Workspace text model', 'unsaved-model');
   const cancelNavigation = page.waitForEvent('dialog');
   const navigate = navigation.getByRole('link', { name: 'Overview', exact: true }).click();
   await (await cancelNavigation).dismiss();
   await navigate;
   await expect(page).toHaveURL('/settings');
-  await expect(model).toHaveValue('unsaved-model');
+  await expectCatalog(page, 'Workspace text model', 'unsaved-model');
 
   // A replacement key alone must block sign-out before the session is deleted.
-  await model.fill('');
+  await fillCatalog(page, 'Workspace text model', '');
   await key.fill('synthetic-unsaved-key');
   const cancelSignOut = page.waitForEvent('dialog');
   const signOut = page.getByRole('button', { name: 'Sign out', exact: true }).click();
@@ -92,7 +92,7 @@ test('provider draft guards navigation and sign-out, then resets after discard o
   await expect(page).toHaveURL('/overview');
   await navigation.getByRole('link', { name: 'Settings', exact: true }).click();
   await expect(key).toHaveValue('');
-  await expect(model).toHaveValue('');
+  await expectCatalog(page, 'Workspace text model', '');
   expect((await (await page.request.get('/api/me/provider')).json()).workspaceApiKeyConfigured).toBe(false);
 
   // Reverting a write-only input to its empty baseline must not create a warning.
@@ -110,7 +110,7 @@ test('provider draft guards navigation and sign-out, then resets after discard o
 
   // Successful save replaces the baseline and clears the secret input, allowing
   // both navigation and sign-out without a stale dirty-state prompt.
-  await model.fill('saved-model');
+  await fillCatalog(page, 'Workspace text model', 'saved-model');
   await key.fill('synthetic-saved-key');
   await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
   await expect(page.getByText('Provider settings saved.', { exact: false })).toBeVisible();
@@ -118,7 +118,7 @@ test('provider draft guards navigation and sign-out, then resets after discard o
   await navigation.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page).toHaveURL('/overview');
   await navigation.getByRole('link', { name: 'Settings', exact: true }).click();
-  await expect(model).toHaveValue('saved-model');
+  await expectCatalog(page, 'Workspace text model', 'saved-model');
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page).toHaveURL('/auth');
   expect(unexpectedDialogs).toEqual([]);
@@ -139,9 +139,8 @@ test('confirmed provider save survives a failed refresh without resending creden
   const navigation = page.getByRole('navigation', { name: 'Workspace' });
   await expect(navigation).toBeVisible();
   await navigation.getByRole('link', { name: 'Settings', exact: true }).click();
-  const model = page.getByLabel('Workspace text model', { exact: true });
   const key = page.getByLabel('Text API key', { exact: true });
-  await expect(model).toHaveValue('');
+  await expectCatalog(page, 'Workspace text model', '');
 
   let writes = 0;
   let failWrite = true;
@@ -158,7 +157,7 @@ test('confirmed provider save survives a failed refresh without resending creden
       await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Synthetic read failure' }) });
     } else await route.continue();
   });
-  await model.fill('persisted-despite-refresh');
+  await fillCatalog(page, 'Workspace text model', 'persisted-despite-refresh');
   await key.fill('synthetic-refresh-key');
   await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Synthetic write failure');
@@ -197,14 +196,14 @@ test('confirmed provider save survives a failed refresh without resending creden
   await page.getByRole('button', { name: 'Refresh saved provider settings', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Refresh saved provider settings', exact: true })).toHaveCount(0);
   await expect(page.getByRole('alert')).toHaveCount(0);
-  await expect(model).toHaveValue('persisted-despite-refresh');
+  await expectCatalog(page, 'Workspace text model', 'persisted-despite-refresh');
   await expect(key).toHaveValue('');
   expect(writes).toBe(1);
 
   // A second injected failure also leaves the acknowledged draft clean before
   // recovery: navigation must not suggest discarding changes already saved.
   failRefresh = true;
-  await model.fill('second-confirmed-model');
+  await fillCatalog(page, 'Workspace text model', 'second-confirmed-model');
   await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Provider settings were saved');
   const dialogs: string[] = [];
@@ -219,9 +218,9 @@ test('confirmed provider save survives a failed refresh without resending creden
   // A genuine authentication denial still clears the private shell.
   failRefresh = false;
   await navigation.getByRole('link', { name: 'Settings', exact: true }).click();
-  await expect(model).toHaveValue('second-confirmed-model');
+  await expectCatalog(page, 'Workspace text model', 'second-confirmed-model');
   await page.route('**/api/me', route => route.fulfill({ status: 401, json: { error: 'Session expired' } }));
-  await model.fill('saved-before-auth-expired');
+  await fillCatalog(page, 'Workspace text model', 'saved-before-auth-expired');
   await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
   await expect(page).toHaveURL('/auth');
   await expect(navigation).toHaveCount(0);

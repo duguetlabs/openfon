@@ -1,3 +1,4 @@
+import { fillCatalog, expectCatalog } from './catalog-fields';
 import { test, expect, type Route } from '@playwright/test';
 import { build } from 'esbuild';
 import { resolve } from 'node:path';
@@ -39,22 +40,21 @@ for (const late of ['success', 'error'] as const) {
     await page.goto('http://127.0.0.1:8812/');
     await expect.poll(() => reads.length).toBe(2); // Actual StrictMode replay.
     await reads[1].fulfill({ json: provider() });
-    const model = page.getByLabel('Workspace text model', { exact: true });
     const key = page.getByLabel('Text API key', { exact: true });
-    await model.fill('unsaved-model');
+    await fillCatalog(page, 'Workspace text model', 'unsaved-model');
     await key.fill('synthetic-unsaved-key');
     if (late === 'success') await reads[0].fulfill({ json: provider('stale-model') });
     else await reads[0].fulfill({ status: 503, json: { error: 'stale initial failure' } });
     // Give the fulfilled fetch and React update a deterministic rendering turn.
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    await expect(model).toHaveValue('unsaved-model');
+    await expectCatalog(page, 'Workspace text model', 'unsaved-model');
     await expect(key).toHaveValue('synthetic-unsaved-key');
     await expect(page.getByRole('alert')).toHaveCount(0);
     let dialogs = 0;
     page.on('dialog', async dialog => { dialogs++; await dialog.dismiss(); });
     await page.getByRole('link', { name: 'Leave form' }).click();
     await expect.poll(() => dialogs).toBe(1);
-    await expect(model).toHaveValue('unsaved-model');
+    await expectCatalog(page, 'Workspace text model', 'unsaved-model');
 
     await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
     await expect.poll(() => reads.length).toBe(3);
@@ -66,7 +66,7 @@ for (const late of ['success', 'error'] as const) {
     await expect.poll(() => reads.length).toBe(4);
     await reads[3].fulfill({ json: provider(savedModel) });
     await expect(page.getByRole('alert')).toHaveCount(0);
-    await expect(model).toHaveValue(savedModel);
+    await expectCatalog(page, 'Workspace text model', savedModel);
     expect(writes).toBe(1);
     await page.getByRole('link', { name: 'Leave form' }).click();
     await expect(page.getByText('Away', { exact: true })).toBeVisible();

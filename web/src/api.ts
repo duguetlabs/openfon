@@ -215,6 +215,11 @@ export interface ProviderUpdate {
   stt_api_key?: string | null;
   stt_clear_api_key?: boolean;
   stt_model?: string;
+  tts_provider?: string;
+  tts_base_url?: string;
+  tts_api_key?: string | null;
+  tts_clear_api_key?: boolean;
+  tts_model?: string;
 }
 
 export interface ProviderView {
@@ -228,6 +233,14 @@ export interface ProviderView {
   stt_model: string;
   stt_api_key_configured: boolean;
   tts_provider: string;
+  tts_base_url?: string;
+  tts_model?: string;
+  tts_api_key_configured?: boolean;
+  effective_tts_provider?: string;
+  effective_text_model?: string;
+  effective_stt_model?: string;
+  effective_realtime_provider?: string;
+  effective_realtime_model?: string;
   baseUrl: string;
   usesInstanceDefault: boolean;
   apiKeyConfigured: boolean;
@@ -335,6 +348,7 @@ export const api = {
   draftKnowledgeFromTurn: (body: { callId: string; turnId: number; collectionId?: string }) => req<KnowledgeItem>('POST', '/api/me/knowledge/drafts/from-turn', body),
   attachKnowledgeCollection: (assistantId: string, collectionId: string) => req<{ ok: true }>('POST', `/api/me/assistants/${assistantId}/knowledge-collections/${collectionId}`, {}),
   detachKnowledgeCollection: (assistantId: string, collectionId: string) => req<{ ok: true }>('DELETE', `/api/me/assistants/${assistantId}/knowledge-collections/${collectionId}`),
+  providerCatalog: () => req<{ models: { id: string; label: string; kind: 'text' | 'transcription' | 'realtime' }[]; voices: VoiceCatalog; live: boolean }>('GET', '/api/me/provider/catalog'),
   provider: () => req<ProviderView>('GET', '/api/me/provider'),
   updateProvider: (body: ProviderUpdate) =>
     req<{ ok: true; apiKeyConfigured: boolean; workspaceApiKeyConfigured: boolean }>('PUT', '/api/me/provider', body),

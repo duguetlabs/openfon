@@ -22,7 +22,7 @@ import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './
 import type { PromptKnowledgeItem } from './prompt';
 import { loadCallKnowledge } from './call-knowledge';
 import { parseRealtimeMessage, decodeRealtimeAudio, RealtimeInputError, transcriptBytes, MAX_TRANSCRIPT_FIELD_BYTES, MAX_CALL_TRANSCRIPT_BYTES, MAX_REALTIME_AUDIO_BYTES } from './realtime-input';
-import { chatComplete, detectLang, isFarewell, isVocabEcho, LlmConfigError, normalizeLang, piperVoiceFor, resolveLlm, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
+import { chatComplete, detectLang, isFarewell, isVocabEcho, LlmConfigError, normalizeLang, piperVoiceFor, resolveLlm, speechConfig, speechVoice, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
 
 // WebSocket binary payloads vary by runtime: ArrayBuffer, ArrayBufferView, or Blob.
 async function toArrayBuffer(data: unknown): Promise<ArrayBuffer> {
@@ -377,6 +377,7 @@ export class CallSession implements DurableObject {
           provider_settings.stt_base_url,
           provider_settings.stt_api_key,
           provider_settings.stt_model,
+          provider_settings.tts_provider, provider_settings.tts_base_url, provider_settings.tts_api_key, provider_settings.tts_model,
           assistants.engine,
           assistants.realtime_model,
           assistants.realtime_voice
@@ -407,6 +408,7 @@ export class CallSession implements DurableObject {
           realtime_api_key: workspace.realtime_api_key,
           stt_provider: workspace.stt_provider, stt_base_url: workspace.stt_base_url,
           stt_api_key: workspace.stt_api_key, stt_model: workspace.stt_model,
+          tts_provider: workspace.tts_provider, tts_base_url: workspace.tts_base_url, tts_api_key: workspace.tts_api_key, tts_model: workspace.tts_model,
         };
       }
       this.knowledge = undefined;
@@ -672,7 +674,7 @@ export class CallSession implements DurableObject {
       },
       { role: 'assistant', content: greeting },
     ];
-    const ttsMode = this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY ? 'server' : 'browser';
+    const ttsMode = speechConfig(this.env, this.settings).provider !== 'browser' ? 'server' : 'browser';
     this.sendReady({
       mode: 'pipeline',
       ttsMode,
@@ -780,6 +782,7 @@ export class CallSession implements DurableObject {
   private closingTimeline: { trigger: string; requestedAt: number; generationRequestedAt?: number;
     generationCompletedAt?: number; serverDrainedAt?: number; playbackCompletedAt?: number;
     endedAt?: number; result?: string } | undefined;
+  private speechAbort = new AbortController();
   private transcriptionAbort: AbortController | undefined;
   private audioReceipts = new RealtimeAudioReceipts();
   private audioReceiptTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1768,8 +1771,8 @@ export class CallSession implements DurableObject {
   }
 
   private async speak(text: string): Promise<boolean> {
-    const voice = voiceForReply(this.env, this.lang, this.settings?.language ?? 'en', this.settings?.voice || '');
-    const audio = await synthesize(this.env, text, voice);
+    const voice = speechVoice(this.env, this.lang, this.settings);
+    const audio = await synthesize(this.env, text, voice, 'mp3', this.settings, this.speechAbort.signal);
     if (this.ended) return false;
     if (audio && this.ws) {
       try {
@@ -1778,7 +1781,7 @@ export class CallSession implements DurableObject {
         /* socket gone */
       }
     }
-    return Boolean(audio?.byteLength) || !(this.env.DEFAULT_TTS_PROVIDER === 'azure' && this.env.AZURE_SPEECH_KEY);
+    return Boolean(audio?.byteLength) || speechConfig(this.env, this.settings).provider === 'browser';
   }
 
   private reserveTranscript(text: string): void {
@@ -2143,6 +2146,7 @@ export class CallSession implements DurableObject {
       console.info(JSON.stringify({ event: 'call_closing', callId: this.callId, ...this.closingTimeline }));
     }
     this.transcriptionAbort?.abort();
+    this.speechAbort.abort();
     this.closeUpstream();
     // Anything still attached has to be told, and then actually closed. Leaving
     // it open means `ended` silently drops every later message and the caller

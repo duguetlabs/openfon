@@ -27,8 +27,8 @@ try {
   await mf.ready; const native = await mf.getD1Database('DB', 'legacy-sync');
   const exec = sql => native.batch(unstable_splitSqlQuery(sql).map(part => native.prepare(part)));
   const query = async sql => (await native.prepare(sql).all()).results;
-  const files = (await readdir(join(root, 'migrations'))).filter(name => /^\d{4}_.*\.sql$/.test(name) && Number(name.slice(0, 4)) <= 21).sort();
-  assert.equal(files.length, 21);
+  const files = (await readdir(join(root, 'migrations'))).filter(name => /^\d{4}_.*\.sql$/.test(name) && Number(name.slice(0, 4)) <= 22).sort();
+  assert.equal(files.length, 22);
   for (const file of files) await exec(await readFile(join(root, 'migrations', file), 'utf8'));
   const snapshot = async () => {
     const tables = await query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT GLOB '_cf_*' ORDER BY name");

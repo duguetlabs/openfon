@@ -1,6 +1,6 @@
 import { resolveRealtime } from './realtime-providers';
 import type { AgentSettings, Env, ProviderSettings } from './types';
-import { LlmConfigError, sameLlmEndpoint, validateLlmBaseUrl } from './providers';
+import { LlmConfigError, speechEndpointError, sameLlmEndpoint, validateLlmBaseUrl } from './providers';
 
 export const TEXT_PRESETS = [
   { id: 'instance', label: 'Instance default (Kataleptic by default)', baseUrl: '', model: '' },
@@ -83,6 +83,22 @@ export function providerUpdate(env: Env, current: ProviderSettings | null, body:
   }
   result.stt_model = str('stt_model', current?.stt_model ?? '', 256);
   if (result.stt_provider !== 'instance' && !result.stt_model) throw new ProviderInputError('STT model is required (for OpenAI, use whisper-1).');
+  const ttsProvider = str('tts_provider', current?.tts_provider || 'instance');
+  if (!['instance', 'browser', 'azure', 'openai', 'custom'].includes(ttsProvider)) throw new ProviderInputError('Unsupported speech provider');
+  const ttsUrl = str('tts_base_url', current?.tts_base_url || '');
+  const oldTtsKey = current?.tts_provider && !['instance', 'browser'].includes(current.tts_provider) ? current.tts_api_key || '' : '';
+  const inactive = ttsProvider === 'instance' || ttsProvider === 'browser';
+  const ttsKey = key('tts_api_key', 'tts_clear_api_key', inactive ? '' : oldTtsKey,
+    `${current?.tts_provider || 'instance'}:${current?.tts_base_url || ''}`, `${ttsProvider}:${ttsUrl}`);
+  if (inactive && ttsKey) throw new ProviderInputError('Select an explicit speech provider to save a synthesis key.');
+  const ttsModel = str('tts_model', current?.tts_model || '', 256);
+  if (!inactive) {
+    const bad = speechEndpointError(ttsProvider, ttsUrl);
+    if (bad) throw new ProviderInputError(bad);
+    if (!ttsKey) throw new ProviderInputError('Speech synthesis needs its own API key; other component keys are never inherited.');
+    if (ttsProvider !== 'azure' && !ttsModel) throw new ProviderInputError('Speech synthesis model is required.');
+  }
+  Object.assign(result, { tts_provider: ttsProvider, tts_base_url: inactive ? '' : ttsUrl, tts_api_key: ttsKey, tts_model: inactive ? '' : ttsModel });
   return result;
 }
 

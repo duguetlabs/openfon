@@ -61,6 +61,10 @@ export interface WorkspaceSpeechSettings {
   stt_base_url?: string;
   stt_api_key?: string;
   stt_model?: string;
+  tts_provider?: 'instance' | 'browser' | 'azure' | 'openai' | 'custom';
+  tts_base_url?: string;
+  tts_api_key?: string;
+  tts_model?: string;
 }
 
 export interface AgentSettings extends WorkspaceSpeechSettings {

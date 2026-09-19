@@ -110,6 +110,7 @@ const SETTINGS_ROW = {
   language: 'en', voice: '', take_messages: 1, custom_instructions: '',
   llm_base_url: '', llm_api_key: '', llm_model: '', engine: 'pipeline',
   realtime_model: '', realtime_voice: '',
+  tts_provider: 'instance', tts_base_url: '', tts_api_key: '', tts_model: '',
 };
 
 function fakeDb(engine: 'pipeline' | 'realtime' = 'pipeline', settings: Partial<typeof SETTINGS_ROW> = {}) {
@@ -331,6 +332,23 @@ it('announces the browser speech language for pipeline greetings and replies', a
   caller.receive({ type: 'text', text: 'Hallo' }); await flush(80);
   expect(caller.messages().find(m => m.type === 'agent_text')).toMatchObject({ language: 'de', text: 'Guten Tag!' });
   caller.receive({ type: 'hangup' }); await flush(80);
+});
+
+it('pipeline uses the saved speech key, announces server audio, and cancels speech on hangup', async () => {
+  const { session } = newSession('pipeline', { tts_provider: 'custom', tts_base_url: 'https://speech.example/v1', tts_api_key: 'speech-only', tts_model: 'custom-tts', voice: 'coral' });
+  let speechSignal: AbortSignal | undefined;
+  const cancel = vi.fn();
+  const fetcher = vi.fn(async (_url: string, init: RequestInit) => {
+    speechSignal = init.signal!;
+    return new Response(new ReadableStream({ pull: () => new Promise<void>(() => {}), cancel }));
+  });
+  globalThis.fetch = fetcher as unknown as typeof fetch;
+  await session.fetch(upgradeRequest());
+  const caller = serverSockets[0]; caller.receive({ type: 'start' }); await flush(80);
+  expect(caller.messages().find(m => m.type === 'ready')).toMatchObject({ ttsMode: 'server', mode: 'pipeline' });
+  expect(fetcher).toHaveBeenCalledWith('https://speech.example/v1/audio/speech', expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer speech-only' }), body: expect.stringContaining('"voice":"coral"') }));
+  caller.receive({ type: 'hangup' }); await flush(80);
+  expect(speechSignal?.aborted).toBe(true); expect(cancel).toHaveBeenCalled();
 });
 
 describe('pipeline closing guard', () => {

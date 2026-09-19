@@ -86,7 +86,7 @@ it('allows unchanged legacy credential writes and credential-free profile writes
 });
 
 it.each(['provider', 'legacy'])('allows new %s rotation and explicit clear batches', async route => {
-  migration(); applyMigrations(db, 17, 17);
+  migration(); applyMigrations(db, 17, 17); applyMigrations(db, 22, 22);
   expect((await request('/api/me/bootstrap')).status).toBe(200);
   const path = route === 'provider' ? '/api/me/provider' : '/api/me/business/b1/agent';
   const rotation = route === 'provider' ? { baseUrl: 'https://rotated.example/v1', apiKey: 'rotated-key' }
@@ -99,7 +99,7 @@ it.each(['provider', 'legacy'])('allows new %s rotation and explicit clear batch
 });
 
 it('rolls back provider rotation when a later statement aborts', async () => {
-  migration(); applyMigrations(db, 17, 17);
+  migration(); applyMigrations(db, 17, 17); applyMigrations(db, 22, 22);
   expect((await request('/api/me/bootstrap')).status).toBe(200);
   db.exec("CREATE TRIGGER test_refusal BEFORE UPDATE ON agent_settings BEGIN SELECT RAISE(ABORT,'synthetic refusal'); END");
   const before = state();
