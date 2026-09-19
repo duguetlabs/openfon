@@ -20,11 +20,11 @@ try {
   await page.setContent('<title>OpenFon synthetic audio pacing test</title>');
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
   const result = await page.evaluate(async () => {
-    let socket;
+    let socket; const acknowledgements = [];
     class Socket {
       static OPEN = 1;
       readyState = 1;
-      send() {}
+      send(raw) { const message = JSON.parse(raw); if (message.type.startsWith('playback_')) acknowledgements.push({ ...message, at: Date.now() }); }
       close() { this.readyState = 3; }
       constructor() { socket = this; }
     }
@@ -54,14 +54,23 @@ try {
         }
         await new Promise(resolve => setTimeout(resolve, 100));
       }
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return { delivered, expected: input.byteLength, peak, frames, ended: voice.ended,
+      const barrierAt = Date.now();
+      message({ type: 'ending', id: '00000000-0000-4000-8000-000000000001' });
+      const pendingAtBarrier = voice.liveSources.size;
+      const acknowledgedEarly = acknowledgements.length > 0;
+      while (!acknowledgements.length && Date.now() - barrierAt < 3000) await new Promise(resolve => setTimeout(resolve, 20));
+      return { barrierAt, pendingAtBarrier, acknowledgedEarly, acknowledgements, delivered, expected: input.byteLength, peak, frames, ended: voice.ended,
         remaining: voice.queuedPcmBytes, nodes: voice.liveSources.size,
         audioClock: voice.playCtx?.currentTime, events };
     } finally { voice.hangup(); }
   });
   console.log(JSON.stringify(result));
   assert.equal(result.delivered, result.expected);
+  assert(result.pendingAtBarrier > 0);
+  assert.equal(result.acknowledgedEarly, false);
+  assert.equal(result.acknowledgements.length, 1);
+  assert.equal(result.acknowledgements[0].type, 'playback_complete');
+  assert(result.acknowledgements[0].at > result.barrierAt);
   assert.equal(result.ended, false);
   assert.equal(result.remaining, 0);
   assert.equal(result.nodes, 0);
