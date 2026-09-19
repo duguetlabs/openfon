@@ -8,7 +8,9 @@ export async function expectCatalog(page: Page, label: string, value: string) {
   await expect.poll(async () => {
     const custom = page.getByLabel(`Custom ${label.toLowerCase()}`, { exact: true });
     const select = page.getByLabel(label, { exact: true });
-    if (await custom.count()) return custom.inputValue();
-    return await select.count() ? select.inputValue() : undefined;
+    // Read one current DOM snapshot; provider loading may replace a custom
+    // input with a known select between polls. Do not wait on a removed input.
+    const customValue = await custom.evaluateAll(nodes => (nodes[0] as HTMLInputElement | undefined)?.value);
+    return customValue ?? await select.evaluateAll(nodes => (nodes[0] as HTMLSelectElement | undefined)?.value);
   }).toBe(value);
 }

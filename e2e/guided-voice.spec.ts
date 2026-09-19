@@ -14,6 +14,8 @@ test('custom pipeline saves separate BYOK components and guided voices without e
   await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
   await expect(page).toHaveURL('/overview');
   await page.goto('/settings');
+  // The local instance is a custom provider; never suggest Kataleptic IDs for it.
+  await expect(page.getByLabel('Workspace text model', { exact: true }).locator('option[value="llama-3.3-70b"]')).toHaveCount(0);
   await fillCatalog(page, 'Workspace text model', 'previous-custom-model');
   await page.getByLabel('Text provider preset', { exact: true }).selectOption('openai');
   await expect(page.getByLabel('Workspace text model', { exact: true })).toHaveValue('gpt-4.1-mini');
@@ -63,6 +65,12 @@ test('custom pipeline saves separate BYOK components and guided voices without e
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: test.info().outputPath('guided-pipeline-mobile.png'), fullPage: true });
+  await page.goto('/settings');
+  await expect(page.getByText('To remove the saved speech key, select Instance default or Browser speech, then save.')).toBeVisible();
+  await page.getByLabel('Speech synthesis provider', { exact: true }).selectOption('browser');
+  await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
+  await expect(page.getByText('Provider settings saved.', { exact: false })).toBeVisible();
+  expect(await (await page.request.get('/api/me/provider')).json()).toMatchObject({ tts_provider: 'browser', tts_api_key_configured: false });
 });
 
 test('guided Kataleptic tiers show matching voices and preserve unknown saved values', async ({ page }) => {

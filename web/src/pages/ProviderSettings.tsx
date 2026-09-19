@@ -71,6 +71,7 @@ export default function ProviderSettings({ onSaved }: { onSaved: () => Promise<v
     setRefreshPending(true);
     await refreshAfterSave();
   }
+  const textPreset = preset === 'instance' ? saved?.instance_text_preset || 'custom' : preset;
   if (!saved) return <p role={error ? 'alert' : 'status'}>{error || 'Loading provider settings…'}</p>;
   return <section id="providers" aria-label="Workspace AI providers"><h2 className="font-display text-2xl mb-3">Workspace AI providers</h2>
     <p className="text-sm text-ink-soft mb-4">Kataleptic is operated by OpenFon’s maintainer and is an optional paid service. You can use your own provider accounts. Provider usage and hosting may cost money.</p>
@@ -85,7 +86,7 @@ export default function ProviderSettings({ onSaved }: { onSaved: () => Promise<v
             if (id !== 'custom') change({ baseUrl: p.baseUrl, model: p.model, apiKey: '', clearApiKey: false });
           }}>{saved.presets.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}</select></label>
           <Field label="Text base URL" value={draft.baseUrl || ''} placeholder={saved.usesInstanceDefault ? saved.baseUrl : 'Blank uses instance default'} onChange={e => { setPreset('custom'); change({ baseUrl: e.target.value }); }} hint="Base URL only; OpenFon appends /chat/completions. Changing endpoints requires a replacement key or explicit removal." />
-          <CatalogSelect key={preset} label="Workspace text model" value={draft.model || ''} onChange={model => change({ model })} options={preset === 'kataleptic' || preset === 'instance' ? catalog?.models.filter(m => m.kind === 'text') || choices(['llama-3.3-70b', 'mistral-nemo-12b']) : preset === 'openai' ? choices(['gpt-4.1-mini', 'gpt-4o-mini']) : []} defaultLabel={`Instance default — ${saved.effective_text_model || 'configured model'}`} hint="Assistants can override the model. Custom providers use their own model IDs." />
+          <CatalogSelect key={preset} label="Workspace text model" value={draft.model || ''} onChange={model => change({ model })} options={textPreset === 'kataleptic' ? catalog?.models.filter(m => m.kind === 'text') || choices(['llama-3.3-70b', 'mistral-nemo-12b']) : textPreset === 'openai' ? choices(['gpt-4.1-mini', 'gpt-4o-mini']) : []} defaultLabel={`Instance default — ${saved.instance_text_model || 'configured model'}`} hint="Assistants can override the model. Custom providers use their own model IDs." />
           <Field label="Text API key" type="password" autoComplete="new-password" value={draft.apiKey || ''} onChange={e => change({ apiKey: e.target.value, clearApiKey: false })} placeholder={saved.workspaceApiKeyConfigured ? 'Saved — leave blank to keep at the same endpoint' : 'Enter your provider key'} />
           <label className="block text-sm"><input type="checkbox" checked={Boolean(draft.clearApiKey)} onChange={e => change({ clearApiKey: e.target.checked, apiKey: '' })} /> Remove saved text key</label>
           <p className="text-sm text-ink-soft">OpenRouter and Hugging Face presets configure text chat only. They do not configure speech recognition, speech synthesis, or realtime voice. Model availability and JSON support depend on the provider and your account.</p>
@@ -124,7 +125,7 @@ export default function ProviderSettings({ onSaved }: { onSaved: () => Promise<v
             <Field label="Speech synthesis base URL" value={draft.tts_base_url || ''} readOnly={draft.tts_provider === 'openai'} onChange={e => change({ tts_base_url: e.target.value })} hint={draft.tts_provider === 'azure' ? 'Required: enter https://REGION.tts.speech.microsoft.com for the region of your Azure Speech resource.' : 'Must implement POST /audio/speech with model, input, voice and MP3 output. Other speech protocols need an adapter.'}/>
             {draft.tts_provider !== 'azure' && <CatalogSelect key={`${draft.tts_provider}:${draft.tts_base_url}`} label="Speech synthesis model" value={draft.tts_model || ''} onChange={tts_model => change({ tts_model })} options={draft.tts_provider === 'openai' ? TTS_MODELS : []} />}
             <Field label="Speech synthesis API key" type="password" autoComplete="new-password" value={draft.tts_api_key || ''} onChange={e => change({ tts_api_key: e.target.value, tts_clear_api_key: false })} placeholder={saved.tts_provider === draft.tts_provider && saved.tts_base_url === draft.tts_base_url && saved.tts_api_key_configured ? 'Saved — leave blank to keep' : 'Separate key required for this component'} />
-            <label className="block text-sm"><input type="checkbox" checked={Boolean(draft.tts_clear_api_key)} onChange={e => change({ tts_clear_api_key: e.target.checked, tts_api_key: '' })}/> Remove saved speech synthesis key</label>
+            <p className="text-sm text-ink-soft">To remove the saved speech key, select Instance default or Browser speech, then save.</p>
           </>}
           <p className="text-sm text-ink-soft">Choose the voice in the assistant editor after saving. Saved keys are never returned to your browser or copied into presets.</p>
         </Card>

@@ -1825,6 +1825,8 @@ export function registerStudioApi(app: StudioApp): void {
       workspaceApiKeyConfigured: Boolean(provider?.llm_api_key),
       model: provider?.llm_model ?? '',
       presets: TEXT_PRESETS,
+      instance_text_preset: TEXT_PRESETS.find(p => p.baseUrl && sameLlmEndpoint(p.baseUrl, c.env.DEFAULT_LLM_BASE_URL))?.id || 'custom',
+      instance_text_model: c.env.DEFAULT_LLM_MODEL,
       realtime_provider: provider?.realtime_provider ?? 'instance',
       realtime_base_url: provider?.realtime_base_url ?? '',
       // Key presence follows runtime selection; it is not a connection check.

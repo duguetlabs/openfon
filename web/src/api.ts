@@ -223,6 +223,8 @@ export interface ProviderUpdate {
 }
 
 export interface ProviderView {
+  instance_text_preset?: string;
+  instance_text_model?: string;
   model: string;
   presets: { id: string; label: string; baseUrl: string; model: string }[];
   realtime_provider: string;
