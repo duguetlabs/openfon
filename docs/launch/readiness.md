@@ -87,3 +87,15 @@ independent summaries. Production is unchanged.
 Before production rollout, verify a completed call with the selected summary
 provider and confirm its saved summary; deployment verification and synthetic
 routing tests do not establish live-provider acceptance.
+
+### Voice selection and repeated browser playback
+
+Selected realtime voices are acknowledged before generation, and the same
+engine speaks the greeting. Local workerd/D1 with real Kataleptic confirmed
+selected Alloy and HD Seraphina and received PCM. Chrome checks cover six
+successive calls, resource closure and recovery from deliberate AudioContext
+suspension, plus saved selection, reservation cancellation and cached previews.
+The user's historical silence was not reproduced; these checks do not establish
+physical audibility on the affected device. Confirm repeated calls there before
+closing that acceptance item. Unreliable automated voice-presentation estimates
+remain unclassified pending a reviewed listening assessment.

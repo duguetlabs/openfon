@@ -25,6 +25,7 @@ export default function Widget() {
   const [textInput, setTextInput] = useState('');
   const [hasMic, setHasMic] = useState(true);
   const [engine, setEngine] = useState('');
+  const [audioBlocked, setAudioBlocked] = useState(false);
   const callRef = useRef<VoiceCall | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -76,6 +77,9 @@ export default function Widget() {
       case 'level':
         setLevel(ev.value);
         break;
+      case 'audio':
+        setAudioBlocked(ev.blocked);
+        break;
       case 'engine':
         setEngine(ev.label);
         break;
@@ -93,13 +97,15 @@ export default function Widget() {
     callRef.current?.hangup();
     setPhase('connecting');
     setLines([]);
+    setAudioBlocked(false);
     const call = new VoiceCall();
     callRef.current = call;
-    call.on(onEvent);
+    call.on(event => { if (callRef.current === call) onEvent(event); });
     try {
       await call.start(slug);
       setHasMic(call.hasMic);
     } catch (err) {
+      call.hangup();
       setPhase('error');
       setErrorMsg(err instanceof Error ? err.message : 'Could not start the call');
     }
@@ -199,6 +205,10 @@ export default function Widget() {
           </div>
         )}
 
+        {(phase === 'connecting' || live) && audioBlocked && <div role="alert" className="text-center">
+          <p>Audio is paused or unavailable. Check your output device if it stays silent.</p>
+          <button className="my-2 rounded border px-4 py-2" onClick={() => callRef.current?.prepareAudio()}>Enable audio</button>
+        </div>}
         {phase === 'ended' && (
           <div className="rise text-center">
             <h1 className="font-display text-4xl font-semibold">Call ended.</h1>
