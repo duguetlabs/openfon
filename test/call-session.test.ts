@@ -338,6 +338,7 @@ describe('pipeline closing guard', () => {
     { first: 'Your message is saved. <END_CALL>', second: 'Hasta luego.', expected: 'Your message is saved. Hasta luego.', calls: 2 },
     { first: 'Auf Wiederhören. <END_CALL>', second: '', expected: 'Auf Wiederhören.', calls: 1 },
     { first: '<END_CALL>', second: '', expected: undefined, calls: 2 },
+    { first: '<END_CALL>', second: 'How can I help you?', expected: undefined, calls: 2 },
   ])('preserves useful speech and bounds the farewell request: $first', async ({ first, second, expected, calls }) => {
     vi.useFakeTimers();
     const { session } = newSession('pipeline');

@@ -65,6 +65,7 @@ export default { async fetch(request, env) {
       if (msg.type === 'response.create') setTimeout(() => {
         send({type:'response.output_audio.delta',delta:audio});
         send({type:'response.output_audio_transcript.done',transcript:'Synthetic greeting.'});
+        send({type:'response.done'});
       }, 30);
       if (msg.type === 'input_audio_buffer.append' && !responded) {
         responded = true;
@@ -77,6 +78,7 @@ export default { async fetch(request, env) {
           send({type:'response.output_audio.delta',delta:audio});
           send({type:'response.output_audio_transcript.done',transcript:'Goodbye.'});
           send({type:'response.function_call_arguments.done',name:'end_call',arguments:'{}'});
+          send({type:'response.done'});
         }, 800);
       }
     });

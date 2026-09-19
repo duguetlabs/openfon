@@ -43,7 +43,7 @@ remain separate checks.
 
 ### Graceful closing checks — 2026-09-19
 
-The [closing controller](../call-closing.md) passed 1,777 tests, both TypeScript
+The [closing controller](../call-closing.md) passed 1,783 tests, both TypeScript
 checks and the production build. Original regressions reproduced immediate
 closure after a tool-only response and before late goodbye audio. Tests cover
 one replacement farewell, cancellation, provider loss/rotation, timeouts,
@@ -51,7 +51,9 @@ playback IDs and browser speech errors. Actual Chrome played 30 seconds of
 synthetic PCM: eight nodes remained at the ending marker, and acknowledgement
 arrived only after they finished (672 ms later, zero remaining buffers).
 Actual workerd Asterisk playback preserved mark/flow-control drainage and emitted
-the matching completion acknowledgement; the PBX and audio were synthetic.
+the matching completion acknowledgement; the PBX and audio were synthetic. Telnyx, Asterisk, direct OpenAI and gateway
+workerd smoke checks also passed after their fixtures gained the missing
+`response.done` event exposed by the first CI run.
 
 Local workerd/D1 calls against real Kataleptic `gpt-realtime-2` and
 `llama-3.3-70b` completed Spanish farewells. A separate realtime-v2 tool-only

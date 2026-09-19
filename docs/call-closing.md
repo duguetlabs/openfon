@@ -3,7 +3,7 @@
 `end_call` requests closing. OpenFon waits for the corresponding response to
 finish and reuses a successful spoken farewell from the current caller turn.
 If it is missing, the controller requests one short goodbye in the language of
-the last caller message, with tools disabled. An empty or failed replacement is
+the last caller message, with tools disabled. An empty, failed or unrecognized replacement is
 not retried. Pipeline calls follow the same policy and preserve any useful reply
 before appending the farewell. The assistant's business prompt stays unchanged.
 
@@ -27,7 +27,9 @@ Identified replies are correlated by provider socket and response ID. Gateways
 without IDs support serial responses on one socket; arbitrary concurrent,
 unlabelled replies cannot provide the same correlation guarantee. Farewell
 recognition uses the existing multilingual heuristic, so unfamiliar wording can
-cause one additional goodbye.
+cause one additional goodbye; an unrecognized replacement closes with
+`farewell_unavailable` rather than claiming a verified farewell. This heuristic
+is not semantic verification of politeness or language correctness.
 
 ## Diagnostics and stored data
 

@@ -1,4 +1,11 @@
 import { isFarewell } from './providers';
+import { RealtimeInputError } from './realtime-input';
+
+function responseKey(id: unknown): string {
+  if (id === undefined) return '';
+  if (typeof id !== 'string' || !id || id.length > 128) throw new RealtimeInputError();
+  return id;
+}
 
 type Reply = { source: object; id: string; audio: boolean; farewell: boolean; text: boolean; done: boolean; ok: boolean; eligible: boolean };
 export type ClosingAction = 'wait' | 'generate' | 'ready' | 'failed';
@@ -17,7 +24,7 @@ export class RealtimeClosingGuard {
   requested = false;
 
   private reply(source: object, id: unknown, restart = false): Reply {
-    const key = typeof id === 'string' && id.length <= 128 ? id : '';
+    const key = responseKey(id);
     let entries = this.replies.get(source);
     if (!entries) { entries = new Map(); this.replies.set(source, entries); }
     let reply = entries.get(key);
@@ -51,13 +58,14 @@ export class RealtimeClosingGuard {
   }
   request(source: object, id?: unknown): void {
     if (this.requested) return;
+    responseKey(id);
     this.requested = true; this.source = source;
     this.target = id === undefined ? this.current.get(source) ?? this.reply(source, undefined) : this.reply(source, id);
   }
   accepts(source: object, id: unknown): boolean {
+    const key = responseKey(id);
     if (!this.requested) return true;
     if (this.terminal || source !== this.source) return false;
-    const key = typeof id === 'string' ? id : '';
     if (this.waitingForReplacement) return !this.replies.get(source)?.has(key) || (!key && this.target?.done === true);
     return this.target?.id === key;
   }
@@ -72,7 +80,7 @@ export class RealtimeClosingGuard {
       if (farewell) this.target = farewell;
     }
     const usable = this.target?.ok && this.target.eligible && this.target.audio && this.target.text;
-    if (usable && (this.replacement || this.target?.farewell)) {
+    if (usable && this.target?.farewell) {
       this.terminal = true; return 'ready';
     }
     if (this.replacement) { this.terminal = true; return 'failed'; }

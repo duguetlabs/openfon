@@ -1746,7 +1746,7 @@ export class CallSession implements DurableObject {
         const farewell = (await chatComplete(llm, [...this.history, { role: 'system', content:
           'The conversation is finished. Say only one short, polite goodbye in the language of the most recent caller message. Do not add facts, ask questions or output END_CALL.' }], { maxTokens: 80 })).replace(/\s*<?END_CALL>?\s*/gi, ' ').trim();
         if (this.ended) return;
-        if (!farewell) { this.closingTimeline!.result = 'farewell_unavailable'; await this.finalize(); return; }
+        if (!isFarewell(farewell)) { this.closingTimeline!.result = 'farewell_unavailable'; await this.finalize(); return; }
         reply = [reply, farewell].filter(Boolean).join(' ');
       }
       if (this.ended) return;
