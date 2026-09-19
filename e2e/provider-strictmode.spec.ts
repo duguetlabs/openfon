@@ -8,9 +8,11 @@ test.beforeAll(async () => {
   const result = await build({ stdin: { contents: `
     import React, { StrictMode } from 'react';
     import { createRoot } from 'react-dom/client';
-    import { createMemoryRouter, RouterProvider, Link } from 'react-router-dom';
+    import { createMemoryRouter, RouterProvider, Link, Outlet } from 'react-router-dom';
     import ProviderSettings from './web/src/pages/ProviderSettings';
-    const router = createMemoryRouter([{ path: '/', element: <><Link to="/away">Leave form</Link><ProviderSettings onSaved={async () => { window.parentRefreshes = (window.parentRefreshes || 0) + 1; }} /></> }, { path:'/away',element:<p>Away</p> }]);
+    import { useUnsavedNavigationGuard } from './web/src/unsaved-edits';
+    function Shell() { useUnsavedNavigationGuard(); return <Outlet />; }
+    const router = createMemoryRouter([{ element: <Shell />, children: [{ path: '/', element: <><Link to="/away">Leave form</Link><ProviderSettings onSaved={async () => { window.parentRefreshes = (window.parentRefreshes || 0) + 1; }} /></> }, { path:'/away',element:<p>Away</p> }] }]);
     createRoot(document.getElementById('root')).render(<StrictMode><RouterProvider router={router}/></StrictMode>);
   `, resolveDir: resolve(import.meta.dirname, '..'), loader: 'tsx' }, bundle: true, write: false,
     format: 'iife', platform: 'browser', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"development"' } });
