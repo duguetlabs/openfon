@@ -77,3 +77,27 @@ test('acknowledged summary save needs no follow-up read and admits only one pend
   await expect(save).toBeDisabled();
   expect(writes).toBe(1);
 });
+
+test('one navigation guard protects summary and provider drafts independently across saves', async ({ page }) => {
+  const summary = page.getByRole('region', { name: 'Call summaries', exact: true });
+  const overview = page.getByRole('navigation', { name: 'Workspace' }).getByRole('link', { name: 'Overview', exact: true });
+  await summary.getByLabel('Summary provider', { exact: true }).selectOption('workspace');
+  async function cancelNavigation() {
+    const dialog = page.waitForEvent('dialog');
+    const navigate = overview.click();
+    await (await dialog).dismiss(); await navigate;
+    await expect(page).toHaveURL('/settings');
+  }
+  await cancelNavigation(); // A clean provider card cannot hide a summary draft.
+  await fillCatalog(page, 'Workspace text model', 'unsaved-provider-model');
+  await summary.getByRole('button', { name: 'Save summary settings', exact: true }).click();
+  await expect(summary.getByRole('status')).toContainText('Call summary settings saved.');
+  await cancelNavigation(); // Saving summaries must not clear the provider guard.
+  await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
+  await expect(page.getByText('Provider settings saved.', { exact: false })).toBeVisible();
+  let unexpectedDialogs = 0;
+  page.on('dialog', async d => { unexpectedDialogs++; await d.dismiss(); });
+  await overview.click();
+  await expect(page).toHaveURL('/overview');
+  expect(unexpectedDialogs).toBe(0);
+});

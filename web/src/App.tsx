@@ -21,7 +21,7 @@ import {
   type CompatibilitySessionSnapshot,
 } from './session-load';
 import { browserLogoutIntentStorage } from './logout-intent';
-import { confirmDiscardUnsaved } from './unsaved-edits';
+import { confirmDiscardUnsaved, useUnsavedNavigationGuard } from './unsaved-edits';
 import { studioSetupPending } from './session-gate';
 
 interface Session {
@@ -54,6 +54,7 @@ const SessionCtx = createContext<Session>({
 export const useSession = () => useContext(SessionCtx);
 
 export default function App() {
+  useUnsavedNavigationGuard();
   const [loading, setLoading] = useState(true);
   const [me, setMe] = useState<Me | null>(null);
   const [business, setBusiness] = useState<Business | null>(null);
