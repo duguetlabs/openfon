@@ -37,7 +37,7 @@ export function CatalogSelect({ label, value, onChange, options, defaultLabel = 
     <label className="block text-sm" htmlFor={id}>{label}</label>
     <div className="flex items-center gap-2"><select id={id} className={`${inputClass} w-full min-w-0`} value={custom || !known ? '__custom' : value} onChange={e => {
       if (e.target.value === '__custom') setCustomValue(value); else { setCustomValue(null); onChange(e.target.value); }
-    }}><option value="" disabled={!allowDefault}>{showGender ? `◇ ${defaultLabel}` : defaultLabel}</option>{filtered.map(o => <option key={o.id} value={o.id} aria-label={showGender ? `${o.label}, ${o.gender || 'unspecified'} voice gender` : undefined}>{showGender ? `${genderIcon(o.gender)} ` : ''}{o.label === o.id ? o.id : `${o.label} — ${o.id}`}</option>)}<option value="__custom">Custom ID…</option></select>{trailing}</div>
+    }}><option value="" disabled={!allowDefault}>{showGender ? `◇ ${defaultLabel}` : defaultLabel}</option>{filtered.map(o => <option key={o.id} value={o.id} aria-label={showGender ? `${o.label}, ${o.gender || 'unspecified'} voice gender` : undefined}>{showGender ? `${genderIcon(o.gender)} ` : ''}{o.label === o.id ? o.id : `${o.label} — ${o.id}`}</option>)}<option value="__custom" aria-label={showGender ? 'Custom ID, unspecified voice gender' : undefined}>{showGender ? '◇ Custom ID…' : 'Custom ID…'}</option></select>{trailing}</div>
     {(custom || !known) && <Field label={`Custom ${label.toLowerCase()}`} value={value} onChange={e => { setCustomValue(e.target.value); onChange(e.target.value); }} hint="Advanced: enter an ID supported by this provider. Existing custom values are preserved." />}
     {hint && <p className="studio-muted">{hint}</p>}
   </div>;

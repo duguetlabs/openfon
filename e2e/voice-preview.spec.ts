@@ -83,6 +83,8 @@ test('compact samples prefetch lazily, reuse cached audio, stop stale playback a
   expect(await (await page.request.get(`/api/me/assistants/${id}`)).json()).toEqual(baseline);
   // Provider gender metadata, with an explicit unknown symbol for native voices.
   await expect(voice.locator('option[value="marin"]')).toHaveText('◇ marin');
+  await expect(voice.locator('option[value="__custom"]')).toHaveText('◇ Custom ID…');
+  await expect(voice.locator('option[value="__custom"]')).toHaveAttribute('aria-label', 'Custom ID, unspecified voice gender');
   await engine.selectOption('kataleptic-realtime-hd');
   await expect(voice.locator('option[value="en-US-AvaMultilingualNeural"]')).toHaveText('♀ en-US-AvaMultilingualNeural');
   await expect(voice.locator('option[value="it-IT-AlessioMultilingualNeural"]')).toHaveText('♂ it-IT-AlessioMultilingualNeural');
