@@ -1,3 +1,4 @@
+import CallDebugPanel from '../components/CallDebugPanel';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, ApiError, bookingRequestContact, takenMessage, type CallDetail, type KnowledgeCollection } from '../api';
@@ -94,6 +95,7 @@ export default function CallDetailPage() {
         </Card>
       )}
 
+      {call.environment === 'test' && <CallDebugPanel key={call.id} callId={call.id} active={call.status === 'active'} />}
       {call.failure_message && <Card className="mb-5"><p>Call issue: {call.failure_message}</p></Card>}
       <div className="mb-6"><p className="text-sm text-ink-soft">Save a caller’s question as a knowledge draft, then write and approve the answer in Knowledge.</p>{collections.length > 0 && <label className="mt-3 block text-sm">Save drafts to <select className="ml-3 rounded border border-line p-2" value={collectionId} onChange={e=>setCollectionId(e.target.value)}>{collections.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}{draftError && <p role="alert" className="mt-3 text-rose">{draftError}</p>}{saved && <p role="status" className="mt-3 text-sm">{saved} <Link to="/knowledge" className="text-iris underline">Review knowledge →</Link></p>}</div>
       <div className="rise rise-2 space-y-3">

@@ -28,6 +28,8 @@
   // plan, so self-hosters get the sweep too.
   "triggers": { "crons": ["*/5 * * * *"] },
   "vars": {
+    // Enable only on a deployment whose private test callers expect recording.
+    "TEST_CALL_DEBUG": "false",
     "TELNYX_ENABLED": "false",
     "ASTERISK_ENABLED": "false",
     // Opt in only after configuring TELNYX_API_KEY/TELNYX_PUBLIC_KEY secrets,

@@ -38,6 +38,7 @@ if (migrated.status !== 0) {
 const worker = spawn(npx, ['wrangler', 'dev', '--local', '--port', process.env.OPENFON_E2E_PORT || process.env.OPENFON_TEST_PORT || '8790', '--inspector-port', process.env.OPENFON_E2E_INSPECTOR_PORT || process.env.OPENFON_INSPECTOR_PORT || '9232', '--persist-to', state,
   '--var', `DEFAULT_LLM_BASE_URL:${providerUrl}`, '--var', `DEFAULT_STT_BASE_URL:${providerUrl}`,
   '--var', `REALTIME_BASE_URL:${providerUrl.replace('http:', 'ws:')}/realtime`, '--var', 'DEFAULT_TTS_PROVIDER:browser',
+  '--var', `TEST_CALL_DEBUG:${process.env.OPENFON_E2E_DEBUG === 'false' ? 'false' : 'true'}`,
   '--var', 'DEFAULT_LLM_API_KEY:local-test-key', '--var', 'DEFAULT_STT_API_KEY:local-test-key',
   '--var', 'AZURE_SPEECH_KEY:local-test-key', '--var', 'REALTIME_API_KEY:local-test-key'], { stdio: 'inherit' });
 const requestedShutdownSignals = new Set();
