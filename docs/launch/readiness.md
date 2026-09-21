@@ -155,3 +155,15 @@ goodbye, finished browser speech before closing, and persisted a completed call
 without a failure code. No physical
 microphone, acoustic echo cancellation, arbitrary BYOK provider or PSTN acceptance
 is implied.
+
+### Debug recording acceptance
+
+Test Studio supports opt-in deployment-wide recording for owner test calls; see
+[debug recordings](../call-debug-recordings.md) for access, retention and replay.
+Local real Worker storage checks cover byte preservation, owner isolation,
+restart and expiry; Chrome checks cover Pipeline diagnostic microphone capture,
+recording disclosure and deletion. These use synthetic input. Recordings cannot
+recover historical audio, prove physical speaker playback, or reproduce a model
+response deterministically. Browser-generated speech has text/events only.
+Quiet and restaurant-noise tests with the actual smart-glasses microphone remain
+physical acceptance items; hands-free interruption settings are unchanged.

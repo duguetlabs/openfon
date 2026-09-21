@@ -748,6 +748,19 @@ app.get('/api/me/business/:id/calls', async (c) => {
   return c.json(results);
 });
 
+app.get('/api/me/debug-config', c => c.json({ testCalls: c.env.TEST_CALL_DEBUG === 'true', retentionDays: 7 }));
+for (const path of ['/api/me/calls/:callId/debug', '/api/me/calls/:callId/debug/download']) {
+  app.on(['GET', 'DELETE'], path, async c => {
+    const owned = await c.env.DB.prepare(`SELECT calls.id FROM calls JOIN businesses ON businesses.id=calls.business_id
+      WHERE calls.id=? AND businesses.user_id=? AND calls.environment='test' AND calls.channel='web'`)
+      .bind(c.req.param('callId'), c.get('userId')).first<{ id: string }>();
+    if (!owned) return c.json({ error: 'Not found' }, 404);
+    const stub = c.env.CALL_SESSION.get(c.env.CALL_SESSION.idFromName(owned.id));
+    const suffix = path.endsWith('/download') ? '/download' : '';
+    return stub.fetch(new Request('https://call-debug/debug' + suffix, { method: c.req.method }));
+  });
+}
+
 app.get('/api/me/calls/:callId', async (c) => {
   const call = await c.env.DB.prepare(
     `SELECT calls.* FROM calls JOIN businesses ON businesses.id = calls.business_id

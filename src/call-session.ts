@@ -19,6 +19,7 @@ import { RealtimeOutputBudget, RealtimeAudioQueue, RealtimeOutputError, Realtime
 import type { Env, Business, AgentSettings, ChatMessage, ProviderSettings } from './types';
 import { resolveRealtime, realtimeConnection, realtimeCapabilities } from './realtime-providers';
 import type { RealtimeConfig } from './realtime-providers';
+import { CallDebug, debugMeta, debugResponse, purgeDebug, debugClientEvent, debugProviderEvent } from './call-debug';
 import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './prompt';
 import type { PromptKnowledgeItem } from './prompt';
 import { loadCallKnowledge } from './call-knowledge';
@@ -217,6 +218,7 @@ function turnDetectionFor(model: string): TurnDetection {
 }
 
 export class CallSession implements DurableObject {
+  private debug: CallDebug | null = null;
   private ws: WebSocket | null = null;
   private callId = '';
   private biz: Business | null = null;
@@ -251,6 +253,7 @@ export class CallSession implements DurableObject {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname.startsWith('/debug')) return debugResponse(this.state, request, this.debug);
     const callId = url.searchParams.get('call') ?? '';
     if (request.headers.get('Upgrade') !== 'websocket' || !callId) {
       return new Response('expected websocket', { status: 426 });
@@ -322,6 +325,10 @@ export class CallSession implements DurableObject {
   private send(obj: unknown): void {
     try {
       this.ws?.send(JSON.stringify(obj));
+      if (this.debug) {
+        const v = obj as { type?: string; text?: string; message?: string };
+        if (v.type) this.debug.event('caller_event', { type: v.type, text: v.text, message: v.message });
+      }
     } catch {
       /* socket gone */
     }
@@ -417,13 +424,17 @@ export class CallSession implements DurableObject {
   }
 
   private async loadCall(): Promise<void> {
-    const call = await this.env.DB.prepare('SELECT id, business_id, assistant_id, status, started_at, channel FROM calls WHERE id = ?')
+    const call = await this.env.DB.prepare('SELECT id, business_id, assistant_id, status, started_at, channel, environment FROM calls WHERE id = ?')
       .bind(this.callId)
       .first<CallRow>();
     if (!call || call.status !== 'active') throw new Error('call not found or not active');
     const budget = await this.env.DB.prepare('SELECT COALESCE(SUM(length(CAST(text AS BLOB))), 0) AS bytes FROM call_turns WHERE call_id = ?')
       .bind(this.callId).first<{ bytes: number }>();
     this.persistedTranscriptBytes = budget?.bytes ?? 0;
+    if (!this.debug && this.env.TEST_CALL_DEBUG === 'true' && (call as CallRow & { environment?: string }).environment === 'test' && call.channel === 'web') {
+      this.debug = await CallDebug.start(this.state, this.callId);
+      this.debug?.event('start', { release: this.env.OPENFON_RELEASE_SHA || 'development' });
+    }
     // Persisted admission decides capabilities; a client cannot opt into another
     // channel using a query parameter or WebSocket message.
     this.requiresCarrierAudio = call.channel === 'telnyx' || call.channel === 'asterisk';
@@ -438,18 +449,36 @@ export class CallSession implements DurableObject {
     if (this.ended) return;
     this.lastActivity = Date.now(); // feeds the idle watchdog
     if (typeof ev.data !== 'string') {
-      if (this.closingTimeline) return;
-      if (this.nativeGreeting) return; // carrier input cannot overtake the native greeting
       const audio = await toArrayBuffer(ev.data);
+      if (this.closingTimeline || this.nativeGreeting) {
+        this.debug?.audio('caller', audio, this.mode === 'realtime' ? 'pcm_s16le_24000' : this.pendingContentType, { forwarded: false });
+        return;
+      }
       if (this.mode === 'realtime') {
-        this.sendUpstream({ type: 'input_audio_buffer.append', audio: b64encode(audio) });
+        const forwarded = this.sendUpstream({ type: 'input_audio_buffer.append', audio: b64encode(audio) });
+        this.debug?.audio('caller', audio, 'pcm_s16le_24000', { forwarded });
       } else {
+        this.debug?.audio('caller_utterance', audio, this.pendingContentType, { admitted: !this.busy });
         await this.handleUtterance(audio);
       }
       return;
     }
-    const msg = JSON.parse(ev.data) as { type: string; text?: string; contentType?: string; id?: unknown };
+    const msg = JSON.parse(ev.data) as { event?: unknown; audio?: string; type: string; text?: string; contentType?: string; id?: unknown };
+    if (this.debug && !['audio_received', 'debug', 'debug_audio'].includes(msg.type)) this.debug.event('caller_control', { type: msg.type });
     switch (msg.type) {
+      case 'debug': {
+        const event = debugClientEvent(msg.event);
+        if (this.debug && event) {
+          if (event.name === 'capture_gap') this.debug.meta.partial = true;
+          this.debug.event('browser', event);
+        }
+        break;
+      }
+      case 'debug_audio':
+        if (this.debug && this.mode === 'pipeline' && typeof msg.audio === 'string' && msg.audio.length <= 16_384) {
+          try { this.debug.audio('microphone', decodeRealtimeAudio(msg.audio), 'pcm_s16le_24000'); } catch { /* invalid diagnostics do not fail calls */ }
+        }
+        break;
       case 'playback_complete':
       case 'playback_failed':
         if (!this.endingSent || !this.playbackId || msg.id !== this.playbackId) break;
@@ -522,7 +551,7 @@ export class CallSession implements DurableObject {
     // would file a call that ran perfectly well as failed — and a working call
     // disappearing from the owner's counts gives them nothing to notice.
     this.failure = null;
-    this.send({ type: 'ready', language: this.lang, ...payload, ...(payload.mode === 'realtime' ? { audioReceipts: true } : {}) });
+    this.send({ type: 'ready', language: this.lang, debugRecording: Boolean(this.debug), ...payload, ...(payload.mode === 'realtime' ? { audioReceipts: true } : {}) });
   }
 
   private async runStart(): Promise<void> {
@@ -568,6 +597,10 @@ export class CallSession implements DurableObject {
     this.lang = this.settings!.language in SUPPORTED_LANGUAGES ? this.settings!.language : 'en';
     const greeting = defaultGreeting(this.biz!, this.settings!);
     const systemPrompt = buildSystemPrompt(this.biz!, this.settings!, new Date(), this.knowledge);
+    this.debug?.event('configuration', { engine: this.settings!.engine, language: this.lang, prompt: systemPrompt,
+      llmModel: this.settings!.llm_model || this.env.DEFAULT_LLM_MODEL, sttModel: this.settings!.stt_model || this.env.DEFAULT_STT_MODEL,
+      ttsProvider: this.settings!.tts_provider || this.env.DEFAULT_TTS_PROVIDER, voice: this.settings!.voice,
+      realtimeModel: this.settings!.realtime_model || this.env.REALTIME_MODEL, realtimeVoice: this.settings!.realtime_voice });
 
     if (this.settings!.engine === 'realtime') {
       this.history = [{ role: 'system', content: systemPrompt }];
@@ -711,12 +744,17 @@ export class CallSession implements DurableObject {
   // State that belongs to a connection is keyed by the connection.
   private readableUpstreams = new Set<WebSocket>();
 
-  private sendUpstream(obj: unknown, target: WebSocket | null = this.upstream): void {
+  private sendUpstream(obj: unknown, target: WebSocket | null = this.upstream): boolean {
     try {
-      target?.send(JSON.stringify(obj));
-    } catch {
-      /* upstream gone */
-    }
+      if (!target) return false;
+      target.send(JSON.stringify(obj));
+      if (this.debug) {
+        const v = obj as { type: string; session?: { instructions?: string; audio?: unknown } };
+        if (v.type === 'session.update') this.debug.event('session', { socket: this.debug.socket(target), session: v.session });
+        else if (v.type !== 'input_audio_buffer.append') this.debug.event('upstream_send', { type: v.type, socket: this.debug.socket(target) });
+      }
+      return true;
+    } catch { return false; }
   }
 
   private cancelResponse(from: WebSocket): void {
@@ -1224,15 +1262,16 @@ export class CallSession implements DurableObject {
     const connection = realtimeConnection({ ...config, model: this.realtimeModel });
     let upgraded: WebSocket | null = null;
     if (connection.headers) {
+      this.debug?.event('connect_attempt');
       const controller = new AbortController();
       const connectTimer = setTimeout(() => controller.abort(), 5000);
       try {
         const response = await fetch(connection.url, {
           headers: connection.headers, redirect: 'manual', signal: controller.signal,
         });
-        if (response.status !== 101 || !response.webSocket) return false;
+        if (response.status !== 101 || !response.webSocket) { this.debug?.event('connect_rejected', { status: response.status }); return false; }
         upgraded = response.webSocket;
-      } catch { return false; }
+      } catch { this.debug?.event('connect_failed'); return false; }
       finally {
         // workerd keeps the request signal attached to the upgraded socket.
         // The deadline bounds connection setup, not the lifetime of the call.
@@ -1261,6 +1300,7 @@ export class CallSession implements DurableObject {
       let abandoned = false;
       let opened = false; // did this connection ever become usable?
       const timer = setTimeout(() => {
+        this.debug?.event('handshake_timeout', { socket: this.debug.socket(ws) });
         abandoned = true;
         this.abandonUpstream(ws);
         settle(false);
@@ -1270,6 +1310,7 @@ export class CallSession implements DurableObject {
         if (this.closingTimeline) { abandoned = true; clearTimeout(timer); this.abandonUpstream(ws); settle(false); return; }
         clearTimeout(timer);
         opened = true;
+        this.debug?.event('upstream_ready', { socket: this.debug.socket(ws) });
         this.upstream = ws;
         if (greetWith) this.sendUpstream({
           type: 'response.create',
@@ -1309,7 +1350,8 @@ export class CallSession implements DurableObject {
         if (!this.readableUpstreams.has(ws)) return; // abandoned or rotated out
         let event: UpstreamMessage;
         try { event = parseRealtimeMessage(ev.data) as unknown as UpstreamMessage; }
-        catch { rejectMessage(); return; }
+        catch { this.debug?.event('provider_parse_error'); rejectMessage(); return; }
+        if (!event.type.endsWith('.delta')) this.debug?.event('provider', { ...debugProviderEvent(event), socket: this.debug.socket(ws) });
         if (config.protocol === 'openai' && !opened) {
           try {
             if (event.type === 'error') {
@@ -1344,6 +1386,7 @@ export class CallSession implements DurableObject {
         });
       });
       ws.addEventListener('error', () => {
+        this.debug?.event('upstream_error', { socket: this.debug.socket(ws) });
         clearTimeout(timer);
         // Only discard a connection that never became usable. WebSockets
         // routinely emit `error` immediately before `close`, and `close` is
@@ -1352,7 +1395,8 @@ export class CallSession implements DurableObject {
         if (!opened) this.abandonUpstream(ws);
         settle(false);
       });
-      ws.addEventListener('close', () => {
+      ws.addEventListener('close', (event) => {
+        this.debug?.event('upstream_close', { socket: this.debug.socket(ws), code: event.code, clean: event.wasClean });
         clearTimeout(timer);
         this.readableUpstreams.delete(ws);
         settle(false);
@@ -1427,6 +1471,7 @@ export class CallSession implements DurableObject {
       }
       this.reconnects++;
       this.totalReconnects++;
+      this.debug?.event('recovery_attempt', { total: this.totalReconnects });
       console.log(`call ${this.callId}: upstream dropped, reconnecting`);
       const old = this.upstream;
       // Deferred: on a proactive rotation the old connection keeps talking
@@ -1516,6 +1561,7 @@ export class CallSession implements DurableObject {
     // Ordered marker follows exactly one admitted binary frame. A recipient
     // cannot know this unpredictable ID until it consumes the preceding bytes.
     this.ws!.send(audio);
+    this.debug?.audio('agent', audio, 'pcm_s16le_24000');
     this.ws!.send(JSON.stringify({ type: 'audio_receipt', id, bytes: audio.byteLength }));
     this.armAudioReceiptDeadline();
   }
@@ -1533,6 +1579,7 @@ export class CallSession implements DurableObject {
       this.checkAudioReceiver(bytes);
       const id = this.audioReceipts.sent(bytes, Date.now());
       this.ws!.send(wire);
+      this.debug?.event('caller_control_sent', { type: value.type, who: value.who });
       this.ws!.send(JSON.stringify({ type: 'control_receipt', id }));
       this.armAudioReceiptDeadline();
       return true;
@@ -1793,6 +1840,7 @@ export class CallSession implements DurableObject {
     if (audio && this.ws) {
       try {
         this.ws.send(audio);
+        this.debug?.audio('agent', audio, 'audio/mpeg');
       } catch {
         /* socket gone */
       }
@@ -1896,6 +1944,12 @@ export class CallSession implements DurableObject {
   }
 
   async alarm(): Promise<void> {
+    const recording = await debugMeta(this.state.storage);
+    if (recording?.watchdogCleared) {
+      if (recording.expiresAt <= Date.now()) await purgeDebug(this.state.storage);
+      else await this.state.storage.setAlarm(recording.expiresAt);
+      return;
+    }
     const callId = this.callId || (await this.state.storage.get<string>('callId')) || '';
     if (!callId) return; // nothing to reconcile
     this.callId = callId;
@@ -2010,6 +2064,7 @@ export class CallSession implements DurableObject {
           `call ${this.callId}: giving up on finalize after ${Math.round(trying / 60_000)}m — leaving the row to be swept`,
           err
         );
+        if (await debugMeta(this.state.storage)) await this.clearWatchdog();
         return; // stop rescheduling; the row stays 'active' for a later sweep
       }
       console.error(`call ${this.callId}: finalize failed, retrying at the next tick`, err);
@@ -2070,7 +2125,16 @@ export class CallSession implements DurableObject {
 
   private async clearWatchdog(): Promise<void> {
     try {
-      await this.commit(this.state.storage.deleteAlarm(), this.state.storage.deleteAll());
+      const recording = await debugMeta(this.state.storage);
+      if (recording) {
+        if (this.debug) {
+          await this.debug.finish();
+          this.debug.meta.watchdogCleared = true;
+          await this.state.storage.put('debug:meta', this.debug.meta);
+        } else await this.state.storage.put('debug:meta', { ...recording, finishedAt: Date.now(), interrupted: true, partial: true, watchdogCleared: true });
+        await this.state.storage.delete(['callId', 'startDeadline', 'startedAt', 'hardDeadline', 'lastActivity', 'ending', 'summarized']);
+        await this.state.storage.setAlarm(recording.expiresAt);
+      } else await this.commit(this.state.storage.deleteAlarm(), this.state.storage.deleteAll());
     } catch (err) {
       console.error('watchdog cleanup failed', err);
     }

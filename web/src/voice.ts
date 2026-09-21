@@ -6,6 +6,7 @@
 export type VoiceEvent =
   | { type: 'status'; status: 'connecting' | 'live' | 'ended' | 'error'; detail?: string }
   | { type: 'engine'; label: string }
+  | { type: 'debug'; recording: boolean }
   | { type: 'audio'; blocked: boolean }
   | { type: 'transcript'; text: string }
   | { type: 'agent_text'; text: string }
@@ -32,6 +33,13 @@ function downsampleToPcm16(input: Float32Array, fromRate: number, toRate: number
 }
 
 export class VoiceCall {
+  private debugRecording = false;
+  private debugGap = false;
+  private debugStarted = performance.now();
+  private trace(name: string, value?: string | number): void {
+    if (!this.debugRecording || this.ws?.readyState !== WebSocket.OPEN || this.ws.bufferedAmount > 64_000) return;
+    try { this.ws.send(JSON.stringify({ type: 'debug', event: { name, value, ms: performance.now() - this.debugStarted } })); } catch { /* diagnostics must not affect calls */ }
+  }
   private ws: WebSocket | null = null;
   private stream: MediaStream | null = null;
   private audioCtx: AudioContext | null = null;
@@ -85,6 +93,7 @@ export class VoiceCall {
   private reportAudio(blocked: boolean): void {
     if (this.ended) return;
     this.audioBlocked = blocked || this.mediaBlocked || this.audioFailure;
+    this.trace('audio_state', this.audioBlocked ? 'blocked' : 'running');
     this.emit({ type: 'audio', blocked: this.audioBlocked });
   }
 
@@ -171,6 +180,7 @@ export class VoiceCall {
       }, 20_000);
     };
     ws.onerror = () => {
+      this.trace('socket_error');
       if (this.ended) return;
       this.emit({ type: 'status', status: 'error', detail: 'Connection failed' });
       this.teardown('ended');
@@ -195,6 +205,7 @@ export class VoiceCall {
         const msg = JSON.parse(ev.data) as {
           type: string;
           audioReceipts?: unknown;
+          debugRecording?: boolean;
           id?: unknown;
           bytes?: unknown;
           text?: string;
@@ -227,6 +238,9 @@ export class VoiceCall {
             ws.send(JSON.stringify({ type: 'audio_received', id: msg.id }));
             break;
           case 'ready':
+            this.debugRecording = msg.debugRecording === true;
+            this.emit({ type: 'debug', recording: this.debugRecording });
+            this.trace('capture', this.stream ? 'microphone' : 'text_only');
             this.audioReceipts = msg.audioReceipts === true;
             this.mode = msg.mode === 'realtime' ? 'realtime' : 'pipeline';
             this.ttsMode = msg.ttsMode === 'server' ? 'server' : 'browser';
@@ -239,7 +253,9 @@ export class VoiceCall {
             }
             if (this.stream) {
               if (this.mode === 'realtime') this.startRealtimeCapture();
-              else this.startVad();
+              else { this.startVad(); if (this.debugRecording) {
+                try { this.startRealtimeCapture(true); } catch { this.trace('capture_gap'); }
+              } }
             }
             break;
           case 'flush': // barge-in: stop agent playback immediately
@@ -342,6 +358,7 @@ export class VoiceCall {
   }
 
   private beginUtterance(now: number): void {
+    this.trace('vad_start');
     if (!this.stream) return;
     this.chunks = [];
     this.recorder = new MediaRecorder(this.stream, { mimeType: this.mimeType });
@@ -356,6 +373,7 @@ export class VoiceCall {
   }
 
   private endUtterance(now: number): void {
+    this.trace('vad_end');
     this.recording = false;
     this.emit({ type: 'speaking', who: 'none' });
     const dur = now - this.speechStartedAt;
@@ -384,7 +402,7 @@ export class VoiceCall {
 
   // ---- realtime engine: continuous capture + streamed PCM playback ----
 
-  private startRealtimeCapture(): void {
+  private startRealtimeCapture(debugOnly = false): void {
     if (!this.stream) return;
     if (!this.playCtx) this.prepareAudio();
     if (!this.playCtx) throw new Error('audio_unavailable');
@@ -403,7 +421,15 @@ export class VoiceCall {
       let sum = 0;
       for (let i = 0; i < input.length; i += 8) sum += input[i] * input[i];
       this.emit({ type: 'level', value: Math.min(1, Math.sqrt(sum / (input.length / 8)) * 18) });
-      this.ws.send(downsampleToPcm16(input, fromRate, 24000).buffer);
+      const pcm = downsampleToPcm16(input, fromRate, 24000);
+      if (debugOnly) {
+        // Extra Pipeline diagnostic track includes speech its half-duplex VAD ignores.
+        // Drop diagnostics before letting them accumulate on a stalled socket.
+        if (this.ws.bufferedAmount > 64_000) { this.debugGap = true; return; }
+        if (this.debugGap) { this.trace('capture_gap'); this.debugGap = false; }
+        let bytes = ''; for (const b of new Uint8Array(pcm.buffer)) bytes += String.fromCharCode(b);
+        try { this.ws.send(JSON.stringify({ type: 'debug_audio', audio: btoa(bytes) })); } catch { /* best effort */ }
+      } else this.ws.send(pcm.buffer);
     };
   }
 
@@ -444,7 +470,7 @@ export class VoiceCall {
     const startAt = Math.max(ctx.currentTime + (this.liveSources.size === 0 ? 0.15 : 0.005), this.nextPlayTime);
     node.start(startAt);
     this.nextPlayTime = startAt + audio.duration;
-    if (this.liveSources.size === 0) this.emit({ type: 'speaking', who: 'agent' });
+    if (this.liveSources.size === 0) { this.trace('playback_start'); this.emit({ type: 'speaking', who: 'agent' }); }
     this.liveSources.add(node);
     this.queuedPcmBytes += bytes.byteLength;
     const retainedBytes = bytes.byteLength;
@@ -453,6 +479,7 @@ export class VoiceCall {
       node.disconnect();
       this.queuedPcmBytes -= retainedBytes;
       if (this.liveSources.size === 0) {
+        this.trace('playback_end');
         this.emit({ type: 'speaking', who: 'none' });
         this.finishClosingPlayback();
       }
@@ -460,6 +487,7 @@ export class VoiceCall {
   }
 
   private flushPlayback(): void {
+    this.trace('flush');
     for (const node of this.liveSources) {
       node.onended = null;
       try {
@@ -521,6 +549,7 @@ export class VoiceCall {
     this.pendingSpeech++;
     this.emit({ type: 'speaking', who: 'agent' });
     const u = new SpeechSynthesisUtterance(text);
+    u.onstart = () => this.trace('speech_start');
     if (this.speechLanguage) {
       u.lang = this.speechLanguage;
       const language = this.speechLanguage.toLowerCase();
@@ -533,6 +562,7 @@ export class VoiceCall {
     const finish = (failed: boolean) => {
       if (this.ended || finished) return;
       finished = true;
+      this.trace(failed ? 'speech_error' : 'speech_end');
       this.playbackFailed ||= failed;
       if (failed) { this.audioFailure = true; this.reportAudio(true); }
       this.pendingSpeech--;
@@ -558,6 +588,7 @@ export class VoiceCall {
 
   private teardown(status: 'ended'): void {
     if (this.ended) return;
+    this.trace('teardown', status);
     this.ended = true;
     if (this.completionTimer !== undefined) clearTimeout(this.completionTimer);
     if (this.vadTimer) clearInterval(this.vadTimer);

@@ -1,5 +1,8 @@
 export interface Env {
   DB: D1Database;
+  /** Enable private, seven-day debug capture for owner test calls only. */
+  TEST_CALL_DEBUG?: string;
+  OPENFON_RELEASE_SHA?: string;
   ASSETS: Fetcher;
   CALL_SESSION: DurableObjectNamespace;
   ASTERISK_CALL?: DurableObjectNamespace;
