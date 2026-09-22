@@ -5,9 +5,10 @@ import type { Env } from '../src/types';
 import { SqliteD1, applyMigrations } from './sqlite-d1';
 
 // Kataleptic retired the realtime cascade, its Piper voices, whisper-large-v3-turbo
-// and the open chat models. Stored selections must move to live defaults, and
-// only where the workspace actually talks to Kataleptic.
+// and the open chat models. Stored selections that explicitly name Kataleptic
+// move to live defaults; an inherited instance endpoint is left to runtime.
 const migration = readFileSync(new URL('../migrations/0024_retire_kataleptic_models.sql', import.meta.url), 'utf8');
+const instanceFix = readFileSync(new URL('../scripts/retire-kataleptic-instance-defaults.sql', import.meta.url), 'utf8');
 const KATALEPTIC = 'https://api.kataleptic.com/v1';
 let db: SqliteD1, env: Env;
 const sql = (s: string) => db.exec(s);
@@ -40,6 +41,7 @@ beforeEach(async () => {
   sql(`INSERT INTO engine_presets(id,business_id,name,engine,realtime_model,realtime_voice,llm_model) VALUES
       ('p-inst','inst','Cascade Deutsch','realtime','kataleptic-realtime','de_DE-thorsten-medium','glm4-9b'),
       ('p-live','inst','HD','realtime','kataleptic-realtime-hd','de-DE-SeraphinaMultilingualNeural','llama-3.3-70b'),
+      ('p-inst-chat','inst','Chat cascade','realtime','llama-3.3-70b','de_DE-thorsten-medium',''),
       ('p-own','own','Mine','realtime','kataleptic-realtime','de_DE-thorsten-medium','qwen3-8b');
     INSERT INTO engine_profiles(id,business_id,name,engine,realtime_model,realtime_voice,llm_model) VALUES
       ('f-kat','kat','Cascade','realtime','llama-3.3-70b','en_US-lessac-medium','qwen2.5-coder-7b'),
@@ -49,20 +51,23 @@ beforeEach(async () => {
 });
 afterEach(() => db.close());
 
-it('moves Kataleptic workspaces off every retired id and leaves custom providers alone', () => {
+it('moves explicit Kataleptic selections off every retired id and leaves inherited and custom ones alone', () => {
   const before = rows("SELECT * FROM assistants WHERE business_id='own' ORDER BY id");
   expect(one("SELECT realtime_model FROM assistants WHERE business_id='inst'")).toEqual({ realtime_model: 'kataleptic-realtime' });
   sql(migration);
   for (const table of ['agent_settings', 'assistants']) {
     expect(rows(`SELECT business_id,realtime_model,realtime_voice,llm_model FROM ${table} ORDER BY business_id`)).toEqual([
-      { business_id: 'inst', realtime_model: '', realtime_voice: '', llm_model: '' },
+      // `kataleptic-realtime` names Kataleptic; the instance LLM endpoint is not known here.
+      { business_id: 'inst', realtime_model: '', realtime_voice: '', llm_model: 'mistral-nemo-12b' },
       { business_id: 'kat', realtime_model: '', realtime_voice: '', llm_model: '' },
       { business_id: 'own', realtime_model: 'kataleptic-realtime', realtime_voice: 'de_DE-thorsten-medium', llm_model: 'qwen3-8b' },
     ]);
   }
   expect(rows("SELECT * FROM assistants WHERE business_id='own' ORDER BY id")).toEqual(before);
   expect(rows('SELECT id,realtime_model,realtime_voice,llm_model FROM engine_presets ORDER BY id')).toEqual([
-    { id: 'p-inst', realtime_model: '', realtime_voice: '', llm_model: '' },
+    { id: 'p-inst', realtime_model: '', realtime_voice: '', llm_model: 'glm4-9b' },
+    // An inherited instance may be a custom realtime service: runtime decides.
+    { id: 'p-inst-chat', realtime_model: 'llama-3.3-70b', realtime_voice: 'de_DE-thorsten-medium', llm_model: '' },
     { id: 'p-live', realtime_model: 'kataleptic-realtime-hd', realtime_voice: 'de-DE-SeraphinaMultilingualNeural', llm_model: 'llama-3.3-70b' },
     { id: 'p-own', realtime_model: 'kataleptic-realtime', realtime_voice: 'de_DE-thorsten-medium', llm_model: 'qwen3-8b' },
   ]);
@@ -78,9 +83,9 @@ it('moves Kataleptic workspaces off every retired id and leaves custom providers
   ]);
   const summaries = rows('SELECT business_id,model,revision FROM summary_settings ORDER BY business_id');
   expect(summaries.map(({ business_id, model }) => ({ business_id, model }))).toEqual([
-    { business_id: 'inst', model: '' }, { business_id: 'kat', model: 'llama-3.3-70b' }, { business_id: 'own', model: 'qwen3-8b' },
+    { business_id: 'inst', model: 'glm4-9b' }, { business_id: 'kat', model: 'llama-3.3-70b' }, { business_id: 'own', model: 'qwen3-8b' },
   ]);
-  expect(summaries.map(s => s.revision === `r-${s.business_id}`)).toEqual([false, false, true]);
+  expect(summaries.map(s => s.revision === `r-${s.business_id}`)).toEqual([true, false, true]);
 });
 
 it('keeps each legacy row equal to its compatibility snapshot, so no repair overwrites Studio edits', () => {
@@ -112,24 +117,51 @@ it('is idempotent and leaves live selections untouched', () => {
 });
 
 it('clears exactly what runtime would remap, with the voice chosen for it', () => {
-  sql(`UPDATE agent_settings SET realtime_model='gpt-4o-realtime-preview', realtime_voice='marin' WHERE business_id='inst';
-    UPDATE assistants SET realtime_model='gpt-4o-realtime-preview', realtime_voice='marin' WHERE business_id='inst';
-    UPDATE compatibility_sync_state SET agent_snapshot=json_replace(agent_snapshot,'$.realtime_model','gpt-4o-realtime-preview','$.realtime_voice','marin') WHERE business_id='inst';`);
+  sql(`UPDATE agent_settings SET realtime_model='gpt-4o-realtime-preview', realtime_voice='marin' WHERE business_id='kat';
+    UPDATE assistants SET realtime_model='gpt-4o-realtime-preview', realtime_voice='marin' WHERE business_id='kat';
+    UPDATE compatibility_sync_state SET agent_snapshot=json_replace(agent_snapshot,'$.realtime_model','gpt-4o-realtime-preview','$.realtime_voice','marin') WHERE business_id='kat';`);
   sql(migration);
   for (const table of ['agent_settings', 'assistants']) {
-    expect(one(`SELECT realtime_model,realtime_voice FROM ${table} WHERE business_id='inst'`)).toEqual({ realtime_model: '', realtime_voice: '' });
+    expect(one(`SELECT realtime_model,realtime_voice FROM ${table} WHERE business_id='kat'`)).toEqual({ realtime_model: '', realtime_voice: '' });
   }
-  expect(JSON.parse(String(one("SELECT agent_snapshot FROM compatibility_sync_state WHERE business_id='inst'").agent_snapshot)))
+  expect(JSON.parse(String(one("SELECT agent_snapshot FROM compatibility_sync_state WHERE business_id='kat'").agent_snapshot)))
     .toMatchObject({ realtime_model: '', realtime_voice: '' });
 });
 
 it('keeps a retired-looking model on a legacy row whose own LLM endpoint is custom', () => {
   // Legacy writers could leave agent_settings on its own endpoint; that model is not Kataleptic's.
   sql(`DROP TRIGGER legacy_provider_credentials_guard;
-    UPDATE agent_settings SET llm_base_url='https://llm.example/v1', llm_api_key='k' WHERE business_id='inst';`);
+    UPDATE agent_settings SET llm_base_url='https://llm.example/v1', llm_api_key='k' WHERE business_id='kat';`);
   sql(migration);
-  expect(one("SELECT llm_model FROM agent_settings WHERE business_id='inst'")).toEqual({ llm_model: 'mistral-nemo-12b' });
-  expect(one("SELECT llm_model FROM assistants WHERE business_id='inst'")).toEqual({ llm_model: 'mistral-nemo-12b' });
-  expect(JSON.parse(String(one("SELECT agent_snapshot FROM compatibility_sync_state WHERE business_id='inst'").agent_snapshot)))
-    .toMatchObject({ llm_model: 'mistral-nemo-12b' });
+  expect(one("SELECT llm_model FROM agent_settings WHERE business_id='kat'")).toEqual({ llm_model: 'gemma3-27b' });
+  expect(one("SELECT llm_model FROM assistants WHERE business_id='kat'")).toEqual({ llm_model: 'gemma3-27b' });
+  expect(JSON.parse(String(one("SELECT agent_snapshot FROM compatibility_sync_state WHERE business_id='kat'").agent_snapshot)))
+    .toMatchObject({ llm_model: 'gemma3-27b' });
+});
+
+it('the instance-default fix clears inherited Kataleptic selections, in sync, and only those', () => {
+  sql(migration);
+  const own = ['assistants', 'agent_settings', 'engine_presets', 'summary_settings', 'provider_settings', 'compatibility_sync_state']
+    .map(table => rows(`SELECT * FROM ${table} WHERE business_id='own' ORDER BY rowid`));
+  sql(instanceFix);
+  for (const table of ['agent_settings', 'assistants']) {
+    expect(one(`SELECT realtime_model,realtime_voice,llm_model FROM ${table} WHERE business_id='inst'`)).toEqual({ realtime_model: '', realtime_voice: '', llm_model: '' });
+  }
+  expect(rows("SELECT id,realtime_model,realtime_voice,llm_model FROM engine_presets WHERE business_id='inst' ORDER BY id")).toEqual([
+    { id: 'p-inst', realtime_model: '', realtime_voice: '', llm_model: '' },
+    { id: 'p-inst-chat', realtime_model: '', realtime_voice: '', llm_model: '' },
+    { id: 'p-live', realtime_model: 'kataleptic-realtime-hd', realtime_voice: 'de-DE-SeraphinaMultilingualNeural', llm_model: 'llama-3.3-70b' },
+  ]);
+  expect(one("SELECT model FROM summary_settings WHERE business_id='inst'")).toEqual({ model: '' });
+  expect(['assistants', 'agent_settings', 'engine_presets', 'summary_settings', 'provider_settings', 'compatibility_sync_state']
+    .map(table => rows(`SELECT * FROM ${table} WHERE business_id='own' ORDER BY rowid`))).toEqual(own);
+  const synced = rows(`SELECT sync.agent_snapshot = json_object(
+      'agent_name', legacy.agent_name, 'greeting', legacy.greeting, 'persona', legacy.persona, 'language', legacy.language,
+      'voice', legacy.voice, 'take_messages', legacy.take_messages, 'custom_instructions', legacy.custom_instructions,
+      'engine', legacy.engine, 'realtime_model', legacy.realtime_model, 'realtime_voice', legacy.realtime_voice,
+      'llm_model', legacy.llm_model) AS same FROM compatibility_sync_state sync JOIN agent_settings legacy USING (business_id)`);
+  expect(synced.every(r => r.same === 1)).toBe(true);
+  const once = rows("SELECT name FROM sqlite_master WHERE type='table'").map(({ name }) => rows(`SELECT * FROM "${name}" ORDER BY rowid`));
+  sql(instanceFix);
+  expect(rows("SELECT name FROM sqlite_master WHERE type='table'").map(({ name }) => rows(`SELECT * FROM "${name}" ORDER BY rowid`))).toEqual(once);
 });

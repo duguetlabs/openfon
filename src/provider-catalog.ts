@@ -1,5 +1,6 @@
 import { fetchProviderJson } from './provider-response';
 import { OPENAI_REALTIME_VOICES } from './provider-settings';
+import { RETIRED_KATALEPTIC_CHAT_MODELS } from './providers';
 
 type Option = { id: string; label: string };
 type Model = Option & { kind: 'text' | 'transcription' | 'realtime' };
@@ -12,7 +13,7 @@ const fallbackModels: Model[] = [
 // Kataleptic retired its self-hosted models; until the gateway stops listing
 // them they would still be offered here, and every call to them fails.
 const RETIRED = new Set(['kataleptic-realtime', 'piper-tts', 'whisper-large-v3-turbo', 'whisper-large-v3-turbo-stream',
-  'parakeet-tdt-0-6b-stream', 'qwen3-8b', 'qwen2.5-coder-7b', 'mistral-nemo-12b', 'gemma3-27b', 'glm4-9b', 'nomic-embed']);
+  'parakeet-tdt-0-6b-stream', 'nomic-embed', ...RETIRED_KATALEPTIC_CHAT_MODELS]);
 const fallback = () => ({ models: fallbackModels, live: false, voices: {
   native: options(OPENAI_REALTIME_VOICES),
   azure: options(['en-US-AvaMultilingualNeural', 'de-DE-SeraphinaMultilingualNeural', 'es-ES-ArabellaMultilingualNeural', 'fr-FR-VivienneMultilingualNeural', 'it-IT-AlessioMultilingualNeural']),

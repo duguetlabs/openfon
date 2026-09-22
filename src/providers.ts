@@ -50,6 +50,15 @@ export function sameLlmEndpoint(a: string, b: string): boolean {
 // its own OpenAI-compatible server, but then only the key stored next to that
 // URL is ever sent: falling back to DEFAULT_LLM_API_KEY here would hand the
 // instance's key to whatever host the business typed into Settings.
+// Kataleptic retired its self-hosted chat models; each answers `model_retired`.
+export const KATALEPTIC_API = 'https://api.kataleptic.com/v1';
+export const RETIRED_KATALEPTIC_CHAT_MODELS = new Set(['qwen3-8b', 'qwen2.5-coder-7b', 'mistral-nemo-12b', 'gemma3-27b', 'glm4-9b']);
+// Only on Kataleptic itself: another endpoint may serve a model of the same name.
+function liveKatalepticModel(env: Env, baseUrl: string, model: string): string {
+  if (!RETIRED_KATALEPTIC_CHAT_MODELS.has(model) || !sameLlmEndpoint(baseUrl, KATALEPTIC_API)) return model;
+  return RETIRED_KATALEPTIC_CHAT_MODELS.has(env.DEFAULT_LLM_MODEL) ? 'llama-3.3-70b' : env.DEFAULT_LLM_MODEL;
+}
+
 export function resolveLlm(env: Env, settings: AgentSettings | null): LlmConfig {
   const custom = (settings?.llm_base_url ?? '').trim();
   const model = settings?.llm_model || env.DEFAULT_LLM_MODEL;
@@ -62,7 +71,7 @@ export function resolveLlm(env: Env, settings: AgentSettings | null): LlmConfig 
       // the instance key somewhere the operator didn't configure.
       baseUrl: env.DEFAULT_LLM_BASE_URL,
       apiKey: settings?.llm_api_key || env.DEFAULT_LLM_API_KEY || '',
-      model,
+      model: liveKatalepticModel(env, env.DEFAULT_LLM_BASE_URL, model),
     };
   }
   // Rows written before this rule existed (or edited straight in D1) are
@@ -72,7 +81,7 @@ export function resolveLlm(env: Env, settings: AgentSettings | null): LlmConfig 
   if (!settings?.llm_api_key) {
     throw new LlmConfigError('A custom LLM base URL needs its own API key — this instance never sends its key to another endpoint.');
   }
-  return { baseUrl: custom, apiKey: settings.llm_api_key, model };
+  return { baseUrl: custom, apiKey: settings.llm_api_key, model: liveKatalepticModel(env, custom, model) };
 }
 
 // Normalization for *address inspection* — "which machine is this" — not for

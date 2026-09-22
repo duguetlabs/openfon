@@ -17,8 +17,7 @@ import { RealtimeOutputBudget, RealtimeAudioQueue, RealtimeOutputError, Realtime
 //   server BINARY <mp3>                         spoken version of the last agent_text (azure mode)
 //   server JSON  {type:"thinking"} | {type:"error", message} | {type:"ended"}
 import type { Env, Business, AgentSettings, ChatMessage, ProviderSettings } from './types';
-import { resolveRealtime, realtimeConnection, realtimeCapabilities } from './realtime-providers';
-import type { RealtimeConfig } from './realtime-providers';
+import { liveRealtimeVoice, resolveRealtime, realtimeConnection, realtimeCapabilities, type RealtimeConfig } from './realtime-providers';
 import { CallDebug, debugMeta, debugResponse, purgeDebug, debugClientEvent, debugProviderEvent } from './call-debug';
 import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './prompt';
 import type { PromptKnowledgeItem } from './prompt';
@@ -1088,9 +1087,9 @@ export class CallSession implements DurableObject {
 
   private resolveRealtimeConfig(): RealtimeConfig {
     const config = this.realtimeConfig = resolveRealtime(this.env, this.settings);
-    if (config.retiredModel && this.settings) {
-      // A voice chosen for the retired tier means nothing to HD: let HD manage it.
-      console.log(`call ${this.callId}: retired realtime model ${config.retiredModel} served on ${config.model}`);
+    if (config.retiredModel) console.log(`call ${this.callId}: retired realtime model ${config.retiredModel} served on ${config.model}`);
+    if (this.settings?.realtime_voice && !liveRealtimeVoice(config, this.settings.realtime_voice)) {
+      // A voice chosen for the retired cascade means nothing now: let the tier manage it.
       this.settings = { ...this.settings, realtime_voice: '' };
     }
     return config;

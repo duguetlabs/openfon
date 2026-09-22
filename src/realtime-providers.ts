@@ -64,6 +64,14 @@ export function resolveRealtime(env: Env & { REALTIME_PROVIDER?: RealtimeProvide
   return { provider, baseUrl, apiKey, model, protocol };
 }
 
+// Piper voice ids (`de_DE-thorsten-medium`) belonged to the retired cascade; no
+// gateway tier accepts them now. Azure names use a hyphen (`de-DE-…`).
+const PIPER_VOICE = /^[a-z]{2}_[A-Z]{2}-/;
+/** The explicit voice to request, or '' when it belongs to a retired tier. */
+export function liveRealtimeVoice(config: RealtimeConfig, voice: string): string {
+  return config.retiredModel || (config.protocol === 'gateway' && PIPER_VOICE.test(voice)) ? '' : voice;
+}
+
 export function realtimeConnection(config: RealtimeConfig): { url: string; headers?: Record<string, string> } {
   const url = new URL(config.baseUrl);
   url.searchParams.set('model', config.model);

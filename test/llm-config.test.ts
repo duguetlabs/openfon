@@ -364,3 +364,18 @@ describe('STT endpoint path construction', () => {
     expect((init.body as FormData).get('file')).toBeInstanceOf(Blob);
   });
 });
+
+describe('retired Kataleptic chat models', () => {
+  const kataleptic = { DEFAULT_LLM_BASE_URL: 'https://api.kataleptic.com/v1', DEFAULT_LLM_API_KEY: 'instance', DEFAULT_LLM_MODEL: 'llama-3.3-70b' } as Env;
+  const s = (extra: Partial<AgentSettings>) => ({ llm_base_url: '', llm_api_key: '', llm_model: '', ...extra }) as AgentSettings;
+  it('serves the instance default instead of a retired model on Kataleptic', () => {
+    expect(resolveLlm(kataleptic, s({ llm_model: 'mistral-nemo-12b' })).model).toBe('llama-3.3-70b');
+    expect(resolveLlm({ ...kataleptic, DEFAULT_LLM_BASE_URL: 'https://llm.example/v1' }, s({ llm_base_url: 'https://api.kataleptic.com/v1/', llm_api_key: 'own', llm_model: 'qwen3-8b' })).model).toBe('llama-3.3-70b');
+    expect(resolveLlm({ ...kataleptic, DEFAULT_LLM_MODEL: 'gemma3-27b' }, null).model).toBe('llama-3.3-70b');
+    expect(resolveLlm(kataleptic, s({ llm_model: 'gpt-5.4-mini' })).model).toBe('gpt-5.4-mini');
+  });
+  it('keeps a same-named model on any other endpoint', () => {
+    expect(resolveLlm({ ...kataleptic, DEFAULT_LLM_BASE_URL: 'https://llm.example/v1' }, s({ llm_model: 'qwen3-8b' })).model).toBe('qwen3-8b');
+    expect(resolveLlm(kataleptic, s({ llm_base_url: 'https://llm.example/v1', llm_api_key: 'own', llm_model: 'qwen3-8b' })).model).toBe('qwen3-8b');
+  });
+});

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { realtimeCapabilities, realtimeConnection, resolveRealtime, OPENAI_REALTIME_URL } from '../src/realtime-providers';
+import { liveRealtimeVoice, realtimeCapabilities, realtimeConnection, resolveRealtime, OPENAI_REALTIME_URL } from '../src/realtime-providers';
 import type { AgentSettings, Env } from '../src/types';
 const env = { REALTIME_BASE_URL: 'wss://gateway.example/v1/realtime', REALTIME_MODEL: 'kataleptic-realtime-hd', DEFAULT_LLM_API_KEY: 'operator-key' } as Env;
 const settings = (extra: object) => ({ realtime_model: '', ...extra }) as AgentSettings;
@@ -82,5 +82,20 @@ describe('retired Kataleptic cascade', () => {
   it('leaves custom providers in their own model namespace', () => {
     const cfg = resolveRealtime(env, settings({ realtime_provider: 'custom', realtime_base_url: 'wss://rt.example/v1/realtime', realtime_api_key: 'k', realtime_model: 'kataleptic-realtime' }));
     expect(cfg.model).toBe('kataleptic-realtime');
+  });
+});
+
+describe('retired Piper voices', () => {
+  const custom = resolveRealtime(env, settings({ realtime_provider: 'custom', realtime_base_url: 'wss://rt.example/v1/realtime', realtime_api_key: 'k' }));
+  it('drops a Piper id on the gateway and keeps every other voice', () => {
+    const hd = resolveRealtime(env, null);
+    expect(liveRealtimeVoice(hd, 'de_DE-thorsten-medium')).toBe('');
+    expect(liveRealtimeVoice(hd, 'de-DE-SeraphinaMultilingualNeural')).toBe('de-DE-SeraphinaMultilingualNeural');
+    expect(liveRealtimeVoice(resolveRealtime(env, settings({ realtime_model: 'gpt-realtime-2.1' })), 'marin')).toBe('marin');
+    // A voice chosen for a retired tier goes with it, whatever its form.
+    expect(liveRealtimeVoice(resolveRealtime(env, settings({ realtime_model: 'kataleptic-realtime' })), 'marin')).toBe('');
+  });
+  it('leaves custom providers their own voice namespace', () => {
+    expect(liveRealtimeVoice(custom, 'de_DE-thorsten-medium')).toBe('de_DE-thorsten-medium');
   });
 });
