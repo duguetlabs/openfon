@@ -65,35 +65,42 @@ describe('explicit realtime providers', () => {
   });
 });
 
+const kataleptic = { ...env, REALTIME_BASE_URL: 'wss://api.kataleptic.com/v1/realtime' } as Env;
 describe('retired Kataleptic cascade', () => {
   it.each(['kataleptic-realtime', 'llama-3.3-70b', 'mistral-nemo-12b'])('serves a stored %s selection on the HD tier', model => {
     for (const selection of [settings({ realtime_model: model }), settings({ realtime_provider: 'kataleptic', realtime_api_key: 'k', realtime_model: model })]) {
-      const cfg = resolveRealtime(env, selection);
+      const cfg = resolveRealtime(kataleptic, selection);
       expect(cfg).toMatchObject({ model: 'kataleptic-realtime-hd', retiredModel: model });
       expect(new URL(realtimeConnection(cfg).url).searchParams.get('model')).toBe('kataleptic-realtime-hd');
     }
   });
   it('serves a retired instance default on the HD tier and keeps live tiers', () => {
-    expect(resolveRealtime({ ...env, REALTIME_MODEL: 'llama-3.3-70b' }, null).model).toBe('kataleptic-realtime-hd');
-    expect(resolveRealtime({ ...env, REALTIME_MODEL: 'gpt-realtime-2.1-mini' }, null)).not.toHaveProperty('retiredModel');
-    expect(resolveRealtime({ ...env, REALTIME_MODEL: 'gpt-4o-realtime-preview' }, null).model).toBe('kataleptic-realtime-hd');
-    expect(resolveRealtime(env, settings({ realtime_provider: 'kataleptic', realtime_api_key: 'k' })).model).toBe('kataleptic-realtime-hd');
+    expect(resolveRealtime({ ...kataleptic, REALTIME_MODEL: 'llama-3.3-70b' }, null).model).toBe('kataleptic-realtime-hd');
+    expect(resolveRealtime({ ...kataleptic, REALTIME_MODEL: 'gpt-realtime-2.1-mini' }, null)).not.toHaveProperty('retiredModel');
+    expect(resolveRealtime({ ...kataleptic, REALTIME_MODEL: 'gpt-4o-realtime-preview' }, null).model).toBe('kataleptic-realtime-hd');
+    expect(resolveRealtime(kataleptic, settings({ realtime_provider: 'kataleptic', realtime_api_key: 'k' })).model).toBe('kataleptic-realtime-hd');
+  });
+  it('leaves another gateway speaking the same protocol its own models and voices', () => {
+    const selfHosted = resolveRealtime(env, settings({ realtime_model: 'llama-3.3-70b' }));
+    expect(selfHosted).toMatchObject({ protocol: 'gateway', model: 'llama-3.3-70b' });
+    expect(selfHosted).not.toHaveProperty('retiredModel');
+    expect(liveRealtimeVoice(selfHosted, 'de_DE-thorsten-medium')).toBe('de_DE-thorsten-medium');
   });
   it('leaves custom providers in their own model namespace', () => {
-    const cfg = resolveRealtime(env, settings({ realtime_provider: 'custom', realtime_base_url: 'wss://rt.example/v1/realtime', realtime_api_key: 'k', realtime_model: 'kataleptic-realtime' }));
+    const cfg = resolveRealtime(kataleptic, settings({ realtime_provider: 'custom', realtime_base_url: 'wss://rt.example/v1/realtime', realtime_api_key: 'k', realtime_model: 'kataleptic-realtime' }));
     expect(cfg.model).toBe('kataleptic-realtime');
   });
 });
 
 describe('retired Piper voices', () => {
-  const custom = resolveRealtime(env, settings({ realtime_provider: 'custom', realtime_base_url: 'wss://rt.example/v1/realtime', realtime_api_key: 'k' }));
+  const custom = resolveRealtime(kataleptic, settings({ realtime_provider: 'custom', realtime_base_url: 'wss://rt.example/v1/realtime', realtime_api_key: 'k' }));
   it('drops a Piper id on the gateway and keeps every other voice', () => {
-    const hd = resolveRealtime(env, null);
+    const hd = resolveRealtime(kataleptic, null);
     expect(liveRealtimeVoice(hd, 'de_DE-thorsten-medium')).toBe('');
     expect(liveRealtimeVoice(hd, 'de-DE-SeraphinaMultilingualNeural')).toBe('de-DE-SeraphinaMultilingualNeural');
-    expect(liveRealtimeVoice(resolveRealtime(env, settings({ realtime_model: 'gpt-realtime-2.1' })), 'marin')).toBe('marin');
+    expect(liveRealtimeVoice(resolveRealtime(kataleptic, settings({ realtime_model: 'gpt-realtime-2.1' })), 'marin')).toBe('marin');
     // A voice chosen for a retired tier goes with it, whatever its form.
-    expect(liveRealtimeVoice(resolveRealtime(env, settings({ realtime_model: 'kataleptic-realtime' })), 'marin')).toBe('');
+    expect(liveRealtimeVoice(resolveRealtime(kataleptic, settings({ realtime_model: 'kataleptic-realtime' })), 'marin')).toBe('');
   });
   it('leaves custom providers their own voice namespace', () => {
     expect(liveRealtimeVoice(custom, 'de_DE-thorsten-medium')).toBe('de_DE-thorsten-medium');

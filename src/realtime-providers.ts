@@ -21,9 +21,14 @@ export const KATALEPTIC_HD_MODEL = 'kataleptic-realtime-hd';
 
 // Kataleptic retired its cascade tier (`kataleptic-realtime`, or a chat model
 // id on /v1/realtime) with its self-hosted models: those return `model_retired`.
-// Only Azure Voice Live (HD) and the native speech-to-speech tiers remain.
+// Only Azure Voice Live (HD) and the native speech-to-speech tiers remain there.
+// Another gateway speaking the same protocol keeps its own models.
+const KATALEPTIC_HOST = 'api.kataleptic.com';
 export function gatewayRealtimeModel(model: string): boolean {
   return model === KATALEPTIC_HD_MODEL || model.startsWith('gpt-realtime');
+}
+function katalepticGateway(config: Pick<RealtimeConfig, 'protocol' | 'baseUrl'>): boolean {
+  return config.protocol === 'gateway' && new URL(config.baseUrl).hostname === KATALEPTIC_HOST;
 }
 
 // Explicit workspace providers never borrow an operator credential. The instance
@@ -55,7 +60,7 @@ export function resolveRealtime(env: Env & { REALTIME_PROVIDER?: RealtimeProvide
   const model = settings?.realtime_model || (instance ? env.REALTIME_MODEL : protocol === 'openai' ? 'gpt-realtime' : KATALEPTIC_HD_MODEL);
   // A stored cascade selection would fail every call. Serve the HD tier instead;
   // migration 0024 rewrites the stored rows, this covers anything it missed.
-  if (protocol === 'gateway' && !gatewayRealtimeModel(model)) {
+  if (katalepticGateway({ protocol, baseUrl }) && !gatewayRealtimeModel(model)) {
     return { provider, baseUrl, apiKey, model: KATALEPTIC_HD_MODEL, protocol, retiredModel: model };
   }
   if (provider === 'openai' && !/^gpt-(realtime|4o.*realtime)/.test(model)) {
@@ -65,11 +70,11 @@ export function resolveRealtime(env: Env & { REALTIME_PROVIDER?: RealtimeProvide
 }
 
 // Piper voice ids (`de_DE-thorsten-medium`) belonged to the retired cascade; no
-// gateway tier accepts them now. Azure names use a hyphen (`de-DE-…`).
+// Kataleptic tier accepts them now. Azure names use a hyphen (`de-DE-…`).
 const PIPER_VOICE = /^[a-z]{2}_[A-Z]{2}-/;
 /** The explicit voice to request, or '' when it belongs to a retired tier. */
 export function liveRealtimeVoice(config: RealtimeConfig, voice: string): string {
-  return config.retiredModel || (config.protocol === 'gateway' && PIPER_VOICE.test(voice)) ? '' : voice;
+  return config.retiredModel || (katalepticGateway(config) && PIPER_VOICE.test(voice)) ? '' : voice;
 }
 
 export function realtimeConnection(config: RealtimeConfig): { url: string; headers?: Record<string, string> } {
