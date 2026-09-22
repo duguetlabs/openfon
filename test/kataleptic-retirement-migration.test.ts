@@ -5,8 +5,9 @@ import type { Env } from '../src/types';
 import { SqliteD1, applyMigrations } from './sqlite-d1';
 
 // Kataleptic retired the realtime cascade, its Piper voices, whisper-large-v3-turbo
-// and the open chat models. Stored selections that explicitly name Kataleptic
-// move to live defaults; an inherited instance endpoint is left to runtime.
+// and the open chat models. Selections made on an explicit api.kataleptic.com
+// provider move to live defaults; inherited instance ones are left to runtime
+// and to the deployment script.
 const migration = readFileSync(new URL('../migrations/0024_retire_kataleptic_models.sql', import.meta.url), 'utf8');
 const instanceFix = readFileSync(new URL('../scripts/retire-kataleptic-instance-defaults.sql', import.meta.url), 'utf8');
 const KATALEPTIC = 'https://api.kataleptic.com/v1';
@@ -53,20 +54,19 @@ afterEach(() => db.close());
 
 it('moves explicit Kataleptic selections off every retired id and leaves inherited and custom ones alone', () => {
   const before = rows("SELECT * FROM assistants WHERE business_id='own' ORDER BY id");
-  expect(one("SELECT realtime_model FROM assistants WHERE business_id='inst'")).toEqual({ realtime_model: 'kataleptic-realtime' });
+  expect(one("SELECT realtime_model FROM assistants WHERE business_id='kat'")).toEqual({ realtime_model: 'llama-3.3-70b' });
   sql(migration);
   for (const table of ['agent_settings', 'assistants']) {
     expect(rows(`SELECT business_id,realtime_model,realtime_voice,llm_model FROM ${table} ORDER BY business_id`)).toEqual([
-      // `kataleptic-realtime` names Kataleptic; the instance LLM endpoint is not known here.
-      { business_id: 'inst', realtime_model: '', realtime_voice: '', llm_model: 'mistral-nemo-12b' },
+      // Where an inherited instance endpoint points is not known to SQL.
+      { business_id: 'inst', realtime_model: 'kataleptic-realtime', realtime_voice: 'de_DE-thorsten-medium', llm_model: 'mistral-nemo-12b' },
       { business_id: 'kat', realtime_model: '', realtime_voice: '', llm_model: '' },
       { business_id: 'own', realtime_model: 'kataleptic-realtime', realtime_voice: 'de_DE-thorsten-medium', llm_model: 'qwen3-8b' },
     ]);
   }
   expect(rows("SELECT * FROM assistants WHERE business_id='own' ORDER BY id")).toEqual(before);
   expect(rows('SELECT id,realtime_model,realtime_voice,llm_model FROM engine_presets ORDER BY id')).toEqual([
-    { id: 'p-inst', realtime_model: '', realtime_voice: '', llm_model: 'glm4-9b' },
-    // An inherited instance may be a custom realtime service: runtime decides.
+    { id: 'p-inst', realtime_model: 'kataleptic-realtime', realtime_voice: 'de_DE-thorsten-medium', llm_model: 'glm4-9b' },
     { id: 'p-inst-chat', realtime_model: 'llama-3.3-70b', realtime_voice: 'de_DE-thorsten-medium', llm_model: '' },
     { id: 'p-live', realtime_model: 'kataleptic-realtime-hd', realtime_voice: 'de-DE-SeraphinaMultilingualNeural', llm_model: 'llama-3.3-70b' },
     { id: 'p-own', realtime_model: 'kataleptic-realtime', realtime_voice: 'de_DE-thorsten-medium', llm_model: 'qwen3-8b' },
@@ -126,6 +126,13 @@ it('clears exactly what runtime would remap, with the voice chosen for it', () =
   }
   expect(JSON.parse(String(one("SELECT agent_snapshot FROM compatibility_sync_state WHERE business_id='kat'").agent_snapshot)))
     .toMatchObject({ realtime_model: '', realtime_voice: '' });
+});
+
+it('leaves a self-hosted gateway speaking the Kataleptic protocol its own models', () => {
+  sql("UPDATE provider_settings SET realtime_base_url='wss://gateway.example/v1/realtime' WHERE business_id='kat'");
+  sql(migration);
+  expect(one("SELECT realtime_model,realtime_voice FROM agent_settings WHERE business_id='kat'")).toEqual({ realtime_model: 'llama-3.3-70b', realtime_voice: 'en_US-lessac-medium' });
+  expect(one("SELECT realtime_model,realtime_voice FROM engine_profiles WHERE id='f-kat'")).toEqual({ realtime_model: 'llama-3.3-70b', realtime_voice: 'en_US-lessac-medium' });
 });
 
 it('keeps a retired-looking model on a legacy row whose own LLM endpoint is custom', () => {

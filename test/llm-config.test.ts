@@ -374,6 +374,10 @@ describe('retired Kataleptic chat models', () => {
     expect(resolveLlm({ ...kataleptic, DEFAULT_LLM_MODEL: 'gemma3-27b' }, null).model).toBe('llama-3.3-70b');
     expect(resolveLlm(kataleptic, s({ llm_model: 'gpt-5.4-mini' })).model).toBe('gpt-5.4-mini');
   });
+  it('never borrows an instance default that lives on another provider', () => {
+    const openai = { ...kataleptic, DEFAULT_LLM_BASE_URL: 'https://api.openai.com/v1', DEFAULT_LLM_MODEL: 'gpt-4.1-mini' } as Env;
+    expect(resolveLlm(openai, s({ llm_base_url: 'https://api.kataleptic.com/v1', llm_api_key: 'own', llm_model: 'qwen3-8b' })).model).toBe('llama-3.3-70b');
+  });
   it('keeps a same-named model on any other endpoint', () => {
     expect(resolveLlm({ ...kataleptic, DEFAULT_LLM_BASE_URL: 'https://llm.example/v1' }, s({ llm_model: 'qwen3-8b' })).model).toBe('qwen3-8b');
     expect(resolveLlm(kataleptic, s({ llm_base_url: 'https://llm.example/v1', llm_api_key: 'own', llm_model: 'qwen3-8b' })).model).toBe('qwen3-8b');

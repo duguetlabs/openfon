@@ -104,11 +104,11 @@ realtime and their own rollout/acceptance checks. Pipeline BYOK does not swap ou
 the internal STT or TTS of HD/native realtime models.
 
 Kataleptic retired its Standard cascade tier (`kataleptic-realtime`, Whisper →
-chat model → Piper), including a chat model ID used as a realtime model. Calls
-serve any saved selection of it on HD and drop Piper voice IDs. Migration 0024
-clears selections that explicitly name Kataleptic; on an instance whose defaults
-are Kataleptic, `scripts/retire-kataleptic-instance-defaults.sql` clears the
-inherited ones.
+chat model → Piper), including a chat model ID used as a realtime model. Calls to
+`api.kataleptic.com` serve any saved selection of it on HD and drop Piper voice
+IDs. Migration 0024 clears selections made on an explicit `api.kataleptic.com`
+provider; on an instance whose defaults are Kataleptic,
+`scripts/retire-kataleptic-instance-defaults.sql` clears the inherited ones.
 
 ## Voice, language and timing
 
