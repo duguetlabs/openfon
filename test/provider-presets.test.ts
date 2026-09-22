@@ -85,7 +85,7 @@ it('direct realtime catalog never contacts Kataleptic or inherits a cached catal
   await request('/api/me/provider', { realtime_provider: 'openai', realtime_api_key: 'private' });
   const response = await request('/api/me/voices');
   expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({ cascade: [], native: expect.arrayContaining([{ id: 'marin', label: 'marin' }]) });
+  expect(await response.json()).toMatchObject({ native: expect.arrayContaining([{ id: 'marin', label: 'marin' }]) });
   expect(fetch).not.toHaveBeenCalled();
 });
 it('sends transcription only to its workspace provider with redirects disabled', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { realtimeCapabilities, realtimeConnection, resolveRealtime, OPENAI_REALTIME_URL } from '../src/realtime-providers';
+import { defaultGatewayModel, liveRealtimeVoice, realtimeCapabilities, realtimeConnection, resolveRealtime, OPENAI_REALTIME_URL } from '../src/realtime-providers';
 import type { AgentSettings, Env } from '../src/types';
 const env = { REALTIME_BASE_URL: 'wss://gateway.example/v1/realtime', REALTIME_MODEL: 'kataleptic-realtime-hd', DEFAULT_LLM_API_KEY: 'operator-key' } as Env;
 const settings = (extra: object) => ({ realtime_model: '', ...extra }) as AgentSettings;
@@ -8,7 +8,7 @@ describe('explicit realtime providers', () => {
   it('[gateway-header-negative] preserves instance gateway authentication and capabilities', () => {
     const cfg = resolveRealtime(env, null);
     expect(realtimeConnection(cfg)).toEqual({ url: 'https://gateway.example/v1/realtime?model=kataleptic-realtime-hd', headers: { Upgrade: 'websocket', Authorization: 'Bearer operator-key' } });
-    expect(realtimeCapabilities(cfg)).toMatchObject({ engineGreeting: false, managedVoice: true, cascade: false });
+    expect(realtimeCapabilities(cfg)).toMatchObject({ engineGreeting: false, managedVoice: true });
   });
   it.each(['ws', 'wss'])('[gateway-header-negative] removes every credential alias while preserving %s routing', scheme => {
     const cfg = resolveRealtime({ ...env, REALTIME_BASE_URL: `${scheme}://gateway.example/api/v1/realtime?token=old-a&route=east&api_key=old-b&token=old-c&api_key=old-d&model=old` }, null);
@@ -25,7 +25,7 @@ describe('explicit realtime providers', () => {
     const cfg = resolveRealtime({ ...env, REALTIME_API_KEY: 'instance-realtime' }, settings({ realtime_provider: 'kataleptic', realtime_base_url: 'wss://workspace.example/v1/realtime', realtime_api_key: 'workspace-gateway', realtime_model: 'gpt-realtime-2' }));
     expect(realtimeConnection(cfg)).toEqual({ url: 'https://workspace.example/v1/realtime?model=gpt-realtime-2', headers: { Upgrade: 'websocket', Authorization: 'Bearer workspace-gateway' } });
     expect(cfg.protocol).toBe('gateway');
-    expect(realtimeCapabilities(cfg)).toEqual({ engineGreeting: true, managedVoice: false, cascade: false, transcriptionModel: 'whisper-1' });
+    expect(realtimeCapabilities(cfg)).toEqual({ engineGreeting: true, managedVoice: false, transcriptionModel: 'whisper-1' });
   });
   it('[gateway-header-negative] prefers the instance realtime key to the legacy text fallback', () => {
     const cfg = resolveRealtime({ ...env, REALTIME_API_KEY: 'instance-realtime' }, null);
@@ -41,7 +41,7 @@ describe('explicit realtime providers', () => {
     const cfg = resolveRealtime(env, settings({ realtime_provider: 'openai', realtime_api_key: 'workspace-key' }));
     expect(cfg.model).toBe('gpt-realtime');
     expect(realtimeConnection(cfg)).toEqual({ url: 'https://api.openai.com/v1/realtime?model=gpt-realtime', headers: { Upgrade: 'websocket', Authorization: 'Bearer workspace-key' } });
-    expect(realtimeCapabilities(cfg)).toEqual({ engineGreeting: true, managedVoice: false, cascade: false, transcriptionModel: 'whisper-1' });
+    expect(realtimeCapabilities(cfg)).toEqual({ engineGreeting: true, managedVoice: false, transcriptionModel: 'whisper-1' });
   });
   it.each(['openai', 'kataleptic', 'custom'])('does not lend the instance key to explicit %s', realtime_provider => {
     expect(() => resolveRealtime(env, settings({ realtime_provider, realtime_base_url: 'wss://gateway.example/v1/realtime' }))).toThrow();
@@ -62,5 +62,54 @@ describe('explicit realtime providers', () => {
   });
   it('rejects a gateway-only model on OpenAI', () => {
     expect(() => resolveRealtime(env, settings({ realtime_provider: 'openai', realtime_api_key: 'test', realtime_model: 'kataleptic-realtime-hd' }))).toThrow('OpenAI realtime model');
+  });
+});
+
+const kataleptic = { ...env, REALTIME_BASE_URL: 'wss://api.kataleptic.com/v1/realtime' } as Env;
+describe('retired Kataleptic cascade', () => {
+  it.each(['kataleptic-realtime', 'llama-3.3-70b', 'mistral-nemo-12b'])('serves a stored %s selection on the HD tier', model => {
+    for (const selection of [settings({ realtime_model: model }), settings({ realtime_provider: 'kataleptic', realtime_api_key: 'k', realtime_model: model })]) {
+      const cfg = resolveRealtime(kataleptic, selection);
+      expect(cfg).toMatchObject({ model: 'kataleptic-realtime-hd', retiredModel: model });
+      expect(new URL(realtimeConnection(cfg).url).searchParams.get('model')).toBe('kataleptic-realtime-hd');
+    }
+  });
+  it('serves a retired instance default on the HD tier and keeps live tiers', () => {
+    expect(resolveRealtime({ ...kataleptic, REALTIME_MODEL: 'llama-3.3-70b' }, null).model).toBe('kataleptic-realtime-hd');
+    expect(resolveRealtime({ ...kataleptic, REALTIME_MODEL: 'gpt-realtime-2.1-mini' }, null)).not.toHaveProperty('retiredModel');
+    expect(resolveRealtime({ ...kataleptic, REALTIME_MODEL: 'gpt-4o-realtime-preview' }, null).model).toBe('kataleptic-realtime-hd');
+    expect(resolveRealtime(kataleptic, settings({ realtime_provider: 'kataleptic', realtime_api_key: 'k' })).model).toBe('kataleptic-realtime-hd');
+  });
+  it('keeps the historical default on another gateway and HD on Kataleptic', () => {
+    const own = (base?: string) => resolveRealtime(env, settings({ realtime_provider: 'kataleptic', realtime_api_key: 'k', ...(base ? { realtime_base_url: base } : {}) }));
+    expect(own('wss://gateway.example/v1/realtime').model).toBe('kataleptic-realtime');
+    expect(own('wss://gateway.example/v1/realtime')).not.toHaveProperty('retiredModel');
+    expect(own().model).toBe('kataleptic-realtime-hd');
+    expect(defaultGatewayModel('not a url')).toBe('kataleptic-realtime');
+  });
+  it('leaves another gateway speaking the same protocol its own models and voices', () => {
+    const selfHosted = resolveRealtime(env, settings({ realtime_model: 'llama-3.3-70b' }));
+    expect(selfHosted).toMatchObject({ protocol: 'gateway', model: 'llama-3.3-70b' });
+    expect(selfHosted).not.toHaveProperty('retiredModel');
+    expect(liveRealtimeVoice(selfHosted, 'de_DE-thorsten-medium')).toBe('de_DE-thorsten-medium');
+  });
+  it('leaves custom providers in their own model namespace', () => {
+    const cfg = resolveRealtime(kataleptic, settings({ realtime_provider: 'custom', realtime_base_url: 'wss://rt.example/v1/realtime', realtime_api_key: 'k', realtime_model: 'kataleptic-realtime' }));
+    expect(cfg.model).toBe('kataleptic-realtime');
+  });
+});
+
+describe('retired Piper voices', () => {
+  const custom = resolveRealtime(kataleptic, settings({ realtime_provider: 'custom', realtime_base_url: 'wss://rt.example/v1/realtime', realtime_api_key: 'k' }));
+  it('drops a Piper id on the gateway and keeps every other voice', () => {
+    const hd = resolveRealtime(kataleptic, null);
+    expect(liveRealtimeVoice(hd, 'de_DE-thorsten-medium')).toBe('');
+    expect(liveRealtimeVoice(hd, 'de-DE-SeraphinaMultilingualNeural')).toBe('de-DE-SeraphinaMultilingualNeural');
+    expect(liveRealtimeVoice(resolveRealtime(kataleptic, settings({ realtime_model: 'gpt-realtime-2.1' })), 'marin')).toBe('marin');
+    // A voice chosen for a retired tier goes with it, whatever its form.
+    expect(liveRealtimeVoice(resolveRealtime(kataleptic, settings({ realtime_model: 'kataleptic-realtime' })), 'marin')).toBe('');
+  });
+  it('leaves custom providers their own voice namespace', () => {
+    expect(liveRealtimeVoice(custom, 'de_DE-thorsten-medium')).toBe('de_DE-thorsten-medium');
   });
 });

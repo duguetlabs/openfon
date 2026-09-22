@@ -41,7 +41,7 @@ export default function SummarySettings() {
   }
   const change = (patch: Partial<Draft>) => { setDraft(d => d && { ...d, ...patch }); setMessage(''); };
   const selected = draft?.mode !== 'custom' ? draft?.mode : presets.find(p => p.url === draft.baseUrl)?.id || 'custom';
-  const options = draft?.baseUrl === presets[0].url ? catalog?.models.filter(m => m.kind === 'text') || choices(['llama-3.3-70b', 'mistral-nemo-12b'])
+  const options = draft?.baseUrl === presets[0].url ? catalog?.models.filter(m => m.kind === 'text') || choices(['llama-3.3-70b', 'gpt-5.4-mini'])
     : draft?.baseUrl === presets[1].url ? choices(['gpt-4.1-mini', 'gpt-4o-mini']) : [];
   return <section id="call-summaries" aria-label="Call summaries">
     <h2 className="font-display text-2xl mb-3">Call summaries</h2>

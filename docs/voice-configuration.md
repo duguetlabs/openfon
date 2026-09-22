@@ -20,8 +20,7 @@ your account. It does not rank models by measured latency or call quality.
 
 | Assistant choice | Technology behind the conversation | What you choose in OpenFon | Components managed by the voice provider |
 | --- | --- | --- | --- |
-| **Standard** — `kataleptic-realtime` | Whisper speech recognition → chat model → Piper speech | Language, instructions, an automatic or explicit Piper voice; use “Standard with a chosen chat model” to select another chat model ID | Streaming recognition, synthesis and turn handling are combined by Kataleptic |
-| **HD** — `kataleptic-realtime-hd` | Azure Voice Live through Kataleptic | Language, instructions and Azure neural voice | Recognition, conversation model and speech are managed by the HD backend; the workspace summary model does not replace its conversation model |
+| **HD** — `kataleptic-realtime-hd` (instance default) | Azure Voice Live through Kataleptic | Language, instructions and Azure neural voice | Recognition, conversation model and speech are managed by the HD backend; the workspace summary model does not replace its conversation model |
 | **Native** — `gpt-realtime-2` | Native speech-to-speech model through Azure AI Foundry and Kataleptic | Model tier, language, instructions and a supported native voice | Conversation reasoning and speech generation belong to the integrated model |
 | **Native** — `gpt-realtime-2.1` | Another native speech-to-speech generation through the same gateway | Model tier, language, instructions and a supported native voice | Same integration boundaries as Native 2; a newer ID is not a guarantee of better behavior for your calls |
 | **Native Mini** — `gpt-realtime-2.1-mini` | Native Mini speech-to-speech tier through the same gateway | Model tier, language, instructions and a supported native voice | Same integration boundaries; compare cost and behavior using your own calls |
@@ -104,10 +103,16 @@ Pipeline calls currently use the browser channel. Telephone adapters require
 realtime and their own rollout/acceptance checks. Pipeline BYOK does not swap out
 the internal STT or TTS of HD/native realtime models.
 
+Kataleptic retired its Standard cascade tier (`kataleptic-realtime`, Whisper →
+chat model → Piper), including a chat model ID used as a realtime model. Calls to
+`api.kataleptic.com` serve any saved selection of it on HD and drop Piper voice
+IDs. Migration 0024 clears selections made on an explicit `api.kataleptic.com`
+provider; on an instance whose defaults are Kataleptic,
+`scripts/retire-kataleptic-instance-defaults.sql` clears the inherited ones.
+
 ## Voice, language and timing
 
-**Voice IDs belong to a voice family.** Standard uses language-specific Piper IDs
-such as `de_DE-thorsten-medium`. HD accepts Azure neural names such as
+**Voice IDs belong to a voice family.** HD accepts Azure neural names such as
 `de-DE-SeraphinaMultilingualNeural`. Native tiers use names such as `marin` or
 `cedar`. Standalone speech models have their own supported voice lists; do not
 assume a voice supported by one speech model works with another. Leaving a voice
@@ -190,7 +195,7 @@ only when you press play.
 Voice names include **♀ female**, **♂ male**, or **◇ unspecified**. Labels follow
 published provider metadata. The built-in Azure labels come from Microsoft’s
 [voice catalog](https://learn.microsoft.com/azure/ai-services/speech-service/language-support?tabs=tts).
-Kataleptic’s current native/Piper catalogs and OpenAI’s voice list publish no
+Kataleptic’s current native catalog and OpenAI’s voice list publish no
 gender field, so those voices show unspecified. Custom IDs remain supported;
 OpenFon does not infer gender from a name or another engine’s voice mapping.
 
@@ -209,8 +214,8 @@ hangup. If the browser suspends audio, **Enable audio** resumes the current call
 Check your selected speaker/headset if transcripts continue but playback remains
 silent; browser playback state cannot establish physical audibility.
 
-Realtime samples come from the selected realtime model: native speech, Standard
-Piper, or HD Azure Voice Live. Pipeline samples use the workspace’s configured
+Realtime samples come from the selected realtime model: native speech or HD
+Azure Voice Live. Pipeline samples use the workspace’s configured
 speech provider and model. Custom providers must support the same speech protocol
 used for calls. Samples can vary in wording or delivery; they demonstrate voice
 character, not recognition quality or interruption behavior in a call.

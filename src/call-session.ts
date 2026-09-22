@@ -17,14 +17,13 @@ import { RealtimeOutputBudget, RealtimeAudioQueue, RealtimeOutputError, Realtime
 //   server BINARY <mp3>                         spoken version of the last agent_text (azure mode)
 //   server JSON  {type:"thinking"} | {type:"error", message} | {type:"ended"}
 import type { Env, Business, AgentSettings, ChatMessage, ProviderSettings } from './types';
-import { resolveRealtime, realtimeConnection, realtimeCapabilities } from './realtime-providers';
-import type { RealtimeConfig } from './realtime-providers';
+import { liveRealtimeVoice, resolveRealtime, realtimeConnection, realtimeCapabilities, type RealtimeConfig } from './realtime-providers';
 import { CallDebug, debugMeta, debugResponse, purgeDebug, debugClientEvent, debugProviderEvent } from './call-debug';
 import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './prompt';
 import type { PromptKnowledgeItem } from './prompt';
 import { loadCallKnowledge } from './call-knowledge';
 import { parseRealtimeMessage, decodeRealtimeAudio, RealtimeInputError, transcriptBytes, MAX_TRANSCRIPT_FIELD_BYTES, MAX_CALL_TRANSCRIPT_BYTES, MAX_REALTIME_AUDIO_BYTES } from './realtime-input';
-import { chatComplete, detectLang, isFarewell, isVocabEcho, LlmConfigError, normalizeLang, piperVoiceFor, resolveLlm, speechConfig, speechVoice, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
+import { chatComplete, detectLang, isFarewell, isVocabEcho, LlmConfigError, normalizeLang, resolveLlm, speechConfig, speechVoice, synthesize, transcribe, voiceForReply, SUPPORTED_LANGUAGES } from './providers';
 
 // WebSocket binary payloads vary by runtime: ArrayBuffer, ArrayBufferView, or Blob.
 async function toArrayBuffer(data: unknown): Promise<ArrayBuffer> {
@@ -186,14 +185,6 @@ const TURN_DETECTION_BY_TIER: Record<string, TurnDetection> = {
   // session start, on every HD call. A rule keyed on the model *name* rather
   // than on the tier would have shipped exactly that.
   'kataleptic-realtime-hd': SERVER_VAD,
-  // Cascade: no evidence it splits, and it will not honour a semantic detector
-  // anyway. Worse than rejecting it — probed live 2026-08-03, it *accepts*
-  // `semantic_vad` and then quietly serves `server_vad` back at Azure's
-  // defaults (0.5 / 500), discarding the tuning above. Nothing fails; the call
-  // just runs on settings nobody chose. Only reading the `session.updated` echo
-  // shows it, which is the lesson both benchmarks kept re-learning: a config we
-  // cannot confirm is not a config.
-  'kataleptic-realtime': SERVER_VAD,
 };
 
 // Exact tier ids, with server VAD as the fallback for anything unlisted —
@@ -568,7 +559,7 @@ export class CallSession implements DurableObject {
     // caller mid-conversation (realtime calls would only notice at summary time).
     try {
       resolveLlm(this.env, this.settings);
-      if (this.settings?.engine === 'realtime') this.realtimeConfig = resolveRealtime(this.env, this.settings);
+      if (this.settings?.engine === 'realtime') this.resolveRealtimeConfig();
     } catch (err) {
       if (!(err instanceof LlmConfigError)) throw err;
       // The diagnostic is for the owner, not the caller: it can name the
@@ -1058,12 +1049,6 @@ export class CallSession implements DurableObject {
               // spending that first update, this can go back to unconditional —
               // and `phrase_list` becomes the supported spelling of it there.
               ...(this.realtimeConfig?.protocol !== 'openai' && this.realtimeModel === 'kataleptic-realtime-hd' ? {} : { prompt: this.biz && this.settings ? sttVocab(this.biz, this.settings, this.knowledge) : undefined }),
-              // On cascade tiers this is a greeting seed + STT accuracy hint,
-              // not a pin: per-utterance detection overrides it once the caller
-              // speaks (verified 2026-06-13 after Kataleptic's fix).
-              ...(this.isCascade() && this.settings && this.settings.language in SUPPORTED_LANGUAGES
-                ? { language: this.settings.language }
-                : {}),
             },
           },
           output: {
@@ -1100,17 +1085,22 @@ export class CallSession implements DurableObject {
   private realtimeConfig: RealtimeConfig | null = null;
   private outputAudio: { socket: WebSocket; itemId: string; contentIndex: number; startedAt: number; bytes: number } | null = null;
 
+  private resolveRealtimeConfig(): RealtimeConfig {
+    const config = this.realtimeConfig = resolveRealtime(this.env, this.settings);
+    if (config.retiredModel) console.log(`call ${this.callId}: retired realtime model ${config.retiredModel} served on ${config.model}`);
+    if (this.settings?.realtime_voice && !liveRealtimeVoice(config, this.settings.realtime_voice)) {
+      // A voice chosen for the retired cascade means nothing now: let the tier manage it.
+      this.settings = { ...this.settings, realtime_voice: '' };
+    }
+    return config;
+  }
+
   private engineGreets(): boolean {
     // An explicitly selected realtime voice must also speak the greeting.
     // Instance Azure/browser synthesis could otherwise substitute another voice.
     if (this.settings?.realtime_voice) return true;
     if (this.realtimeConfig) return realtimeCapabilities(this.realtimeConfig).engineGreeting;
-    return this.realtimeModel === 'kataleptic-realtime' || this.realtimeModel.startsWith('gpt-realtime');
-  }
-
-  private isCascade(): boolean {
-    if (this.realtimeConfig) return realtimeCapabilities(this.realtimeConfig).cascade;
-    return this.realtimeModel !== 'kataleptic-realtime-hd' && !this.realtimeModel.startsWith('gpt-realtime');
+    return this.realtimeModel.startsWith('gpt-realtime');
   }
 
   // Every tier accepts the tool. None of them reliably calls it: measured over
@@ -1213,24 +1203,20 @@ export class CallSession implements DurableObject {
   }
 
   private async startRealtime(systemPrompt: string, greeting: string): Promise<boolean> {
-    this.realtimeConfig ??= resolveRealtime(this.env, this.settings);
+    this.realtimeConfig ??= this.resolveRealtimeConfig();
     const model = this.realtimeConfig.model;
     this.realtimeModel = model;
     console.log(`call ${this.callId}: realtime engine, model ${model}`);
     const isHd = realtimeCapabilities(this.realtimeConfig).managedVoice;
-    const isCascade = this.isCascade();
     // Explicit per-business realtime voice wins; on the Azure-backed HD tier we
-    // manage the voice (matches the synthesized greeting); Piper cascades get a
-    // default-language initial voice (they'd otherwise start English until the
-    // caller's language is first detected); native S2S tiers pick their own.
+    // manage the voice (matches the synthesized greeting); native S2S tiers
+    // pick their own.
     this.voiceManaged = isHd && !this.settings?.realtime_voice;
     this.sessionVoice =
       this.settings?.realtime_voice ||
       (isHd
         ? voiceForReply(this.env, this.lang, this.settings?.language ?? 'en', this.settings?.voice || '')
-        : isCascade
-          ? await piperVoiceFor({ ...this.env, REALTIME_BASE_URL: this.realtimeConfig.baseUrl }, this.lang)
-          : '');
+        : '');
     const toolNote = this.toolsSupported()
       ? '\n\nWhen the conversation is finished and you have said goodbye, call the end_call function.'
       : '';

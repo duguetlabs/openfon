@@ -224,7 +224,8 @@ let restoreSignalTimeout = () => {};
 // pending HTTP Upgrade completes, not a post-upgrade open event from workerd.
 function gatewayFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
   const url = new URL(String(input));
-  if (url.hostname !== 'stub.invalid' || url.pathname !== '/v1/realtime' ||
+  // api.kataleptic.com is stubbed too: retirement handling is scoped to that host.
+  if (!['stub.invalid', 'api.kataleptic.com'].includes(url.hostname) || url.pathname !== '/v1/realtime' ||
       !['http:', 'https:'].includes(url.protocol) || new Headers(init.headers).get('Upgrade') !== 'websocket') {
     throw new Error('no network in unit tests');
   }
@@ -841,13 +842,35 @@ describe('realtime session payload', () => {
     expect(await turnDetection('kataleptic-realtime-hd')).toEqual(TUNED_SERVER_VAD);
   });
 
-  it('never moves cascade tiers off server VAD, which would silently lose the tuning', async () => {
-    // The worse failure of the two, because nothing errors. Probed live, the
-    // cascade *accepts* `semantic_vad` and serves `server_vad` back at Azure's
-    // defaults (0.5 / 500) — the call runs on settings nobody chose, and only
-    // the session.updated echo shows it. A confirmed-different config must not
-    // read as valid.
-    expect(await turnDetection('kataleptic-realtime')).toEqual(TUNED_SERVER_VAD);
+  const KATALEPTIC_REALTIME = { REALTIME_BASE_URL: 'wss://api.kataleptic.com/v1/realtime' };
+
+  it('lets HD manage the voice instead of a voice chosen for the retired tier', async () => {
+    const { session } = newSession('realtime', { realtime_model: 'kataleptic-realtime', realtime_voice: 'de_DE-thorsten-medium' }, KATALEPTIC_REALTIME);
+    await session.fetch(upgradeRequest());
+    serverSockets.at(-1)!.receive({ type: 'start' });
+    await flush();
+    upstreamSockets.at(-1)!.emit('open', {});
+    await flush();
+    const update = upstreamSockets.at(-1)!.messages().find((m) => m.type === 'session.update')!.session as { audio?: { output?: { voice?: string } } };
+    expect(new URL(gatewayRequests.at(-1)!.url).searchParams.get('model')).toBe('kataleptic-realtime-hd');
+    expect(update.audio?.output?.voice).not.toBe('de_DE-thorsten-medium');
+    expect(update.audio?.output?.voice).toMatch(/Neural$/);
+  });
+
+  it('connects a stored retired cascade selection to the HD tier with its tuning', async () => {
+    // Kataleptic answers `model_retired` for the cascade. A row the migration
+    // missed must still reach a live tier instead of failing the call.
+    for (const model of ['kataleptic-realtime', 'llama-3.3-70b']) {
+      const { session } = newSession('realtime', { realtime_model: model }, KATALEPTIC_REALTIME);
+      await session.fetch(upgradeRequest());
+      serverSockets.at(-1)!.receive({ type: 'start' });
+      await flush();
+      upstreamSockets.at(-1)!.emit('open', {});
+      await flush();
+      const update = upstreamSockets.at(-1)!.messages().find((m) => m.type === 'session.update')!.session as { audio?: { input?: { turn_detection?: unknown } } };
+      expect(update.audio?.input?.turn_detection).toEqual(TUNED_SERVER_VAD);
+      expect(new URL(gatewayRequests.at(-1)!.url).searchParams.get('model')).toBe('kataleptic-realtime-hd');
+    }
   });
 
   it('never asks for noise reduction, on any tier', async () => {
@@ -859,7 +882,7 @@ describe('realtime session payload', () => {
       v && typeof v === 'object' && !Array.isArray(v)
         ? Object.entries(v as Record<string, unknown>).flatMap(([k, val]) => [k, ...keys(val)])
         : [];
-    for (const model of ['gpt-realtime-2', 'kataleptic-realtime-hd', 'kataleptic-realtime']) {
+    for (const model of ['gpt-realtime-2', 'gpt-realtime-2.1-mini', 'kataleptic-realtime-hd']) {
       const offenders = keys(await sessionFor(model)).filter((k) => /noise/i.test(k));
       expect(offenders, `${model} session payload asks for noise reduction`).toEqual([]);
     }
@@ -1004,14 +1027,13 @@ describe('session echo read-back', () => {
     expect(updatesSent(up)).toBe(1);
   });
 
-  it('never re-sends on the cascade tier, which does not diverge', async () => {
+  it('never re-sends a session whose echo matches', async () => {
     // "Should never fire" is what transcription's advisory status rested on,
     // and that premise turned out to be the losing half of a race — so pin it.
-    // The cascade echoes the transcription config verbatim, 6/6 measured, and
-    // sends no injected session.update of its own, so the enforced path must
-    // stay dormant there for the whole life of the call.
-    const { up, sent } = await started('llama-3.3-70b');
-    expect(sent.audio?.input?.transcription?.prompt, 'the cascade gets the vocab prompt').toBeTruthy();
+    // An echo that matches what was sent must keep the enforced path dormant
+    // for the whole life of the call.
+    const { up, sent } = await started('gpt-realtime-2.1-mini');
+    expect(sent.audio?.input?.transcription?.prompt, 'native tiers get the vocab prompt').toBeTruthy();
     echo(up, structuredClone(sent));
     await flush();
     // and a later echo of the same session must not start a re-send either
@@ -3518,7 +3540,7 @@ describe('gateway header transport contract', () => {
 
 
 describe('selected voice confirmation', () => {
-  it.each([['matching', 'gpt-realtime-2', 'alloy'], ['substituted', 'gpt-realtime-2', 'alloy'], ['missing', 'gpt-realtime-2', 'alloy'], ['matching', 'kataleptic-realtime-hd', 'de-DE-SeraphinaMultilingualNeural'], ['matching', 'llama-3.3-70b', 'de_DE-thorsten-medium']])('holds generation until %s %s voice is confirmed', async (kind, model, voice) => {
+  it.each([['matching', 'gpt-realtime-2', 'alloy'], ['substituted', 'gpt-realtime-2', 'alloy'], ['missing', 'gpt-realtime-2', 'alloy'], ['matching', 'kataleptic-realtime-hd', 'de-DE-SeraphinaMultilingualNeural'], ['matching', 'gpt-realtime-2.1-mini', 'marin']])('holds generation until %s %s voice is confirmed', async (kind, model, voice) => {
     vi.useFakeTimers();
     const { session } = newSession('realtime', { realtime_model: model, realtime_voice: voice });
     await session.fetch(upgradeRequest()); const caller = serverSockets[0];

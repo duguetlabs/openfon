@@ -89,8 +89,9 @@ test('guided Kataleptic tiers show matching voices and preserve unknown saved va
   const { assistants } = await (await page.request.get('/api/me/bootstrap')).json();
   await page.goto(`/assistants/${assistants[0].id}`);
   const engine = page.getByLabel('Conversation engine', { exact: true });
-  await engine.selectOption('kataleptic-realtime');
-  await page.getByLabel('Realtime voice', { exact: true }).selectOption('de_DE-thorsten-medium');
+  // Kataleptic retired its cascade tier; only HD and native tiers are offered.
+  await expect(engine.locator('option[value="kataleptic-realtime"]')).toHaveCount(0);
+  await expect(engine.locator('option[value="custom"]')).toHaveCount(0);
   await engine.selectOption('kataleptic-realtime-hd');
   await expectCatalog(page, 'Realtime voice', '');
   await page.getByLabel('Realtime voice', { exact: true }).selectOption('de-DE-SeraphinaMultilingualNeural');

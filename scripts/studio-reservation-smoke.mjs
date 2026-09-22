@@ -73,7 +73,7 @@ try {
     if (isRefund && refundFault === 'after') throw refundError;
     return result;
   } };
-  const env = { DB: db, DEFAULT_LLM_BASE_URL: 'https://instance.example/v1', DEFAULT_LLM_API_KEY: 'synthetic-only', DEFAULT_LLM_MODEL: 'instance', DEFAULT_STT_BASE_URL: 'https://instance.example/v1', DEFAULT_STT_MODEL: 'whisper-1', DEFAULT_TTS_PROVIDER: 'browser', REALTIME_BASE_URL: 'wss://instance.example/realtime', REALTIME_MODEL: 'kataleptic-realtime' };
+  const env = { DB: db, DEFAULT_LLM_BASE_URL: 'https://instance.example/v1', DEFAULT_LLM_API_KEY: 'synthetic-only', DEFAULT_LLM_MODEL: 'instance', DEFAULT_STT_BASE_URL: 'https://instance.example/v1', DEFAULT_STT_MODEL: 'whisper-1', DEFAULT_TTS_PROVIDER: 'browser', REALTIME_BASE_URL: 'wss://instance.example/realtime', REALTIME_MODEL: 'kataleptic-realtime-hd' };
   const request = (path, method = 'POST') => worker.fetch(new Request('https://openfon.test' + path, { method, headers: { Cookie: 'ofs=session', 'Content-Type': 'application/json', 'CF-Connecting-IP': ip }, ...(method === 'POST' ? { body: '{}' } : {}) }), env, { waitUntil() {}, passThroughOnException() {} });
   const action = lane => request(lane === 'ticket' ? '/api/me/assistants/asst_biz/test-calls' : '/api/me/provider/check');
   async function reset() {

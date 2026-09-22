@@ -1,17 +1,21 @@
 import { fetchProviderJson } from './provider-response';
 import { OPENAI_REALTIME_VOICES } from './provider-settings';
+import { RETIRED_KATALEPTIC_CHAT_MODELS } from './providers';
 
 type Option = { id: string; label: string };
 type Model = Option & { kind: 'text' | 'transcription' | 'realtime' };
 const options = (ids: string[]): Option[] => ids.map(id => ({ id, label: id }));
 const fallbackModels: Model[] = [
-  ...['kataleptic-realtime', 'kataleptic-realtime-hd', 'gpt-realtime-2', 'gpt-realtime-2.1', 'gpt-realtime-2.1-mini'].map(id => ({ id, label: id, kind: 'realtime' as const })),
-  ...['llama-3.3-70b', 'mistral-nemo-12b'].map(id => ({ id, label: id, kind: 'text' as const })),
-  ...['whisper-large-v3-turbo', 'gpt-4o-transcribe', 'gpt-transcribe', 'gpt-4o-transcribe-diarize'].map(id => ({ id, label: id, kind: 'transcription' as const })),
+  ...['kataleptic-realtime-hd', 'gpt-realtime-2', 'gpt-realtime-2.1', 'gpt-realtime-2.1-mini'].map(id => ({ id, label: id, kind: 'realtime' as const })),
+  ...['llama-3.3-70b', 'gpt-5.4-mini'].map(id => ({ id, label: id, kind: 'text' as const })),
+  ...['gpt-transcribe', 'gpt-4o-transcribe', 'gpt-4o-transcribe-diarize'].map(id => ({ id, label: id, kind: 'transcription' as const })),
 ];
+// Kataleptic retired its self-hosted models; until the gateway stops listing
+// them they would still be offered here, and every call to them fails.
+const RETIRED = new Set(['kataleptic-realtime', 'piper-tts', 'whisper-large-v3-turbo', 'whisper-large-v3-turbo-stream',
+  'parakeet-tdt-0-6b-stream', 'nomic-embed', ...RETIRED_KATALEPTIC_CHAT_MODELS]);
 const fallback = () => ({ models: fallbackModels, live: false, voices: {
   native: options(OPENAI_REALTIME_VOICES),
-  cascade: options(['en_US-lessac-medium', 'de_DE-thorsten-medium', 'fr_FR-siwis-medium', 'es_ES-sharvard-medium', 'it_IT-paola-medium', 'nl_NL-mls-medium', 'sv_SE-nst-medium', 'da_DK-talesyntese-medium', 'fi_FI-harri-medium', 'ru_RU-irina-medium']),
   azure: options(['en-US-AvaMultilingualNeural', 'de-DE-SeraphinaMultilingualNeural', 'es-ES-ArabellaMultilingualNeural', 'fr-FR-VivienneMultilingualNeural', 'it-IT-AlessioMultilingualNeural']),
   hdDefault: 'en-US-AvaMultilingualNeural',
 } });
@@ -37,7 +41,7 @@ export function providerCatalog(): Promise<Catalog> {
       for (const item of items) {
         if (!item || typeof item !== 'object') continue;
         const m = item as { id?: unknown; name?: unknown; architecture?: { input_modalities?: string[]; output_modalities?: string[] } };
-        if (!validId(m.id) || m.id.includes('/') || seen.has(m.id)) continue;
+        if (!validId(m.id) || m.id.includes('/') || seen.has(m.id) || RETIRED.has(m.id)) continue;
         const inputs = m.architecture?.input_modalities, outputs = m.architecture?.output_modalities;
         if (!Array.isArray(inputs) || !Array.isArray(outputs)) continue;
         const kind = m.id.includes('realtime') ? 'realtime' : inputs.includes('audio') && outputs.includes('text') && !m.id.endsWith('-stream')
@@ -47,11 +51,9 @@ export function providerCatalog(): Promise<Catalog> {
       }
       if (parsed.length) { result.models = parsed; result.live = true; }
       if (voices.response.ok && voices.data && typeof voices.data === 'object') {
-        const v = voices.data as Record<string, { voices?: unknown[]; voices_by_language?: Record<string, unknown> }>;
+        const v = voices.data as Record<string, { voices?: unknown[] }>;
         const native = v['gpt-realtime-2']?.voices;
-        const cascade = v['kataleptic-realtime']?.voices_by_language;
         if (Array.isArray(native) && native.length <= 64) result.voices.native = options(native.filter(validId));
-        if (cascade && typeof cascade === 'object' && Object.keys(cascade).length <= 64) result.voices.cascade = options(Object.values(cascade).filter(validId));
       }
     } catch { /* a useful, explicitly labelled offline catalog remains available */ }
     cached = { data: result, until: Date.now() + (result.live ? 3600000 : 60000) };

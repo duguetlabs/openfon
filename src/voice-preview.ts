@@ -1,6 +1,6 @@
 import type { AgentSettings, Env } from './types';
-import { piperVoiceFor, speechConfig, speechVoice, synthesize, voiceForReply } from './providers';
-import { realtimeCapabilities, realtimeConnection, resolveRealtime, type RealtimeConfig } from './realtime-providers';
+import { speechConfig, speechVoice, synthesize, voiceForReply } from './providers';
+import { liveRealtimeVoice, realtimeCapabilities, realtimeConnection, resolveRealtime, type RealtimeConfig } from './realtime-providers';
 import { decodeRealtimeAudio, parseRealtimeMessage } from './realtime-input';
 
 import { PREVIEW_TEXT } from './voice-preview-text';
@@ -98,8 +98,7 @@ export async function generateVoicePreview(env: Env, settings: AgentSettings, si
     return pcmWav(new Uint8Array(bytes));
   }
   const config = resolveRealtime(env, settings); const capabilities = realtimeCapabilities(config);
-  const voice = settings.realtime_voice || (capabilities.managedVoice
-    ? voiceForReply(env, settings.language, settings.language, settings.voice)
-    : capabilities.cascade ? await piperVoiceFor({ ...env, REALTIME_BASE_URL: config.baseUrl }, settings.language) : '');
+  const voice = liveRealtimeVoice(config, settings.realtime_voice) || (capabilities.managedVoice
+    ? voiceForReply(env, settings.language, settings.language, settings.voice) : '');
   return realtimePreview(config, voice, text, signal);
 }

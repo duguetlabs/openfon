@@ -19,7 +19,7 @@ beforeEach(() => {
     INSERT INTO assistants(id,business_id,public_slug,name) VALUES ('a1','b1','one','Alex');
     INSERT INTO provider_settings(business_id,realtime_provider,realtime_api_key,tts_provider,tts_base_url,tts_api_key,tts_model)
       VALUES ('b1','kataleptic','workspace-private','openai','https://api.openai.com/v1','speech-private','tts-1');`);
-  env = { DB: db, REALTIME_BASE_URL: 'wss://api.kataleptic.com/v1/realtime', REALTIME_MODEL: 'kataleptic-realtime', DEFAULT_LLM_API_KEY: 'instance-private' } as unknown as Env;
+  env = { DB: db, REALTIME_BASE_URL: 'wss://api.kataleptic.com/v1/realtime', REALTIME_MODEL: 'kataleptic-realtime-hd', DEFAULT_LLM_API_KEY: 'instance-private' } as unknown as Env;
 });
 afterEach(() => db.close());
 it('previews the unsaved selection with owned credentials without mutating assistant or creating calls', async () => {

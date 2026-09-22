@@ -31,7 +31,7 @@ async function catalog() {
   const response = await worker.fetch(new Request('https://openfon.test/api/me/voices', { headers: { Cookie: 'ofs=s' } }),
     env, { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext);
   expect(response.status).toBe(200);
-  return await response.json() as { azure: unknown[]; cascade: unknown[]; native: unknown[]; hdDefault: string };
+  return await response.json() as { azure: unknown[]; native: unknown[]; hdDefault: string };
 }
 function mockCatalogs() {
   const fetch = vi.fn(async (url: string) => new Response(JSON.stringify(url.includes('speech.microsoft.com') ? azure : gateway)));
@@ -42,7 +42,7 @@ it.each(['openai', 'custom', 'kataleptic'])('keeps pipeline Azure suggestions fo
   select(mode); const fetch = mockCatalogs();
   const result = await catalog();
   expect(result.azure).toEqual(azureOptions);
-  expect(result.cascade).toEqual([]); expect(result.hdDefault).toBe('');
+  expect(result).not.toHaveProperty('cascade'); expect(result.hdDefault).toBe('');
   expect(result.native).toEqual(mode === 'openai' ? expect.arrayContaining([{ id: 'marin', label: 'marin' }]) : []);
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(fetch).toHaveBeenCalledWith('https://westeurope.tts.speech.microsoft.com/cognitiveservices/voices/list', expect.objectContaining({
@@ -60,12 +60,12 @@ it.each(['openai', 'custom'])('supports inherited %s and makes no requests witho
 });
 it('reuses Azure across workspace choices without leaking cached gateway voices into direct/custom', async () => {
   const fetch = mockCatalogs();
-  expect(await catalog()).toMatchObject({ azure: azureOptions, cascade: [{ id: 'piper-en', label: 'piper-en (en)' }], native: [{ id: 'gateway-voice', label: 'gateway-voice' }] });
+  expect(await catalog()).toMatchObject({ azure: azureOptions, native: [{ id: 'gateway-voice', label: 'gateway-voice' }] });
   expect(fetch).toHaveBeenCalledTimes(2);
   select('openai'); const direct = await catalog();
-  expect(direct.azure).toEqual(azureOptions); expect(direct.cascade).toEqual([]);
+  expect(direct.azure).toEqual(azureOptions); expect(direct).not.toHaveProperty('cascade');
   expect(direct.native).not.toContainEqual({ id: 'gateway-voice', label: 'gateway-voice' });
-  select('custom'); expect(await catalog()).toEqual({ azure: azureOptions, native: [], cascade: [], hdDefault: '' });
+  select('custom'); expect(await catalog()).toEqual({ azure: azureOptions, native: [], hdDefault: '' });
   select('instance'); expect((await catalog()).native).toEqual([{ id: 'gateway-voice', label: 'gateway-voice' }]);
   expect(fetch).toHaveBeenCalledTimes(2);
   expect(fetch.mock.calls[0][0]).toBe(env.REALTIME_BASE_URL.replace(/^ws/, 'http') + '/voices');
@@ -94,7 +94,7 @@ it('retains direct suggestions on Azure failure and retries instead of caching f
 it('keeps Azure on gateway failure and never follows an Azure redirect', async () => {
   const fetch = vi.fn(async (url: string) => url.includes('speech.microsoft.com') ? new Response(JSON.stringify(azure)) : new Response('', { status: 503 }));
   vi.stubGlobal('fetch', fetch);
-  expect(await catalog()).toMatchObject({ azure: azureOptions, cascade: [], native: [] });
+  expect(await catalog()).toMatchObject({ azure: azureOptions, native: [] });
   select('openai'); env.AZURE_SPEECH_KEY = 'synthetic-other';
   fetch.mockImplementation(async () => new Response(null, { status: 302, headers: { Location: 'https://unrelated.example' } }));
   expect((await catalog()).azure).toEqual([]); expect(fetch).toHaveBeenCalledTimes(3);

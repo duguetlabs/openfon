@@ -69,7 +69,7 @@ try {
       catch (e) { errors.push(e.message); throw e; }
     },
   };
-  const env = { DB: db, DEFAULT_LLM_BASE_URL: 'https://instance.example/v1', DEFAULT_LLM_API_KEY: '', DEFAULT_LLM_MODEL: 'instance', DEFAULT_STT_BASE_URL: 'https://instance.example/v1', DEFAULT_STT_API_KEY: '', DEFAULT_STT_MODEL: 'whisper-1', DEFAULT_TTS_PROVIDER: 'browser', REALTIME_BASE_URL: 'wss://instance.example/realtime', REALTIME_MODEL: 'kataleptic-realtime' };
+  const env = { DB: db, DEFAULT_LLM_BASE_URL: 'https://instance.example/v1', DEFAULT_LLM_API_KEY: '', DEFAULT_LLM_MODEL: 'instance', DEFAULT_STT_BASE_URL: 'https://instance.example/v1', DEFAULT_STT_API_KEY: '', DEFAULT_STT_MODEL: 'whisper-1', DEFAULT_TTS_PROVIDER: 'browser', REALTIME_BASE_URL: 'wss://instance.example/realtime', REALTIME_MODEL: 'kataleptic-realtime-hd' };
   const request = (path, body) => worker.fetch(new Request('https://openfon.test' + path, { method: body === undefined ? 'GET' : 'POST', headers: { Cookie: 'ofs=session', 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), env, { waitUntil() {}, passThroughOnException() {} });
   const path = kind => ({ collection: '/api/me/knowledge/collections', item: '/api/me/knowledge/collections/kc_default_biz/items', draft: '/api/me/knowledge/drafts/from-turn', preset: '/api/me/engine-presets' })[kind];
   const payload = kind => ({ collection: { name: '  Saved collection  ', description: '  Description 👋  ' }, item: { kind: 'note', status: 'active', title: '  Saved item  ', content: '  Ready 👋  ', source_call_id: 'ignored' }, draft: { callId: 'source', turnId: 1 }, preset: { name: '  Saved preset  ', llm_base_url: 'https://ignored.example/v1', llm_api_key: 'synthetic-ignored' } })[kind];

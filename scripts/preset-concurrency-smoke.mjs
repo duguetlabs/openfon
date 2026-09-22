@@ -52,7 +52,7 @@ try {
   const env = { DB: proxyDb, DEFAULT_LLM_BASE_URL: 'https://instance.example/v1', DEFAULT_LLM_API_KEY: 'synthetic-instance',
     DEFAULT_LLM_MODEL: 'model', DEFAULT_STT_BASE_URL: 'https://instance.example/v1', DEFAULT_STT_API_KEY: 'synthetic-stt',
     DEFAULT_STT_MODEL: 'whisper-1', DEFAULT_TTS_PROVIDER: 'browser', REALTIME_BASE_URL: 'wss://instance.example/realtime',
-    REALTIME_MODEL: 'kataleptic-realtime', REALTIME_API_KEY: 'synthetic-realtime' };
+    REALTIME_MODEL: 'kataleptic-realtime-hd', REALTIME_API_KEY: 'synthetic-realtime' };
   const request = (path, body, method = body === undefined ? 'GET' : 'PUT') => worker.fetch(new Request('https://openfon.test' + path, {
     method, headers: { Cookie: 'ofs=s1', 'Content-Type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),

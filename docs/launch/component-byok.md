@@ -3,8 +3,7 @@
 For the technology comparison, component settings and voice/language guidance, see
 [Choosing a conversation engine, models and voices](../voice-configuration.md).
 
-The assistant editor offers Kataleptic Standard (Whisper → chat → Piper), HD
-(Azure Voice Live), native GPT Realtime tiers, and Custom Pipeline. Available
+The assistant editor offers Kataleptic HD (Azure Voice Live), native GPT Realtime tiers, and Custom Pipeline. Available
 choices follow the workspace realtime provider. The text model used to summarize
 realtime calls is separate from the realtime conversation model.
 
@@ -33,7 +32,7 @@ advanced or previously saved values, but does not prove provider availability.
 The Kataleptic catalog is public, cached, bounded, and fetched without workspace
 keys; built-in suggestions are labeled when it is unavailable. Browser speech
 selects an installed language-matched voice on the caller's device. OpenAI speech
-voices are multilingual; Piper voice IDs are language-specific.
+voices are multilingual.
 
 An empty key input retains the saved key at the same provider/endpoint. Changing
 an endpoint requires a replacement key. Selecting instance/browser speech clears
