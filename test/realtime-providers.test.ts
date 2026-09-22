@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { liveRealtimeVoice, realtimeCapabilities, realtimeConnection, resolveRealtime, OPENAI_REALTIME_URL } from '../src/realtime-providers';
+import { defaultGatewayModel, liveRealtimeVoice, realtimeCapabilities, realtimeConnection, resolveRealtime, OPENAI_REALTIME_URL } from '../src/realtime-providers';
 import type { AgentSettings, Env } from '../src/types';
 const env = { REALTIME_BASE_URL: 'wss://gateway.example/v1/realtime', REALTIME_MODEL: 'kataleptic-realtime-hd', DEFAULT_LLM_API_KEY: 'operator-key' } as Env;
 const settings = (extra: object) => ({ realtime_model: '', ...extra }) as AgentSettings;
@@ -79,6 +79,13 @@ describe('retired Kataleptic cascade', () => {
     expect(resolveRealtime({ ...kataleptic, REALTIME_MODEL: 'gpt-realtime-2.1-mini' }, null)).not.toHaveProperty('retiredModel');
     expect(resolveRealtime({ ...kataleptic, REALTIME_MODEL: 'gpt-4o-realtime-preview' }, null).model).toBe('kataleptic-realtime-hd');
     expect(resolveRealtime(kataleptic, settings({ realtime_provider: 'kataleptic', realtime_api_key: 'k' })).model).toBe('kataleptic-realtime-hd');
+  });
+  it('keeps the historical default on another gateway and HD on Kataleptic', () => {
+    const own = (base?: string) => resolveRealtime(env, settings({ realtime_provider: 'kataleptic', realtime_api_key: 'k', ...(base ? { realtime_base_url: base } : {}) }));
+    expect(own('wss://gateway.example/v1/realtime').model).toBe('kataleptic-realtime');
+    expect(own('wss://gateway.example/v1/realtime')).not.toHaveProperty('retiredModel');
+    expect(own().model).toBe('kataleptic-realtime-hd');
+    expect(defaultGatewayModel('not a url')).toBe('kataleptic-realtime');
   });
   it('leaves another gateway speaking the same protocol its own models and voices', () => {
     const selfHosted = resolveRealtime(env, settings({ realtime_model: 'llama-3.3-70b' }));

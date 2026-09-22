@@ -18,6 +18,7 @@ export interface RealtimeConfig {
 }
 export const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime';
 export const KATALEPTIC_HD_MODEL = 'kataleptic-realtime-hd';
+export const KATALEPTIC_REALTIME_URL = 'wss://api.kataleptic.com/v1/realtime';
 
 // Kataleptic retired its cascade tier (`kataleptic-realtime`, or a chat model
 // id on /v1/realtime) with its self-hosted models: those return `model_retired`.
@@ -28,7 +29,12 @@ export function gatewayRealtimeModel(model: string): boolean {
   return model === KATALEPTIC_HD_MODEL || model.startsWith('gpt-realtime');
 }
 function katalepticGateway(config: Pick<RealtimeConfig, 'protocol' | 'baseUrl'>): boolean {
-  return config.protocol === 'gateway' && new URL(config.baseUrl).hostname === KATALEPTIC_HOST;
+  if (config.protocol !== 'gateway') return false;
+  try { return new URL(config.baseUrl).hostname === KATALEPTIC_HOST; } catch { return false; }
+}
+/** Default for an explicit gateway provider: HD on Kataleptic, the historical default elsewhere. */
+export function defaultGatewayModel(baseUrl: string): string {
+  return katalepticGateway({ protocol: 'gateway', baseUrl }) ? KATALEPTIC_HD_MODEL : 'kataleptic-realtime';
 }
 
 // Explicit workspace providers never borrow an operator credential. The instance
@@ -40,7 +46,7 @@ export function resolveRealtime(env: Env & { REALTIME_PROVIDER?: RealtimeProvide
   if (!['kataleptic', 'openai', 'custom'].includes(provider)) throw new LlmConfigError('Unsupported realtime provider.');
   const protocol = provider === 'kataleptic' ? 'gateway' : 'openai';
   const baseUrl = instance ? env.REALTIME_BASE_URL : settings?.realtime_base_url?.trim() ||
-    (provider === 'openai' ? OPENAI_REALTIME_URL : provider === 'kataleptic' ? 'wss://api.kataleptic.com/v1/realtime' : '');
+    (provider === 'openai' ? OPENAI_REALTIME_URL : provider === 'kataleptic' ? KATALEPTIC_REALTIME_URL : '');
   let url: URL;
   try { url = new URL(baseUrl); } catch { throw new LlmConfigError('Realtime endpoint must be an absolute WebSocket URL.'); }
   if (!['ws:', 'wss:'].includes(url.protocol) || url.username || url.password || url.hash) {
@@ -57,7 +63,7 @@ export function resolveRealtime(env: Env & { REALTIME_PROVIDER?: RealtimeProvide
   const apiKey = instance ? env.REALTIME_API_KEY || (protocol === 'gateway' ? env.DEFAULT_LLM_API_KEY : '') || '' : settings?.realtime_api_key || '';
   if (!instance && !apiKey) throw new LlmConfigError('This realtime provider needs its own API key.');
   if (protocol === 'openai' && !apiKey) throw new LlmConfigError('OpenAI realtime requires a realtime API key.');
-  const model = settings?.realtime_model || (instance ? env.REALTIME_MODEL : protocol === 'openai' ? 'gpt-realtime' : KATALEPTIC_HD_MODEL);
+  const model = settings?.realtime_model || (instance ? env.REALTIME_MODEL : protocol === 'openai' ? 'gpt-realtime' : defaultGatewayModel(baseUrl));
   // A stored cascade selection would fail every call. Serve the HD tier instead;
   // migration 0024 rewrites the stored rows, this covers anything it missed.
   if (katalepticGateway({ protocol, baseUrl }) && !gatewayRealtimeModel(model)) {

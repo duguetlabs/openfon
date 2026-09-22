@@ -1,5 +1,5 @@
 import { generateVoicePreview, PREVIEW_TEXT } from './voice-preview';
-import { KATALEPTIC_HD_MODEL, resolveRealtime } from './realtime-providers';
+import { defaultGatewayModel, KATALEPTIC_REALTIME_URL, resolveRealtime } from './realtime-providers';
 import { registerSummaryApi } from './summary-settings';
 import { providerCatalog } from './provider-catalog';
 import { checkedPresetWriteSql, checkedPresetWrite, checkedPresetSourceSql, checkedPresetSource } from './preset-write-snapshot';
@@ -1850,7 +1850,7 @@ export function registerStudioApi(app: StudioApp): void {
       effective_text_model: provider?.llm_model || c.env.DEFAULT_LLM_MODEL,
       effective_stt_model: !provider?.stt_provider || provider.stt_provider === 'instance' ? c.env.DEFAULT_STT_MODEL : provider.stt_model,
       effective_realtime_provider: !provider?.realtime_provider || provider.realtime_provider === 'instance' ? c.env.REALTIME_PROVIDER || 'kataleptic' : provider.realtime_provider,
-      effective_realtime_model: !provider?.realtime_provider || provider.realtime_provider === 'instance' ? c.env.REALTIME_MODEL : provider.realtime_provider === 'kataleptic' ? KATALEPTIC_HD_MODEL : 'gpt-realtime',
+      effective_realtime_model: !provider?.realtime_provider || provider.realtime_provider === 'instance' ? c.env.REALTIME_MODEL : provider.realtime_provider === 'kataleptic' ? defaultGatewayModel(provider.realtime_base_url || KATALEPTIC_REALTIME_URL) : 'gpt-realtime',
       updatedAt: provider?.updated_at ?? null,
     });
   });
