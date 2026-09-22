@@ -841,13 +841,13 @@ describe('realtime session payload', () => {
     expect(await turnDetection('kataleptic-realtime-hd')).toEqual(TUNED_SERVER_VAD);
   });
 
-  it('never moves cascade tiers off server VAD, which would silently lose the tuning', async () => {
-    // The worse failure of the two, because nothing errors. Probed live, the
-    // cascade *accepts* `semantic_vad` and serves `server_vad` back at Azure's
-    // defaults (0.5 / 500) — the call runs on settings nobody chose, and only
-    // the session.updated echo shows it. A confirmed-different config must not
-    // read as valid.
-    expect(await turnDetection('kataleptic-realtime')).toEqual(TUNED_SERVER_VAD);
+  it('connects a stored retired cascade selection to the HD tier with its tuning', async () => {
+    // Kataleptic answers `model_retired` for the cascade. A row the migration
+    // missed must still reach a live tier instead of failing the call.
+    for (const model of ['kataleptic-realtime', 'llama-3.3-70b']) {
+      expect(await turnDetection(model)).toEqual(TUNED_SERVER_VAD);
+      expect(new URL(gatewayRequests.at(-1)!.url).searchParams.get('model')).toBe('kataleptic-realtime-hd');
+    }
   });
 
   it('never asks for noise reduction, on any tier', async () => {
@@ -859,7 +859,7 @@ describe('realtime session payload', () => {
       v && typeof v === 'object' && !Array.isArray(v)
         ? Object.entries(v as Record<string, unknown>).flatMap(([k, val]) => [k, ...keys(val)])
         : [];
-    for (const model of ['gpt-realtime-2', 'kataleptic-realtime-hd', 'kataleptic-realtime']) {
+    for (const model of ['gpt-realtime-2', 'gpt-realtime-2.1-mini', 'kataleptic-realtime-hd']) {
       const offenders = keys(await sessionFor(model)).filter((k) => /noise/i.test(k));
       expect(offenders, `${model} session payload asks for noise reduction`).toEqual([]);
     }
@@ -1004,14 +1004,13 @@ describe('session echo read-back', () => {
     expect(updatesSent(up)).toBe(1);
   });
 
-  it('never re-sends on the cascade tier, which does not diverge', async () => {
+  it('never re-sends a session whose echo matches', async () => {
     // "Should never fire" is what transcription's advisory status rested on,
     // and that premise turned out to be the losing half of a race — so pin it.
-    // The cascade echoes the transcription config verbatim, 6/6 measured, and
-    // sends no injected session.update of its own, so the enforced path must
-    // stay dormant there for the whole life of the call.
-    const { up, sent } = await started('llama-3.3-70b');
-    expect(sent.audio?.input?.transcription?.prompt, 'the cascade gets the vocab prompt').toBeTruthy();
+    // An echo that matches what was sent must keep the enforced path dormant
+    // for the whole life of the call.
+    const { up, sent } = await started('gpt-realtime-2.1-mini');
+    expect(sent.audio?.input?.transcription?.prompt, 'native tiers get the vocab prompt').toBeTruthy();
     echo(up, structuredClone(sent));
     await flush();
     // and a later echo of the same session must not start a re-send either

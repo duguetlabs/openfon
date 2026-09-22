@@ -56,7 +56,7 @@ try {
     try { const result = await native.batch(statements.map(s => s.raw())); receipt.result = result; return result; }
     catch (error) { receipt.errors = errorChain(error); throw error; }
   } };
-  const env = { DB: db, DEFAULT_LLM_BASE_URL: 'https://instance.invalid/v1', DEFAULT_LLM_API_KEY: 'synthetic-only', DEFAULT_LLM_MODEL: 'instance', DEFAULT_STT_BASE_URL: 'https://instance.invalid/v1', DEFAULT_STT_MODEL: 'whisper-1', DEFAULT_TTS_PROVIDER: 'browser', REALTIME_MODEL: 'kataleptic-realtime' };
+  const env = { DB: db, DEFAULT_LLM_BASE_URL: 'https://instance.invalid/v1', DEFAULT_LLM_API_KEY: 'synthetic-only', DEFAULT_LLM_MODEL: 'instance', DEFAULT_STT_BASE_URL: 'https://instance.invalid/v1', DEFAULT_STT_MODEL: 'whisper-1', DEFAULT_TTS_PROVIDER: 'browser', REALTIME_MODEL: 'kataleptic-realtime-hd' };
   globalThis.fetch = async (input, init) => {
     const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
     if (['localhost','127.0.0.1','[::1]'].includes(url.hostname)) return realFetch(input, init);

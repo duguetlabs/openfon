@@ -293,7 +293,6 @@ export interface VoiceOption {
 }
 
 export interface VoiceCatalog {
-  cascade: VoiceOption[];
   native: VoiceOption[];
   azure: VoiceOption[];
   hdDefault: string;

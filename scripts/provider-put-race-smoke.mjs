@@ -61,7 +61,7 @@ try {
   } };
   const env = { DB: proxyDb, DEFAULT_LLM_BASE_URL: 'https://api.kataleptic.com/v1', DEFAULT_LLM_API_KEY: 'synthetic-instance',
     DEFAULT_LLM_MODEL: 'llama-3.3-70b', DEFAULT_STT_BASE_URL: 'https://api.kataleptic.com/v1', DEFAULT_STT_API_KEY: 'synthetic-stt',
-    DEFAULT_STT_MODEL: 'whisper-1', DEFAULT_TTS_PROVIDER: 'browser', REALTIME_MODEL: 'kataleptic-realtime', REALTIME_BASE_URL: 'wss://api.kataleptic.com/v1/realtime' };
+    DEFAULT_STT_MODEL: 'whisper-1', DEFAULT_TTS_PROVIDER: 'browser', REALTIME_MODEL: 'kataleptic-realtime-hd', REALTIME_BASE_URL: 'wss://api.kataleptic.com/v1/realtime' };
   const request = (path, body) => worker.fetch(new Request('https://openfon.test' + path, {
     method: body === undefined ? 'GET' : 'PUT', headers: { Cookie: 'ofs=s1', 'Content-Type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),

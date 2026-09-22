@@ -25,7 +25,7 @@ beforeEach(() => {
 afterEach(() => { db.close(); vi.unstubAllGlobals(); });
 
 async function privatePrimary() {
-  db.exec("UPDATE agent_settings SET engine='realtime',realtime_model='kataleptic-realtime',realtime_voice='azure-voice' WHERE business_id='b1'");
+  db.exec("UPDATE agent_settings SET engine='realtime',realtime_model='kataleptic-realtime-hd',realtime_voice='azure-voice' WHERE business_id='b1'");
   expect((await request('/api/me/bootstrap')).status).toBe(200);
   db.exec("UPDATE assistants SET state='draft',activated_at=NULL WHERE business_id='b1'");
   expect((await request('/api/public/agent/one', undefined, '')).status).toBe(404);

@@ -34,7 +34,7 @@ beforeEach(async () => {
     INSERT INTO engine_presets(id,business_id,name,engine,language) VALUES ('preset','b1','Original','realtime','en');`);
   env = { DB: db, DEFAULT_LLM_BASE_URL: 'https://instance.example/v1', DEFAULT_LLM_API_KEY: 'synthetic-key',
     DEFAULT_LLM_MODEL: 'model', DEFAULT_STT_BASE_URL: 'https://instance.example/v1', DEFAULT_STT_API_KEY: 'synthetic-stt',
-    DEFAULT_STT_MODEL: 'whisper-1', DEFAULT_TTS_PROVIDER: 'browser', REALTIME_MODEL: 'kataleptic-realtime',
+    DEFAULT_STT_MODEL: 'whisper-1', DEFAULT_TTS_PROVIDER: 'browser', REALTIME_MODEL: 'kataleptic-realtime-hd',
     REALTIME_BASE_URL: 'wss://instance.example/realtime', REALTIME_API_KEY: 'synthetic-realtime' } as unknown as Env;
   expect((await request('/api/me/bootstrap')).status).toBe(200);
 });

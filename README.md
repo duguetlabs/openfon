@@ -55,7 +55,7 @@ Defaults live in `wrangler.jsonc` under `vars`; secrets via `wrangler secret put
 | `DEFAULT_LLM_MODEL` | Chat model | `llama-3.3-70b` |
 | `DEFAULT_LLM_API_KEY` | *(secret)* key for the LLM API | — |
 | `DEFAULT_STT_BASE_URL` | OpenAI-compatible `/audio/transcriptions` API | `https://api.kataleptic.com/v1` |
-| `DEFAULT_STT_MODEL` | Transcription model | `whisper-large-v3-turbo` |
+| `DEFAULT_STT_MODEL` | Transcription model | `gpt-transcribe` |
 | `DEFAULT_STT_API_KEY` | *(secret)* key for the STT API | — |
 | `STT_TIMEOUT_MS` | Total transcription deadline including compatibility retry (1000–120000 ms) | `60000` |
 | `DEFAULT_TTS_PROVIDER` | `azure` or `browser` | `azure` |
@@ -63,7 +63,7 @@ Defaults live in `wrangler.jsonc` under `vars`; secrets via `wrangler secret put
 | `AZURE_SPEECH_REGION` | Azure Speech region | `westeurope` |
 | `DEFAULT_TTS_VOICE` | Azure neural voice | `en-US-AvaMultilingualNeural` |
 | `REALTIME_BASE_URL` | WebSocket endpoint for the configured realtime adapter | `wss://api.kataleptic.com/v1/realtime` |
-| `REALTIME_MODEL` | Model/tier for the realtime engine | `llama-3.3-70b` |
+| `REALTIME_MODEL` | Model/tier for the realtime engine | `kataleptic-realtime-hd` |
 | `REALTIME_API_KEY` | *(secret)* key for the realtime endpoint; falls back to `DEFAULT_LLM_API_KEY` | — |
 | `ALLOW_INSECURE_LLM_URL` | `"true"` lets a business point its LLM at a plain-http or loopback URL; single-tenant instances only | — |
 

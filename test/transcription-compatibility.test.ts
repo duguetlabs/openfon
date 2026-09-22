@@ -79,3 +79,14 @@ it('never loops after a failed compatibility attempt or retries an unprompted re
   await expect(transcribe(env, new ArrayBuffer(2), 'audio/wav')).rejects.toThrow('STT error 400');
   expect(fetcher).toHaveBeenCalledOnce();
 });
+
+it('reads the detected language from gpt-transcribe\'s languages list', async () => {
+  // Recorded shape from api.kataleptic.com, 2026-09-23.
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ text: 'Guten Tag', languages: [{ code: 'de' }], usage: { type: 'duration', seconds: 5 } })));
+  await expect(request()).resolves.toEqual({ text: 'Guten Tag', language: 'de' });
+});
+
+it.each([[{ languages: 'de' }], [{ languages: [{ code: 7 }] }], [{ languages: [] }], [{ languages: [null] }]])('keeps the transcript when the languages list is malformed: %j', async extra => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ text: 'Guten Tag', ...extra })));
+  await expect(request()).resolves.toMatchObject({ text: 'Guten Tag' });
+});

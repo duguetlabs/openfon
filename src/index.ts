@@ -953,7 +953,7 @@ app.post('/api/me/profiles/:pid/apply', async (c) => {
 
 // ---------- voice catalogs (aggregated per tier, cached per isolate) ----------
 type VoiceOption = { id: string; label: string };
-let voicesCache: { endpoint: string; data: { cascade: VoiceOption[]; native: VoiceOption[]; hdDefault: string }; at: number } | null = null;
+let voicesCache: { endpoint: string; data: { native: VoiceOption[]; hdDefault: string }; at: number } | null = null;
 let azureVoicesCache: { region: string; key: string; data: VoiceOption[]; at: number } | null = null;
 
 app.get('/api/me/voices', async (c) => {
@@ -965,28 +965,22 @@ app.get('/api/me/voices', async (c) => {
   // Only inherited gateway configuration may contact the instance gateway.
   const useGateway = mode === 'kataleptic' && (!provider?.realtime_provider || provider.realtime_provider === 'instance');
   const out: {
-    cascade: { id: string; label: string }[];
     native: { id: string; label: string }[];
     azure: { id: string; label: string }[];
     hdDefault: string;
-  } = { cascade: [], native: mode === 'openai' ? OPENAI_REALTIME_VOICES.map(id => ({ id, label: id })) : [], azure: [], hdDefault: '' };
+  } = { native: mode === 'openai' ? OPENAI_REALTIME_VOICES.map(id => ({ id, label: id })) : [], azure: [], hdDefault: '' };
   if (useGateway && voicesCache?.endpoint === c.env.REALTIME_BASE_URL && Date.now() - voicesCache.at < 3_600_000) {
     Object.assign(out, voicesCache.data);
   } else if (useGateway) try {
     const res = await fetch(c.env.REALTIME_BASE_URL.replace(/^ws/, 'http') + '/voices', { signal: AbortSignal.timeout(3000) });
     if (res.ok) {
       const cat = (await res.json()) as {
-        'kataleptic-realtime'?: { voices_by_language?: Record<string, string> };
         'kataleptic-realtime-hd'?: { default?: string };
         'gpt-realtime-2'?: { voices?: string[] };
       };
-      out.cascade = Object.entries(cat['kataleptic-realtime']?.voices_by_language ?? {}).map(([lang, id]) => ({
-        id,
-        label: `${id} (${lang})`,
-      }));
       out.native = (cat['gpt-realtime-2']?.voices ?? []).map((id) => ({ id, label: id }));
       out.hdDefault = cat['kataleptic-realtime-hd']?.default ?? '';
-      voicesCache = { endpoint: c.env.REALTIME_BASE_URL, data: { cascade: out.cascade, native: out.native, hdDefault: out.hdDefault }, at: Date.now() };
+      voicesCache = { endpoint: c.env.REALTIME_BASE_URL, data: { native: out.native, hdDefault: out.hdDefault }, at: Date.now() };
     }
   } catch {
     /* catalog unavailable — dropdowns degrade to free text */

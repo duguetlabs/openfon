@@ -136,7 +136,7 @@ try {
     assert.equal(catalog.status, 200, 'authenticated direct voice catalog');
     const voices = await catalog.json();
     assert.ok(voices.native.some(voice => voice.id === 'marin'));
-    assert.deepEqual(voices.cascade, []);
+    assert.equal('cascade' in voices, false);
     assert.deepEqual(voices.azure, []);
   }
   const webhook = async (type, id=randomUUID()) => {

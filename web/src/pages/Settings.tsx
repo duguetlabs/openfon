@@ -646,8 +646,7 @@ export default function Settings() {
                   onChange={(e) => setA({ realtime_model: e.target.value })}
                 >
                   <option value="">Instance default</option>
-                  <option value="kataleptic-realtime">kataleptic-realtime — fastest (~0.5 s) and cheapest</option>
-                  <option value="kataleptic-realtime-hd">kataleptic-realtime-hd — HD voices (Azure Voice Live), ~1 s</option>
+                  <option value="kataleptic-realtime-hd">kataleptic-realtime-hd — HD voices (Azure Voice Live), fastest</option>
                   <option value="gpt-realtime-2">gpt-realtime-2 — native speech-to-speech with built-in reasoning; not EU-hosted</option>
                 </select>
                 <span className="mt-1.5 block text-xs leading-relaxed text-ink-soft">
@@ -660,15 +659,13 @@ export default function Settings() {
                     onChange={(e) => setA({ realtime_voice: e.target.value })}
                     placeholder="Tier default"
                     list="rt-voice-options"
-                    hint="Pick from the chosen tier's live catalog or type any voice id. Empty = tier default (cascade voices follow the caller's language automatically)."
+                    hint="Pick from the chosen tier's live catalog or type any voice id. Empty = tier default (HD voices follow the caller's language automatically)."
                   />
                   <datalist id="rt-voice-options">
                     {(voiceCatalog
-                      ? agent.realtime_model === 'kataleptic-realtime-hd'
-                        ? voiceCatalog.azure
-                        : agent.realtime_model === 'gpt-realtime-2'
-                          ? voiceCatalog.native
-                          : voiceCatalog.cascade
+                      ? agent.realtime_model.startsWith('gpt-realtime')
+                        ? voiceCatalog.native
+                        : voiceCatalog.azure
                       : []
                     ).map((v) => (
                       <option key={v.id} value={v.id}>

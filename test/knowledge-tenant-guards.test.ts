@@ -37,7 +37,7 @@ beforeEach(async () => {
     INSERT INTO provider_settings(business_id) VALUES('b1'),('b2');`);
   env = { DB: db, DEFAULT_LLM_BASE_URL: 'https://instance.example/v1', DEFAULT_LLM_API_KEY: '', DEFAULT_LLM_MODEL: 'instance',
     DEFAULT_STT_BASE_URL: 'https://instance.example/v1', DEFAULT_STT_API_KEY: '', DEFAULT_STT_MODEL: 'whisper-1', DEFAULT_TTS_PROVIDER: 'browser',
-    REALTIME_BASE_URL: 'wss://instance.example/realtime', REALTIME_MODEL: 'kataleptic-realtime' } as unknown as Env;
+    REALTIME_BASE_URL: 'wss://instance.example/realtime', REALTIME_MODEL: 'kataleptic-realtime-hd' } as unknown as Env;
   expect((await request('/api/me/bootstrap')).status).toBe(200);
   expect((await request('/api/me/bootstrap', undefined, 'GET', 's2')).status).toBe(200);
   sql(`INSERT INTO assistants(id,business_id,public_slug) VALUES('a1','b1','extra-one'),('a2','b2','extra-two');

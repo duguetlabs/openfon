@@ -15,6 +15,14 @@ export interface RealtimeConfig {
   protocol: 'gateway' | 'openai';
 }
 export const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime';
+export const KATALEPTIC_HD_MODEL = 'kataleptic-realtime-hd';
+
+// Kataleptic retired its cascade tier (`kataleptic-realtime`, or a chat model
+// id on /v1/realtime) with its self-hosted models: those return `model_retired`.
+// Only Azure Voice Live (HD) and the native speech-to-speech tiers remain.
+export function gatewayRealtimeModel(model: string): boolean {
+  return model === KATALEPTIC_HD_MODEL || model.startsWith('gpt-realtime');
+}
 
 // Explicit workspace providers never borrow an operator credential. The instance
 // option alone preserves the legacy gateway URL/key/model defaults.
@@ -42,7 +50,10 @@ export function resolveRealtime(env: Env & { REALTIME_PROVIDER?: RealtimeProvide
   const apiKey = instance ? env.REALTIME_API_KEY || (protocol === 'gateway' ? env.DEFAULT_LLM_API_KEY : '') || '' : settings?.realtime_api_key || '';
   if (!instance && !apiKey) throw new LlmConfigError('This realtime provider needs its own API key.');
   if (protocol === 'openai' && !apiKey) throw new LlmConfigError('OpenAI realtime requires a realtime API key.');
-  const model = settings?.realtime_model || (instance ? env.REALTIME_MODEL : protocol === 'openai' ? 'gpt-realtime' : 'kataleptic-realtime');
+  let model = settings?.realtime_model || (instance ? env.REALTIME_MODEL : protocol === 'openai' ? 'gpt-realtime' : KATALEPTIC_HD_MODEL);
+  // A stored cascade selection would fail every call. Serve the HD tier instead;
+  // migration 0024 rewrites the stored rows, this covers anything it missed.
+  if (protocol === 'gateway' && !gatewayRealtimeModel(model)) model = KATALEPTIC_HD_MODEL;
   if (provider === 'openai' && !/^gpt-(realtime|4o.*realtime)/.test(model)) {
     throw new LlmConfigError('Choose an OpenAI realtime model for the OpenAI provider.');
   }
@@ -66,9 +77,8 @@ export function realtimeConnection(config: RealtimeConfig): { url: string; heade
 export function realtimeCapabilities(config: RealtimeConfig) {
   const native = config.protocol === 'openai';
   return {
-    engineGreeting: native || config.model === 'kataleptic-realtime' || config.model.startsWith('gpt-realtime'),
-    cascade: !native && config.model !== 'kataleptic-realtime-hd' && !config.model.startsWith('gpt-realtime'),
-    managedVoice: !native && config.model === 'kataleptic-realtime-hd',
+    engineGreeting: native || config.model.startsWith('gpt-realtime'),
+    managedVoice: !native && config.model === KATALEPTIC_HD_MODEL,
     transcriptionModel: native || config.model.startsWith('gpt-realtime') ? 'whisper-1' : null,
   };
 }

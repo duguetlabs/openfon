@@ -1,5 +1,4 @@
 import { fetchProviderBytes, fetchProviderJson, ProviderResponseError } from './provider-response';
-import { piperVoiceFromCatalog } from './piper-catalog';
 // Pluggable AI providers. LLM and STT speak the OpenAI-compatible wire format,
 // so OpenFon works with Kataleptic (default), OpenAI, Azure OpenAI, Groq, Ollama,
 // vLLM, or anything else that implements /chat/completions and /audio/transcriptions.
@@ -225,33 +224,6 @@ export const SUPPORTED_LANGUAGES: Record<string, { name: string; voice: string }
   ru: { name: 'Russian', voice: MULTILINGUAL_VOICE },
 };
 
-// Initial voice per language for Piper-based cascade tiers. The cascade
-// follows the *detected* caller language, but before anyone has spoken it
-// falls back to English — pinning a language-prefixed voice id sets the
-// correct initial pronunciation (greeting, first reply); detection-based
-// following continues afterwards. Unknown ids degrade gracefully upstream,
-// with the lang_REGION prefix still selecting the language.
-// transcription.language seeding is layered on top since Kataleptic's
-// 2026-06-13 fix (seed = greeting + STT hint; per-utterance detection wins);
-// the voice pin stays as belt-and-braces and for non-Kataleptic providers.
-export const PIPER_BY_LANG: Record<string, string> = {
-  en: 'en_US-lessac-medium',
-  de: 'de_DE-thorsten-medium',
-  fr: 'fr_FR-siwis-medium',
-  es: 'es_ES-sharvard-medium',
-  nl: 'nl_NL-mls-medium',
-  sv: 'sv_SE-nst-medium',
-  da: 'da_DK-talesyntese-medium',
-  it: 'it_IT-paola-medium',
-  fi: 'fi_FI-harri-medium',
-  ru: 'ru_RU-irina-medium',
-};
-
-// Endpoint-scoped, bounded public catalog; fixed language defaults on failure.
-export async function piperVoiceFor(env: Env, lang: string): Promise<string> {
-  return piperVoiceFromCatalog(env.REALTIME_BASE_URL, lang, PIPER_BY_LANG[lang] ?? '');
-}
-
 // STT backends report language as ISO codes ("de") or names ("german").
 const LANG_ALIASES: Record<string, string> = {
   english: 'en', german: 'de', french: 'fr', spanish: 'es', dutch: 'nl',
@@ -381,11 +353,15 @@ export async function transcribe(env: Env, audio: ArrayBuffer, contentType: stri
   if (!res.ok) {
     throw new Error(`STT error ${res.status}: provider request failed`);
   }
-  const result = data as { text?: unknown; language?: unknown } | null;
+  const result = data as { text?: unknown; language?: unknown; languages?: unknown } | null;
   if (!result || typeof result !== 'object' || Array.isArray(result) ||
     (result.text != null && typeof result.text !== 'string') ||
     (result.language != null && typeof result.language !== 'string')) throw new ProviderResponseError();
-  return { text: (result.text ?? '').trim(), language: normalizeLang(result.language ?? undefined) };
+  // Whisper reports `language`; gpt-transcribe reports `languages: [{ code }]`.
+  // A malformed list only costs the hint, never the transcript.
+  const first = Array.isArray(result.languages) ? result.languages[0] as { code?: unknown } | undefined : undefined;
+  const language = result.language ?? (typeof first?.code === 'string' ? first.code : undefined);
+  return { text: (result.text ?? '').trim(), language: normalizeLang(language) };
 }
 
 // Pick the voice for a reply: the business's custom voice only applies to its

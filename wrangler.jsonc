@@ -39,17 +39,16 @@
     "DEFAULT_LLM_BASE_URL": "https://api.kataleptic.com/v1",
     "DEFAULT_LLM_MODEL": "llama-3.3-70b",
     "DEFAULT_STT_BASE_URL": "https://api.kataleptic.com/v1",
-    "DEFAULT_STT_MODEL": "whisper-large-v3-turbo",
+    "DEFAULT_STT_MODEL": "gpt-transcribe",
     "DEFAULT_TTS_PROVIDER": "azure",
     "AZURE_SPEECH_REGION": "westeurope",
     "DEFAULT_TTS_VOICE": "en-US-AvaMultilingualNeural",
     "REALTIME_BASE_URL": "wss://api.kataleptic.com/v1/realtime",
-    // Cascade with a strong chat model: ~0.5 s replies and reliable grounded
-    // reasoning (the "kataleptic-realtime" default model answered English
-    // callers in German and got weekday math wrong in testing — it greets
-    // faster, but correctness wins). "kataleptic-realtime-hd" = Azure Voice
-    // Live (HD voices); "gpt-realtime-2" = native speech-to-speech.
+    // Azure Voice Live (HD voices): fastest time to first audio and best
+    // hearing in docs/research/voice-engine-quality-2026-08.md. The
+    // "gpt-realtime-*" tiers are native speech-to-speech. Kataleptic retired
+    // its cascade tier (kataleptic-realtime, or a chat model id here).
     // Per-business override in Settings.
-    "REALTIME_MODEL": "llama-3.3-70b"
+    "REALTIME_MODEL": "kataleptic-realtime-hd"
   }
 }
