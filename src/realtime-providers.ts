@@ -13,6 +13,8 @@ export interface RealtimeConfig {
   apiKey: string;
   model: string;
   protocol: 'gateway' | 'openai';
+  /** The retired selection replaced by `model`; its voice belonged to that tier. */
+  retiredModel?: string;
 }
 export const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime';
 export const KATALEPTIC_HD_MODEL = 'kataleptic-realtime-hd';
@@ -50,10 +52,12 @@ export function resolveRealtime(env: Env & { REALTIME_PROVIDER?: RealtimeProvide
   const apiKey = instance ? env.REALTIME_API_KEY || (protocol === 'gateway' ? env.DEFAULT_LLM_API_KEY : '') || '' : settings?.realtime_api_key || '';
   if (!instance && !apiKey) throw new LlmConfigError('This realtime provider needs its own API key.');
   if (protocol === 'openai' && !apiKey) throw new LlmConfigError('OpenAI realtime requires a realtime API key.');
-  let model = settings?.realtime_model || (instance ? env.REALTIME_MODEL : protocol === 'openai' ? 'gpt-realtime' : KATALEPTIC_HD_MODEL);
+  const model = settings?.realtime_model || (instance ? env.REALTIME_MODEL : protocol === 'openai' ? 'gpt-realtime' : KATALEPTIC_HD_MODEL);
   // A stored cascade selection would fail every call. Serve the HD tier instead;
   // migration 0024 rewrites the stored rows, this covers anything it missed.
-  if (protocol === 'gateway' && !gatewayRealtimeModel(model)) model = KATALEPTIC_HD_MODEL;
+  if (protocol === 'gateway' && !gatewayRealtimeModel(model)) {
+    return { provider, baseUrl, apiKey, model: KATALEPTIC_HD_MODEL, protocol, retiredModel: model };
+  }
   if (provider === 'openai' && !/^gpt-(realtime|4o.*realtime)/.test(model)) {
     throw new LlmConfigError('Choose an OpenAI realtime model for the OpenAI provider.');
   }

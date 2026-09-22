@@ -98,7 +98,7 @@ export async function generateVoicePreview(env: Env, settings: AgentSettings, si
     return pcmWav(new Uint8Array(bytes));
   }
   const config = resolveRealtime(env, settings); const capabilities = realtimeCapabilities(config);
-  const voice = settings.realtime_voice || (capabilities.managedVoice
+  const voice = (config.retiredModel ? '' : settings.realtime_voice) || (capabilities.managedVoice
     ? voiceForReply(env, settings.language, settings.language, settings.voice) : '');
   return realtimePreview(config, voice, text, signal);
 }

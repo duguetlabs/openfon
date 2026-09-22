@@ -560,7 +560,7 @@ export class CallSession implements DurableObject {
     // caller mid-conversation (realtime calls would only notice at summary time).
     try {
       resolveLlm(this.env, this.settings);
-      if (this.settings?.engine === 'realtime') this.realtimeConfig = resolveRealtime(this.env, this.settings);
+      if (this.settings?.engine === 'realtime') this.resolveRealtimeConfig();
     } catch (err) {
       if (!(err instanceof LlmConfigError)) throw err;
       // The diagnostic is for the owner, not the caller: it can name the
@@ -1086,6 +1086,16 @@ export class CallSession implements DurableObject {
   private realtimeConfig: RealtimeConfig | null = null;
   private outputAudio: { socket: WebSocket; itemId: string; contentIndex: number; startedAt: number; bytes: number } | null = null;
 
+  private resolveRealtimeConfig(): RealtimeConfig {
+    const config = this.realtimeConfig = resolveRealtime(this.env, this.settings);
+    if (config.retiredModel && this.settings) {
+      // A voice chosen for the retired tier means nothing to HD: let HD manage it.
+      console.log(`call ${this.callId}: retired realtime model ${config.retiredModel} served on ${config.model}`);
+      this.settings = { ...this.settings, realtime_voice: '' };
+    }
+    return config;
+  }
+
   private engineGreets(): boolean {
     // An explicitly selected realtime voice must also speak the greeting.
     // Instance Azure/browser synthesis could otherwise substitute another voice.
@@ -1194,7 +1204,7 @@ export class CallSession implements DurableObject {
   }
 
   private async startRealtime(systemPrompt: string, greeting: string): Promise<boolean> {
-    this.realtimeConfig ??= resolveRealtime(this.env, this.settings);
+    this.realtimeConfig ??= this.resolveRealtimeConfig();
     const model = this.realtimeConfig.model;
     this.realtimeModel = model;
     console.log(`call ${this.callId}: realtime engine, model ${model}`);

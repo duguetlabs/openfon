@@ -6,55 +6,59 @@
 -- Realtime and LLM selections are cleared to '' (the workspace or instance
 -- default, now kataleptic-realtime-hd and llama-3.3-70b) rather than pinned to
 -- a replacement, and only where the workspace uses the Kataleptic or instance
--- endpoint. Custom providers keep their own model namespace. Every table gets
--- the same value-only transform, including the legacy compatibility snapshot:
--- a legacy row that no longer matched its snapshot would look like an old-worker
--- edit and be copied over the Studio assistant.
+-- endpoint (the legacy row's own LLM endpoint included). A voice chosen for a
+-- retired tier goes with it. Custom providers keep their own model namespace.
+-- Every table gets the same transform, including the legacy compatibility
+-- snapshot: a legacy row that no longer matched its snapshot would look like an
+-- old-worker edit and be copied over the Studio assistant.
 
 UPDATE assistants SET
-  realtime_model = CASE WHEN (realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT LIKE 'gpt-%realtime%') THEN '' ELSE realtime_model END,
-  realtime_voice = CASE WHEN realtime_voice GLOB '[a-z][a-z]_[A-Z][A-Z]-*' THEN '' ELSE realtime_voice END
+  realtime_model = CASE WHEN (realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT GLOB 'gpt-realtime*') THEN '' ELSE realtime_model END,
+  realtime_voice = CASE WHEN (realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT GLOB 'gpt-realtime*') OR realtime_voice GLOB '[a-z][a-z]_[A-Z][A-Z]-*' THEN '' ELSE realtime_voice END
 WHERE COALESCE((SELECT realtime_provider FROM provider_settings WHERE business_id=assistants.business_id), 'instance') IN ('instance', 'kataleptic')
-  AND ((realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT LIKE 'gpt-%realtime%') OR realtime_voice GLOB '[a-z][a-z]_[A-Z][A-Z]-*');
+  AND ((realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT GLOB 'gpt-realtime*') OR realtime_voice GLOB '[a-z][a-z]_[A-Z][A-Z]-*');
 
 UPDATE assistants SET llm_model = ''
-WHERE llm_model IN ('qwen3-8b', 'qwen2.5-coder-7b', 'mistral-nemo-12b', 'gemma3-27b', 'glm4-9b') AND COALESCE((SELECT llm_base_url FROM provider_settings WHERE business_id=assistants.business_id), '') IN ('', 'https://api.kataleptic.com/v1', 'https://api.kataleptic.com/v1/');
+WHERE llm_model IN ('qwen3-8b', 'qwen2.5-coder-7b', 'mistral-nemo-12b', 'gemma3-27b', 'glm4-9b') AND COALESCE((SELECT llm_base_url FROM provider_settings WHERE business_id=assistants.business_id), '') IN ('', 'https://api.kataleptic.com/v1', 'https://api.kataleptic.com/v1/')
+  AND COALESCE((SELECT llm_base_url FROM agent_settings WHERE business_id=assistants.business_id), '') IN ('', 'https://api.kataleptic.com/v1', 'https://api.kataleptic.com/v1/');
 
 UPDATE agent_settings SET
-  realtime_model = CASE WHEN (realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT LIKE 'gpt-%realtime%') THEN '' ELSE realtime_model END,
-  realtime_voice = CASE WHEN realtime_voice GLOB '[a-z][a-z]_[A-Z][A-Z]-*' THEN '' ELSE realtime_voice END
+  realtime_model = CASE WHEN (realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT GLOB 'gpt-realtime*') THEN '' ELSE realtime_model END,
+  realtime_voice = CASE WHEN (realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT GLOB 'gpt-realtime*') OR realtime_voice GLOB '[a-z][a-z]_[A-Z][A-Z]-*' THEN '' ELSE realtime_voice END
 WHERE COALESCE((SELECT realtime_provider FROM provider_settings WHERE business_id=agent_settings.business_id), 'instance') IN ('instance', 'kataleptic')
-  AND ((realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT LIKE 'gpt-%realtime%') OR realtime_voice GLOB '[a-z][a-z]_[A-Z][A-Z]-*');
+  AND ((realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT GLOB 'gpt-realtime*') OR realtime_voice GLOB '[a-z][a-z]_[A-Z][A-Z]-*');
 
 UPDATE agent_settings SET llm_model = ''
-WHERE llm_model IN ('qwen3-8b', 'qwen2.5-coder-7b', 'mistral-nemo-12b', 'gemma3-27b', 'glm4-9b') AND COALESCE((SELECT llm_base_url FROM provider_settings WHERE business_id=agent_settings.business_id), '') IN ('', 'https://api.kataleptic.com/v1', 'https://api.kataleptic.com/v1/');
+WHERE llm_model IN ('qwen3-8b', 'qwen2.5-coder-7b', 'mistral-nemo-12b', 'gemma3-27b', 'glm4-9b') AND COALESCE((SELECT llm_base_url FROM provider_settings WHERE business_id=agent_settings.business_id), '') IN ('', 'https://api.kataleptic.com/v1', 'https://api.kataleptic.com/v1/')
+  AND agent_settings.llm_base_url IN ('', 'https://api.kataleptic.com/v1', 'https://api.kataleptic.com/v1/');
 
 UPDATE engine_presets SET
-  realtime_model = CASE WHEN (realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT LIKE 'gpt-%realtime%') THEN '' ELSE realtime_model END,
-  realtime_voice = CASE WHEN realtime_voice GLOB '[a-z][a-z]_[A-Z][A-Z]-*' THEN '' ELSE realtime_voice END
+  realtime_model = CASE WHEN (realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT GLOB 'gpt-realtime*') THEN '' ELSE realtime_model END,
+  realtime_voice = CASE WHEN (realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT GLOB 'gpt-realtime*') OR realtime_voice GLOB '[a-z][a-z]_[A-Z][A-Z]-*' THEN '' ELSE realtime_voice END
 WHERE COALESCE((SELECT realtime_provider FROM provider_settings WHERE business_id=engine_presets.business_id), 'instance') IN ('instance', 'kataleptic')
-  AND ((realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT LIKE 'gpt-%realtime%') OR realtime_voice GLOB '[a-z][a-z]_[A-Z][A-Z]-*');
+  AND ((realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT GLOB 'gpt-realtime*') OR realtime_voice GLOB '[a-z][a-z]_[A-Z][A-Z]-*');
 
 UPDATE engine_presets SET llm_model = ''
 WHERE llm_model IN ('qwen3-8b', 'qwen2.5-coder-7b', 'mistral-nemo-12b', 'gemma3-27b', 'glm4-9b') AND COALESCE((SELECT llm_base_url FROM provider_settings WHERE business_id=engine_presets.business_id), '') IN ('', 'https://api.kataleptic.com/v1', 'https://api.kataleptic.com/v1/');
 
 UPDATE engine_profiles SET
-  realtime_model = CASE WHEN (realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT LIKE 'gpt-%realtime%') THEN '' ELSE realtime_model END,
-  realtime_voice = CASE WHEN realtime_voice GLOB '[a-z][a-z]_[A-Z][A-Z]-*' THEN '' ELSE realtime_voice END
+  realtime_model = CASE WHEN (realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT GLOB 'gpt-realtime*') THEN '' ELSE realtime_model END,
+  realtime_voice = CASE WHEN (realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT GLOB 'gpt-realtime*') OR realtime_voice GLOB '[a-z][a-z]_[A-Z][A-Z]-*' THEN '' ELSE realtime_voice END
 WHERE COALESCE((SELECT realtime_provider FROM provider_settings WHERE business_id=engine_profiles.business_id), 'instance') IN ('instance', 'kataleptic')
-  AND ((realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT LIKE 'gpt-%realtime%') OR realtime_voice GLOB '[a-z][a-z]_[A-Z][A-Z]-*');
+  AND ((realtime_model <> '' AND realtime_model <> 'kataleptic-realtime-hd' AND realtime_model NOT GLOB 'gpt-realtime*') OR realtime_voice GLOB '[a-z][a-z]_[A-Z][A-Z]-*');
 
 UPDATE engine_profiles SET llm_model = ''
 WHERE llm_model IN ('qwen3-8b', 'qwen2.5-coder-7b', 'mistral-nemo-12b', 'gemma3-27b', 'glm4-9b') AND COALESCE((SELECT llm_base_url FROM provider_settings WHERE business_id=engine_profiles.business_id), '') IN ('', 'https://api.kataleptic.com/v1', 'https://api.kataleptic.com/v1/');
 
 UPDATE compatibility_sync_state SET agent_snapshot = json_replace(agent_snapshot,
-  '$.realtime_model', CASE WHEN (json_extract(agent_snapshot, '$.realtime_model') <> '' AND json_extract(agent_snapshot, '$.realtime_model') <> 'kataleptic-realtime-hd' AND json_extract(agent_snapshot, '$.realtime_model') NOT LIKE 'gpt-%realtime%') THEN '' ELSE json_extract(agent_snapshot, '$.realtime_model') END,
-  '$.realtime_voice', CASE WHEN json_extract(agent_snapshot, '$.realtime_voice') GLOB '[a-z][a-z]_[A-Z][A-Z]-*' THEN '' ELSE json_extract(agent_snapshot, '$.realtime_voice') END)
+  '$.realtime_model', CASE WHEN (json_extract(agent_snapshot, '$.realtime_model') <> '' AND json_extract(agent_snapshot, '$.realtime_model') <> 'kataleptic-realtime-hd' AND json_extract(agent_snapshot, '$.realtime_model') NOT GLOB 'gpt-realtime*') THEN '' ELSE json_extract(agent_snapshot, '$.realtime_model') END,
+  '$.realtime_voice', CASE WHEN (json_extract(agent_snapshot, '$.realtime_model') <> '' AND json_extract(agent_snapshot, '$.realtime_model') <> 'kataleptic-realtime-hd' AND json_extract(agent_snapshot, '$.realtime_model') NOT GLOB 'gpt-realtime*') OR json_extract(agent_snapshot, '$.realtime_voice') GLOB '[a-z][a-z]_[A-Z][A-Z]-*' THEN '' ELSE json_extract(agent_snapshot, '$.realtime_voice') END)
 WHERE json_valid(agent_snapshot) AND COALESCE((SELECT realtime_provider FROM provider_settings WHERE business_id=compatibility_sync_state.business_id), 'instance') IN ('instance', 'kataleptic')
-  AND ((json_extract(agent_snapshot, '$.realtime_model') <> '' AND json_extract(agent_snapshot, '$.realtime_model') <> 'kataleptic-realtime-hd' AND json_extract(agent_snapshot, '$.realtime_model') NOT LIKE 'gpt-%realtime%') OR json_extract(agent_snapshot, '$.realtime_voice') GLOB '[a-z][a-z]_[A-Z][A-Z]-*');
+  AND ((json_extract(agent_snapshot, '$.realtime_model') <> '' AND json_extract(agent_snapshot, '$.realtime_model') <> 'kataleptic-realtime-hd' AND json_extract(agent_snapshot, '$.realtime_model') NOT GLOB 'gpt-realtime*') OR json_extract(agent_snapshot, '$.realtime_voice') GLOB '[a-z][a-z]_[A-Z][A-Z]-*');
 
 UPDATE compatibility_sync_state SET agent_snapshot = json_replace(agent_snapshot, '$.llm_model', '')
-WHERE json_valid(agent_snapshot) AND json_extract(agent_snapshot, '$.llm_model') IN ('qwen3-8b', 'qwen2.5-coder-7b', 'mistral-nemo-12b', 'gemma3-27b', 'glm4-9b') AND COALESCE((SELECT llm_base_url FROM provider_settings WHERE business_id=compatibility_sync_state.business_id), '') IN ('', 'https://api.kataleptic.com/v1', 'https://api.kataleptic.com/v1/');
+WHERE json_valid(agent_snapshot) AND json_extract(agent_snapshot, '$.llm_model') IN ('qwen3-8b', 'qwen2.5-coder-7b', 'mistral-nemo-12b', 'gemma3-27b', 'glm4-9b') AND COALESCE((SELECT llm_base_url FROM provider_settings WHERE business_id=compatibility_sync_state.business_id), '') IN ('', 'https://api.kataleptic.com/v1', 'https://api.kataleptic.com/v1/')
+  AND COALESCE((SELECT llm_base_url FROM agent_settings WHERE business_id=compatibility_sync_state.business_id), '') IN ('', 'https://api.kataleptic.com/v1', 'https://api.kataleptic.com/v1/');
 
 -- An explicit Kataleptic endpoint must keep a model; the instance default is
 -- only what an empty endpoint means.

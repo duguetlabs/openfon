@@ -69,13 +69,14 @@ describe('retired Kataleptic cascade', () => {
   it.each(['kataleptic-realtime', 'llama-3.3-70b', 'mistral-nemo-12b'])('serves a stored %s selection on the HD tier', model => {
     for (const selection of [settings({ realtime_model: model }), settings({ realtime_provider: 'kataleptic', realtime_api_key: 'k', realtime_model: model })]) {
       const cfg = resolveRealtime(env, selection);
-      expect(cfg.model).toBe('kataleptic-realtime-hd');
+      expect(cfg).toMatchObject({ model: 'kataleptic-realtime-hd', retiredModel: model });
       expect(new URL(realtimeConnection(cfg).url).searchParams.get('model')).toBe('kataleptic-realtime-hd');
     }
   });
   it('serves a retired instance default on the HD tier and keeps live tiers', () => {
     expect(resolveRealtime({ ...env, REALTIME_MODEL: 'llama-3.3-70b' }, null).model).toBe('kataleptic-realtime-hd');
-    expect(resolveRealtime({ ...env, REALTIME_MODEL: 'gpt-realtime-2.1-mini' }, null).model).toBe('gpt-realtime-2.1-mini');
+    expect(resolveRealtime({ ...env, REALTIME_MODEL: 'gpt-realtime-2.1-mini' }, null)).not.toHaveProperty('retiredModel');
+    expect(resolveRealtime({ ...env, REALTIME_MODEL: 'gpt-4o-realtime-preview' }, null).model).toBe('kataleptic-realtime-hd');
     expect(resolveRealtime(env, settings({ realtime_provider: 'kataleptic', realtime_api_key: 'k' })).model).toBe('kataleptic-realtime-hd');
   });
   it('leaves custom providers in their own model namespace', () => {

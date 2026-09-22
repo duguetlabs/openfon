@@ -110,3 +110,26 @@ it('is idempotent and leaves live selections untouched', () => {
   // summary revisions only move for rows that still hold a retired model
   expect(twice).toEqual(once);
 });
+
+it('clears exactly what runtime would remap, with the voice chosen for it', () => {
+  sql(`UPDATE agent_settings SET realtime_model='gpt-4o-realtime-preview', realtime_voice='marin' WHERE business_id='inst';
+    UPDATE assistants SET realtime_model='gpt-4o-realtime-preview', realtime_voice='marin' WHERE business_id='inst';
+    UPDATE compatibility_sync_state SET agent_snapshot=json_replace(agent_snapshot,'$.realtime_model','gpt-4o-realtime-preview','$.realtime_voice','marin') WHERE business_id='inst';`);
+  sql(migration);
+  for (const table of ['agent_settings', 'assistants']) {
+    expect(one(`SELECT realtime_model,realtime_voice FROM ${table} WHERE business_id='inst'`)).toEqual({ realtime_model: '', realtime_voice: '' });
+  }
+  expect(JSON.parse(String(one("SELECT agent_snapshot FROM compatibility_sync_state WHERE business_id='inst'").agent_snapshot)))
+    .toMatchObject({ realtime_model: '', realtime_voice: '' });
+});
+
+it('keeps a retired-looking model on a legacy row whose own LLM endpoint is custom', () => {
+  // Legacy writers could leave agent_settings on its own endpoint; that model is not Kataleptic's.
+  sql(`DROP TRIGGER legacy_provider_credentials_guard;
+    UPDATE agent_settings SET llm_base_url='https://llm.example/v1', llm_api_key='k' WHERE business_id='inst';`);
+  sql(migration);
+  expect(one("SELECT llm_model FROM agent_settings WHERE business_id='inst'")).toEqual({ llm_model: 'mistral-nemo-12b' });
+  expect(one("SELECT llm_model FROM assistants WHERE business_id='inst'")).toEqual({ llm_model: 'mistral-nemo-12b' });
+  expect(JSON.parse(String(one("SELECT agent_snapshot FROM compatibility_sync_state WHERE business_id='inst'").agent_snapshot)))
+    .toMatchObject({ llm_model: 'mistral-nemo-12b' });
+});

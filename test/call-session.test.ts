@@ -841,6 +841,19 @@ describe('realtime session payload', () => {
     expect(await turnDetection('kataleptic-realtime-hd')).toEqual(TUNED_SERVER_VAD);
   });
 
+  it('lets HD manage the voice instead of a voice chosen for the retired tier', async () => {
+    const { session } = newSession('realtime', { realtime_model: 'kataleptic-realtime', realtime_voice: 'de_DE-thorsten-medium' });
+    await session.fetch(upgradeRequest());
+    serverSockets.at(-1)!.receive({ type: 'start' });
+    await flush();
+    upstreamSockets.at(-1)!.emit('open', {});
+    await flush();
+    const update = upstreamSockets.at(-1)!.messages().find((m) => m.type === 'session.update')!.session as { audio?: { output?: { voice?: string } } };
+    expect(new URL(gatewayRequests.at(-1)!.url).searchParams.get('model')).toBe('kataleptic-realtime-hd');
+    expect(update.audio?.output?.voice).not.toBe('de_DE-thorsten-medium');
+    expect(update.audio?.output?.voice).toMatch(/Neural$/);
+  });
+
   it('connects a stored retired cascade selection to the HD tier with its tuning', async () => {
     // Kataleptic answers `model_retired` for the cascade. A row the migration
     // missed must still reach a live tier instead of failing the call.
@@ -3517,7 +3530,7 @@ describe('gateway header transport contract', () => {
 
 
 describe('selected voice confirmation', () => {
-  it.each([['matching', 'gpt-realtime-2', 'alloy'], ['substituted', 'gpt-realtime-2', 'alloy'], ['missing', 'gpt-realtime-2', 'alloy'], ['matching', 'kataleptic-realtime-hd', 'de-DE-SeraphinaMultilingualNeural'], ['matching', 'llama-3.3-70b', 'de_DE-thorsten-medium']])('holds generation until %s %s voice is confirmed', async (kind, model, voice) => {
+  it.each([['matching', 'gpt-realtime-2', 'alloy'], ['substituted', 'gpt-realtime-2', 'alloy'], ['missing', 'gpt-realtime-2', 'alloy'], ['matching', 'kataleptic-realtime-hd', 'de-DE-SeraphinaMultilingualNeural'], ['matching', 'gpt-realtime-2.1-mini', 'marin']])('holds generation until %s %s voice is confirmed', async (kind, model, voice) => {
     vi.useFakeTimers();
     const { session } = newSession('realtime', { realtime_model: model, realtime_voice: voice });
     await session.fetch(upgradeRequest()); const caller = serverSockets[0];
