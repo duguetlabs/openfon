@@ -380,12 +380,17 @@ describe('GPT-Live transcripts', () => {
       if (!String(input).includes('tts.speech.microsoft.com')) return gatewayFetch(input, init);
       bodies.push(String(init?.body));
       await new Promise(resolve => setTimeout(resolve, 50));
-      const bytes = pcm(900, 4800);
+      const bytes = pcm(900, 3 * 48000); // three seconds of speech
       return { ok: true, status: 200, headers: new Headers(), body: new ReadableStream({ start(c) { c.enqueue(new Uint8Array(bytes)); c.close(); } }) } as unknown as Response;
     }) as typeof fetch;
     for (let i = 0; i < 50; i++) caller.receive({ type: 'text', text: 'x'.repeat(4000) });
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(bodies).toHaveLength(2); // one synthesizing, one waiting; the rest are dropped
+    await vi.advanceTimersByTimeAsync(500);
+    expect(bodies).toHaveLength(2); // two slots; the rest are dropped
+    caller.receive({ type: 'text', text: 'still speaking the first' }); await vi.advanceTimersByTimeAsync(500);
+    expect(bodies).toHaveLength(2); // synthesized is not delivered: the slot is held through playback
+    await vi.advanceTimersByTimeAsync(8000);
+    caller.receive({ type: 'text', text: 'both played' }); await vi.advanceTimersByTimeAsync(500);
+    expect(bodies).toHaveLength(3);
     expect(bodies[0]).toContain('x'.repeat(500));
     expect(bodies[0]).not.toContain('x'.repeat(501));
     caller.receive({ type: 'hangup' }); await flush();

@@ -1869,9 +1869,12 @@ export class CallSession implements DurableObject {
   // Bounded before anything is kept or paid for: text is cut on arrival, at
   // most two messages wait for synthesis, and queued caller audio is capped.
   private static readonly MAX_TYPED_CHARS = 500;
+  // A message holds its slot from arrival until its audio has been spoken in,
+  // so a caller cannot buy synthesis faster than it can be delivered.
   private static readonly MAX_TYPED_PENDING = 2;
-  private static readonly MAX_TYPED_CHUNKS = 600; // 60 s of 100 ms chunks
-  private typedAudio: ArrayBuffer[] = [];
+  // Two messages at the length cap fit (about 35 s each), and nothing more.
+  private static readonly MAX_TYPED_CHUNKS = 900; // 90 s of 100 ms chunks
+  private typedAudio: { chunk: ArrayBuffer; last: boolean }[] = [];
   private typedTimer: ReturnType<typeof setTimeout> | undefined;
   private typedPending = 0;
   // Synthesis times vary; messages are queued in the order they were typed.
@@ -1884,33 +1887,38 @@ export class CallSession implements DurableObject {
     }
     const typed = text.slice(0, CallSession.MAX_TYPED_CHARS);
     this.typedPending++;
-    this.typedChain = this.typedChain.then(() => this.synthesizeTypedText(typed)).finally(() => { this.typedPending--; });
+    this.typedChain = this.typedChain.then(async () => {
+      if (!await this.synthesizeTypedText(typed)) this.typedPending--;
+    });
   }
 
-  private async synthesizeTypedText(typed: string): Promise<void> {
+  /** True when the audio was queued; its slot is then released by the pump. */
+  private async synthesizeTypedText(typed: string): Promise<boolean> {
     let audio: ArrayBuffer | null = null;
     try { audio = await synthesize(this.env, typed, speechVoice(this.env, this.lang, this.settings), 'pcm24', this.settings, this.speechAbort.signal); }
     catch { /* reported below, like no synthesis at all */ }
-    if (this.ended || !this.gptLive) return;
+    if (this.ended || !this.gptLive) return false;
     if (!audio?.byteLength || audio.byteLength % 2) {
       console.log(`call ${this.callId}: typed text on GPT-Live needs server speech synthesis; not delivered`);
-      return;
+      return false;
     }
     if (this.typedAudio.length + Math.ceil(audio.byteLength / 4800) + 5 > CallSession.MAX_TYPED_CHUNKS) {
       console.log(`call ${this.callId}: typed text dropped: too much caller audio already queued`);
-      return;
+      return false;
     }
     // Real-time pace, 100 ms at a time, then a short silence to end the utterance.
-    for (let offset = 0; offset < audio.byteLength; offset += 4800) this.typedAudio.push(audio.slice(offset, offset + 4800));
-    for (let i = 0; i < 5; i++) this.typedAudio.push(new ArrayBuffer(4800));
+    for (let offset = 0; offset < audio.byteLength; offset += 4800) this.typedAudio.push({ chunk: audio.slice(offset, offset + 4800), last: false });
+    for (let i = 0; i < 5; i++) this.typedAudio.push({ chunk: new ArrayBuffer(4800), last: i === 4 });
     const tick = () => {
       this.typedTimer = undefined;
-      const chunk = this.typedAudio.shift();
-      if (!chunk || this.ended) return;
-      this.gptLive?.appendAudio(chunk);
+      const next = this.typedAudio.shift();
+      if (!next || this.ended) return;
+      this.gptLive?.appendAudio(next.chunk);
+      if (next.last) this.typedPending--;
       this.typedTimer = setTimeout(tick, 100);
     };
     if (this.typedTimer === undefined) tick();
+    return true;
   }
 
   private sendCallerText(text: string): void {
