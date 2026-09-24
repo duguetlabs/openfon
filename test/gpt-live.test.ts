@@ -520,6 +520,21 @@ describe('GPT-Live recovery', () => {
     caller.receive({ type: 'hangup' }); await flush();
   });
 
+  it('recognises a goodbye in the replacement session despite its restarted clock', async () => {
+    vi.useFakeTimers();
+    const { gateway, caller } = await call();
+    said(gateway, 'caller', ' Can I book a cleaning?', 50_000); await vi.advanceTimersByTimeAsync(1300);
+    gateway.close(1006, 'dropped'); await flush(80);
+    const replacement = gateways[1];
+    replacement.receive({ type: 'session.started', session: replacement.of('session.start')[0].session }); await flush();
+    const functionCall = { type: 'response.event', delegation_id: 'item_1', event: { type: 'response.output_item.done',
+      item: { type: 'function_call', call_id: 'call_1', name: 'end_call', arguments: '{}' } } };
+    said(replacement, 'agent', ' Booked. Goodbye!', 1000); audio(replacement, SPEECH, 3);
+    replacement.receive(functionCall); audio(replacement, SILENCE, 6); await vi.advanceTimersByTimeAsync(500);
+    expect(caller.of('ending')).toHaveLength(1);
+    caller.receive({ type: 'hangup' }); await flush();
+  });
+
   it('fails the call when the replacement session cannot start', async () => {
     vi.useFakeTimers();
     const { gateway, caller, rows } = await call();

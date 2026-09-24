@@ -174,6 +174,10 @@ export class GptLiveEngine {
     ws.accept();
     this.ws = ws; this.started = false; this.closing = false;
     this.silentRun = this.quietAfterAgent = PAUSE_CHUNKS + 1;
+    // Transcript times restart with every session; a replacement must not
+    // compare its words with the previous session's clock.
+    this.lastTurn = { caller: null, agent: null };
+    this.callerFarewellAt = -1;
     const start = gptLiveSessionStart(options);
     return new Promise<boolean>(resolve => {
       let settled = false;
