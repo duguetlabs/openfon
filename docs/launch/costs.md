@@ -18,6 +18,7 @@ Blank worksheet: **no measured example bill is available for this release**. The
 | Speech synthesis characters/audio | | | | |
 | Realtime input audio/text | | | | |
 | Realtime output audio/text | | | | |
+| GPT-Live session seconds (`gpt-live-1` bills per second of session, plus its delegation model's tokens) | | | | |
 | Cloudflare requests, compute, storage and D1 | | | | |
 | Carrier inbound/forwarded minutes or media fees | | | | |
 | Other usage actually billed | | | | |
