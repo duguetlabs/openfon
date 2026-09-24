@@ -51,6 +51,22 @@ const TURN_GAP_MS = 1200;
 const FAREWELL_GRACE_MS = 8000;
 // The caller said goodbye: how long to wait for the agent's sign-off.
 const CALLER_FAREWELL_WAIT_MS = 8000;
+// The model says nothing, greeting included, until input audio flows, and
+// Azure's billing clock starts with the first input. Every path has stretches
+// with no caller audio: the carrier greeting gate holds it back, a browser
+// microphone starts after `ready`, closing stops forwarding it, and the voice
+// preview has none at all. Whenever real input has been idle this long, a
+// 100 ms chunk of silence is sent. Browser capture delivers ~43 ms chunks and
+// carriers 20 ms ones, so this never lands inside real speech.
+const INPUT_IDLE_MS = 200;
+export const GPT_LIVE_SILENCE = new ArrayBuffer(4800); // 100 ms of PCM16 at 24 kHz
+const SILENCE_B64 = btoa('\0'.repeat(4800));
+// The gateway refuses an append or response.create beyond the session's credit
+// reservation with `insufficient_reservation`, drops that event and keeps the
+// socket open. A blip is survivable; a stream of them means the call has no
+// credit left to continue on.
+const RESERVATION_ERROR_WINDOW_MS = 5000;
+const MAX_RESERVATION_ERRORS = 20;
 const HANDSHAKE_TIMEOUT_MS = 5000;
 const CLOSE_TIMEOUT_MS = 2000;
 
@@ -132,6 +148,9 @@ export class GptLiveEngine {
   private closing = false; // we asked for the end of this socket
   private stopped = false; // the call is over: no session may start again
   private connecting: AbortController | null = null;
+  private lastInputAt = 0;
+  private keepalive: ReturnType<typeof setTimeout> | undefined;
+  private reservationErrors: number[] = [];
   private closeTimer: ReturnType<typeof setTimeout> | undefined;
   private open: Record<Role, Turn | null> = { caller: null, agent: null };
   private lastTurn: Record<Role, { text: string; startMs: number; endMs: number } | null> = { caller: null, agent: null };
@@ -201,6 +220,9 @@ export class GptLiveEngine {
             if (!this.confirmed(msg.session, start.session)) { this.host.debug?.event('session_rejected'); settle(false); return; }
             this.started = true;
             this.host.debug?.event('provider', { type: msg.type });
+            // Input first: without it the greeting is never spoken.
+            this.lastInputAt = 0;
+            this.keepInputFlowing(ws);
             if (options.greeting) this.send({ type: 'session.commentary.append', delegation_id: null, content: `Greet the caller: '${options.greeting}'` });
             settle(true);
           } else if (msg.type === 'error') {
@@ -238,7 +260,20 @@ export class GptLiveEngine {
 
   appendAudio(pcm: ArrayBuffer): boolean {
     if (!this.started || this.closing || !pcm.byteLength) return false;
-    return this.send({ type: 'session.input_audio.append', audio: b64encode(pcm) });
+    const sent = this.send({ type: 'session.input_audio.append', audio: b64encode(pcm) });
+    if (sent) this.lastInputAt = Date.now();
+    return sent;
+  }
+
+  // Real-time silence, one chunk per tick, for as long as real input is idle.
+  // It does not count as input itself, or it would pace itself down to half rate.
+
+  private keepInputFlowing(ws: WebSocket): void {
+    if (this.keepalive !== undefined) clearTimeout(this.keepalive);
+    this.keepalive = undefined;
+    if (this.ws !== ws || !this.started || this.closing) return;
+    if (Date.now() - this.lastInputAt >= INPUT_IDLE_MS) this.send({ type: 'session.input_audio.append', audio: SILENCE_B64 });
+    this.keepalive = setTimeout(() => this.keepInputFlowing(ws), 100);
   }
 
   /** Graceful end: session.close, then a bounded wait for session.closed. Open
@@ -270,6 +305,8 @@ export class GptLiveEngine {
   }
 
   private detach(): void {
+    if (this.keepalive !== undefined) clearTimeout(this.keepalive);
+    this.keepalive = undefined;
     this.flushTurns();
     if (this.closeTimer !== undefined) clearTimeout(this.closeTimer);
     this.closeTimer = undefined;
@@ -309,10 +346,19 @@ export class GptLiveEngine {
         this.discard();
         if (!this.closing) this.host.disconnected();
         break;
-      case 'error':
+      case 'error': {
+        if ((msg.error as { code?: unknown } | undefined)?.code === 'insufficient_reservation') {
+          const now = Date.now();
+          this.reservationErrors = this.reservationErrors.filter(at => now - at < RESERVATION_ERROR_WINDOW_MS);
+          this.reservationErrors.push(now);
+          console.warn(`GPT-Live: an event exceeded the session's credit reservation (${this.reservationErrors.length} in ${RESERVATION_ERROR_WINDOW_MS / 1000} s)`);
+          if (this.reservationErrors.length < MAX_RESERVATION_ERRORS) break;
+          throw new GptLiveProtocolError('credit reservation is exhausted');
+        }
         // Unknown/auth/quota/input failures cannot leave a silent call alive.
         // Fixed wording only: provider fields never reach the call record.
         throw new GptLiveProtocolError('rejected a request');
+      }
       // session.delegation.created, *.appended and anything newer: nothing to do.
     }
   }

@@ -118,6 +118,14 @@ gate, transcript budget, closing timeline and hangup as other realtime calls
   and carrier playback queues drain as they do for other tiers. μ-law passthrough
   was verified against the service but is not used: the resampling lives in the
   carrier adapters, and the session contract stays PCM24 for every engine.
+- **Input.** The model says nothing, greeting included, until input audio flows,
+  and Azure starts billing at the first input. From `session.started` on, whenever
+  caller audio has been idle for 200 ms (the carrier greeting gate, a browser
+  microphone not yet started, closing, the voice preview), OpenFon sends 100 ms of
+  silence every 100 ms.
+- **Credit.** The gateway refuses an event beyond the session's credit reservation
+  with `insufficient_reservation` and keeps the socket open. OpenFon logs it and
+  carries on; 20 within 5 s fail the call, since it has no credit left to run on.
 - **Interruptions.** Full duplex: no VAD settings, no flush, cancel or truncate.
   Audio already queued (at most about half a second server-side) still plays.
 - **Transcripts.** Caller and agent fragments arrive interleaved with no turn
@@ -143,8 +151,8 @@ gate, transcript budget, closing timeline and hangup as other realtime calls
 
 Evidence: unit tests with a synthetic gateway socket (`test/gpt-live.test.ts`),
 and on 2026-09-24 an engine run against Azure's GPT-Live endpoint directly
-(greeting, synthesized caller speech answered, turns assembled, caller-farewell
-hangup). The
+(greeting with no caller audio, synthesized caller speech answered, turns
+assembled, caller-farewell hangup, a three-second voice preview). The
 Kataleptic `/v1/live/sessions` endpoint was not yet deployed, so no call through
 the gateway, browser call or telephone call is claimed.
 

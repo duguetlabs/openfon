@@ -2,7 +2,7 @@ import type { AgentSettings, Env } from './types';
 import { speechConfig, speechVoice, synthesize, voiceForReply } from './providers';
 import { GPT_LIVE_MODEL, gptLiveConnection, isGptLiveModel, liveRealtimeVoice, realtimeCapabilities, realtimeConnection, resolveRealtime, type RealtimeConfig } from './realtime-providers';
 import { decodeRealtimeAudio, parseRealtimeMessage } from './realtime-input';
-import { GPT_LIVE_AUDIO_FORMAT, gptLiveVoice, silentPcm } from './gpt-live';
+import { GPT_LIVE_AUDIO_FORMAT, GPT_LIVE_SILENCE, gptLiveVoice, silentPcm } from './gpt-live';
 
 import { PREVIEW_TEXT } from './voice-preview-text';
 export { PREVIEW_TEXT } from './voice-preview-text';
@@ -98,9 +98,10 @@ export function gptLivePreview(config: RealtimeConfig, voice: string, text: stri
     let socket: WebSocket | undefined, settled = false, started = false;
     let bytes = 0, kept = 0, silent = 0, events = 0, inputChars = 0; const chunks: Uint8Array[] = [];
     const controller = new AbortController();
+    let input: ReturnType<typeof setInterval> | undefined;
     const finish = (result?: ArrayBuffer) => {
       if (settled) return; settled = true;
-      clearTimeout(timer); signal.removeEventListener('abort', abort);
+      clearTimeout(timer); if (input !== undefined) clearInterval(input); signal.removeEventListener('abort', abort);
       try { if (started) socket?.send(JSON.stringify({ type: 'session.close' })); } catch { /* already closed */ }
       try { socket?.close(1000, 'Preview complete'); } catch { /* already closed */ }
       controller.abort(); chunks.length = 0;
@@ -122,12 +123,18 @@ export function gptLivePreview(config: RealtimeConfig, voice: string, text: stri
         try {
           if (++events > 1500 || typeof event.data !== 'string' || (inputChars += event.data.length) > 4_000_000) throw failed();
           const msg = parseRealtimeMessage(event.data);
+          // A single over-reservation refusal drops one event; the deadline bounds the rest.
+          if (msg.type === 'error' && (msg.error as { code?: unknown } | undefined)?.code === 'insufficient_reservation') return;
           if (msg.type === 'error') throw failed();
           if (msg.type === 'session.started' && !started) {
             const session = msg.session as { model?: unknown; audio?: { format?: { type?: unknown; rate?: unknown }; output?: { voice?: unknown } } } | undefined;
             if (session?.model !== GPT_LIVE_MODEL || session.audio?.format?.type !== GPT_LIVE_AUDIO_FORMAT.type ||
               session.audio.format.rate !== GPT_LIVE_AUDIO_FORMAT.rate || (voice && session.audio.output?.voice !== voice)) throw failed();
             started = true;
+            // The model speaks only while input audio flows; a preview has no caller.
+            const silence = JSON.stringify({ type: 'session.input_audio.append', audio: btoa(String.fromCharCode(...new Uint8Array(GPT_LIVE_SILENCE))) });
+            const append = () => { try { ws.send(silence); } catch { finish(); } };
+            append(); input = setInterval(append, 100);
             ws.send(JSON.stringify({ type: 'session.commentary.append', delegation_id: null, content: `Say exactly: '${text}'` }));
           } else if (msg.type === 'session.output_audio.delta') {
             if (!started) throw failed();
