@@ -1868,8 +1868,14 @@ export class CallSession implements DurableObject {
   private static readonly MAX_TYPED_CHARS = 500;
   private typedAudio: ArrayBuffer[] = [];
   private typedTimer: ReturnType<typeof setTimeout> | undefined;
+  // Synthesis times vary; messages are queued in the order they were typed.
+  private typedChain: Promise<void> = Promise.resolve();
 
-  private async speakTypedText(text: string): Promise<void> {
+  private speakTypedText(text: string): void {
+    this.typedChain = this.typedChain.then(() => this.synthesizeTypedText(text));
+  }
+
+  private async synthesizeTypedText(text: string): Promise<void> {
     const typed = text.slice(0, CallSession.MAX_TYPED_CHARS);
     let audio: ArrayBuffer | null = null;
     try { audio = await synthesize(this.env, typed, speechVoice(this.env, this.lang, this.settings), 'pcm24', this.settings, this.speechAbort.signal); }
@@ -1894,7 +1900,7 @@ export class CallSession implements DurableObject {
 
   private sendCallerText(text: string): void {
     if (this.gptLive) {
-      if (!this.closingTimeline) void this.speakTypedText(text);
+      if (!this.closingTimeline) this.speakTypedText(text);
       return;
     }
     if (this.upstream) this.closingGuard.startTurn(this.upstream);

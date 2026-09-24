@@ -124,9 +124,9 @@ export function gptLivePreview(config: RealtimeConfig, voice: string, text: stri
           const msg = parseRealtimeMessage(event.data);
           if (msg.type === 'error') throw failed();
           if (msg.type === 'session.started' && !started) {
-            const session = msg.session as { model?: unknown; audio?: { format?: { type?: unknown; rate?: unknown } } } | undefined;
+            const session = msg.session as { model?: unknown; audio?: { format?: { type?: unknown; rate?: unknown }; output?: { voice?: unknown } } } | undefined;
             if (session?.model !== GPT_LIVE_MODEL || session.audio?.format?.type !== GPT_LIVE_AUDIO_FORMAT.type ||
-              session.audio.format.rate !== GPT_LIVE_AUDIO_FORMAT.rate) throw failed();
+              session.audio.format.rate !== GPT_LIVE_AUDIO_FORMAT.rate || (voice && session.audio.output?.voice !== voice)) throw failed();
             started = true;
             ws.send(JSON.stringify({ type: 'session.commentary.append', delegation_id: null, content: `Say exactly: '${text}'` }));
           } else if (msg.type === 'session.output_audio.delta') {

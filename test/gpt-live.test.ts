@@ -158,6 +158,12 @@ describe('GPT-Live provider resolution', () => {
     expect(gptLiveConnection(resolveRealtime(env, settings({}))).url).toBe('https://api.kataleptic.com/v1/live/sessions');
   });
 
+  it('never maps a non-WebSocket base URL to a plaintext upgrade', () => {
+    const config = { ...resolveRealtime(env, settings({})), baseUrl: 'https://gw.example/v1/realtime' };
+    expect(() => gptLiveConnection(config)).toThrow(/WebSocket URL/);
+    expect(gptLiveConnection({ ...config, baseUrl: 'ws://localhost:8787/v1/realtime' }).url).toBe('http://localhost:8787/v1/live/sessions');
+  });
+
   it('refuses gpt-live-1 on direct OpenAI and custom realtime providers', () => {
     expect(() => resolveRealtime(env, settings({ realtime_provider: 'openai', realtime_api_key: 'k' }))).toThrow(/OpenAI realtime model/);
     expect(() => resolveRealtime(env, settings({ realtime_provider: 'custom', realtime_base_url: 'wss://custom.example/v1/realtime', realtime_api_key: 'k' })))
@@ -344,6 +350,24 @@ describe('GPT-Live transcripts', () => {
     expect(turns()).toEqual([]); // the caller turn comes back through the transcript
     caller.emit('message', { data: new ArrayBuffer(960) }); await flush();
     expect(gateway.of('session.input_audio.append')).toHaveLength(9);
+    caller.receive({ type: 'hangup' }); await flush();
+  });
+
+  it('keeps typed messages in the order they were typed when synthesis times differ', async () => {
+    vi.useFakeTimers();
+    const { gateway, caller } = await call({ env: { DEFAULT_TTS_PROVIDER: 'azure', AZURE_SPEECH_KEY: 'speech-key' } });
+    const gatewayFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (!String(input).includes('tts.speech.microsoft.com')) return gatewayFetch(input, init);
+      const first = String(init?.body).includes('first');
+      await new Promise(resolve => setTimeout(resolve, first ? 500 : 10)); // the first is slower
+      const bytes = pcm(first ? 1111 : 2222);
+      return { ok: true, status: 200, headers: new Headers(), body: new ReadableStream({ start(c) { c.enqueue(new Uint8Array(bytes)); c.close(); } }) } as unknown as Response;
+    }) as typeof fetch;
+    caller.receive({ type: 'text', text: 'first' }); caller.receive({ type: 'text', text: 'second' });
+    await vi.advanceTimersByTimeAsync(3000);
+    const samples = gateway.of('session.input_audio.append').map(m => Buffer.from(m.audio, 'base64').readInt16LE(0)).filter(Boolean);
+    expect(samples).toEqual([1111, 2222]);
     caller.receive({ type: 'hangup' }); await flush();
   });
 
@@ -594,6 +618,15 @@ describe('GPT-Live voice preview', () => {
     expect(gateways[0].of('session.start')[0].session.audio.output).toBeUndefined();
     gateways[0].receive({ type: 'error', error: { code: 'x' } });
     await rejected;
+  });
+
+  it('rejects a session that confirms another voice', async () => {
+    const promise = gptLivePreview(config, 'cedar', 'Hi', new AbortController().signal);
+    const rejected = expect(promise).rejects.toThrow('Voice preview failed');
+    await flush();
+    gateways[0].receive({ type: 'session.started', session: { model: 'gpt-live-1', audio: { format: { type: 'audio/pcm', rate: 24000 }, output: { voice: 'marin' } } } });
+    await rejected;
+    expect(gateways[0].of('session.commentary.append')).toHaveLength(0);
   });
 
   it('rejects a session that confirms another model', async () => {

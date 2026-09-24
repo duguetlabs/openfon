@@ -117,7 +117,11 @@ export function gptLiveConnection(config: RealtimeConfig): { url: string; header
   url.searchParams.delete('model');
   url.searchParams.delete('token');
   url.searchParams.delete('api_key');
-  url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
+  // resolveRealtime admits only ws(s); map each explicitly rather than
+  // defaulting anything else to plaintext with a bearer key attached.
+  if (url.protocol === 'wss:') url.protocol = 'https:';
+  else if (url.protocol === 'ws:') url.protocol = 'http:';
+  else throw new LlmConfigError('Realtime endpoint must be an absolute WebSocket URL.');
   return { url: url.href, headers: { Upgrade: 'websocket', Authorization: `Bearer ${config.apiKey}` } };
 }
 
