@@ -1865,24 +1865,39 @@ export class CallSession implements DurableObject {
   // authority. It is spoken into the caller's side instead, so it reaches the
   // model with exactly the standing of speech, and its transcript comes back
   // like any other caller turn. That needs server speech synthesis.
+  //
+  // Bounded before anything is kept or paid for: text is cut on arrival, at
+  // most two messages wait for synthesis, and queued caller audio is capped.
   private static readonly MAX_TYPED_CHARS = 500;
+  private static readonly MAX_TYPED_PENDING = 2;
+  private static readonly MAX_TYPED_CHUNKS = 600; // 60 s of 100 ms chunks
   private typedAudio: ArrayBuffer[] = [];
   private typedTimer: ReturnType<typeof setTimeout> | undefined;
+  private typedPending = 0;
   // Synthesis times vary; messages are queued in the order they were typed.
   private typedChain: Promise<void> = Promise.resolve();
 
   private speakTypedText(text: string): void {
-    this.typedChain = this.typedChain.then(() => this.synthesizeTypedText(text));
+    if (this.typedPending >= CallSession.MAX_TYPED_PENDING) {
+      console.log(`call ${this.callId}: typed text dropped while earlier messages are still being spoken`);
+      return;
+    }
+    const typed = text.slice(0, CallSession.MAX_TYPED_CHARS);
+    this.typedPending++;
+    this.typedChain = this.typedChain.then(() => this.synthesizeTypedText(typed)).finally(() => { this.typedPending--; });
   }
 
-  private async synthesizeTypedText(text: string): Promise<void> {
-    const typed = text.slice(0, CallSession.MAX_TYPED_CHARS);
+  private async synthesizeTypedText(typed: string): Promise<void> {
     let audio: ArrayBuffer | null = null;
     try { audio = await synthesize(this.env, typed, speechVoice(this.env, this.lang, this.settings), 'pcm24', this.settings, this.speechAbort.signal); }
     catch { /* reported below, like no synthesis at all */ }
     if (this.ended || !this.gptLive) return;
     if (!audio?.byteLength || audio.byteLength % 2) {
       console.log(`call ${this.callId}: typed text on GPT-Live needs server speech synthesis; not delivered`);
+      return;
+    }
+    if (this.typedAudio.length + Math.ceil(audio.byteLength / 4800) + 5 > CallSession.MAX_TYPED_CHUNKS) {
+      console.log(`call ${this.callId}: typed text dropped: too much caller audio already queued`);
       return;
     }
     // Real-time pace, 100 ms at a time, then a short silence to end the utterance.

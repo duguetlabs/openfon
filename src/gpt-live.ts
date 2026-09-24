@@ -130,6 +130,8 @@ export class GptLiveEngine {
   private ws: WebSocket | null = null;
   private started = false;
   private closing = false; // we asked for the end of this socket
+  private stopped = false; // the call is over: no session may start again
+  private connecting: AbortController | null = null;
   private closeTimer: ReturnType<typeof setTimeout> | undefined;
   private open: Record<Role, Turn | null> = { caller: null, agent: null };
   private lastTurn: Record<Role, { text: string; startMs: number; endMs: number } | null> = { caller: null, agent: null };
@@ -154,8 +156,9 @@ export class GptLiveEngine {
    * format and voice, or false on any failure (the socket is then discarded). */
   async start(options: GptLiveSessionOptions): Promise<boolean> {
     this.discard();
+    if (this.stopped) return false;
     const connection = gptLiveConnection(this.config);
-    const controller = new AbortController();
+    const controller = this.connecting = new AbortController();
     const connectTimer = setTimeout(() => controller.abort(), HANDSHAKE_TIMEOUT_MS);
     let ws: WebSocket;
     try {
@@ -167,8 +170,11 @@ export class GptLiveEngine {
       }
       ws = response.webSocket;
     } catch { this.host.debug?.event('connect_failed'); return false; }
-    finally { clearTimeout(connectTimer); } // bounds setup, not the call
+    finally { clearTimeout(connectTimer); this.connecting = null; } // bounds setup, not the call
     ws.accept();
+    // The call ended while this was connecting. The session bills by the
+    // second, so it must not outlive the call.
+    if (this.stopped) { try { ws.close(1000, 'call ended'); } catch { /* closed */ } return false; }
     this.ws = ws; this.started = false; this.closing = false;
     this.silentRun = this.quietAfterAgent = PAUSE_CHUNKS + 1;
     // Transcript times restart with every session; a replacement must not
@@ -238,6 +244,8 @@ export class GptLiveEngine {
   /** Graceful end: session.close, then a bounded wait for session.closed. Open
    * transcript turns are handed over first so the summary sees them. */
   close(): void {
+    this.stopped = true;
+    this.connecting?.abort();
     this.flushTurns();
     this.clearTimers();
     const ws = this.ws;
@@ -296,7 +304,10 @@ export class GptLiveEngine {
         this.onDelegationEvent(msg.event);
         break;
       case 'session.closed':
-        if (this.closing) this.discard();
+        // Unasked, it ends the session while the socket may stay open: the
+        // same as a drop, and recovered the same way.
+        this.discard();
+        if (!this.closing) this.host.disconnected();
         break;
       case 'error':
         // Unknown/auth/quota/input failures cannot leave a silent call alive.
@@ -321,6 +332,8 @@ export class GptLiveEngine {
   private onTranscript(role: Role, msg: Record<string, unknown>): void {
     const text = msg.delta;
     const bytes = transcriptBytes(text); // bounded before it is kept
+    // The caller kept talking after a goodbye: that goodbye no longer ends the call.
+    if (role === 'caller' && this.callerFarewell !== undefined && typeof text === 'string' && text.trim()) this.clearTimers();
     const startMs = ms(msg.start_ms), endMs = ms(msg.end_ms);
     let turn = this.open[role];
     // One stored field is capped; a monologue that long is split, not dropped.

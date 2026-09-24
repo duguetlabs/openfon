@@ -371,6 +371,26 @@ describe('GPT-Live transcripts', () => {
     caller.receive({ type: 'hangup' }); await flush();
   });
 
+  it('bounds typed text before paying for synthesis', async () => {
+    vi.useFakeTimers();
+    const { caller } = await call({ env: { DEFAULT_TTS_PROVIDER: 'azure', AZURE_SPEECH_KEY: 'speech-key' } });
+    const gatewayFetch = globalThis.fetch;
+    const bodies: string[] = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (!String(input).includes('tts.speech.microsoft.com')) return gatewayFetch(input, init);
+      bodies.push(String(init?.body));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const bytes = pcm(900, 4800);
+      return { ok: true, status: 200, headers: new Headers(), body: new ReadableStream({ start(c) { c.enqueue(new Uint8Array(bytes)); c.close(); } }) } as unknown as Response;
+    }) as typeof fetch;
+    for (let i = 0; i < 50; i++) caller.receive({ type: 'text', text: 'x'.repeat(4000) });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(bodies).toHaveLength(2); // one synthesizing, one waiting; the rest are dropped
+    expect(bodies[0]).toContain('x'.repeat(500));
+    expect(bodies[0]).not.toContain('x'.repeat(501));
+    caller.receive({ type: 'hangup' }); await flush();
+  });
+
   it('delivers nothing for typed text when no server speech synthesis is configured', async () => {
     const { gateway, caller } = await call();
     caller.receive({ type: 'text', text: 'Are you open Friday?' }); await flush(80);
@@ -523,6 +543,15 @@ describe('GPT-Live closing', () => {
     caller.receive({ type: 'hangup' }); await flush();
   });
 
+  it('forgets a caller goodbye once the caller keeps talking', async () => {
+    const { gateway, caller } = await conversation();
+    said(gateway, 'caller', ' Okay, goodbye.', 8000); await vi.advanceTimersByTimeAsync(1300);
+    said(gateway, 'caller', ' Oh wait, one more question about parking', 10_000);
+    audio(gateway, SILENCE, 100); await vi.advanceTimersByTimeAsync(12_000);
+    expect(caller.of('ending')).toHaveLength(0);
+    caller.receive({ type: 'hangup' }); await flush();
+  });
+
   it('does not arm the farewell backstop before a real exchange', async () => {
     vi.useFakeTimers();
     const { gateway, caller } = await call();
@@ -577,6 +606,29 @@ describe('GPT-Live recovery', () => {
     said(replacement, 'agent', ' Booked. Goodbye!', 1000); audio(replacement, SPEECH, 3);
     replacement.receive(functionCall); audio(replacement, SILENCE, 6); await vi.advanceTimersByTimeAsync(500);
     expect(caller.of('ending')).toHaveLength(1);
+    caller.receive({ type: 'hangup' }); await flush();
+  });
+
+  it('does not leave a replacement session open when the caller hangs up while it connects', async () => {
+    vi.useFakeTimers();
+    const { gateway, caller } = await call();
+    const gatewayFetch = globalThis.fetch;
+    let release!: () => void;
+    globalThis.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+      new Promise<void>(resolve => { release = resolve; }).then(() => gatewayFetch(input, init))) as typeof fetch;
+    gateway.close(1006, 'dropped'); await flush(80);
+    caller.receive({ type: 'hangup' }); await flush(80);
+    release(); await flush(80);
+    for (const late of gateways.slice(1)) expect(late.closed).not.toBeNull();
+    expect(gateways.slice(1).flatMap(ws => ws.of('session.start'))).toHaveLength(0);
+  });
+
+  it('treats an unsolicited session.closed as a drop and recovers', async () => {
+    const { gateway, caller } = await call();
+    gateway.receive({ type: 'session.closed', reason: 'expired', usage: { seconds: 3600 } }); await flush(80);
+    expect(gateway.closed).not.toBeNull();
+    expect(gateways).toHaveLength(2);
+    expect(gateways[1].of('session.start')).toHaveLength(1);
     caller.receive({ type: 'hangup' }); await flush();
   });
 
