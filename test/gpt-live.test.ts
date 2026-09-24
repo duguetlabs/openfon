@@ -396,6 +396,25 @@ describe('GPT-Live transcripts', () => {
     caller.receive({ type: 'hangup' }); await flush();
   });
 
+  it('holds typed audio while a dropped session is replaced', async () => {
+    vi.useFakeTimers();
+    const tts = pcm(700, 4800 * 4);
+    const { gateway, caller } = await call({ env: { DEFAULT_TTS_PROVIDER: 'azure', AZURE_SPEECH_KEY: 'speech-key' } });
+    const gatewayFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => String(input).includes('tts.speech.microsoft.com')
+      ? { ok: true, status: 200, headers: new Headers(), body: new ReadableStream({ start(c) { c.enqueue(new Uint8Array(tts)); c.close(); } }) } as unknown as Response
+      : gatewayFetch(input, init)) as typeof fetch;
+    caller.receive({ type: 'text', text: 'Hello?' }); await flush(80);
+    expect(gateway.of('session.input_audio.append')).toHaveLength(1);
+    gateway.close(1006, 'dropped'); await flush(80);
+    await vi.advanceTimersByTimeAsync(1000); // recovery still connecting
+    const replacement = gateways[1];
+    replacement.receive({ type: 'session.started', session: replacement.of('session.start')[0].session }); await flush();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(gateway.of('session.input_audio.append').length + replacement.of('session.input_audio.append').length).toBe(4 + 5);
+    caller.receive({ type: 'hangup' }); await flush();
+  });
+
   it('delivers nothing for typed text when no server speech synthesis is configured', async () => {
     const { gateway, caller } = await call();
     caller.receive({ type: 'text', text: 'Are you open Friday?' }); await flush(80);

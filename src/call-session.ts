@@ -1911,10 +1911,13 @@ export class CallSession implements DurableObject {
     for (let i = 0; i < 5; i++) this.typedAudio.push({ chunk: new ArrayBuffer(4800), last: i === 4 });
     const tick = () => {
       this.typedTimer = undefined;
-      const next = this.typedAudio.shift();
+      const next = this.typedAudio[0];
       if (!next || this.ended) return;
-      this.gptLive?.appendAudio(next.chunk);
-      if (next.last) this.typedPending--;
+      // Refused while a replacement session connects: keep it, and try again.
+      if (this.gptLive?.appendAudio(next.chunk)) {
+        this.typedAudio.shift();
+        if (next.last) this.typedPending--;
+      }
       this.typedTimer = setTimeout(tick, 100);
     };
     if (this.typedTimer === undefined) tick();
