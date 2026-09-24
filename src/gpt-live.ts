@@ -174,8 +174,12 @@ export class GptLiveEngine {
   /** Connect and start a session. Resolves once `session.started` confirms the
    * format and voice, or false on any failure (the socket is then discarded). */
   async start(options: GptLiveSessionOptions): Promise<boolean> {
-    this.discard();
+    this.discard(); // may flush a caller goodbye, arming its wait
     if (this.stopped) return false;
+    // The agent cannot answer a goodbye while its session is being replaced:
+    // the wait for its reply restarts once the replacement is up.
+    const farewellPending = this.callerFarewell !== undefined;
+    this.clearTimers();
     const connection = gptLiveConnection(this.config);
     const controller = this.connecting = new AbortController();
     const connectTimer = setTimeout(() => controller.abort(), HANDSHAKE_TIMEOUT_MS);
@@ -224,6 +228,7 @@ export class GptLiveEngine {
             // Input first: without it the greeting is never spoken.
             this.lastInputAt = 0;
             this.keepInputFlowing(ws);
+            if (farewellPending && !this.closeState) this.awaitFarewellReply();
             if (options.greeting) this.send({ type: 'session.commentary.append', delegation_id: null, content: `Greet the caller: '${options.greeting}'` });
             settle(true);
           } else if (msg.type === 'error') {
@@ -424,6 +429,10 @@ export class GptLiveEngine {
     if (this.closeState || this.turns < 3 || !isFarewell(text)) return;
     this.callerFarewellAt = startMs;
     if (this.agentFarewell()) { this.requestClose('caller_farewell'); return; }
+    this.awaitFarewellReply();
+  }
+
+  private awaitFarewellReply(): void {
     this.clearTimers();
     this.callerFarewell = setTimeout(() => {
       this.callerFarewell = undefined;

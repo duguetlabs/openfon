@@ -722,6 +722,24 @@ describe('GPT-Live recovery', () => {
     caller.receive({ type: 'hangup' }); await flush();
   });
 
+  it('gives the replacement agent its own wait to answer a pending caller goodbye', async () => {
+    vi.useFakeTimers();
+    const { gateway, caller } = await call();
+    for (const [role, text, at] of [['agent', ' Hello.', 200], ['caller', ' Book Friday.', 2000], ['agent', ' Done.', 4000]] as const) {
+      said(gateway, role, text, at); await vi.advanceTimersByTimeAsync(1300);
+    }
+    said(gateway, 'caller', ' Goodbye.', 6000); await vi.advanceTimersByTimeAsync(1300); // the reply wait starts
+    gateway.close(1006, 'dropped'); await flush(80);
+    await vi.advanceTimersByTimeAsync(4000); // the replacement takes a while to start
+    const replacement = gateways[1];
+    replacement.receive({ type: 'session.started', session: replacement.of('session.start')[0].session }); await flush();
+    audio(replacement, SILENCE, 10); await vi.advanceTimersByTimeAsync(4000);
+    expect(caller.of('ending')).toHaveLength(0); // the old session's 8 s would have run out here
+    await vi.advanceTimersByTimeAsync(4500); audio(replacement, SILENCE, 1); await flush();
+    expect(caller.of('ending')).toHaveLength(1);
+    caller.receive({ type: 'hangup' }); await flush();
+  });
+
   it('fails the call when the replacement session cannot start', async () => {
     vi.useFakeTimers();
     const { gateway, caller, rows } = await call();
