@@ -707,6 +707,21 @@ describe('GPT-Live recovery', () => {
     caller.receive({ type: 'hangup' }); await flush();
   });
 
+  it('answers a tool call in the replacement session even if its id repeats one from the dropped session', async () => {
+    vi.useFakeTimers();
+    const { gateway, caller } = await call();
+    const unknown = { type: 'response.event', delegation_id: 'item_1', event: { type: 'response.output_item.done',
+      item: { type: 'function_call', call_id: 'call_1', name: 'lookup', arguments: '{}' } } };
+    gateway.receive(unknown); await flush();
+    expect(gateway.of('response.item.create')).toHaveLength(1);
+    gateway.close(1006, 'dropped'); await flush(80);
+    const replacement = gateways[1];
+    replacement.receive({ type: 'session.started', session: replacement.of('session.start')[0].session }); await flush();
+    replacement.receive(unknown); await flush();
+    expect(replacement.of('response.item.create')).toHaveLength(1);
+    caller.receive({ type: 'hangup' }); await flush();
+  });
+
   it('fails the call when the replacement session cannot start', async () => {
     vi.useFakeTimers();
     const { gateway, caller, rows } = await call();

@@ -200,6 +200,7 @@ export class GptLiveEngine {
     // compare its words with the previous session's clock.
     this.lastTurn = { caller: null, agent: null };
     this.callerFarewellAt = -1;
+    this.answeredCalls.clear(); // tool call ids belong to one session
     const start = gptLiveSessionStart(options);
     return new Promise<boolean>(resolve => {
       let settled = false;
