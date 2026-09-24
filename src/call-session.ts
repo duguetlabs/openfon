@@ -449,7 +449,9 @@ export class CallSession implements DurableObject {
         return;
       }
       if (this.mode === 'realtime') {
-        const forwarded = this.gptLive ? this.gptLive.appendAudio(audio)
+        // While typed text is being spoken into the session it is the caller's
+        // audio; one input stream cannot carry both.
+        const forwarded = this.gptLive ? !this.typedAudio.length && this.gptLive.appendAudio(audio)
           : this.sendUpstream({ type: 'input_audio_buffer.append', audio: b64encode(audio) });
         this.debug?.audio('caller', audio, 'pcm_s16le_24000', { forwarded });
       } else {
@@ -773,6 +775,9 @@ export class CallSession implements DurableObject {
   }
 
   private closeUpstream(): void {
+    this.typedAudio = [];
+    if (this.typedTimer !== undefined) clearTimeout(this.typedTimer);
+    this.typedTimer = undefined;
     this.gptLive?.close();
     this.clearRealtimeQueue();
     for (const timer of [this.closingTimer, this.generationTimer, this.playbackTimer]) if (timer !== undefined) clearTimeout(timer);
@@ -1855,18 +1860,51 @@ export class CallSession implements DurableObject {
     return this.recovering;
   }
 
+  // GPT-Live has no user-message item, and appending typed text to its
+  // instructions would give whatever a caller types instruction-level
+  // authority. It is spoken into the caller's side instead, so it reaches the
+  // model with exactly the standing of speech, and its transcript comes back
+  // like any other caller turn. That needs server speech synthesis.
+  private static readonly MAX_TYPED_CHARS = 500;
+  private typedAudio: ArrayBuffer[] = [];
+  private typedTimer: ReturnType<typeof setTimeout> | undefined;
+
+  private async speakTypedText(text: string): Promise<void> {
+    const typed = text.slice(0, CallSession.MAX_TYPED_CHARS);
+    let audio: ArrayBuffer | null = null;
+    try { audio = await synthesize(this.env, typed, speechVoice(this.env, this.lang, this.settings), 'pcm24', this.settings, this.speechAbort.signal); }
+    catch { /* reported below, like no synthesis at all */ }
+    if (this.ended || !this.gptLive) return;
+    if (!audio?.byteLength || audio.byteLength % 2) {
+      console.log(`call ${this.callId}: typed text on GPT-Live needs server speech synthesis; not delivered`);
+      return;
+    }
+    // Real-time pace, 100 ms at a time, then a short silence to end the utterance.
+    for (let offset = 0; offset < audio.byteLength; offset += 4800) this.typedAudio.push(audio.slice(offset, offset + 4800));
+    for (let i = 0; i < 5; i++) this.typedAudio.push(new ArrayBuffer(4800));
+    const tick = () => {
+      this.typedTimer = undefined;
+      const chunk = this.typedAudio.shift();
+      if (!chunk || this.ended) return;
+      this.gptLive?.appendAudio(chunk);
+      this.typedTimer = setTimeout(tick, 100);
+    };
+    if (this.typedTimer === undefined) tick();
+  }
+
   private sendCallerText(text: string): void {
+    if (this.gptLive) {
+      if (!this.closingTimeline) void this.speakTypedText(text);
+      return;
+    }
     if (this.upstream) this.closingGuard.startTurn(this.upstream);
     this.reserveTranscript(text);
     this.maybeSwitchVoice(text);
-    if (this.gptLive) this.gptLive.sendText(text);
-    else {
-      this.sendUpstream({
-        type: 'conversation.item.create',
-        item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] },
-      });
-      this.sendUpstream({ type: 'response.create' });
-    }
+    this.sendUpstream({
+      type: 'conversation.item.create',
+      item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] },
+    });
+    this.sendUpstream({ type: 'response.create' });
     this.send({ type: 'transcript', text });
     this.history.push({ role: 'user', content: text });
     void this.saveTurn('caller', text).catch(error => this.failInternally(error));

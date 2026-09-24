@@ -123,8 +123,11 @@ gate, transcript budget, closing timeline and hangup as other realtime calls
 - **Transcripts.** Caller and agent fragments arrive interleaved with no turn
   events. A speaker's turn ends after 1.2 s without a fragment from them; a turn
   over the 8 KiB field limit is split.
-- **Typed text.** Sent as a `session.instructions.append` addendum, which the model
-  answers aloud.
+- **Typed text.** GPT-Live has no user-message item, and an instruction addendum
+  would give typed text instruction-level authority. The widget's typed message is
+  synthesized with the workspace speech provider and streamed in as caller audio
+  at real-time pace, while the microphone waits; its transcript returns like any
+  caller turn. Without server speech synthesis a typed message is not delivered.
 - **Closing.** `end_call` is answered with `function_call_output` and
   `response.create`, then OpenFon hangs up once the goodbye has been spoken and
   followed by 600 ms of silence, or after 8 s without a goodbye. Delegation is not
@@ -140,7 +143,8 @@ gate, transcript budget, closing timeline and hangup as other realtime calls
 
 Evidence: unit tests with a synthetic gateway socket (`test/gpt-live.test.ts`),
 and on 2026-09-24 an engine run against Azure's GPT-Live endpoint directly
-(greeting, typed question answered, turns assembled, caller-farewell hangup). The
+(greeting, synthesized caller speech answered, turns assembled, caller-farewell
+hangup). The
 Kataleptic `/v1/live/sessions` endpoint was not yet deployed, so no call through
 the gateway, browser call or telephone call is claimed.
 

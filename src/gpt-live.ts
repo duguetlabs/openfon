@@ -53,9 +53,6 @@ const FAREWELL_GRACE_MS = 8000;
 const CALLER_FAREWELL_WAIT_MS = 8000;
 const HANDSHAKE_TIMEOUT_MS = 5000;
 const CLOSE_TIMEOUT_MS = 2000;
-// session.instructions.append is limited to 500 tokens; a typed message is
-// cut well inside that.
-const MAX_TYPED_TEXT_CHARS = 1200;
 
 export interface GptLiveSessionOptions {
   instructions: string;
@@ -236,15 +233,6 @@ export class GptLiveEngine {
   appendAudio(pcm: ArrayBuffer): boolean {
     if (!this.started || this.closing || !pcm.byteLength) return false;
     return this.send({ type: 'session.input_audio.append', audio: b64encode(pcm) });
-  }
-
-  /** A caller typing instead of speaking. There is no user-message item in this
-   * protocol; an instruction addendum was verified to be answered aloud. */
-  sendText(text: string): boolean {
-    if (!this.started || this.closing) return false;
-    const typed = text.length > MAX_TYPED_TEXT_CHARS ? text.slice(0, MAX_TYPED_TEXT_CHARS) : text;
-    return this.send({ type: 'session.instructions.append', delegation_id: null,
-      content: `The caller typed this message instead of speaking: "${typed}" Answer it aloud.` });
   }
 
   /** Graceful end: session.close, then a bounded wait for session.closed. Open
