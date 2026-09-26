@@ -188,7 +188,7 @@ export default function Widget() {
               <div key={i} className={`flex ${l.who === 'agent' ? 'justify-start' : 'justify-end'}`}>
                 <p
                   className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed ${
-                    l.who === 'agent' ? 'rounded-tl-sm bg-paper/10 text-paper' : 'rounded-tr-sm bg-ring text-paper'
+                    l.who === 'agent' ? 'rounded-tl-sm bg-paper/10 text-paper' : 'rounded-tr-sm bg-ring text-midnight'
                   }`}
                 >
                   {l.text}
@@ -243,7 +243,7 @@ export default function Widget() {
             {phase === 'idle' || phase === 'ended' || phase === 'error' ? (
               <button
                 onClick={() => void startCall()}
-                className="group flex h-28 w-28 items-center justify-center rounded-full bg-ring text-paper shadow-deep transition-transform hover:scale-105 active:scale-95"
+                className="group flex h-28 w-28 items-center justify-center rounded-full bg-ring text-midnight shadow-deep transition-transform hover:scale-105 active:scale-95"
                 aria-label="Start call"
               >
                 <PhoneIcon className="h-10 w-10" />
@@ -251,7 +251,7 @@ export default function Widget() {
             ) : (
               <button
                 onClick={hangup}
-                className="flex h-28 w-28 items-center justify-center rounded-full bg-paper/10 text-paper backdrop-blur transition-colors hover:bg-ring"
+                className="flex h-28 w-28 items-center justify-center rounded-full bg-paper/10 text-paper backdrop-blur transition-colors hover:bg-ring hover:text-midnight"
                 aria-label="Hang up"
               >
                 <PhoneIcon className="h-10 w-10 rotate-[135deg]" />

@@ -476,18 +476,6 @@ export default function Settings() {
         </Card>
       </section>
 
-      <div className="settings-save-bar">
-        <p className="hidden font-mono text-[11px] uppercase tracking-[0.14em] text-ink-faint sm:block">
-          Business changes apply on the next call
-        </p>
-        <div className="flex items-center gap-3">
-          {saved && <span role="status" className="text-sm font-semibold text-ok">{saved}</span>}
-          {displayError && <span role="alert" className="text-sm text-rose">{displayError}</span>}
-          {profileRefreshPending && <Button variant="ghost" disabled={saving} onClick={() => { const operation = beginSaving('settings'); if (!operation) return; void refreshProfileDisplay().finally(() => finishSaving(operation)); }}>Retry profile refresh</Button>}
-          {settingsRefreshNeeded && <Button variant="ghost" disabled={saving} onClick={() => void retryRefresh()}>Retry settings refresh</Button>}
-          <Button disabled={saving || profileRefreshPending || !dirty} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</Button>
-        </div>
-      </div>
       <ProviderSettings onSaved={refresh} />
       <SummarySettings />
       <details id="saved-voice-setups" className="settings-advanced">
@@ -558,6 +546,18 @@ export default function Settings() {
         </Card>
       </section>
       </details>
+      <div className="settings-save-bar">
+        <p className="settings-save-context">
+          Business changes apply on the next call
+        </p>
+        <div className="flex items-center gap-3">
+          {saved && <span role="status" className="text-sm font-semibold text-ok">{saved}</span>}
+          {displayError && <span role="alert" className="text-sm text-rose">{displayError}</span>}
+          {profileRefreshPending && <Button variant="ghost" disabled={saving} onClick={() => { const operation = beginSaving('settings'); if (!operation) return; void refreshProfileDisplay().finally(() => finishSaving(operation)); }}>Retry profile refresh</Button>}
+          {settingsRefreshNeeded && <Button variant="ghost" disabled={saving} onClick={() => void retryRefresh()}>Retry settings refresh</Button>}
+          <Button disabled={saving || profileRefreshPending || !dirty} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</Button>
+        </div>
+      </div>
     </div>
   );
 }

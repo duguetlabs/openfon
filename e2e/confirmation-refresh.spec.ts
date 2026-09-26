@@ -39,6 +39,7 @@ for (const mode of ['signup', 'login'] as const) {
 
 for (const operation of ['apply', 'delete'] as const) {
   test(`confirmed profile ${operation} survives refresh failure and retries reads only`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/auth');
     await page.getByLabel('Email').fill(`profile-confirm-${operation}-${Date.now()}@example.invalid`);
     await page.getByLabel('Password', { exact: true }).fill('Synthetic-Confirmation-Password-1234');
@@ -72,6 +73,10 @@ for (const operation of ['apply', 'delete'] as const) {
     });
     await page.getByRole('button', { name: operation === 'apply' ? 'Apply' : 'Delete profile', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('The profile change was saved');
+    // Assert before any recovery click or business-field access can auto-scroll.
+    await expect(page.getByRole('alert')).toBeInViewport();
+    await expect(page.getByRole('button', { name: 'Retry profile refresh', exact: true })).toBeInViewport();
+    await expect(page.getByRole('button', { name: 'Retry profile refresh', exact: true })).toHaveCount(1);
     if (operation === 'delete') await expect(page.getByRole('button', { name: 'Delete profile', exact: true })).toHaveCount(0);
     else await expect(page.getByRole('button', { name: 'Apply', exact: true })).toBeDisabled();
     await page.getByLabel('Name', { exact: true }).fill('Newer unsaved workspace name');

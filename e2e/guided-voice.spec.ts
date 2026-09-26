@@ -93,9 +93,10 @@ test('guided Kataleptic tiers show matching voices and preserve unknown saved va
   await expect(page).toHaveURL('/overview');
   const { assistants } = await (await page.request.get('/api/me/bootstrap')).json();
   const models = ['gpt-realtime-2', 'gpt-realtime-2.1', 'gpt-realtime-2.1-mini', 'gpt-live-1'];
+  const distinctVoice = (model: string) => model === 'gpt-live-1' ? 'cedar' : `${model}-exclusive`;
   await page.route('**/api/me/provider/catalog', route => route.fulfill({ json: {
     models: [], live: true, voices: { native: [{ id: 'wrong-shared-voice', label: 'wrong-shared-voice' }], azure: [], hdDefault: '',
-      realtime: Object.fromEntries(models.map(id => [id, [{ id: 'marin', label: 'marin' }, { id: `${id}-exclusive`, label: `${id}-exclusive` }]])),
+      realtime: Object.fromEntries(models.map(id => [id, [{ id: 'marin', label: 'marin' }, { id: distinctVoice(id), label: distinctVoice(id) }]])),
       cataloguedModels: models,
     },
   } }));
@@ -110,7 +111,7 @@ test('guided Kataleptic tiers show matching voices and preserve unknown saved va
   for (const model of ['gpt-realtime-2','gpt-realtime-2.1','gpt-realtime-2.1-mini','gpt-live-1']) {
     await engine.selectOption(model);
     await expect(page.getByText('Voice choices from this engine’s Kataleptic catalog.', { exact: true })).toBeVisible();
-    await expect(page.getByLabel('Realtime voice', { exact: true }).locator(`option[value="${model}-exclusive"]`)).toHaveCount(1);
+    await expect(page.getByLabel('Realtime voice', { exact: true }).locator(`option[value="${distinctVoice(model)}"]`)).toHaveCount(1);
     await expect(page.getByLabel('Realtime voice', { exact: true }).locator('option[value="wrong-shared-voice"]')).toHaveCount(0);
     if (model.endsWith('mini')) await expect(page.getByLabel('About this engine')).toContainText('Lower cost');
     await expect(page.getByLabel('Realtime voice', { exact: true })).toHaveValue('');

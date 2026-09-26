@@ -25,11 +25,11 @@
 // from transcript timing, and the end of a farewell from the silence after it.
 import type { CallDebug } from './call-debug';
 import { isFarewell } from './providers';
-import { GPT_LIVE_MODEL, gptLiveConnection, type RealtimeConfig } from './realtime-providers';
+import { GPT_LIVE_MODEL, GPT_LIVE_VOICES, gptLiveConnection, type RealtimeConfig } from './realtime-providers';
 import { parseRealtimeMessage, transcriptBytes, MAX_TRANSCRIPT_FIELD_BYTES } from './realtime-input';
 
 /** The ten voices session.start accepts. marin is the service default. */
-export const GPT_LIVE_VOICES = ['marin', 'cedar', 'alloy', 'coral', 'shimmer', 'verse', 'ash', 'sage', 'ballad', 'echo'];
+export { GPT_LIVE_VOICES } from './realtime-providers';
 /** Backend model the live model delegates tool work to: a Kataleptic chat id. */
 export const DEFAULT_GPT_LIVE_DELEGATION_MODEL = 'gpt-5.4-mini';
 export const GPT_LIVE_AUDIO_FORMAT = { type: 'audio/pcm', rate: 24000 } as const;

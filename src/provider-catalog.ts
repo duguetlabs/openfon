@@ -1,7 +1,7 @@
 import { fetchProviderJson } from './provider-response';
 import { OPENAI_REALTIME_VOICES } from './provider-settings';
 import { RETIRED_KATALEPTIC_CHAT_MODELS } from './providers';
-import { GPT_LIVE_MODEL, isGptLiveModel } from './realtime-providers';
+import { GPT_LIVE_MODEL, GPT_LIVE_VOICES, isGptLiveModel } from './realtime-providers';
 
 type Option = { id: string; label: string };
 type Model = Option & { kind: 'text' | 'transcription' | 'realtime' };
@@ -60,7 +60,10 @@ export function providerCatalog(): Promise<Catalog> {
         for (const id of Object.keys(result.voices.realtime)) {
           const list = v[id]?.voices;
           if (!Array.isArray(list) || !list.length || list.length > 64 || !list.every(validId)) continue;
-          result.voices.realtime[id] = options([...new Set(list)]);
+          // Do not advertise a future GPT-Live voice that this adapter would
+          // normalize to its default during calls and previews.
+          const supported = id === GPT_LIVE_MODEL ? list.filter(voice => GPT_LIVE_VOICES.includes(voice)) : list;
+          result.voices.realtime[id] = options([...new Set(supported)]);
           result.voices.cataloguedModels.push(id);
         }
         result.voices.native = result.voices.realtime['gpt-realtime-2'];

@@ -457,6 +457,29 @@
   margin-top:28px
 }
 
+.settings-save-bar {
+  position:sticky;
+  bottom:16px;
+  z-index:10;
+  padding:14px 16px;
+  border:1px solid var(--color-line);
+  border-radius:12px;
+  background:var(--color-surface);
+  box-shadow:0 4px 18px rgb(15 23 42 / .08)
+}
+
+.settings-save-bar>div {
+  min-width:0;
+  flex-wrap:wrap;
+  overflow-wrap:anywhere
+}
+
+.settings-save-context {
+  margin:0;
+  font-size:12px;
+  color:var(--color-ink-soft)
+}
+
 .assistant-editor-sections {
   display:grid;
   gap:24px

@@ -137,7 +137,9 @@ against Azure session startup; no new listening comparison is claimed here.
 
 When a catalog entry is unavailable or invalid, the picker labels its built-in
 suggestions and preserves saved/custom IDs. It does not silently use another
-engine's live list. Direct OpenAI uses its documented Realtime suggestions,
+engine's live list. GPT-Live choices are also restricted to voices the current
+OpenFon call/preview adapter supports; newly advertised voices require adapter
+support before they appear. Direct OpenAI uses its documented Realtime suggestions,
 separately from Kataleptic. Azure HD shows a small curated selection, not its full
 voice inventory. ChatGPT's consumer voice names are not an API catalog; OpenFon
 does not claim a mapping from those names to Kataleptic voice IDs.
