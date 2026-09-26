@@ -149,12 +149,32 @@ gate, transcript budget, closing timeline and hangup as other realtime calls
 - **Drops.** One replacement session per drop, briefed with the transcript so far
   and without a second greeting, within the whole-call reconnect ceiling.
 
-Evidence: unit tests with a synthetic gateway socket (`test/gpt-live.test.ts`),
-and on 2026-09-24 an engine run against Azure's GPT-Live endpoint directly
-(greeting with no caller audio, synthesized caller speech answered, turns
-assembled, caller-farewell hangup, a three-second voice preview). The
-Kataleptic `/v1/live/sessions` endpoint was not yet deployed, so no call through
-the gateway, browser call or telephone call is claimed.
+Evidence includes unit tests with a synthetic gateway socket
+(`test/gpt-live.test.ts`) and a direct-Azure engine run on 2026-09-24. On
+2026-09-26 the Kataleptic endpoint and OpenFon consumer were deployed. The
+OpenFon release is `7b4f6042d5354a1e9c5634cbd16417a04e0f78a4`; production
+Worker version `3e9e542a-1646-431e-8dae-99be37b733c8` serves 100% of traffic.
+The HD default remains unchanged, GPT-Live is optional, and carrier flags remain
+disabled. No new D1 migration was required or run.
+
+A full-application acceptance probe ran that OpenFon source in local workerd
+with D1, Durable Objects, an authenticated owner test-call route and WebSockets,
+using the **real production Kataleptic voice and summary models**. Synthetic
+caller PCM and a paced playback receiver verified greeting, the bakery's closing
+time answer, caller-farewell closure after the closing receipt, five saved
+transcript turns and a completed call with no failure code. The real summary
+recorded the question and the five-PM answer; 249600 bytes of output PCM were
+received. A separate actual-engine probe explicitly sent `response.create` with
+instructions to invoke `end_call`; the real delegated tool completed and closed
+with `model_tool` and no provider errors. That forced tool probe establishes
+wiring, not reliability of spontaneous tool selection.
+
+These were operator-run live API probes with local OpenFon storage; the probe
+scripts/results were temporary local artifacts, not a committed acceptance
+harness. Production OpenFon health, bindings and exact built HTML/JS/CSS were
+checked separately. No production customer call, physical microphone/speaker,
+real-browser GPT-Live call, interruption or telephone acceptance is claimed.
+Those gates remain in [launch readiness](launch/readiness.md).
 
 ## Reproduce independence locally
 
