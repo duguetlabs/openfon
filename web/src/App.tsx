@@ -203,31 +203,42 @@ export default function App() {
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
-  const { signOut } = useSession();
+  const { signOut, business } = useSession();
   const nav = useNavigate();
   const loc = useLocation();
+  const navigation = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const menu = navigation.current;
+    const active = menu?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!menu || !active) return;
+    const revealCurrent = () => {
+      if (menu.scrollWidth <= menu.clientWidth) return;
+      const container = menu.getBoundingClientRect(), link = active.getBoundingClientRect();
+      if (link.left < container.left) menu.scrollLeft += link.left - container.left;
+      else if (link.right > container.right) menu.scrollLeft += link.right - container.right;
+    };
+    revealCurrent();
+    const observer = new ResizeObserver(revealCurrent);
+    observer.observe(menu);
+    return () => observer.disconnect();
+  }, [loc.pathname]);
   const tab = (path: string, label: string) => (
     <Link
       to={path}
       aria-current={(loc.pathname === path || loc.pathname.startsWith(path + '/')) ? 'page' : undefined}
-      className={`rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-colors ${
-        (loc.pathname === path || (path !== '/overview' && loc.pathname.startsWith(path + '/')))
-          ? 'bg-wash-iris text-iris shadow-[inset_0_0_0_1px_rgb(88_73_190/0.18)]'
-          : 'text-ink-soft hover:bg-wash-iris/60 hover:text-ink'
-      }`}
+      className="workspace-nav-link"
     >
       {label}
     </Link>
   );
   return (
-    <div className="studio-theme atmosphere flex min-h-screen flex-col bg-base">
+    <div className="studio-theme workspace-shell min-h-screen bg-base">
       <a className="studio-skip" href="#workspace-content">Skip to workspace content</a>
-      <header className="sticky top-0 z-10 border-b border-line bg-base/85 backdrop-blur-md">
-        <div className="studio-shell-header mx-auto w-full max-w-6xl px-5 py-3">
-          <Link to="/overview">
-            <Logo />
-          </Link>
-          <nav className="studio-nav" aria-label="Workspace">
+      <header className="workspace-sidebar">
+        <div className="studio-shell-header">
+          <Link to="/overview" className="workspace-brand" aria-label="OpenFon overview"><Logo /></Link>
+          <p className="workspace-name">{business?.name || 'Your workspace'}</p>
+          <nav ref={navigation} className="studio-nav" aria-label="Workspace">
             {tab('/overview', 'Overview')}
             {tab('/assistants', 'Assistants')}
             {tab('/test', 'Test Studio')}
@@ -243,15 +254,15 @@ function Shell({ children }: { children: React.ReactNode }) {
                 });
                 nav('/auth');
               }}
-              className="ml-1 rounded-lg px-3 py-1.5 text-sm text-ink-soft transition-colors hover:text-ink"
+              className="workspace-signout"
             >
               Sign out
             </button>
           </nav>
         </div>
       </header>
-      <main id="workspace-content" tabIndex={-1} className="studio-shell-main mx-auto w-full max-w-5xl flex-1 px-5 py-10">{children}</main>
-      <footer className="mx-auto w-full max-w-5xl px-5 pb-8">
+      <main id="workspace-content" tabIndex={-1} className="studio-shell-main">{children}</main>
+      <footer className="workspace-footer">
         <div className="callline mb-5" />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-ink-soft">
@@ -265,7 +276,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               github.com/duguetlabs/openfon
             </a>
           </p>
-          <p className="font-mono text-[11px] text-ink-faint">self-hosted · MIT licensed</p>
+          <p className="text-xs text-ink-faint">self-hosted · MIT licensed</p>
         </div>
       </footer>
     </div>

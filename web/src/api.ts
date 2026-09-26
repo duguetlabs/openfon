@@ -293,6 +293,8 @@ export interface VoiceOption {
 }
 
 export interface VoiceCatalog {
+  realtime?: Record<string, VoiceOption[]>;
+  cataloguedModels?: string[];
   native: VoiceOption[];
   azure: VoiceOption[];
   hdDefault: string;

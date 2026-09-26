@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, openSettingsSections } from './fixtures';
 import type { Route } from '@playwright/test';
 
 for (const newerEdit of [false, true]) {
@@ -27,6 +27,7 @@ for (const newerEdit of [false, true]) {
       return route.continue();
     });
     await page.goto('/settings');
+  await openSettingsSections(page);
     const input = page.getByRole('button', { name: 'Apply', exact: true }).locator('..').locator('input');
     await expect(input).toHaveValue('Original profile');
     await input.fill('Attempted rename'); await input.blur();
@@ -50,6 +51,7 @@ for (const newerEdit of [false, true]) {
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     expect(writes).toBe(2);
     await page.reload();
+  await openSettingsSections(page);
     await expect(input).toHaveValue(desired);
   });
 }
@@ -81,6 +83,7 @@ for (const firstSucceeds of [false, true]) {
       return route.continue();
     });
     await page.goto('/settings');
+  await openSettingsSections(page);
     const input = page.getByRole('button', { name: 'Apply', exact: true }).locator('..').locator('input');
     await expect(input).toHaveValue('Original profile');
     await input.fill('Pending B'); await input.blur();
@@ -109,6 +112,7 @@ for (const firstSucceeds of [false, true]) {
     expect((await retry).ok()).toBe(true);
     expect(writes).toBe(3);
     await page.reload();
+  await openSettingsSections(page);
     await expect(input).toHaveValue('Pending C');
   });
 }

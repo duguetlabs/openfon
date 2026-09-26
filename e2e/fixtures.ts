@@ -10,3 +10,13 @@ export const test = base.extend<{ limiterIsolation: void }>({
   }, { auto: true }],
 });
 export { expect };
+
+// Tests of existing settings behavior explicitly reveal the new component
+// disclosures. The information-architecture test verifies their closed defaults.
+export async function openSettingsSections(page: import('@playwright/test').Page) {
+  if (new URL(page.url()).pathname !== '/settings') return;
+  await expect(page.locator('#providers')).toBeVisible();
+  for (const disclosure of await page.locator('#providers details, #saved-voice-setups').all()) {
+    if (await disclosure.getAttribute('open') === null) await disclosure.locator('summary').first().click();
+  }
+}

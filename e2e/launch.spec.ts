@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, openSettingsSections } from './fixtures';
 import type { Page } from '@playwright/test';
 
 async function signup(page: Page) {
@@ -22,7 +22,7 @@ test('public page has usable examples, navigation and mobile layout', async ({ p
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.goto('/');
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('A little more');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Be there for callers.');
   await page.getByRole('button', { name: /callback request/ }).click();
   await expect(page.getByText('Could someone call me about a repair?')).toBeVisible();
   await page.locator('summary').filter({ hasText: 'Does it answer my existing phone number?' }).click();
@@ -73,11 +73,13 @@ test('new workspace remains private, assistant edits persist, pause survives rel
   await expect(page.getByLabel('Opening greeting')).toHaveValue('Hello from the workshop test.');
 
   await page.reload();
+  await openSettingsSections(page);
   await expect(page.getByLabel('Opening greeting')).toHaveValue('Hello from the workshop test.');
   await page.getByRole('button', { name: 'Publish assistant' }).click();
   await expect(page.getByRole('button', { name: 'Pause assistant' })).toBeVisible();
   await page.getByRole('button', { name: 'Pause assistant' }).click();
   await page.reload();
+  await openSettingsSections(page);
   await expect(page.getByRole('button', { name: 'Publish assistant' })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
 });
@@ -127,6 +129,7 @@ test('knowledge draft, approval and attachment survive reload; all app menus wor
   await expect(page.getByRole('checkbox', { name: 'Alex', exact: true })).toBeChecked();
   await expect(page.getByRole('status').filter({ hasText: 'Assistant knowledge updated' })).toBeVisible();
   await page.reload();
+  await openSettingsSections(page);
   await page.getByRole('combobox', { name: 'Collection', exact: true }).selectOption({ label: 'Workshop services (1 item)' });
   await expect(page.getByRole('checkbox', { name: 'Alex', exact: true })).toBeChecked();
   await expect(page.getByText('Do you fix punctures?', { exact: true })).toBeVisible();
@@ -173,6 +176,7 @@ test('account can change password, export data without credentials, and delete',
   expect(replacement.secure).toBe(true);
   expect((await request.get('/api/me', { headers: { Cookie: `ofs=${copiedSession}` } })).status()).toBe(401);
   await page.reload();
+  await openSettingsSections(page);
   await expect(page.getByRole('heading', { name: 'Your account' })).toBeVisible();
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download data', exact: true }).click();
@@ -339,23 +343,21 @@ test('assistant-list retries recover Test Studio and preserve Knowledge drafts',
   await expect(page.getByRole('button', { name: 'Retry assistants' })).toHaveCount(0);
 });
 
-test('settings identifies a saved business when active assistant validation rejects its save', async ({ page }) => {
+test('business settings save independently of an active assistant', async ({ page }) => {
   await signup(page);
   const bootstrap = await (await page.request.get('/api/me/bootstrap')).json();
   expect((await page.request.post(`/api/me/assistants/${bootstrap.assistants[0].id}/activate`, { data: {} })).ok()).toBe(true);
+  const before = await (await page.request.get('/api/me/business')).json();
+  let assistantWrites = 0;
+  page.on('request', request => { if (request.method() === 'PUT' && request.url().endsWith('/agent')) assistantWrites++; });
   await page.goto('/settings');
   await page.getByLabel('Name', { exact: true }).fill('Updated business facts');
-  await page.getByLabel('Agent name', { exact: true }).fill('');
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Business changes were saved. Assistant save failed:');
-  const persisted = await (await page.request.get('/api/me/business')).json();
-  expect(persisted.name).toBe('Updated business facts');
-  expect(persisted.agent.agent_name).toBe('Alex');
-  await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('');
-  await page.getByLabel('Agent name', { exact: true }).fill('Updated assistant');
+  await expect(page.getByLabel('Agent name', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Saved.' })).toBeVisible();
-  await expect(page.getByRole('alert')).toHaveCount(0);
+  const persisted = await (await page.request.get('/api/me/business')).json();
+  expect(persisted.name).toBe('Updated business facts'); expect(persisted.agent).toEqual(before.agent);
+  expect(assistantWrites).toBe(0); await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
 test('a search navigation cannot overwrite a newer draft before changing filters', async ({ page }) => {

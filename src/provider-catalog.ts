@@ -17,6 +17,9 @@ const RETIRED = new Set(['kataleptic-realtime', 'piper-tts', 'whisper-large-v3-t
   'parakeet-tdt-0-6b-stream', 'nomic-embed', ...RETIRED_KATALEPTIC_CHAT_MODELS]);
 const fallback = () => ({ models: fallbackModels, live: false, voices: {
   native: options(OPENAI_REALTIME_VOICES),
+  realtime: Object.fromEntries(['gpt-realtime-2', 'gpt-realtime-2.1', 'gpt-realtime-2.1-mini', GPT_LIVE_MODEL]
+    .map(id => [id, options(OPENAI_REALTIME_VOICES)])),
+  cataloguedModels: [] as string[],
   azure: options(['en-US-AvaMultilingualNeural', 'de-DE-SeraphinaMultilingualNeural', 'es-ES-ArabellaMultilingualNeural', 'fr-FR-VivienneMultilingualNeural', 'it-IT-AlessioMultilingualNeural']),
   hdDefault: 'en-US-AvaMultilingualNeural',
 } });
@@ -53,8 +56,14 @@ export function providerCatalog(): Promise<Catalog> {
       if (parsed.length) { result.models = parsed; result.live = true; }
       if (voices.response.ok && voices.data && typeof voices.data === 'object') {
         const v = voices.data as Record<string, { voices?: unknown[] }>;
-        const native = v['gpt-realtime-2']?.voices;
-        if (Array.isArray(native) && native.length <= 64) result.voices.native = options(native.filter(validId));
+        // Resolve every engine's own entry; never borrow another model's catalog.
+        for (const id of Object.keys(result.voices.realtime)) {
+          const list = v[id]?.voices;
+          if (!Array.isArray(list) || !list.length || list.length > 64 || !list.every(validId)) continue;
+          result.voices.realtime[id] = options([...new Set(list)]);
+          result.voices.cataloguedModels.push(id);
+        }
+        result.voices.native = result.voices.realtime['gpt-realtime-2'];
       }
     } catch { /* a useful, explicitly labelled offline catalog remains available */ }
     cached = { data: result, until: Date.now() + (result.live ? 3600000 : 60000) };

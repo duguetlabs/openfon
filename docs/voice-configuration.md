@@ -111,6 +111,48 @@ IDs. Migration 0024 clears selections made on an explicit `api.kataleptic.com`
 provider; on an instance whose defaults are Kataleptic,
 `scripts/retire-kataleptic-instance-defaults.sql` clears the inherited ones.
 
+## Choosing by cost and voice style
+
+The engine picker uses plain-language hints rather than star ratings. **Lower
+cost** identifies Kataleptic's Mini tier relative to its full Realtime 2.1 tier;
+its gateway rate table lists lower audio-token rates. **Expressive speech**
+describes native speech-to-speech, **Neural voices** describes Azure Voice Live,
+and **Full duplex** describes GPT-Live listening while speaking. These describe
+technology and billing, not a measured quality ranking. Evaluate a sample and a
+real conversation in your callers' language before choosing.
+
+Realtime bills text/audio tokens; GPT-Live bills session duration plus delegated
+model usage; Pipeline bills its selected components. Prices and actual call cost
+vary. The hints were checked against Kataleptic's gateway model descriptions and
+rate tables on 2026-09-26; they are not fixed quotes or a cheapest-model guarantee.
+
+### Where the voice choices come from
+
+OpenFon reads each Kataleptic engine's **own entry** in its public
+`/v1/realtime/voices` catalog, including `gpt-live-1`. Current gateway source
+advertises the same ten API voice IDs for GPT-Live and the native Realtime tiers.
+This overlap is intentional in the gateway, not evidence that two models have
+identical sound. The GPT-Live adapter's accepted list was previously checked
+against Azure session startup; no new listening comparison is claimed here.
+
+When a catalog entry is unavailable or invalid, the picker labels its built-in
+suggestions and preserves saved/custom IDs. It does not silently use another
+engine's live list. Direct OpenAI uses its documented Realtime suggestions,
+separately from Kataleptic. Azure HD shows a small curated selection, not its full
+voice inventory. ChatGPT's consumer voice names are not an API catalog; OpenFon
+does not claim a mapping from those names to Kataleptic voice IDs.
+
+OpenAI's [Realtime voice documentation](https://developers.openai.com/api/docs/guides/realtime-conversations#voice-options)
+lists the ten native voices and recommends Marin/Cedar for quality. Its
+[GPT-Live session documentation](https://developers.openai.com/api/docs/guides/live-conversations#configuration-fields)
+documents Marin as the default; Kataleptic's own adapter/catalog determines the
+choices exposed through that gateway.
+
+Voice labels use plain text for Microsoft-published gender metadata. Other
+voices remain unlabelled rather than guessing from their names. The compact play
+button previews the selected configuration and keeps the existing lazy prefetch;
+it does not play automatically or display a duration.
+
 ## Voice, language and timing
 
 **Voice IDs belong to a voice family.** HD accepts Azure neural names such as

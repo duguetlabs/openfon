@@ -1,38 +1,33 @@
 @import 'tailwindcss';
 
 @theme {
-  /* ——— light side: "Quiet Operator" ——— */
-  --color-base: #faf9fc;
+  --color-base: #f4f6f8;
   --color-surface: #ffffff;
-  --color-wash-iris: #f3f0fa;
-  --color-wash-rose: #fbf4f7;
-  --color-ink: #232136;
-  --color-ink-soft: #5f5b79;
-  --color-ink-faint: #757093;
-  --color-iris: #5849be;
-  --color-iris-deep: #46389b;
-  --color-rose: #b43a66;
-  --color-line: #e8e5f1;
-  --color-line-strong: #d8d4e8;
-  --color-ok: #1f7a53;
-  --color-midnight: #1a1532;
-
-  /* ——— dark call widget (unchanged) ——— */
-  --color-paper: #faf6ef;
-  --color-paper-2: #f3ecdd;
-  --color-pine: #1f4d3a;
-  --color-pine-deep: #14352a;
-  --color-pine-night: #0d241c;
-  --color-ring: #e8603c;
-  --color-ring-soft: #f7d9cf;
-
-  --font-display: 'Fraunces', 'Georgia', serif;
-  --font-sans: 'Schibsted Grotesk', 'Helvetica Neue', sans-serif;
-  --font-mono: 'Spline Sans Mono', ui-monospace, monospace;
-
-  --shadow-lift: 0 1px 2px rgb(35 33 54 / 0.04), 0 4px 14px -6px rgb(35 33 54 / 0.08);
-  --shadow-raise: 0 1px 2px rgb(35 33 54 / 0.05), 0 12px 32px -16px rgb(70 56 155 / 0.18);
-  --shadow-deep: 0 24px 64px -24px rgb(0 0 0 / 0.55);
+  --color-wash-iris: #eaf0fc;
+  --color-wash-rose: #fff0f0;
+  --color-ink: #172b43;
+  --color-ink-soft: #536478;
+  --color-ink-faint: #627287;
+  --color-iris: #2454b8;
+  --color-iris-deep: #193e90;
+  --color-rose: #b12e3a;
+  --color-line: #dce3eb;
+  --color-line-strong: #bdc9d7;
+  --color-ok: #21714d;
+  --color-midnight: #172b43;
+  --color-paper: #f7f9fc;
+  --color-paper-2: #e7edf5;
+  --color-pine: #244b63;
+  --color-pine-deep: #193b50;
+  --color-pine-night: #122b3d;
+  --color-ring: #85b8ff;
+  --color-ring-soft: #dceaff;
+  --font-display: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+  --shadow-lift: 0 1px 2px rgb(23 43 67 / 0.04);
+  --shadow-raise: 0 6px 18px -10px rgb(23 43 67 / 0.18);
+  --shadow-deep: 0 16px 40px -20px rgb(0 0 0 / 0.35);
 }
 
 html {
@@ -47,72 +42,18 @@ html {
   color: #fff;
 }
 
-/* very light iris + rose washes over the clear base */
-.atmosphere {
-  position: relative;
-  isolation: isolate;
+.atmosphere { position: relative; }
+.callline, .callline-accent { height: 1px; background: var(--color-line); }
+.grain { position: relative; }
+:focus-visible { outline: 2px solid var(--color-iris); outline-offset: 3px; }
+button, input, select, textarea { font: inherit; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button:not(:disabled), summary { cursor: pointer; }
+h1, h2, h3 { text-wrap: balance; }
+button, a, p, h1, h2, h3 { overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
-.atmosphere::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(900px 420px at 12% -8%, rgb(88 73 190 / 0.07), transparent 70%),
-    radial-gradient(800px 380px at 88% -6%, rgb(180 58 102 / 0.055), transparent 70%),
-    linear-gradient(to bottom, rgb(243 240 250 / 0.6), transparent 420px);
-}
-
-/* dotted "call line" separator */
-.callline {
-  background-image: radial-gradient(circle, var(--color-line-strong) 1.5px, transparent 1.5px);
-  background-size: 12px 3px;
-  background-repeat: repeat-x;
-  background-position: center;
-  height: 3px;
-}
-
-/* short accent callline in iris, for headings */
-.callline-accent {
-  background-image: radial-gradient(circle, rgb(88 73 190 / 0.45) 1.5px, transparent 1.5px);
-  background-size: 11px 3px;
-  background-repeat: repeat-x;
-  background-position: left center;
-  height: 3px;
-}
-
-/* paper grain for atmosphere */
-.grain {
-  position: relative;
-}
-.grain::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.5;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-/* page-load stagger */
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.rise {
-  animation: rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-.rise-1 { animation-delay: 0.05s; }
-.rise-2 { animation-delay: 0.12s; }
-.rise-3 { animation-delay: 0.19s; }
-.rise-4 { animation-delay: 0.26s; }
 
 /* ringing pulse for the widget dial */
 @keyframes ringpulse {
@@ -130,14 +71,6 @@ html {
 }
 .ringpulse2 {
   animation: ringpulse 1.8s ease-out 0.6s infinite;
-}
-
-@keyframes wobble {
-  0%, 100% { transform: rotate(-4deg); }
-  50% { transform: rotate(4deg); }
-}
-.wobble {
-  animation: wobble 0.4s ease-in-out infinite;
 }
 
 /* live waveform bars */

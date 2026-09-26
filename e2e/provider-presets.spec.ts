@@ -1,5 +1,5 @@
 import { fillCatalog, expectCatalog } from './catalog-fields';
-import { test, expect } from './fixtures';
+import { test, expect, openSettingsSections } from './fixtures';
 
 test('provider alternatives persist, keep custom models, and require a new key when endpoints change', async ({ page }) => {
   await page.goto('/auth');
@@ -14,6 +14,7 @@ test('provider alternatives persist, keep custom models, and require a new key w
   await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
   await expect(page).toHaveURL('/overview');
   await page.goto('/settings');
+  await openSettingsSections(page);
   await expect(page.getByText(/Kataleptic is operated by OpenFon/)).toBeVisible();
   const select = page.getByLabel('Text provider preset', { exact: true });
   for (const [preset, url] of [['kataleptic','https://api.kataleptic.com/v1'], ['openrouter','https://openrouter.ai/api/v1'], ['huggingface','https://router.huggingface.co/v1'], ['openai','https://api.openai.com/v1']]) {
@@ -26,6 +27,7 @@ test('provider alternatives persist, keep custom models, and require a new key w
   await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
   await expect(page.getByText('Provider settings saved.', { exact: false })).toBeVisible();
   await page.reload();
+  await openSettingsSections(page);
   await expect(select).toHaveValue('openrouter');
   await expectCatalog(page, 'Workspace text model', 'custom/model:route');
   await expect(page.getByLabel('Text API key', { exact: true })).toHaveValue('');
@@ -40,6 +42,7 @@ test('provider alternatives persist, keep custom models, and require a new key w
   await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
   await expect(page.getByText('Provider settings saved.', { exact: false })).toBeVisible();
   await page.reload();
+  await openSettingsSections(page);
   await expect(page.getByLabel('Realtime provider', { exact: true })).toHaveValue('openai');
   await expect(page.getByLabel('Transcription provider', { exact: true })).toHaveValue('openai');
   await expect(page.getByLabel('Realtime API key', { exact: true })).toHaveValue('');
@@ -61,6 +64,7 @@ test('provider draft guards navigation and sign-out, then resets after discard o
   const navigation = page.getByRole('navigation', { name: 'Workspace' });
   await expect(navigation).toBeVisible();
   await navigation.getByRole('link', { name: 'Settings', exact: true }).click();
+  await openSettingsSections(page);
   const key = page.getByLabel('Text API key', { exact: true });
   await expectCatalog(page, 'Workspace text model', '');
 
@@ -91,6 +95,7 @@ test('provider draft guards navigation and sign-out, then resets after discard o
   await discard;
   await expect(page).toHaveURL('/overview');
   await navigation.getByRole('link', { name: 'Settings', exact: true }).click();
+  await openSettingsSections(page);
   await expect(key).toHaveValue('');
   await expectCatalog(page, 'Workspace text model', '');
   expect((await (await page.request.get('/api/me/provider')).json()).workspaceApiKeyConfigured).toBe(false);
@@ -107,6 +112,7 @@ test('provider draft guards navigation and sign-out, then resets after discard o
   await navigation.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page).toHaveURL('/overview');
   await navigation.getByRole('link', { name: 'Settings', exact: true }).click();
+  await openSettingsSections(page);
 
   // Successful save replaces the baseline and clears the secret input, allowing
   // both navigation and sign-out without a stale dirty-state prompt.
@@ -118,6 +124,7 @@ test('provider draft guards navigation and sign-out, then resets after discard o
   await navigation.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page).toHaveURL('/overview');
   await navigation.getByRole('link', { name: 'Settings', exact: true }).click();
+  await openSettingsSections(page);
   await expectCatalog(page, 'Workspace text model', 'saved-model');
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page).toHaveURL('/auth');
@@ -139,6 +146,7 @@ test('confirmed provider save survives a failed refresh without resending creden
   const navigation = page.getByRole('navigation', { name: 'Workspace' });
   await expect(navigation).toBeVisible();
   await navigation.getByRole('link', { name: 'Settings', exact: true }).click();
+  await openSettingsSections(page);
   const key = page.getByLabel('Text API key', { exact: true });
   await expectCatalog(page, 'Workspace text model', '');
 
@@ -218,6 +226,7 @@ test('confirmed provider save survives a failed refresh without resending creden
   // A genuine authentication denial still clears the private shell.
   failRefresh = false;
   await navigation.getByRole('link', { name: 'Settings', exact: true }).click();
+  await openSettingsSections(page);
   await expectCatalog(page, 'Workspace text model', 'second-confirmed-model');
   await page.route('**/api/me', route => route.fulfill({ status: 401, json: { error: 'Session expired' } }));
   await fillCatalog(page, 'Workspace text model', 'saved-before-auth-expired');
@@ -226,7 +235,7 @@ test('confirmed provider save survives a failed refresh without resending creden
   await expect(navigation).toHaveCount(0);
 });
 
-test('provider save refresh preserves sibling drafts while updating untouched assistant fields', async ({ page }) => {
+test('provider save refresh preserves business drafts and updates the primary saved setup', async ({ page }) => {
   await page.goto('/auth');
   await page.getByLabel('Email').fill(`provider-siblings-${Date.now()}@example.invalid`);
   await page.getByLabel('Password', { exact: true }).fill('Synthetic-Presets-Password-1234');
@@ -248,47 +257,43 @@ test('provider save refresh preserves sibling drafts while updating untouched as
     engine: 'realtime', realtime_model: 'kataleptic-realtime-hd', realtime_voice: 'azure-gateway-voice',
   } })).ok()).toBe(true);
   await page.goto('/settings');
-  await expect(page.getByLabel('Realtime voice (optional)', { exact: true })).toHaveValue('azure-gateway-voice');
+  await openSettingsSections(page);
+  await expect(page.getByLabel('Current primary assistant setup')).toContainText('azure-gateway-voice');
   await page.getByLabel('Name', { exact: true }).fill('Unsaved business name');
   await page.getByLabel('Monday opening time', { exact: true }).fill('10:30');
   await page.getByLabel('Service 1 price', { exact: true }).fill('€99');
   await page.getByLabel('FAQ 1 answer', { exact: true }).fill('Unsaved parking answer');
   await page.getByLabel('Closure 1 reason', { exact: true }).fill('Unsaved closure reason');
-  await page.getByLabel('Agent name', { exact: true }).fill('Unsaved assistant name');
-  await page.getByLabel('Personality', { exact: true }).fill('Unsaved assistant personality');
 
   await page.getByLabel('Realtime provider', { exact: true }).selectOption('openai');
   await page.getByLabel('Realtime API key', { exact: true }).fill('synthetic-sibling-key');
   await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
   await expect(page.getByText('Provider settings saved.', { exact: false })).toBeVisible();
   // Wait for the sibling reload itself: untouched gateway voice adopts the
-  // server's provider-switch cleanup while edited assistant fields survive.
-  await expect(page.getByLabel('Realtime voice (optional)', { exact: true })).toHaveValue('');
+  // server's provider-switch cleanup while unsaved business fields survive.
+  await expect(page.getByLabel('Current primary assistant setup')).not.toContainText('azure-gateway-voice');
   await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Unsaved business name');
   await expect(page.getByLabel('Monday opening time', { exact: true })).toHaveValue('10:30');
   await expect(page.getByLabel('Service 1 price', { exact: true })).toHaveValue('€99');
   await expect(page.getByLabel('FAQ 1 answer', { exact: true })).toHaveValue('Unsaved parking answer');
   await expect(page.getByLabel('Closure 1 reason', { exact: true })).toHaveValue('Unsaved closure reason');
-  await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Unsaved assistant name');
-  await expect(page.getByLabel('Personality', { exact: true })).toHaveValue('Unsaved assistant personality');
   const unchanged = await (await page.request.get('/api/me/business')).json();
   expect(unchanged.name).toBe('Sibling baseline workshop');
   expect(JSON.parse(unchanged.services_json)[0].price).toBe('€40');
-  expect(unchanged.agent.agent_name).not.toBe('Unsaved assistant name');
+  expect(unchanged.agent.agent_name).toBe(business.agent.agent_name);
 
-  const savedAssistant = page.waitForResponse(response => response.url().endsWith(`/api/me/business/${business.id}/agent`) && response.request().method() === 'PUT');
+  const savedBusiness = page.waitForResponse(response => response.url().endsWith(`/api/me/business/${business.id}`) && response.request().method() === 'PUT');
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  expect((await savedAssistant).ok()).toBe(true);
+  expect((await savedBusiness).ok()).toBe(true);
   await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
   await page.reload();
+  await openSettingsSections(page);
   await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Unsaved business name');
   await expect(page.getByLabel('Monday opening time', { exact: true })).toHaveValue('10:30');
   await expect(page.getByLabel('Service 1 price', { exact: true })).toHaveValue('€99');
   await expect(page.getByLabel('FAQ 1 answer', { exact: true })).toHaveValue('Unsaved parking answer');
   await expect(page.getByLabel('Closure 1 reason', { exact: true })).toHaveValue('Unsaved closure reason');
-  await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Unsaved assistant name');
-  await expect(page.getByLabel('Personality', { exact: true })).toHaveValue('Unsaved assistant personality');
-  await expect(page.getByLabel('Realtime voice (optional)', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('Current primary assistant setup')).not.toContainText('azure-gateway-voice');
 });
 
 test('historical profile previews do not overwrite names and deletion reloads later entries', async ({ page }) => {
@@ -314,6 +319,7 @@ test('historical profile previews do not overwrite names and deletion reloads la
     return route.fulfill({json:{ok:true}});
   });
   await page.goto('/settings');
+  await openSettingsSections(page);
   const preview=page.locator('input[value="Historical preview"]');
   await expect(preview).toHaveAttribute('readonly','');
   await preview.focus();await page.getByRole('heading',{name:'Engine profiles'}).click();

@@ -246,7 +246,7 @@ export default function Widget() {
                 className="group flex h-28 w-28 items-center justify-center rounded-full bg-ring text-paper shadow-deep transition-transform hover:scale-105 active:scale-95"
                 aria-label="Start call"
               >
-                <PhoneIcon className="wobble h-10 w-10 [animation-play-state:paused] group-hover:[animation-play-state:running]" />
+                <PhoneIcon className="h-10 w-10" />
               </button>
             ) : (
               <button

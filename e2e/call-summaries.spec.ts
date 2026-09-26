@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, openSettingsSections } from './fixtures';
 import { fillCatalog } from './catalog-fields';
 
 test.beforeEach(async ({ page }) => {
@@ -14,6 +14,7 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
   await expect(page).toHaveURL('/overview');
   await page.goto('/settings');
+  await openSettingsSections(page);
 });
 
 test('workspace summary model is saved separately from voice profiles; custom keys are write-only and removable', async ({ page }) => {

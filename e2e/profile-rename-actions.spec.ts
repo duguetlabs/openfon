@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, openSettingsSections } from './fixtures';
 import type { Page, Route } from '@playwright/test';
 
 async function setup(page: Page, count = 1) {
@@ -21,6 +21,7 @@ async function setup(page: Page, count = 1) {
     expect(response.ok()).toBe(true); profiles.push(await response.json());
   }
   await page.goto('/settings');
+  await openSettingsSections(page);
   await expect(page.getByRole('button', { name: 'Apply', exact: true })).toHaveCount(count);
   return { business, profiles };
 }
@@ -123,7 +124,9 @@ test('failed rename releases actions with error and confirmed baseline, then ret
     await expect(input).toHaveValue('Newer draft');
     await input.blur(); await expect.poll(() => gate.held.length).toBe(3); await expectGated(page, 1);
     await gate.settle(2); await expect(rows(page).first().getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
-    await page.reload(); await expect(rows(page).first().locator('input')).toHaveValue('Newer draft');
+    await page.reload();
+    await openSettingsSections(page);
+    await expect(rows(page).first().locator('input')).toHaveValue('Newer draft');
   } finally { await gate.dispose(); }
 });
 

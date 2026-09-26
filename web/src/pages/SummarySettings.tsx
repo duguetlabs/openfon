@@ -43,9 +43,9 @@ export default function SummarySettings() {
   const selected = draft?.mode !== 'custom' ? draft?.mode : presets.find(p => p.url === draft.baseUrl)?.id || 'custom';
   const options = draft?.baseUrl === presets[0].url ? catalog?.models.filter(m => m.kind === 'text') || choices(['llama-3.3-70b', 'gpt-5.4-mini'])
     : draft?.baseUrl === presets[1].url ? choices(['gpt-4.1-mini', 'gpt-4o-mini']) : [];
-  return <section id="call-summaries" aria-label="Call summaries">
+  return <section id="call-summaries" className="settings-section" aria-label="Call summaries">
     <h2 className="font-display text-2xl mb-3">Call summaries</h2>
-    <p className="text-sm text-ink-soft mb-4">Summaries run after a call. Choose one model for this workspace, independently of the voice, conversation engine and Pipeline reply model.</p>
+    <p className="text-sm text-ink-soft mb-4">Turn completed conversations into summaries. This workspace-wide setting is separate from the voice your callers hear and the model that answers them.</p>
     {error && <p role="alert" className="text-rose mb-3">{error}</p>}
     {message && <p role="status" className="mb-3">{message}</p>}
     {error && <Button type="button" variant="ghost" disabled={busy} onClick={() => void run(false)}>Reload summary settings (discard edits)</Button>}

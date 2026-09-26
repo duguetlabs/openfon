@@ -1,7 +1,8 @@
 import SummarySettings from './SummarySettings';
 import ProviderSettings from './ProviderSettings';
 import { useEffect, useRef, useState } from 'react';
-import { api, type Agent, type Business, type EngineProfile, type VoiceCatalog } from '../api';
+import { Link } from 'react-router-dom';
+import { api, type Agent, type Business, type EngineProfile } from '../api';
 import { useSession } from '../App';
 import {
   readClosureRows,
@@ -15,7 +16,7 @@ import {
   type HourRow,
 } from '../row-arrays';
 import { readServiceRows, serializeServiceRows, type ServiceRow } from '../service-rows';
-import { Button, Card, Field, FieldLabel, SectionTitle, TextArea, LANGUAGES, inputClassSm } from '../ui';
+import { Button, Card, Field, FieldLabel, SectionTitle, TextArea, inputClassSm } from '../ui';
 import { ListEditor } from './Onboarding';
 
 // A provider-only save refreshes the shared session. Adopt server changes only
@@ -49,12 +50,6 @@ function businessPayload(business: Business, rows: Pick<ReturnType<typeof settin
   };
 }
 
-function assistantPayload(agent: Agent) {
-  const { llm_base_url: _url, llm_api_key: _key, apiKeyConfigured: _configured,
-    workspaceApiKeyConfigured: _workspaceConfigured, ...assistant } = agent;
-  return assistant;
-}
-
 export default function Settings() {
   const { business, refresh } = useSession();
   const [biz, setBiz] = useState<Business | null>(null);
@@ -73,7 +68,6 @@ export default function Settings() {
   const [profileRefreshPending, setProfileRefreshPending] = useState(false);
   const profileRefreshKind = useRef<'apply' | 'delete'>('apply');
   const profileListGeneration = useRef(0);
-  const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog | null>(null);
   const [newProfileName, setNewProfileName] = useState('');
   const newProfileNameVersion = useRef(0);
   const [profileRenamePending, setProfileRenamePending] = useState(false);
@@ -139,7 +133,6 @@ export default function Settings() {
       void request.then(applied => {
         if (!active || !applied || settingsRead.current !== request) return;
         void loadProfiles(business.id).catch(() => {});
-        void api.voices().then(setVoiceCatalog).catch(() => {});
       }).catch(() => {}); // readSettings owns only its still-current load failure.
     }
     return () => { active = false; };
@@ -211,11 +204,9 @@ export default function Settings() {
   </div>;
 
   const workspacePayload = businessPayload(biz, { hours, services, faqs, closures });
-  const agentPayload = assistantPayload(agent);
   const baseline = loaded.current;
   const businessDirty = !baseline || JSON.stringify(workspacePayload) !== JSON.stringify(businessPayload(baseline.business, baseline));
-  const assistantDirty = !baseline?.agent || JSON.stringify(agentPayload) !== JSON.stringify(assistantPayload(baseline.agent));
-  const dirty = businessDirty || assistantDirty;
+  const dirty = businessDirty;
 
   async function retryRefresh() {
     const operation = beginSaving('settings');
@@ -239,7 +230,7 @@ export default function Settings() {
     mutationGeneration.current++;
     setError('');
     setSaved('');
-    let stage: 'business' | 'assistant' | 'refresh' = 'business';
+    let stage: 'business' | 'refresh' = 'business';
     try {
       if (businessDirty) {
         await api.updateBusiness(biz!.id, workspacePayload);
@@ -249,12 +240,6 @@ export default function Settings() {
         loaded.current = { ...loaded.current!,
           business: { ...loaded.current!.business, ...workspacePayload },
           hours, services, faqs, closures };
-      }
-      stage = 'assistant';
-      if (assistantDirty) {
-        await api.updateAgent(biz!.id, agentPayload);
-        mutationGeneration.current++;
-        loaded.current = { ...loaded.current!, agent: { ...agent! } };
       }
       stage = 'refresh';
       await refresh();
@@ -266,9 +251,8 @@ export default function Settings() {
         setRefreshFailed(true);
         setSaved('Changes saved.');
       }
-      setError(stage === 'assistant' ? `Business changes were saved. Assistant save failed: ${detail}`
-        : stage === 'refresh' ? `Business and assistant changes were saved, but refreshing the page data failed: ${detail}`
-        : `Business save failed; assistant changes were not submitted: ${detail}`);
+      setError(stage === 'refresh' ? `Business changes were saved, but refreshing the page data failed: ${detail}`
+        : `Business save failed: ${detail}`);
     } finally { finishSaving(operation); }
   }
 
@@ -351,19 +335,20 @@ export default function Settings() {
   const profileApplyReason = 'Save or revert your engine, model, language, and voice edits before applying a profile.';
 
   const set = (patch: Partial<Business>) => setBiz({ ...biz, ...patch });
-  const setA = (patch: Partial<Agent>) => setAgent({ ...agent, ...patch });
 
   return (
-    <div className="mx-auto max-w-2xl space-y-10">
+    <div className="settings-page space-y-8">
       <div className="rise">
         <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-ink-faint">Configuration</p>
         <h1 className="mt-1 font-display text-4xl font-semibold tracking-tight text-ink">Settings</h1>
-        <div className="callline-accent mt-3 w-16" />
+        <p className="mt-3 text-ink-soft">Shared business details, provider connections, and after-call summaries.</p>
       </div>
-      <ProviderSettings onSaved={refresh} />
-      <SummarySettings />
-      <section className="rise">
-        <SectionTitle sub="The facts your agent answers from.">Business</SectionTitle>
+      <nav className="settings-nav" aria-label="Settings sections">
+        <a href="#business-details">Business</a><a href="#providers">AI connections</a><a href="#call-summaries">Call summaries</a><a href="#saved-voice-setups">Saved voice setups</a>
+      </nav>
+      <Card className="settings-scope-note"><div><h2 className="font-semibold">Looking for an assistant’s voice or instructions?</h2><p className="text-sm text-ink-soft mt-1">Edit them in Assistants. Each assistant has its own personality, language, voice, and conversation engine.</p></div><Link className="studio-link" to="/assistants">Manage assistants →</Link></Card>
+      <section id="business-details" className="settings-section rise">
+        <SectionTitle sub="Shared facts used by your assistants. Changes are saved separately from AI connections and summaries.">Business</SectionTitle>
         <Card className="space-y-4">
           <Field label="Name" value={biz.name} onChange={(e) => set({ name: e.target.value })} />
           <TextArea label="Description" value={biz.description} onChange={(e) => set({ description: e.target.value })} />
@@ -491,62 +476,30 @@ export default function Settings() {
         </Card>
       </section>
 
-      <section className="rise rise-1">
-        <SectionTitle sub="These legacy settings apply to your first assistant. Manage additional assistants in the Assistants menu.">Primary assistant</SectionTitle>
-        <Card className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Agent name" value={agent.agent_name} onChange={(e) => setA({ agent_name: e.target.value })} />
-            <label className="block">
-              <FieldLabel>Language</FieldLabel>
-              <select
-                className="w-full rounded-[10px] border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-ink outline-none focus:border-iris focus:ring-[3px] focus:ring-iris/15"
-                value={agent.language}
-                onChange={(e) => setA({ language: e.target.value })}
-              >
-                {LANGUAGES.map(([code, name]) => (
-                  <option key={code} value={code}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <Field label="Personality" value={agent.persona} onChange={(e) => setA({ persona: e.target.value })} />
-          <TextArea label="Greeting" value={agent.greeting} onChange={(e) => setA({ greeting: e.target.value })} placeholder="Leave empty for the default greeting." />
-          <Field
-            label="Voice (Azure TTS)"
-            value={agent.voice}
-            onChange={(e) => setA({ voice: e.target.value })}
-            list="azure-voice-options"
-            hint="Default is en-US-AvaMultilingualNeural, one natural voice for all languages. A custom voice applies to your default language only."
-          />
-          <datalist id="azure-voice-options">
-            {(voiceCatalog?.azure ?? []).map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.label}
-              </option>
-            ))}
-          </datalist>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" className="accent-iris" checked={!!agent.take_messages} onChange={(e) => setA({ take_messages: e.target.checked ? 1 : 0 })} />
-            Take messages when the agent can't help
-          </label>
-          <TextArea
-            label="Extra instructions"
-            value={agent.custom_instructions}
-            onChange={(e) => setA({ custom_instructions: e.target.value })}
-            placeholder="Anything else your receptionist should know or do."
-          />
-        </Card>
-      </section>
-
-      <section className="rise rise-2">
-        <SectionTitle sub="Saved combinations of engine, model, language, and voices — apply one to switch the whole setup at once.">
+      <div className="settings-save-bar">
+        <p className="hidden font-mono text-[11px] uppercase tracking-[0.14em] text-ink-faint sm:block">
+          Business changes apply on the next call
+        </p>
+        <div className="flex items-center gap-3">
+          {saved && <span role="status" className="text-sm font-semibold text-ok">{saved}</span>}
+          {displayError && <span role="alert" className="text-sm text-rose">{displayError}</span>}
+          {profileRefreshPending && <Button variant="ghost" disabled={saving} onClick={() => { const operation = beginSaving('settings'); if (!operation) return; void refreshProfileDisplay().finally(() => finishSaving(operation)); }}>Retry profile refresh</Button>}
+          {settingsRefreshNeeded && <Button variant="ghost" disabled={saving} onClick={() => void retryRefresh()}>Retry settings refresh</Button>}
+          <Button disabled={saving || profileRefreshPending || !dirty} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</Button>
+        </div>
+      </div>
+      <ProviderSettings onSaved={refresh} />
+      <SummarySettings />
+      <details id="saved-voice-setups" className="settings-advanced">
+        <summary>Saved voice setups <span className="text-sm text-ink-soft">· primary assistant</span></summary>
+        <section className="mt-5">
+        <SectionTitle sub="Existing engine profiles are kept here for your primary assistant. Applying a profile replaces its engine, model, language, and voice; other assistants are unchanged.">
           Engine profiles
         </SectionTitle>
         <Card className="space-y-3">
+          <p aria-label="Current primary assistant setup" className="text-sm text-ink-soft">Current saved setup for {agent.agent_name}: {agent.engine} · {(agent.engine === 'realtime' ? agent.realtime_model : agent.llm_model) || 'default model'} · {agent.language} · {(agent.engine === 'realtime' ? agent.realtime_voice : agent.voice) || 'default voice'}. <Link className="studio-link" to="/assistants">Edit in Assistants →</Link></p>
           <p className="text-xs text-ink-soft">Up to 64 profiles are shown. Long historical values are previews and cannot be renamed here; applying uses the full saved configuration. Delete unused profiles to reveal more.</p>
-          {profiles.length === 0 && <p className="text-sm text-ink-soft">No profiles yet. Configure the engine below, then save it here under a name.</p>}
+          {profiles.length === 0 && <p className="text-sm text-ink-soft">No profiles yet. Configure your primary assistant in Assistants, then return here to save its voice setup.</p>}
           {profileDraftDirty && profiles.length > 0 && <p className="text-sm text-ink-soft">{profileApplyReason}</p>}
           <p className="text-xs text-ink-soft">If you click Apply or Delete profile while a name is saving, click it again after saving finishes.</p>
           {profileRenamePending && <p role="status" className="text-sm text-ink-soft">Saving profile names…</p>}
@@ -554,6 +507,7 @@ export default function Settings() {
             <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-wash-iris/50 px-3 py-2">
               <input
                 className="min-w-32 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-ink outline-none hover:border-line-strong focus:border-iris focus:bg-surface focus:ring-[3px] focus:ring-iris/15"
+                aria-label={`Profile name: ${profileSavedNames.current.get(p.id) || p.name}`}
                 value={p.name}
                 readOnly={Boolean(p.preview_only) || saving || profileRefreshPending}
                 onFocus={() => { if (!profileSavedNames.current.has(p.id)) profileSavedNames.current.set(p.id, p.name); }}
@@ -588,7 +542,8 @@ export default function Settings() {
           <div className="flex gap-2 pt-1">
             <input
               className={`${inputClassSm} flex-1 px-3.5 py-2`}
-              placeholder='Save current setup as… e.g. "Realtime HD English (Emma)"'
+              aria-label="New profile name"
+              placeholder='Save current setup as… e.g. "German front desk"'
               value={newProfileName}
               onChange={(e) => { newProfileNameVersion.current++; setNewProfileName(e.target.value); }}
             />
@@ -602,99 +557,7 @@ export default function Settings() {
           </div>
         </Card>
       </section>
-
-      <section className="rise rise-2">
-        <SectionTitle sub="Provider endpoint and credentials are shared by all assistants. Engine and voice settings below apply to your primary assistant. OpenFon speaks the OpenAI API dialect — point it at Kataleptic, OpenAI, Groq, Ollama, or your own server. Empty model and endpoint fields use instance defaults; saved API keys stay until explicitly replaced or removed.">
-          AI provider
-        </SectionTitle>
-        <Card className="space-y-4">
-          <div>
-            <FieldLabel>Voice engine</FieldLabel>
-            <div className="mt-2 space-y-2">
-              <label className="flex items-start gap-2.5 text-sm">
-                <input
-                  type="radio"
-                  className="mt-1 accent-iris"
-                  checked={agent.engine !== 'realtime'}
-                  onChange={() => setA({ engine: 'pipeline' })}
-                />
-                <span>
-                  <strong>Pipeline</strong> <span className="text-ink-soft">— transcribe → think → speak. Uses separate transcription, text generation, and speech synthesis settings.</span>
-                </span>
-              </label>
-              <label className="flex items-start gap-2.5 text-sm">
-                <input
-                  type="radio"
-                  className="mt-1 accent-iris"
-                  checked={agent.engine === 'realtime'}
-                  onChange={() => setA({ engine: 'realtime' })}
-                />
-                <span>
-                  <strong>Realtime</strong>{' '}
-                  <span className="text-ink-soft">
-                    — streams audio both ways and supports interruptions. Requires a configured realtime provider.
-                  </span>
-                </span>
-              </label>
-            </div>
-            {agent.engine === 'realtime' && (
-              <label className="mt-4 block rounded-xl border border-line bg-wash-iris/40 p-4">
-                <FieldLabel>Realtime model</FieldLabel>
-                <select
-                  className="w-full rounded-[10px] border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-ink outline-none focus:border-iris focus:ring-[3px] focus:ring-iris/15"
-                  value={agent.realtime_model}
-                  onChange={(e) => setA({ realtime_model: e.target.value })}
-                >
-                  <option value="">Instance default</option>
-                  <option value="kataleptic-realtime-hd">kataleptic-realtime-hd — HD voices (Azure Voice Live), fastest</option>
-                  <option value="gpt-realtime-2">gpt-realtime-2 — native speech-to-speech with built-in reasoning; not EU-hosted</option>
-                  <option value="gpt-live-1">gpt-live-1 — full-duplex speech-to-speech; listens while it talks</option>
-                </select>
-                <span className="mt-1.5 block text-xs leading-relaxed text-ink-soft">
-                  Takes effect on the next call — handy for comparing tiers back-to-back.
-                </span>
-                <div className="mt-3">
-                  <Field
-                    label="Realtime voice (optional)"
-                    value={agent.realtime_voice}
-                    onChange={(e) => setA({ realtime_voice: e.target.value })}
-                    placeholder="Tier default"
-                    list="rt-voice-options"
-                    hint="Pick from the chosen tier's live catalog or type any voice id. Empty = tier default (HD voices follow the caller's language automatically)."
-                  />
-                  <datalist id="rt-voice-options">
-                    {(voiceCatalog
-                      ? agent.realtime_model.startsWith('gpt-realtime') || agent.realtime_model === 'gpt-live-1'
-                        ? voiceCatalog.native
-                        : voiceCatalog.azure
-                      : []
-                    ).map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.label}
-                      </option>
-                    ))}
-                  </datalist>
-                </div>
-              </label>
-            )}
-          </div>
-          {agent.engine === 'pipeline' && <Field label="Assistant text model override" value={agent.llm_model} onChange={e => setA({ llm_model: e.target.value })} hint="Pipeline replies only when independent summaries are configured. Blank uses the workspace text model above." />}
-
-        </Card>
-      </section>
-
-      <div className="rise rise-3 sticky bottom-4 flex items-center justify-between gap-4 rounded-xl border border-line bg-surface/95 px-4 py-3 shadow-raise backdrop-blur-md">
-        <p className="hidden font-mono text-[11px] uppercase tracking-[0.14em] text-ink-faint sm:block">
-          Changes apply on the next call
-        </p>
-        <div className="flex items-center gap-3">
-          {saved && <span role="status" className="text-sm font-semibold text-ok">{saved}</span>}
-          {displayError && <span role="alert" className="text-sm text-rose">{displayError}</span>}
-          {profileRefreshPending && <Button variant="ghost" disabled={saving} onClick={() => { const operation = beginSaving('settings'); if (!operation) return; void refreshProfileDisplay().finally(() => finishSaving(operation)); }}>Retry profile refresh</Button>}
-          {settingsRefreshNeeded && <Button variant="ghost" disabled={saving} onClick={() => void retryRefresh()}>Retry settings refresh</Button>}
-          <Button disabled={saving || profileRefreshPending || !dirty} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</Button>
-        </div>
-      </div>
+      </details>
     </div>
   );
 }
