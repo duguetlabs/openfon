@@ -19,6 +19,11 @@ export interface RealtimeConfig {
 export const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime';
 export const KATALEPTIC_HD_MODEL = 'kataleptic-realtime-hd';
 export const KATALEPTIC_REALTIME_URL = 'wss://api.kataleptic.com/v1/realtime';
+/** Full-duplex GPT-Live. It speaks its own protocol on its own endpoint; see src/gpt-live.ts. */
+export const GPT_LIVE_MODEL = 'gpt-live-1';
+export function isGptLiveModel(model: string): boolean {
+  return model === GPT_LIVE_MODEL;
+}
 
 // Kataleptic retired its cascade tier (`kataleptic-realtime`, or a chat model
 // id on /v1/realtime) with its self-hosted models: those return `model_retired`.
@@ -26,7 +31,7 @@ export const KATALEPTIC_REALTIME_URL = 'wss://api.kataleptic.com/v1/realtime';
 // Another gateway speaking the same protocol keeps its own models.
 const KATALEPTIC_HOST = 'api.kataleptic.com';
 export function gatewayRealtimeModel(model: string): boolean {
-  return model === KATALEPTIC_HD_MODEL || model.startsWith('gpt-realtime');
+  return model === KATALEPTIC_HD_MODEL || model.startsWith('gpt-realtime') || isGptLiveModel(model);
 }
 function katalepticGateway(config: Pick<RealtimeConfig, 'protocol' | 'baseUrl'>): boolean {
   if (config.protocol !== 'gateway') return false;
@@ -72,6 +77,11 @@ export function resolveRealtime(env: Env & { REALTIME_PROVIDER?: RealtimeProvide
   if (provider === 'openai' && !/^gpt-(realtime|4o.*realtime)/.test(model)) {
     throw new LlmConfigError('Choose an OpenAI realtime model for the OpenAI provider.');
   }
+  // GPT-Live is wired to the gateway's /v1/live/sessions contract only. A custom
+  // OpenAI-protocol endpoint has no such route that we know of.
+  if (isGptLiveModel(model) && protocol !== 'gateway') {
+    throw new LlmConfigError('GPT-Live is available only through the Kataleptic gateway.');
+  }
   return { provider, baseUrl, apiKey, model, protocol };
 }
 
@@ -97,10 +107,28 @@ export function realtimeConnection(config: RealtimeConfig): { url: string; heade
   return { url: url.href, headers: { Upgrade: 'websocket', Authorization: `Bearer ${config.apiKey}` } };
 }
 
+// GPT-Live has no `?model=` and no `/realtime` path: the gateway serves it at
+// `<base>/live/sessions`, derived from the configured realtime URL so an
+// instance's own gateway host and route parameters carry over. The model is
+// named in `session.start`.
+export function gptLiveConnection(config: RealtimeConfig): { url: string; headers: Record<string, string> } {
+  const url = new URL(config.baseUrl);
+  url.pathname = `${url.pathname.replace(/\/+$/, '').replace(/\/realtime$/, '')}/live/sessions`;
+  url.searchParams.delete('model');
+  url.searchParams.delete('token');
+  url.searchParams.delete('api_key');
+  // resolveRealtime admits only ws(s); map each explicitly rather than
+  // defaulting anything else to plaintext with a bearer key attached.
+  if (url.protocol === 'wss:') url.protocol = 'https:';
+  else if (url.protocol === 'ws:') url.protocol = 'http:';
+  else throw new LlmConfigError('Realtime endpoint must be an absolute WebSocket URL.');
+  return { url: url.href, headers: { Upgrade: 'websocket', Authorization: `Bearer ${config.apiKey}` } };
+}
+
 export function realtimeCapabilities(config: RealtimeConfig) {
   const native = config.protocol === 'openai';
   return {
-    engineGreeting: native || config.model.startsWith('gpt-realtime'),
+    engineGreeting: native || config.model.startsWith('gpt-realtime') || isGptLiveModel(config.model),
     managedVoice: !native && config.model === KATALEPTIC_HD_MODEL,
     transcriptionModel: native || config.model.startsWith('gpt-realtime') ? 'whisper-1' : null,
   };

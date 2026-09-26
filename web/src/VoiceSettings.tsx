@@ -21,7 +21,9 @@ export const TTS_MODELS = choices(['gpt-4o-mini-tts', 'tts-1', 'tts-1-hd']);
 export const TTS_VOICES = choices(['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse', 'marin', 'cedar']);
 export const TTS_LEGACY_VOICES = TTS_VOICES.filter(v => !['ballad', 'verse', 'marin', 'cedar'].includes(v.id));
 export const AZURE_VOICES = choices(['en-US-AvaMultilingualNeural', 'de-DE-SeraphinaMultilingualNeural', 'es-ES-ArabellaMultilingualNeural', 'fr-FR-VivienneMultilingualNeural', 'it-IT-AlessioMultilingualNeural']);
-const KATALEPTIC_TIERS = ['kataleptic-realtime-hd', 'gpt-realtime-2', 'gpt-realtime-2.1', 'gpt-realtime-2.1-mini'];
+const KATALEPTIC_TIERS = ['kataleptic-realtime-hd', 'gpt-realtime-2', 'gpt-realtime-2.1', 'gpt-realtime-2.1-mini', 'gpt-live-1'];
+// The ten voices GPT-Live accepts at session start; it has no voice catalog endpoint.
+const GPT_LIVE_VOICES = choices(['marin', 'cedar', 'alloy', 'coral', 'shimmer', 'verse', 'ash', 'sage', 'ballad', 'echo']);
 const LANGUAGES = [{ id: 'en', label: 'English' }, { id: 'de', label: 'Deutsch' }, { id: 'es', label: 'Español' }, { id: 'fr', label: 'Français' }, { id: 'it', label: 'Italiano' }, { id: 'nl', label: 'Nederlands' }, { id: 'sv', label: 'Svenska' }, { id: 'da', label: 'Dansk' }, { id: 'fi', label: 'Suomi' }, { id: 'ru', label: 'Русский' }];
 
 // Native selects remain keyboard accessible; explicit custom mode preserves IDs
@@ -61,7 +63,7 @@ export function AssistantVoiceSettings({ assistant: a, onChange }: { assistant: 
   const kataleptic = realtimeProvider === 'kataleptic';
   const effectiveModel = a.realtime_model || provider?.effective_realtime_model || '';
   // Kataleptic serves any retired tier (its old cascade) on HD; show what runs.
-  const family = kataleptic ? effectiveModel.startsWith('gpt-realtime') ? 'native' : 'hd' : realtimeProvider === 'openai' ? 'native' : 'custom';
+  const family = kataleptic ? effectiveModel === 'gpt-live-1' ? 'live' : effectiveModel.startsWith('gpt-realtime') ? 'native' : 'hd' : realtimeProvider === 'openai' ? 'native' : 'custom';
   const selected = a.engine === 'pipeline' ? 'pipeline' : !a.realtime_model ? 'default' : kataleptic ? KATALEPTIC_TIERS.includes(a.realtime_model) ? a.realtime_model : 'kataleptic-realtime-hd' : 'custom';
   const textModels = catalog?.models.filter(m => m.kind === 'text') || choices(['llama-3.3-70b', 'gpt-5.4-mini']);
   const speech = provider?.effective_tts_provider || 'unknown';
@@ -78,7 +80,7 @@ export function AssistantVoiceSettings({ assistant: a, onChange }: { assistant: 
       else if (value === 'custom') onChange({ engine: 'realtime', realtime_model: 'gpt-realtime', realtime_voice: '' });
       else onChange({ engine: 'realtime', realtime_model: value, realtime_voice: '' });
     }}><option value="default">Workspace realtime default{provider?.effective_realtime_model ? ` — ${provider.effective_realtime_model}` : ''}</option>
-      {kataleptic && <><option value="kataleptic-realtime-hd">HD — Azure Voice Live</option><option value="gpt-realtime-2">Native — GPT Realtime 2</option><option value="gpt-realtime-2.1">Native — GPT Realtime 2.1</option><option value="gpt-realtime-2.1-mini">Native Mini — GPT Realtime 2.1 Mini</option></>}
+      {kataleptic && <><option value="kataleptic-realtime-hd">HD — Azure Voice Live</option><option value="gpt-realtime-2">Native — GPT Realtime 2</option><option value="gpt-realtime-2.1">Native — GPT Realtime 2.1</option><option value="gpt-realtime-2.1-mini">Native Mini — GPT Realtime 2.1 Mini</option><option value="gpt-live-1">Full-duplex — GPT-Live 1</option></>}
       {!kataleptic && <option value="custom">Custom realtime model</option>}<option value="pipeline">Custom Pipeline — separate transcription, language model and speech</option>
     </select></label>
     {a.engine === 'pipeline' ? <>
@@ -87,8 +89,8 @@ export function AssistantVoiceSettings({ assistant: a, onChange }: { assistant: 
       {speech === 'browser' ? <div className="flex items-center gap-2"><p className="studio-muted">Browser speech uses an installed voice matching the language.</p>{preview}</div> : <CatalogSelect key={`${speech}:${provider?.tts_model}`} label="Speech voice" value={a.voice} onChange={voice => onChange({ voice })} options={voiceOptions(speechVoices, speech === 'azure')} showGender trailing={preview} defaultLabel={speech === 'openai' || speech === 'custom' ? 'Provider default — alloy' : 'Automatic language-matched voice'} />}
     </> : <>
       {selected === 'custom' && <CatalogSelect key={realtimeProvider} label="Realtime model" value={a.realtime_model} onChange={realtime_model => onChange({ realtime_model })} options={choices(['gpt-realtime', 'gpt-realtime-mini'])} />}
-      <p className="studio-muted">{family === 'hd' ? 'Azure Voice Live manages recognition and the conversation model. Choose an Azure voice.' : family === 'native' ? 'Native speech-to-speech. The conversation model is built in; voices are multilingual.' : 'Custom realtime uses the OpenAI GA protocol. Model and voice IDs depend on your provider.'}</p>
-      <CatalogSelect key={`${realtimeProvider}:${effectiveModel}`} label="Realtime voice" value={a.realtime_voice} onChange={realtime_voice => onChange({ realtime_voice })} showGender trailing={preview} options={voiceOptions(family === 'hd' ? AZURE_VOICES : family === 'native' ? catalog?.voices.native || choices(['marin', 'cedar', 'alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse']) : [], family === 'hd')} />
+      <p className="studio-muted">{family === 'hd' ? 'Azure Voice Live manages recognition and the conversation model. Choose an Azure voice.' : family === 'native' ? 'Native speech-to-speech. The conversation model is built in; voices are multilingual.' : family === 'live' ? 'Full-duplex speech-to-speech: listens and talks at the same time, and handles interruptions itself. Tool calls such as hanging up go through a separate text model. Voices are multilingual.' : 'Custom realtime uses the OpenAI GA protocol. Model and voice IDs depend on your provider.'}</p>
+      <CatalogSelect key={`${realtimeProvider}:${effectiveModel}`} label="Realtime voice" value={a.realtime_voice} onChange={realtime_voice => onChange({ realtime_voice })} showGender trailing={preview} options={voiceOptions(family === 'hd' ? AZURE_VOICES : family === 'live' ? GPT_LIVE_VOICES : family === 'native' ? catalog?.voices.native || choices(['marin', 'cedar', 'alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse']) : [], family === 'hd')} />
     </>}
     <p className="studio-muted">{speech === 'browser' && a.engine === 'pipeline' ? 'Local AI voice sample.' : 'AI samples preload for the selected voice. Provider charges may apply.'} {!(speech === 'browser' && a.engine === 'pipeline') && '♀ Female · ♂ Male · ◇ Gender unspecified by provider.'}</p>
     {a.engine === 'pipeline' && <CatalogSelect key={provider?.baseUrl} label="Language model" value={a.llm_model} onChange={llm_model => onChange({ llm_model })} options={provider?.baseUrl?.startsWith('https://api.kataleptic.com/') ? textModels : provider?.baseUrl === 'https://api.openai.com/v1' ? choices(['gpt-4.1-mini', 'gpt-4o-mini']) : []} defaultLabel={`Workspace default${provider?.effective_text_model ? ` — ${provider.effective_text_model}` : ''}`} hint="Generates Pipeline conversational replies. Configure post-call summaries separately in workspace settings." />}

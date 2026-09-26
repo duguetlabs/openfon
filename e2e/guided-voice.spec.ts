@@ -95,7 +95,7 @@ test('guided Kataleptic tiers show matching voices and preserve unknown saved va
   await engine.selectOption('kataleptic-realtime-hd');
   await expectCatalog(page, 'Realtime voice', '');
   await page.getByLabel('Realtime voice', { exact: true }).selectOption('de-DE-SeraphinaMultilingualNeural');
-  for (const model of ['gpt-realtime-2','gpt-realtime-2.1','gpt-realtime-2.1-mini']) {
+  for (const model of ['gpt-realtime-2','gpt-realtime-2.1','gpt-realtime-2.1-mini','gpt-live-1']) {
     await engine.selectOption(model);
     await expect(page.getByLabel('Realtime voice', { exact: true })).toHaveValue('');
     await expect(page.getByLabel('Custom realtime voice', { exact: true })).toHaveCount(0);

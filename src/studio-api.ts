@@ -1929,7 +1929,7 @@ export function registerStudioApi(app: StudioApp): void {
       for (const table of ['assistants', 'agent_settings']) {
         statements.push(c.env.DB.prepare(
           `UPDATE ${table} SET realtime_model='' WHERE business_id=?
-           AND (realtime_model LIKE 'kataleptic-%' OR realtime_model='gpt-realtime-2')`
+           AND (realtime_model LIKE 'kataleptic-%' OR realtime_model='gpt-realtime-2' OR realtime_model='gpt-live-1')`
         ).bind(workspace.id));
         statements.push(c.env.DB.prepare(
           `UPDATE ${table} SET realtime_voice='' WHERE business_id=?

@@ -1,12 +1,13 @@
 import { fetchProviderJson } from './provider-response';
 import { OPENAI_REALTIME_VOICES } from './provider-settings';
 import { RETIRED_KATALEPTIC_CHAT_MODELS } from './providers';
+import { GPT_LIVE_MODEL, isGptLiveModel } from './realtime-providers';
 
 type Option = { id: string; label: string };
 type Model = Option & { kind: 'text' | 'transcription' | 'realtime' };
 const options = (ids: string[]): Option[] => ids.map(id => ({ id, label: id }));
 const fallbackModels: Model[] = [
-  ...['kataleptic-realtime-hd', 'gpt-realtime-2', 'gpt-realtime-2.1', 'gpt-realtime-2.1-mini'].map(id => ({ id, label: id, kind: 'realtime' as const })),
+  ...['kataleptic-realtime-hd', 'gpt-realtime-2', 'gpt-realtime-2.1', 'gpt-realtime-2.1-mini', GPT_LIVE_MODEL].map(id => ({ id, label: id, kind: 'realtime' as const })),
   ...['llama-3.3-70b', 'gpt-5.4-mini'].map(id => ({ id, label: id, kind: 'text' as const })),
   ...['gpt-transcribe', 'gpt-4o-transcribe', 'gpt-4o-transcribe-diarize'].map(id => ({ id, label: id, kind: 'transcription' as const })),
 ];
@@ -44,7 +45,7 @@ export function providerCatalog(): Promise<Catalog> {
         if (!validId(m.id) || m.id.includes('/') || seen.has(m.id) || RETIRED.has(m.id)) continue;
         const inputs = m.architecture?.input_modalities, outputs = m.architecture?.output_modalities;
         if (!Array.isArray(inputs) || !Array.isArray(outputs)) continue;
-        const kind = m.id.includes('realtime') ? 'realtime' : inputs.includes('audio') && outputs.includes('text') && !m.id.endsWith('-stream')
+        const kind = m.id.includes('realtime') || isGptLiveModel(m.id) ? 'realtime' : inputs.includes('audio') && outputs.includes('text') && !m.id.endsWith('-stream')
           ? 'transcription' : inputs.includes('text') && outputs.includes('text') && !outputs.includes('audio') ? 'text' : null;
         if (!kind) continue;
         seen.add(m.id); parsed.push({ id: m.id, label: typeof m.name === 'string' && m.name.length <= 256 ? m.name : m.id, kind });

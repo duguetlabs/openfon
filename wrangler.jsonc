@@ -49,6 +49,9 @@
     // "gpt-realtime-*" tiers are native speech-to-speech. Kataleptic retired
     // its cascade tier (kataleptic-realtime, or a chat model id here).
     // Per-business override in Settings.
-    "REALTIME_MODEL": "kataleptic-realtime-hd"
+    "REALTIME_MODEL": "kataleptic-realtime-hd",
+    // gpt-live-1 (full-duplex) delegates tool calls such as end_call to this
+    // Kataleptic chat model. Only used when an assistant selects gpt-live-1.
+    "GPT_LIVE_DELEGATION_MODEL": "gpt-5.4-mini"
   }
 }

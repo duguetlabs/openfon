@@ -36,6 +36,8 @@ export interface Env {
   REALTIME_BASE_URL: string;
   REALTIME_MODEL: string;
   REALTIME_API_KEY?: string; // falls back to DEFAULT_LLM_API_KEY
+  /** Kataleptic chat model that answers GPT-Live delegations (tools); default gpt-5.4-mini. */
+  GPT_LIVE_DELEGATION_MODEL?: string;
 }
 
 export interface Business {

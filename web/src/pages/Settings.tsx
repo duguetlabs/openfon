@@ -648,6 +648,7 @@ export default function Settings() {
                   <option value="">Instance default</option>
                   <option value="kataleptic-realtime-hd">kataleptic-realtime-hd — HD voices (Azure Voice Live), fastest</option>
                   <option value="gpt-realtime-2">gpt-realtime-2 — native speech-to-speech with built-in reasoning; not EU-hosted</option>
+                  <option value="gpt-live-1">gpt-live-1 — full-duplex speech-to-speech; listens while it talks</option>
                 </select>
                 <span className="mt-1.5 block text-xs leading-relaxed text-ink-soft">
                   Takes effect on the next call — handy for comparing tiers back-to-back.
@@ -663,7 +664,7 @@ export default function Settings() {
                   />
                   <datalist id="rt-voice-options">
                     {(voiceCatalog
-                      ? agent.realtime_model.startsWith('gpt-realtime')
+                      ? agent.realtime_model.startsWith('gpt-realtime') || agent.realtime_model === 'gpt-live-1'
                         ? voiceCatalog.native
                         : voiceCatalog.azure
                       : []

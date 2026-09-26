@@ -1,7 +1,8 @@
 import type { AgentSettings, Env } from './types';
 import { speechConfig, speechVoice, synthesize, voiceForReply } from './providers';
-import { liveRealtimeVoice, realtimeCapabilities, realtimeConnection, resolveRealtime, type RealtimeConfig } from './realtime-providers';
+import { GPT_LIVE_MODEL, gptLiveConnection, isGptLiveModel, liveRealtimeVoice, realtimeCapabilities, realtimeConnection, resolveRealtime, type RealtimeConfig } from './realtime-providers';
 import { decodeRealtimeAudio, parseRealtimeMessage } from './realtime-input';
+import { GPT_LIVE_AUDIO_FORMAT, GPT_LIVE_SILENCE, gptLiveVoice, silentPcm } from './gpt-live';
 
 import { PREVIEW_TEXT } from './voice-preview-text';
 export { PREVIEW_TEXT } from './voice-preview-text';
@@ -88,6 +89,82 @@ export function realtimePreview(config: RealtimeConfig, voice: string, text: str
   });
 }
 
+// GPT-Live has no responses: audio streams continuously, silence included, and
+// nothing marks the end of the sample. It ends at the first sustained silence
+// after speech. The commentary form is the one verified to be spoken verbatim.
+const LIVE_PREVIEW_TAIL_CHUNKS = 8; // 800 ms of 100 ms chunks
+export function gptLivePreview(config: RealtimeConfig, voice: string, text: string, signal: AbortSignal): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    let socket: WebSocket | undefined, settled = false, started = false;
+    let bytes = 0, kept = 0, silent = 0, events = 0, inputChars = 0; const chunks: Uint8Array[] = [];
+    const controller = new AbortController();
+    let input: ReturnType<typeof setInterval> | undefined;
+    const finish = (result?: ArrayBuffer) => {
+      if (settled) return; settled = true;
+      clearTimeout(timer); if (input !== undefined) clearInterval(input); signal.removeEventListener('abort', abort);
+      try { if (started) socket?.send(JSON.stringify({ type: 'session.close' })); } catch { /* already closed */ }
+      try { socket?.close(1000, 'Preview complete'); } catch { /* already closed */ }
+      controller.abort(); chunks.length = 0;
+      if (result) resolve(result); else reject(failed());
+    };
+    const abort = () => finish();
+    const timer = setTimeout(abort, PREVIEW_DEADLINE_MS);
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) { abort(); return; }
+    const connection = gptLiveConnection(config);
+    void fetch(connection.url, { headers: connection.headers, signal: controller.signal, redirect: 'manual' }).then(response => {
+      const ws = response.webSocket;
+      if (settled) { if (ws) { ws.accept(); try { ws.close(1000, 'Preview complete'); } catch { /* closed */ } } else void response.body?.cancel().catch(() => {}); return; }
+      if (!ws || response.status !== 101) { void response.body?.cancel().catch(() => {}); finish(); return; }
+      socket = ws; ws.accept();
+      ws.addEventListener('close', abort); ws.addEventListener('error', abort);
+      ws.addEventListener('message', event => {
+        if (settled) return;
+        try {
+          if (++events > 1500 || typeof event.data !== 'string' || (inputChars += event.data.length) > 4_000_000) throw failed();
+          const msg = parseRealtimeMessage(event.data);
+          // A single over-reservation refusal drops one event; the deadline bounds the rest.
+          if (msg.type === 'error' && (msg.error as { code?: unknown } | undefined)?.code === 'insufficient_reservation') return;
+          if (msg.type === 'error') throw failed();
+          if (msg.type === 'session.started' && !started) {
+            const session = msg.session as { model?: unknown; audio?: { format?: { type?: unknown; rate?: unknown }; output?: { voice?: unknown } } } | undefined;
+            if (session?.model !== GPT_LIVE_MODEL || session.audio?.format?.type !== GPT_LIVE_AUDIO_FORMAT.type ||
+              session.audio.format.rate !== GPT_LIVE_AUDIO_FORMAT.rate || (voice && session.audio.output?.voice !== voice)) throw failed();
+            started = true;
+            // The model speaks only while input audio flows; a preview has no caller.
+            const silence = JSON.stringify({ type: 'session.input_audio.append', audio: btoa(String.fromCharCode(...new Uint8Array(GPT_LIVE_SILENCE))) });
+            const append = () => { try { ws.send(silence); } catch { finish(); } };
+            append(); input = setInterval(append, 100);
+            ws.send(JSON.stringify({ type: 'session.commentary.append', delegation_id: null, content: `Say exactly: '${text}'` }));
+          } else if (msg.type === 'session.output_audio.delta') {
+            if (!started) throw failed();
+            const chunk = new Uint8Array(decodeRealtimeAudio(msg.delta as string));
+            if (!chunk.length) return;
+            if (chunk.length % 2) throw failed();
+            const quiet = silentPcm(chunk.buffer as ArrayBuffer);
+            if (!quiet) silent = 0;
+            else if (!chunks.length) return; // leading silence
+            else if (++silent >= LIVE_PREVIEW_TAIL_CHUNKS) {
+              const pcm = new Uint8Array(kept); let offset = 0;
+              for (const piece of chunks) { if (offset >= kept) break; pcm.set(piece.subarray(0, kept - offset), offset); offset += piece.length; }
+              finish(pcmWav(pcm)); return;
+            }
+            if ((bytes += chunk.length) > PREVIEW_MAX_BYTES) throw failed();
+            chunks.push(chunk);
+            // Keep short pauses inside the sample; drop the trailing silence.
+            if (silent <= 2) kept = bytes;
+          }
+        } catch { finish(); }
+      });
+      ws.send(JSON.stringify({ type: 'session.start', session: {
+        model: GPT_LIVE_MODEL,
+        instructions: 'You are recording a voice sample. Say only the words you are asked to say, once, with nothing before or after them.',
+        audio: { format: { ...GPT_LIVE_AUDIO_FORMAT }, ...(voice ? { output: { voice } } : {}) },
+      } }));
+    }).catch(() => finish());
+  });
+}
+
 export async function generateVoicePreview(env: Env, settings: AgentSettings, signal: AbortSignal): Promise<ArrayBuffer> {
   const text = PREVIEW_TEXT[settings.language];
   if (!text) throw failed();
@@ -98,6 +175,7 @@ export async function generateVoicePreview(env: Env, settings: AgentSettings, si
     return pcmWav(new Uint8Array(bytes));
   }
   const config = resolveRealtime(env, settings); const capabilities = realtimeCapabilities(config);
+  if (isGptLiveModel(config.model)) return gptLivePreview(config, gptLiveVoice(liveRealtimeVoice(config, settings.realtime_voice)), text, signal);
   const voice = liveRealtimeVoice(config, settings.realtime_voice) || (capabilities.managedVoice
     ? voiceForReply(env, settings.language, settings.language, settings.voice) : '');
   return realtimePreview(config, voice, text, signal);

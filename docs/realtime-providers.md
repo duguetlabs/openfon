@@ -94,6 +94,68 @@ Official protocol references (checked 2026-09-12):
 [Realtime WebSocket authentication](https://developers.openai.com/api/docs/guides/voice-websockets?api=realtime),
 [session/audio/events and interruption](https://developers.openai.com/api/docs/guides/realtime-conversations).
 
+## GPT-Live (`gpt-live-1`)
+
+`gpt-live-1` is a full-duplex model with its own protocol, not a Realtime API
+tier. It is available only through the Kataleptic gateway: OpenFon derives
+`<realtime base>/live/sessions` from the configured realtime URL (by default
+`wss://api.kataleptic.com/v1/live/sessions`), with the same header authentication
+and credential-alias removal, and no `model` query parameter. Direct OpenAI and
+custom realtime providers reject the model at configuration time.
+
+The call runs on the same output admission, pacing, receipts, carrier greeting
+gate, transcript budget, closing timeline and hangup as other realtime calls
+(`src/gpt-live.ts`, bridged from `CallSession`). What differs:
+
+- **Session.** One strict `session.start` carries the model, instructions, PCM16
+  24 kHz in both directions, an optional voice, and a `responses` delegation whose
+  only tool is `end_call`. `session.started` must confirm the model, format and
+  voice before a caller hears anything. Instructions cannot be updated later.
+- **Greeting.** Sent as `session.commentary.append` right after `session.started`.
+  Carrier readiness still waits for the first audible greeting audio.
+- **Audio.** The service streams output continuously, silence included. OpenFon
+  forwards speech and pauses up to 300 ms and drops longer silence, so browser
+  and carrier playback queues drain as they do for other tiers. μ-law passthrough
+  was verified against the service but is not used: the resampling lives in the
+  carrier adapters, and the session contract stays PCM24 for every engine.
+- **Input.** The model says nothing, greeting included, until input audio flows,
+  and Azure starts billing at the first input. From `session.started` on, whenever
+  caller audio has been idle for 200 ms (the carrier greeting gate, a browser
+  microphone not yet started, closing, the voice preview), OpenFon sends 100 ms of
+  silence every 100 ms.
+- **Credit.** The gateway refuses an event beyond the session's credit reservation
+  with `insufficient_reservation` and keeps the socket open. OpenFon logs it and
+  carries on; 20 within 5 s fail the call, since it has no credit left to run on.
+- **Interruptions.** Full duplex: no VAD settings, no flush, cancel or truncate.
+  Audio already queued (at most about half a second server-side) still plays.
+- **Transcripts.** Caller and agent fragments arrive interleaved with no turn
+  events. A speaker's turn ends after 1.2 s without a fragment from them; a turn
+  over the 8 KiB field limit is split.
+- **Typed text.** GPT-Live has no user-message item, and an instruction addendum
+  would give typed text instruction-level authority. The widget's typed message is
+  synthesized with the workspace speech provider and streamed in as caller audio
+  at real-time pace, while the microphone waits; its transcript returns like any
+  caller turn. Without server speech synthesis a typed message is not delivered.
+- **Closing.** `end_call` is answered with `function_call_output` and
+  `response.create`, then OpenFon hangs up once the goodbye has been spoken and
+  followed by 600 ms of silence, or after 8 s without a goodbye. Delegation is not
+  reliable (one of two identical goodbye probes never delegated), so the caller
+  farewell backstop is armed on this tier: a caller's goodbye answered by the
+  agent's goodbye ends the call, as does a caller's goodbye followed by 8 s with
+  no reply. Anything the model says after its goodbye is not played.
+- **End.** `session.close`, then up to 2 s for `session.closed` before the socket
+  is closed regardless. A session left with an unanswered delegation was seen
+  never to send `session.closed`; the gateway bills that case from wall time.
+- **Drops.** One replacement session per drop, briefed with the transcript so far
+  and without a second greeting, within the whole-call reconnect ceiling.
+
+Evidence: unit tests with a synthetic gateway socket (`test/gpt-live.test.ts`),
+and on 2026-09-24 an engine run against Azure's GPT-Live endpoint directly
+(greeting with no caller audio, synthesized caller speech answered, turns
+assembled, caller-farewell hangup, a three-second voice preview). The
+Kataleptic `/v1/live/sessions` endpoint was not yet deployed, so no call through
+the gateway, browser call or telephone call is claimed.
+
 ## Reproduce independence locally
 
 After installing dependencies and applying the provider changes:

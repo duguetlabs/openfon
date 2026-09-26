@@ -17,7 +17,8 @@ import { RealtimeOutputBudget, RealtimeAudioQueue, RealtimeOutputError, Realtime
 //   server BINARY <mp3>                         spoken version of the last agent_text (azure mode)
 //   server JSON  {type:"thinking"} | {type:"error", message} | {type:"ended"}
 import type { Env, Business, AgentSettings, ChatMessage, ProviderSettings } from './types';
-import { liveRealtimeVoice, resolveRealtime, realtimeConnection, realtimeCapabilities, type RealtimeConfig } from './realtime-providers';
+import { isGptLiveModel, liveRealtimeVoice, resolveRealtime, realtimeConnection, realtimeCapabilities, type RealtimeConfig } from './realtime-providers';
+import { DEFAULT_GPT_LIVE_DELEGATION_MODEL, GptLiveEngine, gptLiveVoice, type GptLiveHost, type GptLiveSessionOptions } from './gpt-live';
 import { CallDebug, debugMeta, debugResponse, purgeDebug, debugClientEvent, debugProviderEvent } from './call-debug';
 import { buildSystemPrompt, defaultGreeting, sttVocab, SUMMARY_PROMPT } from './prompt';
 import type { PromptKnowledgeItem } from './prompt';
@@ -185,6 +186,8 @@ const TURN_DETECTION_BY_TIER: Record<string, TurnDetection> = {
   // session start, on every HD call. A rule keyed on the model *name* rather
   // than on the tier would have shipped exactly that.
   'kataleptic-realtime-hd': SERVER_VAD,
+  // gpt-live-1 has no entry: it is full duplex and takes no turn-detection
+  // settings at all (src/gpt-live.ts).
 };
 
 // Exact tier ids, with server VAD as the fallback for anything unlisted —
@@ -446,7 +449,10 @@ export class CallSession implements DurableObject {
         return;
       }
       if (this.mode === 'realtime') {
-        const forwarded = this.sendUpstream({ type: 'input_audio_buffer.append', audio: b64encode(audio) });
+        // While typed text is being spoken into the session it is the caller's
+        // audio; one input stream cannot carry both.
+        const forwarded = this.gptLive ? !this.typedAudio.length && this.gptLive.appendAudio(audio)
+          : this.sendUpstream({ type: 'input_audio_buffer.append', audio: b64encode(audio) });
         this.debug?.audio('caller', audio, 'pcm_s16le_24000', { forwarded });
       } else {
         this.debug?.audio('caller_utterance', audio, this.pendingContentType, { admitted: !this.busy });
@@ -769,6 +775,10 @@ export class CallSession implements DurableObject {
   }
 
   private closeUpstream(): void {
+    this.typedAudio = [];
+    if (this.typedTimer !== undefined) clearTimeout(this.typedTimer);
+    this.typedTimer = undefined;
+    this.gptLive?.close();
     this.clearRealtimeQueue();
     for (const timer of [this.closingTimer, this.generationTimer, this.playbackTimer]) if (timer !== undefined) clearTimeout(timer);
     this.closingTimer = this.generationTimer = this.playbackTimer = undefined;
@@ -1204,6 +1214,7 @@ export class CallSession implements DurableObject {
 
   private async startRealtime(systemPrompt: string, greeting: string): Promise<boolean> {
     this.realtimeConfig ??= this.resolveRealtimeConfig();
+    if (isGptLiveModel(this.realtimeConfig.model)) return this.startGptLive(systemPrompt, greeting);
     const model = this.realtimeConfig.model;
     this.realtimeModel = model;
     console.log(`call ${this.callId}: realtime engine, model ${model}`);
@@ -1729,7 +1740,195 @@ export class CallSession implements DurableObject {
     }
   }
 
+  // ---- GPT-Live bridge (src/gpt-live.ts) ----
+  // A second engine on the same call plumbing: output admission, pacing and
+  // receipts, the carrier greeting gate, transcript persistence, the closing
+  // timeline and hangup are CallSession's, unchanged. What differs is the wire
+  // protocol and that there are no responses, turns or barge-in events to key
+  // anything on; the engine derives those from the stream.
+  private gptLive: GptLiveEngine | null = null;
+  private gptLiveDelegation = '';
+
+  private async startGptLive(systemPrompt: string, greeting: string): Promise<boolean> {
+    const config = this.realtimeConfig!;
+    this.realtimeModel = config.model;
+    console.log(`call ${this.callId}: realtime engine, model ${config.model}`);
+    this.voiceManaged = false; // one voice per session; the model follows the caller's language itself
+    this.sessionVoice = gptLiveVoice(this.settings?.realtime_voice || '');
+    this.realtimeInstructions = `${systemPrompt}\n\nWhen the conversation is finished and you have said goodbye, delegate so the call can be ended.`;
+    // The backend answers delegated work. It needs the business facts too, or
+    // whatever it hands back for the live model to say is invented.
+    this.gptLiveDelegation = 'You handle delegated tasks for a live phone agent. Call end_call once the caller has said goodbye or the conversation is finished. ' +
+      `Otherwise answer briefly, using only the business instructions and facts below, and say so when they do not cover the question.\n\n${systemPrompt}`;
+    this.gptLive = new GptLiveEngine(config, this.gptLiveHost());
+    return this.gptLive.start(this.gptLiveOptions(this.realtimeInstructions, greeting));
+  }
+
+  private gptLiveOptions(instructions: string, greeting: string | null): GptLiveSessionOptions {
+    return { instructions, greeting, voice: this.sessionVoice,
+      delegationModel: this.env.GPT_LIVE_DELEGATION_MODEL || DEFAULT_GPT_LIVE_DELEGATION_MODEL,
+      delegationInstructions: this.gptLiveDelegation };
+  }
+
+  private gptLiveHost(): GptLiveHost {
+    const session = this;
+    return {
+      get debug() { return session.debug; },
+      admitAudio: (encoded, source) => {
+        if (this.ended || !this.ws) return null;
+        try {
+          // Same admission as realtime deltas, charged before decoding.
+          const bytes = this.realtimeOutputBudget.reserve(encoded, Date.now(), source);
+          this.audioQueue.check(bytes);
+          this.checkAudioReceiver(Math.min(bytes, 24000) + (this.nativeGreeting?.bytes ?? 0), this.nativeGreeting?.frames.length ?? 0);
+          return decodeRealtimeAudio(encoded);
+        } catch (error) { this.failRealtimeOutput(error); return null; }
+      },
+      // The stream has no response ids. A pause closes the unlabelled segment,
+      // so the per-response size cap bounds one stretch of speech, not the call.
+      audioPaused: source => this.realtimeOutputBudget.responseDone(source),
+      playAudio: audio => {
+        // After `ending` the carrier drains only once audio stops arriving.
+        if (this.ended || this.endingSent) return;
+        const pending = this.nativeGreeting;
+        try {
+          if (!pending) { this.sendRealtimeAudio(audio); return; }
+          if (pending.bytes + audio.byteLength > MAX_REALTIME_AUDIO_BYTES) { pending.failed = true; pending.resolve(false); return; }
+          pending.frames.push(audio); pending.bytes += audio.byteLength;
+          pending.resolve(true);
+        } catch (error) { this.failRealtimeOutput(error); }
+      },
+      turn: (role, text) => {
+        try { this.reserveTranscript(text); }
+        catch (error) { if (!this.ended) { this.failInternally(error); this.closeUpstream(); } return; }
+        this.history.push({ role: role === 'caller' ? 'user' : 'assistant', content: text });
+        if (role === 'caller') this.maybeSwitchVoice(text);
+        if (!this.ended) this.send({ type: role === 'caller' ? 'transcript' : 'agent_text', text });
+        void this.saveTurn(role, text).catch(error => {
+          if (error instanceof RealtimeInputError && !this.ended) { this.failInternally(error); this.closeUpstream(); }
+          else console.error(`call ${this.callId}: transcript turn write failed`);
+        });
+      },
+      closeRequested: trigger => {
+        if (this.ended || this.endingSent || this.closingTimeline) return;
+        this.startClosing(trigger);
+        this.generationDeadline();
+      },
+      readyToHangUp: () => {
+        if (this.ended) return;
+        if (this.generationTimer !== undefined) clearTimeout(this.generationTimer);
+        this.generationTimer = undefined;
+        if (this.closingTimeline) this.closingTimeline.generationCompletedAt ??= Date.now();
+        this.beginHangup();
+      },
+      failed: error => {
+        if (this.ended) return;
+        this.failInternally(error);
+        this.closeUpstream();
+      },
+      disconnected: () => {
+        if (this.nativeGreeting) { this.nativeGreeting.failed = true; this.nativeGreeting.resolve(false); return; }
+        if (this.ended || this.mode !== 'realtime') return;
+        if (this.closingTimeline) {
+          if (!this.closingTimeline.generationCompletedAt) {
+            this.closingTimeline.result = 'provider_disconnect';
+            void this.finalize();
+          }
+          return;
+        }
+        void this.recoverGptLive();
+      },
+    };
+  }
+
+  // One replacement session per drop, briefed with the conversation so far,
+  // within the same whole-call ceiling as realtime rotations. A session lasts
+  // an hour and a call at most thirty minutes, so there is no expiry rotation.
+  private recoverGptLive(): Promise<void> {
+    this.recovering ??= (async () => {
+      if (this.totalReconnects < CallSession.MAX_TOTAL_RECONNECTS) {
+        this.totalReconnects++;
+        this.debug?.event('recovery_attempt', { total: this.totalReconnects });
+        console.log(`call ${this.callId}: GPT-Live session dropped, reconnecting`);
+        if (await this.gptLive!.start(this.gptLiveOptions(this.resumeInstructions(), null))) return;
+      }
+      if (this.ended || this.closingTimeline) return;
+      this.failure ??= 'Call failed: the voice engine connection was lost and could not be restored.';
+      this.sendError('Voice engine connection lost');
+      await this.finalize();
+    })().finally(() => { this.recovering = null; });
+    return this.recovering;
+  }
+
+  // GPT-Live has no user-message item, and appending typed text to its
+  // instructions would give whatever a caller types instruction-level
+  // authority. It is spoken into the caller's side instead, so it reaches the
+  // model with exactly the standing of speech, and its transcript comes back
+  // like any other caller turn. That needs server speech synthesis.
+  //
+  // Bounded before anything is kept or paid for: text is cut on arrival, at
+  // most two messages wait for synthesis, and queued caller audio is capped.
+  private static readonly MAX_TYPED_CHARS = 500;
+  // A message holds its slot from arrival until its audio has been spoken in,
+  // so a caller cannot buy synthesis faster than it can be delivered.
+  private static readonly MAX_TYPED_PENDING = 2;
+  // Two messages at the length cap fit (about 35 s each), and nothing more.
+  private static readonly MAX_TYPED_CHUNKS = 900; // 90 s of 100 ms chunks
+  private typedAudio: { chunk: ArrayBuffer; last: boolean }[] = [];
+  private typedTimer: ReturnType<typeof setTimeout> | undefined;
+  private typedPending = 0;
+  // Synthesis times vary; messages are queued in the order they were typed.
+  private typedChain: Promise<void> = Promise.resolve();
+
+  private speakTypedText(text: string): void {
+    if (this.typedPending >= CallSession.MAX_TYPED_PENDING) {
+      console.log(`call ${this.callId}: typed text dropped while earlier messages are still being spoken`);
+      return;
+    }
+    const typed = text.slice(0, CallSession.MAX_TYPED_CHARS);
+    this.typedPending++;
+    this.typedChain = this.typedChain.then(async () => {
+      if (!await this.synthesizeTypedText(typed)) this.typedPending--;
+    });
+  }
+
+  /** True when the audio was queued; its slot is then released by the pump. */
+  private async synthesizeTypedText(typed: string): Promise<boolean> {
+    let audio: ArrayBuffer | null = null;
+    try { audio = await synthesize(this.env, typed, speechVoice(this.env, this.lang, this.settings), 'pcm24', this.settings, this.speechAbort.signal); }
+    catch { /* reported below, like no synthesis at all */ }
+    if (this.ended || !this.gptLive) return false;
+    if (!audio?.byteLength || audio.byteLength % 2) {
+      console.log(`call ${this.callId}: typed text on GPT-Live needs server speech synthesis; not delivered`);
+      return false;
+    }
+    if (this.typedAudio.length + Math.ceil(audio.byteLength / 4800) + 5 > CallSession.MAX_TYPED_CHUNKS) {
+      console.log(`call ${this.callId}: typed text dropped: too much caller audio already queued`);
+      return false;
+    }
+    // Real-time pace, 100 ms at a time, then a short silence to end the utterance.
+    for (let offset = 0; offset < audio.byteLength; offset += 4800) this.typedAudio.push({ chunk: audio.slice(offset, offset + 4800), last: false });
+    for (let i = 0; i < 5; i++) this.typedAudio.push({ chunk: new ArrayBuffer(4800), last: i === 4 });
+    const tick = () => {
+      this.typedTimer = undefined;
+      const next = this.typedAudio[0];
+      if (!next || this.ended) return;
+      // Refused while a replacement session connects: keep it, and try again.
+      if (this.gptLive?.appendAudio(next.chunk)) {
+        this.typedAudio.shift();
+        if (next.last) this.typedPending--;
+      }
+      this.typedTimer = setTimeout(tick, 100);
+    };
+    if (this.typedTimer === undefined) tick();
+    return true;
+  }
+
   private sendCallerText(text: string): void {
+    if (this.gptLive) {
+      if (!this.closingTimeline) this.speakTypedText(text);
+      return;
+    }
     if (this.upstream) this.closingGuard.startTurn(this.upstream);
     this.reserveTranscript(text);
     this.maybeSwitchVoice(text);
