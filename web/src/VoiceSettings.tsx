@@ -36,7 +36,7 @@ const ENGINE_GUIDANCE: Record<string, { badge: string; description: string; cost
 };
 const KATALEPTIC_TIERS = ['kataleptic-realtime-hd', 'gpt-realtime-2', 'gpt-realtime-2.1', 'gpt-realtime-2.1-mini', 'gpt-live-1'];
 // Verified built-in fallback; prefer this engine's own gateway catalog entry.
-const GPT_LIVE_VOICES = choices(['marin', 'cedar', 'alloy', 'coral', 'shimmer', 'verse', 'ash', 'sage', 'ballad', 'echo']);
+const GPT_LIVE_VOICES = choices(['marin', 'cedar', 'alloy', 'coral', 'shimmer', 'verse', 'ash', 'sage', 'ballad', 'echo', 'arbor', 'breeze', 'cove', 'ember', 'juniper', 'maple', 'sol', 'spruce', 'vale']);
 const LANGUAGES = [{ id: 'en', label: 'English' }, { id: 'de', label: 'Deutsch' }, { id: 'es', label: 'Español' }, { id: 'fr', label: 'Français' }, { id: 'it', label: 'Italiano' }, { id: 'nl', label: 'Nederlands' }, { id: 'sv', label: 'Svenska' }, { id: 'da', label: 'Dansk' }, { id: 'fi', label: 'Suomi' }, { id: 'ru', label: 'Русский' }];
 
 // Native selects remain keyboard accessible; explicit custom mode preserves IDs

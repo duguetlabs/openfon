@@ -183,6 +183,11 @@ describe('GPT-Live provider resolution', () => {
 });
 
 describe('GPT-Live session start', () => {
+  it.each(['arbor', 'breeze', 'cove', 'ember', 'juniper', 'maple', 'sol', 'spruce', 'vale'])('preserves Azure-verified voice %s in the actual call start', async voice => {
+    const { start } = await call({ settings: { realtime_voice: voice } });
+    expect(start!.session.audio.output.voice).toBe(voice);
+  });
+
   it('sends the strict session.start shape with voice, format and function-only delegation', async () => {
     const { start, gateway, caller } = await call({ settings: { realtime_voice: 'cedar' }, env: { GPT_LIVE_DELEGATION_MODEL: 'gpt-5.4' } });
     expect(upgrades).toHaveLength(1);
@@ -754,13 +759,13 @@ describe('GPT-Live recovery', () => {
 describe('GPT-Live voice preview', () => {
   const config: RealtimeConfig = { provider: 'kataleptic', protocol: 'gateway', baseUrl: 'wss://api.kataleptic.com/v1/realtime', apiKey: 'k', model: 'gpt-live-1' };
 
-  it('records the spoken sample up to its trailing silence and closes the session', async () => {
-    const promise = gptLivePreview(config, 'cedar', 'Hello there!', new AbortController().signal);
+  it.each(['cedar', 'arbor', 'breeze', 'cove', 'ember', 'juniper', 'maple', 'sol', 'spruce', 'vale'])('records voice %s through trailing silence and closes the session', async voice => {
+    const promise = gptLivePreview(config, voice, 'Hello there!', new AbortController().signal);
     await flush();
     const ws = gateways[0];
     const start = ws.of('session.start')[0];
     expect(start.session).toEqual({ model: 'gpt-live-1', instructions: expect.any(String),
-      audio: { format: { type: 'audio/pcm', rate: 24000 }, output: { voice: 'cedar' } } });
+      audio: { format: { type: 'audio/pcm', rate: 24000 }, output: { voice } } });
     ws.receive({ type: 'session.started', session: start.session });
     expect(ws.of('session.commentary.append')[0]).toEqual({ type: 'session.commentary.append', delegation_id: null, content: "Say exactly: 'Hello there!'" });
     // Input silence first: the model says nothing until input audio flows.
