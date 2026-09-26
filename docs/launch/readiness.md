@@ -2,6 +2,9 @@
 
 This release is not approval to deploy production or claim live telephone readiness.
 
+Current production/staging versions, migrations and configuration differences are
+recorded in [production preflight](production-preflight.md#current-deployment-state--verified-2026-09-26).
+
 ## Code release
 
 - [ ] Pass required CI on the final commit.
@@ -13,7 +16,7 @@ This release is not approval to deploy production or claim live telephone readin
 - [ ] Verify authenticated setup and an actual microphone conversation against an independently configured provider. Synthetic PCM and browser graph tests do not prove physical audio or provider behavior.
 - [ ] Resolve reported restaurant-background false interruptions and failed endings on the smart-glasses microphone. Generic historical output errors do not identify the failed guard; new call records distinguish receipt, queue, rate and response failures.
 - [ ] Verify interruption follow-up in an audible real-provider call: old playback stops, the matching new answer completes, and only then does the next prompt begin. Strict provider-explicit natural-VAD causality is not established by the existing recordings.
-- [ ] Kataleptic model retirement: after migration 0024 and the new defaults (`kataleptic-realtime-hd`, `gpt-transcribe`) are live, run `scripts/retire-kataleptic-instance-defaults.sql` against production D1 (separately authorized, after a backup), place at least one English and one German call through the shipped realtime path and one pipeline call, and confirm production D1 holds no `kataleptic-realtime`, chat-model realtime, Piper-voice, `whisper-large-v3-turbo` or retired open-chat-model selection. Only then tell Kataleptic its cutover may proceed.
+- [ ] Kataleptic model retirement: migration 0024 and the new defaults are deployed. The September 23 rollout recorded the instance-default cleanup and zero retired selections; do not blindly repeat that data rewrite. Complete the remaining production English/German demo-call acceptance and recheck provider selections before the October 23 cutover. Local provider tests do not establish that production-call acceptance.
 - [ ] GPT-Live (`gpt-live-1`): gateway and optional OpenFon consumer deployed on 2026-09-26. Local full-application tests through real Kataleptic passed greeting, answers, caller-farewell closure, saved turns and summary; a separate forced delegation probe passed `end_call`. Complete actual browser/microphone and interruption acceptance, then a separately authorized telephone call covering the same behavior. Synthetic caller/playback with local storage does not establish those gates; see [realtime providers](../realtime-providers.md#gpt-live-gpt-live-1).
 - [ ] Complete a consented SIP/PSTN pilot with the chosen carrier, number and spending explicitly authorized. Telnyx setup still requires the authorized account login; the existing support appeal must not be duplicated. See [pilot evaluation](pilot-evaluation.md).
 - [ ] Before a separately approved production deployment, confirm operator/hostname/provider configuration, take a fresh backup, verify rollback/recovery, and explicitly enable only accepted routes. See [production preflight](production-preflight.md).
@@ -68,15 +71,16 @@ acceptance. An earlier v2 run completed the protocol successfully but its final
 transcript-export query failed on a fixture column name; that failure remains
 separate from the subsequent successful calls.
 
-Component BYOK and migration 0022 are deployed to staging at application release
+Component BYOK and migration 0022 first reached staging at application release
 `079f3ee` (2026-09-19). A fresh staging backup restored successfully; rehearsal
 preserved existing rows, and remote integrity, deployment bindings, health and
-built assets passed verification. Production is unchanged. Live custom-provider
+built assets passed verification. Both code and migration are now in production
+(2026-09-26 readback); the original staging rollout did not change production. Live custom-provider
 speech acceptance remains pending; see [configuration and rollout](component-byok.md).
 
 ### Independent summary configuration
 
-Migration 0023 and independent Call summaries settings are deployed to staging
+Migration 0023 and independent Call summaries settings first reached staging
 at application release `d0ddf750bedadb015c9f88bbfe565ba8cf692ac7`
 (2026-09-19), version `37311060-a7bc-4356-9e00-c5da504995e0`, at 100%.
 This supersedes the component-BYOK staging release recorded above. The fresh
@@ -84,11 +88,13 @@ backup restored successfully; rehearsal preserved all existing rows and columns.
 Remote integrity/FK checks, deployment bindings, health, exact built HTML/JS/CSS,
 and unauthenticated summary-route rejection passed. No summary settings were
 created: existing calls retain compatibility behavior until the owner chooses
-independent summaries. Production is unchanged.
+independent summaries. That staging rollout did not change production; both the
+summary feature and migration are now deployed to production (2026-09-26 readback).
 
-Before production rollout, verify a completed call with the selected summary
-provider and confirm its saved summary; deployment verification and synthetic
-routing tests do not establish live-provider acceptance.
+Before enabling a newly selected summary provider for callers, verify a completed
+call and its saved summary. The September 26 full-application GPT-Live probe used
+real Kataleptic summaries with local storage; it does not establish acceptance
+of arbitrary custom summary providers or production workspace configuration.
 
 ### Voice selection and repeated browser playback
 
