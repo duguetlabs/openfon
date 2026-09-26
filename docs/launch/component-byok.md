@@ -73,6 +73,7 @@ Before rolling back to a Worker without 0023 support, return each configured
 workspace to compatibility mode or pause calls: an old Worker ignores the new
 selection and uses assistant text settings for summaries. Keep the additive table
 during rollback. Local SQLite rehearsal and synthetic browser checks do not prove
-live summary-provider acceptance. Migration 0023 and the matching release are
-now deployed to staging; see [the rollout record](readiness.md#independent-summary-configuration).
-Production rollout remains pending.
+live summary-provider acceptance. As verified on 2026-09-26, migrations 0022 and
+0023 and their matching features are deployed to both staging and production; see
+[the current deployment record](production-preflight.md#current-deployment-state--verified-2026-09-26).
+Custom-provider and physical-audio acceptance remain separate gates.
