@@ -28,6 +28,10 @@ it('returns labeled built-in suggestions on failure and retries after the short 
   const fetcher = vi.fn(async () => { throw new Error('offline'); }); vi.stubGlobal('fetch', fetcher);
   const result = await providerCatalog(); expect(result.live).toBe(false);
   expect(result.models.some(m => m.id === 'kataleptic-realtime-hd')).toBe(true);
+  expect(result.voices.realtime['gpt-live-1'].map(v => v.id)).toEqual(expect.arrayContaining(['arbor', 'breeze', 'cove', 'ember', 'juniper', 'maple', 'sol', 'spruce', 'vale']));
+  expect(result.voices.realtime['gpt-live-1']).toHaveLength(19);
+  expect(result.voices.realtime['gpt-realtime-2']).toHaveLength(10);
+  expect(result.voices.realtime['gpt-realtime-2'].map(v => v.id)).not.toContain('breeze');
   expect(result.models.map(m => m.id)).not.toEqual(expect.arrayContaining(['kataleptic-realtime']));
   expect(result.models.filter(m => ['kataleptic-realtime', 'whisper-large-v3-turbo', 'mistral-nemo-12b'].includes(m.id))).toEqual([]);
   await providerCatalog(); expect(fetcher).toHaveBeenCalledTimes(2);
@@ -51,4 +55,17 @@ it('keeps each engine voice list separate and labels only validated live entries
   expect(result.voices.realtime['gpt-realtime-2']).toEqual([{ id: 'native-only', label: 'native-only' }]);
   expect(result.voices.cataloguedModels).toEqual(['gpt-realtime-2', 'gpt-realtime-2.1', 'gpt-live-1']);
   expect(result.voices.realtime['gpt-realtime-2.1-mini'].map(v => v.id)).toContain('marin');
+});
+
+it.each([undefined, { voices: ['<invalid>'] }])('keeps expanded Live suggestions when its upstream entry is missing or malformed: %j', async liveEntry => {
+  vi.resetModules();
+  const { providerCatalog } = await import('../src/provider-catalog');
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url.endsWith('/models')
+    ? { data: [{ id: 'gpt-live-1', architecture: { input_modalities: ['audio'], output_modalities: ['audio'] } }] }
+    : { 'gpt-live-1': liveEntry })));
+  const result = await providerCatalog();
+  expect(result.voices.realtime['gpt-live-1']).toHaveLength(19);
+  expect(result.voices.realtime['gpt-live-1'].map(v => v.id)).toContain('breeze');
+  expect(result.voices.cataloguedModels).not.toContain('gpt-live-1');
+  expect(result.voices.realtime['gpt-realtime-2']).toHaveLength(10);
 });
