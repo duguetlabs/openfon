@@ -93,7 +93,7 @@ test('guided Kataleptic tiers show matching voices and preserve unknown saved va
   await expect(page).toHaveURL('/overview');
   const { assistants } = await (await page.request.get('/api/me/bootstrap')).json();
   const models = ['gpt-realtime-2', 'gpt-realtime-2.1', 'gpt-realtime-2.1-mini', 'gpt-live-1'];
-  const distinctVoice = (model: string) => model === 'gpt-live-1' ? 'cedar' : `${model}-exclusive`;
+  const distinctVoice = (model: string) => model === 'gpt-live-1' ? 'breeze' : `${model}-exclusive`;
   await page.route('**/api/me/provider/catalog', route => route.fulfill({ json: {
     models: [], live: true, voices: { native: [{ id: 'wrong-shared-voice', label: 'wrong-shared-voice' }], azure: [], hdDefault: '',
       realtime: Object.fromEntries(models.map(id => [id, [{ id: 'marin', label: 'marin' }, { id: distinctVoice(id), label: distinctVoice(id) }]])),
@@ -129,5 +129,20 @@ test('guided Kataleptic tiers show matching voices and preserve unknown saved va
   await page.reload();
   await openSettingsSections(page);
   await expectCatalog(page, 'Realtime voice', 'future-voice');
+  // If the gateway catalog is unavailable, only GPT-Live gets its expanded
+  // verified suggestions; native Realtime keeps its separate voice contract.
+  await page.route('**/api/me/provider/catalog', route => route.fulfill({ json: { models: [], live: false, voices: {} } }));
+  await page.reload();
+  const voice = page.getByLabel('Realtime voice', { exact: true });
+  for (const id of ['arbor', 'breeze', 'cove', 'ember', 'juniper', 'maple', 'sol', 'spruce', 'vale']) {
+    await expect(voice.locator(`option[value="${id}"]`)).toHaveCount(1);
+  }
+  await voice.selectOption('breeze');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByText('Assistant saved.', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(voice).toHaveValue('breeze');
+  await page.getByLabel('Conversation engine', { exact: true }).selectOption('gpt-realtime-2');
+  await expect(voice.locator('option[value="breeze"]')).toHaveCount(0);
   await page.screenshot({ path: test.info().outputPath('guided-native-desktop.png'), fullPage: true });
 });

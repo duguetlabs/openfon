@@ -18,7 +18,7 @@ const RETIRED = new Set(['kataleptic-realtime', 'piper-tts', 'whisper-large-v3-t
 const fallback = () => ({ models: fallbackModels, live: false, voices: {
   native: options(OPENAI_REALTIME_VOICES),
   realtime: Object.fromEntries(['gpt-realtime-2', 'gpt-realtime-2.1', 'gpt-realtime-2.1-mini', GPT_LIVE_MODEL]
-    .map(id => [id, options(OPENAI_REALTIME_VOICES)])),
+    .map(id => [id, options(id === GPT_LIVE_MODEL ? GPT_LIVE_VOICES : OPENAI_REALTIME_VOICES)])),
   cataloguedModels: [] as string[],
   azure: options(['en-US-AvaMultilingualNeural', 'de-DE-SeraphinaMultilingualNeural', 'es-ES-ArabellaMultilingualNeural', 'fr-FR-VivienneMultilingualNeural', 'it-IT-AlessioMultilingualNeural']),
   hdDefault: 'en-US-AvaMultilingualNeural',
