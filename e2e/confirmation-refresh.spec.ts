@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, openSettingsSections } from './fixtures';
 
 for (const mode of ['signup', 'login'] as const) {
   test(`confirmed ${mode} retries session reads without repeating authentication`, async ({ page }) => {
@@ -39,6 +39,7 @@ for (const mode of ['signup', 'login'] as const) {
 
 for (const operation of ['apply', 'delete'] as const) {
   test(`confirmed profile ${operation} survives refresh failure and retries reads only`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/auth');
     await page.getByLabel('Email').fill(`profile-confirm-${operation}-${Date.now()}@example.invalid`);
     await page.getByLabel('Password', { exact: true }).fill('Synthetic-Confirmation-Password-1234');
@@ -52,6 +53,7 @@ for (const operation of ['apply', 'delete'] as const) {
     const business = await (await page.request.get('/api/me/business')).json();
     const profile = await (await page.request.post(`/api/me/business/${business.id}/profiles`, { data: { name: 'French pipeline', engine: 'pipeline', language: 'fr', voice: '', llm_model: '' } })).json();
     await page.goto('/settings');
+  await openSettingsSections(page);
     await expect(page.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
     let mutations = 0;
     let failRead = false;
@@ -71,6 +73,10 @@ for (const operation of ['apply', 'delete'] as const) {
     });
     await page.getByRole('button', { name: operation === 'apply' ? 'Apply' : 'Delete profile', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('The profile change was saved');
+    // Assert before any recovery click or business-field access can auto-scroll.
+    await expect(page.getByRole('alert')).toBeInViewport();
+    await expect(page.getByRole('button', { name: 'Retry profile refresh', exact: true })).toBeInViewport();
+    await expect(page.getByRole('button', { name: 'Retry profile refresh', exact: true })).toHaveCount(1);
     if (operation === 'delete') await expect(page.getByRole('button', { name: 'Delete profile', exact: true })).toHaveCount(0);
     else await expect(page.getByRole('button', { name: 'Apply', exact: true })).toBeDisabled();
     await page.getByLabel('Name', { exact: true }).fill('Newer unsaved workspace name');
@@ -82,7 +88,7 @@ for (const operation of ['apply', 'delete'] as const) {
     const stored = await (await page.request.get('/api/me/business')).json();
     if (operation === 'apply') {
       expect(stored.agent.language).toBe('fr');
-      await expect(page.getByRole('combobox', { name: 'Language', exact: true })).toHaveValue('fr');
+      await expect(page.getByLabel('Current primary assistant setup')).toContainText(' · fr · ');
     } else {
       expect((await (await page.request.get(`/api/me/business/${business.id}/profiles`)).json()).some((row: { id: string }) => row.id === profile.id)).toBe(false);
     }
@@ -103,6 +109,7 @@ test('older profile recovery read cannot overwrite a newer provider refresh', as
   const business = await (await page.request.get('/api/me/business')).json();
   await page.request.post(`/api/me/business/${business.id}/profiles`, { data: { name: 'French pipeline', engine: 'pipeline', language: 'fr', voice: '', llm_model: '' } });
   await page.goto('/settings');
+  await openSettingsSections(page);
   await expect(page.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
   let reads = 0;
   let captured = false;
@@ -125,12 +132,12 @@ test('older profile recovery read cannot overwrite a newer provider refresh', as
   // A separate accepted edit becomes visible through the independent provider refresh.
   expect((await page.request.put(`/api/me/business/${business.id}/agent`, { data: { agent_name: 'Newer server assistant' } })).ok()).toBe(true);
   await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
-  await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Newer server assistant');
+  await expect(page.getByLabel('Current primary assistant setup')).toContainText('Newer server assistant');
   await page.getByLabel('Name', { exact: true }).fill('Newer unsaved workspace draft');
   release();
   await expect.poll(() => delivered).toBe(true);
   await expect(page.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
-  await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Newer server assistant');
+  await expect(page.getByLabel('Current primary assistant setup')).toContainText('Newer server assistant');
   await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Newer unsaved workspace draft');
   expect((await (await page.request.get('/api/me/business')).json()).agent.agent_name).toBe('Newer server assistant');
 });
@@ -149,6 +156,7 @@ test('superseded effect cannot launch a late profile read or hide recovery failu
   const business = await (await page.request.get('/api/me/business')).json();
   await page.request.post(`/api/me/business/${business.id}/profiles`, { data: { name: 'French pipeline', engine: 'pipeline', language: 'fr', voice: '', llm_model: '' } });
   await page.goto('/settings');
+  await openSettingsSections(page);
   await expect(page.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
   let failSession = true;
   await page.route('**/api/me', async route => {

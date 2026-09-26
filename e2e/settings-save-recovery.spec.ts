@@ -1,71 +1,41 @@
-import { test, expect } from './fixtures';
+import { test, expect, openSettingsSections } from './fixtures';
 
-for (const failure of ['refresh', 'assistant'] as const) {
-  test(`settings resumes confirmed stages after ${failure} failure`, async ({ page }) => {
-    await page.goto('/auth');
-    await page.getByLabel('Email').fill(`settings-recovery-${failure}-${Date.now()}@example.invalid`);
-    await page.getByLabel('Password', { exact: true }).fill('Synthetic-Settings-Password-1234');
-    await page.getByRole('button', { name: 'Create account', exact: true }).click();
-    await page.getByLabel('Business name', { exact: true }).fill('Settings recovery workshop');
-    await page.getByLabel('What do you do?').fill('Synthetic settings recovery validation');
-    await page.getByRole('button', { name: 'Continue →' }).click();
-    await page.getByRole('button', { name: 'Continue →' }).click();
-    await page.getByRole('button', { name: /Save.*studio/i }).click();
-    await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
+for (const failure of ['refresh', 'business'] as const) {
+  test(`workspace settings recover after ${failure} failure without writing assistant settings`, async ({ page }) => {
+    await openSettings(page, failure);
     const business = await (await page.request.get('/api/me/business')).json();
-    await page.goto('/settings');
     const save = page.getByRole('button', { name: 'Save changes', exact: true });
-    await expect(page.getByLabel('Name', { exact: true })).toHaveValue(business.name);
-    let businessWrites = 0;
-    let assistantWrites = 0;
-    let failRefresh = false;
+    let businessWrites = 0, assistantWrites = 0, failRefresh = false;
     await page.route('**/api/me/**', async route => {
-      const request = route.request();
-      const path = new URL(request.url()).pathname;
-      if (path === `/api/me/business/${business.id}` && request.method() === 'PUT') businessWrites++;
-      if (path === `/api/me/business/${business.id}/agent` && request.method() === 'PUT') {
-        assistantWrites++;
-        if (failure === 'assistant' && assistantWrites === 1) {
-          return route.fulfill({ status: 503, json: { error: 'Synthetic assistant interruption' } });
-        }
-        const response = await route.fetch();
-        expect(response.ok()).toBe(true);
-        if (failure === 'refresh') failRefresh = true;
-        return route.fulfill({ response });
+      const request = route.request(), path = new URL(request.url()).pathname;
+      if (path === `/api/me/business/${business.id}/agent` && request.method() === 'PUT') assistantWrites++;
+      if (path === `/api/me/business/${business.id}` && request.method() === 'PUT') {
+        businessWrites++;
+        if (failure === 'business' && businessWrites === 1) return route.fulfill({ status: 503, json: { error: 'Synthetic business interruption' } });
+        const response = await route.fetch(); expect(response.ok()).toBe(true);
+        failRefresh = failure === 'refresh'; return route.fulfill({ response });
       }
       if (path === '/api/me/business' && request.method() === 'GET' && failRefresh) {
-        failRefresh = false;
-        return route.fulfill({ status: 503, json: { error: 'Synthetic refresh interruption' } });
+        failRefresh = false; return route.fulfill({ status: 503, json: { error: 'Synthetic refresh interruption' } });
       }
       return route.continue();
     });
     await page.getByLabel('Name', { exact: true }).fill('Confirmed business');
-    await page.getByLabel('Agent name', { exact: true }).fill('Confirmed assistant');
     await save.click();
-    await expect(page.getByRole('alert').filter({ hasText: failure === 'refresh' ? 'refreshing the page data failed' : 'Assistant save failed' })).toBeVisible();
-    expect(businessWrites).toBe(1);
-    expect(assistantWrites).toBe(1);
-    if (failure === 'assistant') {
-      await save.click();
-      await expect(save).toBeDisabled();
-      expect(businessWrites).toBe(1);
-      expect(assistantWrites).toBe(2);
+    await expect(page.getByRole('alert').filter({ hasText: failure === 'refresh' ? 'refreshing the page data failed' : 'Business save failed' })).toBeVisible();
+    expect(businessWrites).toBe(1); expect(assistantWrites).toBe(0);
+    if (failure === 'business') {
+      await save.click(); await expect(save).toBeDisabled(); expect(businessWrites).toBe(2);
     } else {
       await expect(save).toBeDisabled();
-      // A later draft must survive the read-only recovery without being written.
       await page.getByLabel('Name', { exact: true }).fill('Later business draft');
-      await page.getByLabel('Agent name', { exact: true }).fill('Later assistant draft');
       await page.getByRole('button', { name: 'Retry settings refresh', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Retry settings refresh', exact: true })).toHaveCount(0);
       await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Later business draft');
-      await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Later assistant draft');
-      await expect(save).toBeEnabled();
-      expect(businessWrites).toBe(1);
-      expect(assistantWrites).toBe(1);
+      await expect(save).toBeEnabled(); expect(businessWrites).toBe(1);
     }
     const persisted = await (await page.request.get('/api/me/business')).json();
-    expect(persisted.name).toBe('Confirmed business');
-    expect(persisted.agent.agent_name).toBe('Confirmed assistant');
+    expect(persisted.name).toBe('Confirmed business'); expect(persisted.agent).toEqual(business.agent); expect(assistantWrites).toBe(0);
   });
 }
 
@@ -81,6 +51,7 @@ async function openSettings(page: import('@playwright/test').Page, label: string
   await page.getByRole('button', { name: /Save.*studio/i }).click();
   await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
   await page.goto('/settings');
+  await openSettingsSections(page);
   await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Read order workshop');
 }
 
@@ -125,7 +96,6 @@ for (const timing of ['before', 'during'] as const) {
   });
   // Hold a read started either before Save or while its first write is pending.
   await page.getByLabel('Name', { exact: true }).fill('Confirmed later business');
-  await page.getByLabel('Agent name', { exact: true }).fill('Confirmed later assistant');
   if (timing === 'during') {
     await page.getByRole('button', { name: 'Save changes', exact: true }).click();
     await expect.poll(() => writePending).toBe(true);
@@ -135,17 +105,17 @@ for (const timing of ['before', 'during'] as const) {
   if (timing === 'before') await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   else releaseWrite();
   await expect.poll(() => finalRead).toBe(true);
-  await page.getByLabel('Agent name', { exact: true }).fill('Newest unsaved assistant');
+  await page.getByLabel('Description', { exact: true }).fill('Newest unsaved description');
   releaseStale();
   await expect.poll(() => staleDelivered).toBe(true);
   releaseFinal();
   await expect(page.getByRole('alert').filter({ hasText: 'refreshing the page data failed' })).toBeVisible();
   await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Confirmed later business');
-  await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Newest unsaved assistant');
+  await expect(page.getByLabel('Description', { exact: true })).toHaveValue('Newest unsaved description');
   await expect(page.getByRole('button', { name: 'Retry settings refresh', exact: true })).toBeVisible();
   const persisted = await (await page.request.get('/api/me/business')).json();
   expect(persisted.name).toBe('Confirmed later business');
-  expect(persisted.agent.agent_name).toBe('Confirmed later assistant');
+  expect(persisted.description).not.toBe('Newest unsaved description');
 });
 }
 

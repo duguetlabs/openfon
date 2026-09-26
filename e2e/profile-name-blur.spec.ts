@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, openSettingsSections } from './fixtures';
 
 test('unchanged profile name blurs spend no writes while real rename persists once', async ({ page }) => {
   await page.goto('/auth');
@@ -18,6 +18,7 @@ test('unchanged profile name blurs spend no writes while real rename persists on
   let writes = 0;
   page.on('request', request => { if (request.method() === 'PUT' && request.url().endsWith(`/api/me/profiles/${profile.id}`)) writes++; });
   await page.goto('/settings');
+  await openSettingsSections(page);
   const input = page.getByRole('button', { name: 'Apply', exact: true }).locator('..').locator('input');
   await expect(input).toBeVisible();
   for (let i = 0; i < 3; i++) { await input.focus(); await input.blur(); }
@@ -34,5 +35,6 @@ test('unchanged profile name blurs spend no writes while real rename persists on
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   expect(writes).toBe(1);
   await page.reload();
+  await openSettingsSections(page);
   await expect(page.locator('input[value="Renamed profile"]')).toBeVisible();
 });

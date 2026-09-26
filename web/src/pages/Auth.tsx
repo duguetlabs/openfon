@@ -50,19 +50,6 @@ export default function AuthPage() {
     <div className="studio-theme auth-layout flex min-h-screen flex-col bg-base md:flex-row">
       {/* brand panel */}
       <div className="auth-brand relative flex flex-col justify-between overflow-hidden bg-midnight p-8 text-white md:w-[44%] md:p-12">
-        {/* atmosphere: iris + rose glow on midnight */}
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              'radial-gradient(640px 480px at 85% 0%, rgb(88 73 190 / 0.35), transparent 70%), radial-gradient(560px 420px at 0% 100%, rgb(180 58 102 / 0.22), transparent 70%)',
-          }}
-        />
-        {/* decorative dial rings */}
-        <div className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full border border-white/[0.08]" />
-        <div className="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full border border-white/[0.08]" />
-        <div className="pointer-events-none absolute -bottom-40 -left-24 h-80 w-80 rounded-full border border-white/[0.07]" />
-
         <div className="rise relative">
           <span className="inline-flex items-center gap-2 text-xl">
             <svg viewBox="0 0 32 32" className="h-7 w-7" aria-hidden>
@@ -85,12 +72,12 @@ export default function AuthPage() {
             <br />
             On your terms.
           </h1>
-          <p className="rise rise-2 mt-6 max-w-sm text-sm leading-relaxed text-white/65">
+          <p className="rise rise-2 mt-6 max-w-sm text-sm leading-relaxed text-[#c3d3e7]">
             Build a browser voice assistant, test its answers, and review every conversation.
             OpenFon can take messages and capture booking requests for your team to follow up.
           </p>
         </div>
-        <p className="rise rise-3 relative font-mono text-xs text-white/40">
+        <p className="rise rise-3 relative text-xs text-[#b9c9db]">
           open source · self-hosted · MIT licensed
         </p>
       </div>
@@ -135,7 +122,7 @@ export default function AuthPage() {
             aria-describedby={signOutPending ? 'sign-out-pending-status' : undefined}
             className="m-0 min-w-0 border-0 p-0 transition-opacity disabled:cursor-wait disabled:opacity-60"
           >
-            <div className="rounded-2xl border border-line bg-surface p-7 shadow-raise sm:p-8">
+            <div className="rounded-xl border border-line bg-surface p-7 sm:p-8">
               <div className="mb-6">
                 <h2 className="font-display text-3xl font-semibold tracking-tight text-ink">
                   {mode === 'signup' ? 'Create your workspace' : 'Welcome back'}

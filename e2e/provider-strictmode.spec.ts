@@ -42,6 +42,7 @@ for (const late of ['success', 'error'] as const) {
     await page.goto('http://127.0.0.1:8812/');
     await expect.poll(() => reads.length).toBe(2); // Actual StrictMode replay.
     await reads[1].fulfill({ json: provider() });
+    await page.locator('#providers details').filter({ has: page.locator('summary').filter({ hasText: 'Text generation' }) }).locator('summary').click();
     const key = page.getByLabel('Text API key', { exact: true });
     await fillCatalog(page, 'Workspace text model', 'unsaved-model');
     await key.fill('synthetic-unsaved-key');

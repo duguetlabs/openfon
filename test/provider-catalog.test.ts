@@ -33,3 +33,22 @@ it('returns labeled built-in suggestions on failure and retries after the short 
   await providerCatalog(); expect(fetcher).toHaveBeenCalledTimes(2);
   await vi.advanceTimersByTimeAsync(60001); await providerCatalog(); expect(fetcher).toHaveBeenCalledTimes(4);
 });
+
+it('keeps each engine voice list separate and labels only validated live entries', async () => {
+  vi.resetModules();
+  const { providerCatalog } = await import('../src/provider-catalog');
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url.endsWith('/models')
+    ? { data: [{ id: 'gpt-live-1', architecture: { input_modalities: ['audio'], output_modalities: ['audio'] } }] }
+    : {
+      'gpt-realtime-2': { voices: ['native-only'] },
+      'gpt-realtime-2.1': { voices: ['next-only', 'next-only'] },
+      'gpt-realtime-2.1-mini': { voices: ['<invalid>'] },
+      'gpt-live-1': { voices: ['cedar', 'future-unsupported-live-voice'] },
+    })));
+  const result = await providerCatalog();
+  expect(result.voices.realtime['gpt-live-1']).toEqual([{ id: 'cedar', label: 'cedar' }]);
+  expect(result.voices.realtime['gpt-realtime-2.1']).toEqual([{ id: 'next-only', label: 'next-only' }]);
+  expect(result.voices.realtime['gpt-realtime-2']).toEqual([{ id: 'native-only', label: 'native-only' }]);
+  expect(result.voices.cataloguedModels).toEqual(['gpt-realtime-2', 'gpt-realtime-2.1', 'gpt-live-1']);
+  expect(result.voices.realtime['gpt-realtime-2.1-mini'].map(v => v.id)).toContain('marin');
+});

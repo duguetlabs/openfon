@@ -1,7 +1,7 @@
 import { CatalogSelect, choices, TTS_MODELS } from '../VoiceSettings';
 import { useEffect, useState } from 'react';
 import { api, type ProviderView, type ProviderUpdate } from '../api';
-import { Button, Card, Field, inputClassSm } from '../ui';
+import { Button, Field, inputClassSm } from '../ui';
 import { useUnsavedEdits } from '../unsaved-edits';
 
 export default function ProviderSettings({ onSaved }: { onSaved: () => Promise<void> }) {
@@ -73,13 +73,14 @@ export default function ProviderSettings({ onSaved }: { onSaved: () => Promise<v
   }
   const textPreset = preset === 'instance' ? saved?.instance_text_preset || 'custom' : preset;
   if (!saved) return <p role={error ? 'alert' : 'status'}>{error || 'Loading provider settings…'}</p>;
-  return <section id="providers" aria-label="Workspace AI providers"><h2 className="font-display text-2xl mb-3">Workspace AI providers</h2>
+  return <section id="providers" className="settings-section" aria-label="Workspace AI providers"><h2 className="font-display text-2xl mb-3">AI connections</h2>
+    <p className="text-sm text-ink-soft mb-3">Connect a provider once for the workspace. Choose each assistant’s engine, model, and voice in Assistants. Expand a component to use your own API key.</p>
     <p className="text-sm text-ink-soft mb-4">Kataleptic is operated by OpenFon’s maintainer and is an optional paid service. You can use your own provider accounts. Provider usage and hosting may cost money.</p>
     {error && <p role="alert" className="text-rose mb-3">{error}</p>}{message && <p role="status" className="mb-3">{message}</p>}
     {refreshPending && <Button type="button" disabled={busy} onClick={() => void run(async () => { setMessage(savedMessage); await refreshAfterSave(); })}>Refresh saved provider settings</Button>}
     <form onSubmit={e => { e.preventDefault(); if (!busy && !refreshPending) void run(save); }}>
       <fieldset disabled={busy || refreshPending} className="min-w-0 space-y-4">
-        <Card className="space-y-4"><h3 className="font-semibold">Text generation (Pipeline replies)</h3>
+        <details className="connection-card"><summary><span>Text generation</span><span className="connection-purpose">Pipeline replies and shared text model</span></summary><div className="space-y-4">
           <label className="block text-sm">Text provider preset<select aria-label="Text provider preset" className={`${inputClassSm} w-full min-w-0 max-w-full`} value={preset} onChange={e => {
             const id = e.target.value; setPreset(id);
             const p = saved.presets.find(x => x.id === id)!;
@@ -90,8 +91,8 @@ export default function ProviderSettings({ onSaved }: { onSaved: () => Promise<v
           <Field label="Text API key" type="password" autoComplete="new-password" value={draft.apiKey || ''} onChange={e => change({ apiKey: e.target.value, clearApiKey: false })} placeholder={saved.workspaceApiKeyConfigured ? 'Saved — leave blank to keep at the same endpoint' : 'Enter your provider key'} />
           <label className="block text-sm"><input type="checkbox" checked={Boolean(draft.clearApiKey)} onChange={e => change({ clearApiKey: e.target.checked, apiKey: '' })} /> Remove saved text key</label>
           <p className="text-sm text-ink-soft">OpenRouter and Hugging Face presets configure text chat only. They do not configure speech recognition, speech synthesis, or realtime voice. Model availability and JSON support depend on the provider and your account.</p>
-        </Card>
-        <Card className="space-y-4"><h3 className="font-semibold">Speech recognition (pipeline)</h3>
+        </div></details>
+        <details className="connection-card"><summary><span>Speech recognition</span><span className="connection-purpose">Turn Pipeline caller audio into text</span></summary><div className="space-y-4">
           <label className="block text-sm">Transcription provider<select aria-label="Transcription provider" className={`${inputClassSm} w-full min-w-0 max-w-full`} value={draft.stt_provider === 'custom' && draft.stt_base_url === 'https://api.kataleptic.com/v1' ? 'kataleptic' : draft.stt_provider} onChange={e => {
             const provider = e.target.value; change({ stt_provider: provider === 'kataleptic' ? 'custom' : provider, stt_base_url: provider === 'openai' ? 'https://api.openai.com/v1' : provider === 'kataleptic' ? 'https://api.kataleptic.com/v1' : '', stt_model: provider === 'openai' ? 'whisper-1' : provider === 'kataleptic' ? 'gpt-transcribe' : '', stt_api_key: '', stt_clear_api_key: false });
           }}><option value="instance">Instance default</option><option value="openai">OpenAI (direct)</option><option value="kataleptic">Kataleptic (your own key)</option><option value="custom">Custom OpenAI-compatible transcription</option></select></label>
@@ -102,8 +103,8 @@ export default function ProviderSettings({ onSaved }: { onSaved: () => Promise<v
           <Field label="Transcription API key" type="password" autoComplete="new-password" value={draft.stt_api_key || ''} onChange={e => change({ stt_api_key: e.target.value, stt_clear_api_key: false })} placeholder={saved.stt_provider === draft.stt_provider && saved.stt_base_url === draft.stt_base_url && saved.stt_api_key_configured ? 'Saved — leave blank to keep' : 'Separate key required for explicit provider'} />
           <label className="block text-sm"><input type="checkbox" checked={Boolean(draft.stt_clear_api_key)} onChange={e => change({ stt_clear_api_key: e.target.checked, stt_api_key: '' })}/> Remove saved transcription key</label>
           </>}
-        </Card>
-        <Card className="space-y-4"><h3 className="font-semibold">Realtime voice</h3>
+        </div></details>
+        <details className="connection-card"><summary><span>Realtime voice</span><span className="connection-purpose">One connection for listening and speaking</span></summary><div className="space-y-4">
           <label className="block text-sm">Realtime provider<select aria-label="Realtime provider" className={`${inputClassSm} w-full min-w-0 max-w-full`} value={draft.realtime_provider} onChange={e => {
             const provider = e.target.value; change({ realtime_provider: provider, realtime_base_url: provider === 'openai' ? 'wss://api.openai.com/v1/realtime' : provider === 'kataleptic' ? 'wss://api.kataleptic.com/v1/realtime' : '', realtime_api_key: '', realtime_clear_api_key: false });
           }}><option value="instance">Instance default</option><option value="kataleptic">Kataleptic gateway</option><option value="openai">OpenAI (direct)</option><option value="custom">Custom OpenAI GA protocol (experimental)</option></select></label>
@@ -114,9 +115,9 @@ export default function ProviderSettings({ onSaved }: { onSaved: () => Promise<v
           <Field label="Realtime API key" type="password" autoComplete="new-password" value={draft.realtime_api_key || ''} onChange={e => change({ realtime_api_key: e.target.value, realtime_clear_api_key: false })} placeholder={saved.realtime_provider === draft.realtime_provider && saved.realtime_base_url === draft.realtime_base_url && saved.realtime_api_key_configured ? 'Saved — leave blank to keep' : 'Separate key required for explicit provider'} />
           <label className="block text-sm"><input type="checkbox" checked={Boolean(draft.realtime_clear_api_key)} onChange={e => change({ realtime_clear_api_key: e.target.checked, realtime_api_key: '' })}/> Remove saved realtime key</label>
           </>}
-          <p className="text-sm text-ink-soft">OpenAI uses gpt-realtime when the assistant model is blank. Switching to OpenAI clears known Kataleptic model/voice presets; custom values stay editable in Assistants. For independence from Kataleptic, also select an independent text provider for summaries and transcription provider for pipeline calls.</p>
-        </Card>
-        <Card className="space-y-4"><h3 className="font-semibold">Speech synthesis (custom pipeline)</h3>
+          <p className="text-sm text-ink-soft">OpenAI uses gpt-realtime when the assistant model is blank. Switching to OpenAI clears known Kataleptic model/voice presets; custom values stay editable in Assistants. For independence from Kataleptic, also review the separate Call summaries settings and the transcription provider for Pipeline calls.</p>
+        </div></details>
+        <details className="connection-card"><summary><span>Speech synthesis</span><span className="connection-purpose">The spoken voice for Pipeline replies</span></summary><div className="space-y-4">
           <p className="text-sm text-ink-soft">Bring a separate speech key. This selection is used for pipeline calls; realtime conversation audio is managed by its realtime provider.</p>
           <label className="block text-sm">Speech synthesis provider<select className={`${inputClassSm} w-full`} aria-label="Speech synthesis provider" value={draft.tts_provider || 'instance'} onChange={e => {
             const provider = e.target.value; change({ tts_provider: provider, tts_base_url: provider === 'openai' ? 'https://api.openai.com/v1' : '', tts_model: provider === 'openai' ? 'gpt-4o-mini-tts' : '', tts_api_key: '', tts_clear_api_key: false });
@@ -128,7 +129,7 @@ export default function ProviderSettings({ onSaved }: { onSaved: () => Promise<v
             <p className="text-sm text-ink-soft">To remove the saved speech key, select Instance default or Browser speech, then save.</p>
           </>}
           <p className="text-sm text-ink-soft">Choose the voice in the assistant editor after saving. Saved keys are never returned to your browser or copied into presets.</p>
-        </Card>
+        </div></details>
         <div className="flex flex-wrap gap-3"><Button>{busy ? 'Working…' : 'Save provider settings'}</Button><Button type="button" variant="ghost" onClick={() => void run(async () => { const r = await api.checkProvider(); setMessage(`Saved text connection succeeded (${r.model}). This does not verify voice or telephone calls.`); })}>Check saved text connection</Button></div>
       </fieldset>
     </form>

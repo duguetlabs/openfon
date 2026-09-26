@@ -83,13 +83,13 @@ test('compact samples prefetch lazily, reuse cached audio, stop stale playback a
   await expect(play).toHaveAttribute('aria-busy', 'false');
   expect(await audio.evaluate((el: HTMLAudioElement) => el.paused)).toBe(true);
   expect(await (await page.request.get(`/api/me/assistants/${id}`)).json()).toEqual(baseline);
-  // Provider gender metadata, with an explicit unknown symbol for native voices.
-  await expect(voice.locator('option[value="marin"]')).toHaveText('◇ marin');
-  await expect(voice.locator('option[value="__custom"]')).toHaveText('◇ Custom ID…');
-  await expect(voice.locator('option[value="__custom"]')).toHaveAttribute('aria-label', 'Custom ID, unspecified voice gender');
+  // Only provider-supplied gender labels; unknown voices have no decorative glyphs.
+  await expect(voice.locator('option[value="marin"]')).toHaveText('marin');
+  await expect(voice.locator('option[value="__custom"]')).toHaveText('Custom ID…');
+  await expect(voice.locator('option[value="marin"]')).not.toHaveAttribute('aria-label');
   await engine.selectOption('kataleptic-realtime-hd');
-  await expect(voice.locator('option[value="en-US-AvaMultilingualNeural"]')).toHaveText('♀ en-US-AvaMultilingualNeural');
-  await expect(voice.locator('option[value="it-IT-AlessioMultilingualNeural"]')).toHaveText('♂ it-IT-AlessioMultilingualNeural');
+  await expect(voice.locator('option[value="en-US-AvaMultilingualNeural"]')).toHaveText('Ava · English, multilingual · Female');
+  await expect(voice.locator('option[value="it-IT-AlessioMultilingualNeural"]')).toHaveText('Alessio · Italian, multilingual · Male');
   await page.setViewportSize({ width: 390, height: 844 });
   await play.scrollIntoViewIfNeeded();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

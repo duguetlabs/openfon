@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, openSettingsSections } from './fixtures';
 import type { Page, Route } from '@playwright/test';
 const rendered = (page: Page) => page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
 const inputFor = (page: Page) => page.getByRole('button', { name: 'Apply', exact: true }).locator('..').locator('input');
@@ -16,7 +16,9 @@ async function setup(page: Page) {
   const business = await (await page.request.get('/api/me/business')).json();
   const response = await page.request.post(`/api/me/business/${business.id}/profiles`, { data: { name: 'Original profile', engine: 'pipeline', language: 'en' } });
   expect(response.status()).toBe(201); const profile = await response.json();
-  await page.goto('/settings'); await expect(inputFor(page)).toHaveValue('Original profile');
+  await page.goto('/settings');
+  await openSettingsSections(page);
+  await expect(inputFor(page)).toHaveValue('Original profile');
   return { businessId: business.id as string, profileId: profile.id as string };
 }
 const persistedName = async (page: Page, businessId: string, profileId: string) =>

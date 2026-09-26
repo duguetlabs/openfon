@@ -122,7 +122,7 @@ export default function Onboarding() {
       <div className="mx-auto max-w-2xl px-5 py-10">
         <div className="rise mb-10 flex items-center justify-between">
           <Link to="/" aria-label="OpenFon home"><Logo /></Link>
-          <ol className="flex items-center gap-2.5 font-mono text-[11px] text-ink-faint">
+          <ol className="flex items-center gap-2.5 text-xs text-ink-faint">
             {steps.map((s, i) => (
               <li key={s} className={`flex items-center gap-1.5 ${i === step ? 'text-iris' : ''}`}>
                 <span
@@ -143,7 +143,7 @@ export default function Onboarding() {
         </div>
 
         <div className="mb-6 flex justify-end"><button className="text-sm text-ink-soft underline" onClick={() => { if (!confirmDiscardUnsaved()) return; active.current = false; void signOut().catch(() => {}); navigate('/auth'); }}>Sign out</button></div>
-        <p className="rise rise-1 font-mono text-[11px] uppercase tracking-[0.2em] text-ink-faint">
+        <p className="rise rise-1 text-sm text-ink-faint">
           Step {step + 1} of {steps.length}
         </p>
         <h1 className="rise rise-1 mt-1 mb-2 font-display text-4xl font-semibold tracking-tight text-ink">
@@ -152,10 +152,10 @@ export default function Onboarding() {
         <p className="rise rise-2 mb-7 max-w-md text-sm leading-relaxed text-ink-soft">
           {step === 0 && 'Tell your receptionist who it works for. You can edit everything later.'}
           {step === 1 && 'Give your assistant accurate hours and service details. Test its answers before sharing your line.'}
-          {step === 2 && 'Give your agent a name and a voice. It greets every caller with this.'}
+          {step === 2 && 'Choose a name, language and greeting. You can select and preview its voice in the assistant editor.'}
         </p>
 
-        <Card className="rise rise-3 space-y-5 shadow-raise sm:p-7">
+        <Card className="space-y-5 sm:p-7">
           <fieldset disabled={busy || refreshPending} className="space-y-5">
           {step === 0 && (
             <>

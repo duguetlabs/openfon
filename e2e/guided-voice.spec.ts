@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, openSettingsSections } from './fixtures';
 import { fillCatalog, expectCatalog } from './catalog-fields';
 
 test('custom pipeline saves separate BYOK components and guided voices without exposing keys', async ({ page }) => {
@@ -14,6 +14,7 @@ test('custom pipeline saves separate BYOK components and guided voices without e
   await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
   await expect(page).toHaveURL('/overview');
   await page.goto('/settings');
+  await openSettingsSections(page);
   // The local instance is a custom provider; never suggest Kataleptic IDs for it.
   await expect(page.getByLabel('Workspace text model', { exact: true }).locator('option[value="llama-3.3-70b"]')).toHaveCount(0);
   await fillCatalog(page, 'Workspace text model', 'previous-custom-model');
@@ -34,6 +35,7 @@ test('custom pipeline saves separate BYOK components and guided voices without e
   await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
   await expect(page.getByText('Provider settings saved.', { exact: false })).toBeVisible();
   await page.reload();
+  await openSettingsSections(page);
   for (const name of ['Text','Transcription','Speech synthesis']) await expect(page.getByLabel(`${name} API key`, { exact: true })).toHaveValue('');
   const response = await page.request.get('/api/me/provider');
   const view = await response.json();
@@ -53,6 +55,7 @@ test('custom pipeline saves separate BYOK components and guided voices without e
   await expect(page.getByText('Assistant saved.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
   await page.reload();
+  await openSettingsSections(page);
   await expect(page.getByLabel('Conversation engine', { exact: true })).toHaveValue('pipeline');
   await expectCatalog(page, 'Speech voice', 'coral');
   await expectCatalog(page, 'Default language', 'de');
@@ -61,11 +64,13 @@ test('custom pipeline saves separate BYOK components and guided voices without e
   await expect(page.getByText('Assistant saved.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
   await page.reload();
+  await openSettingsSections(page);
   await expectCatalog(page, 'Language model', 'future-custom-model');
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: test.info().outputPath('guided-pipeline-mobile.png'), fullPage: true });
   await page.goto('/settings');
+  await openSettingsSections(page);
   await expect(page.getByText('To remove the saved speech key, select Instance default or Browser speech, then save.')).toBeVisible();
   await page.getByLabel('Speech synthesis provider', { exact: true }).selectOption('browser');
   await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
@@ -87,6 +92,14 @@ test('guided Kataleptic tiers show matching voices and preserve unknown saved va
   await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
   await expect(page).toHaveURL('/overview');
   const { assistants } = await (await page.request.get('/api/me/bootstrap')).json();
+  const models = ['gpt-realtime-2', 'gpt-realtime-2.1', 'gpt-realtime-2.1-mini', 'gpt-live-1'];
+  const distinctVoice = (model: string) => model === 'gpt-live-1' ? 'cedar' : `${model}-exclusive`;
+  await page.route('**/api/me/provider/catalog', route => route.fulfill({ json: {
+    models: [], live: true, voices: { native: [{ id: 'wrong-shared-voice', label: 'wrong-shared-voice' }], azure: [], hdDefault: '',
+      realtime: Object.fromEntries(models.map(id => [id, [{ id: 'marin', label: 'marin' }, { id: distinctVoice(id), label: distinctVoice(id) }]])),
+      cataloguedModels: models,
+    },
+  } }));
   await page.goto(`/assistants/${assistants[0].id}`);
   const engine = page.getByLabel('Conversation engine', { exact: true });
   // Kataleptic retired its cascade tier; only HD and native tiers are offered.
@@ -97,6 +110,10 @@ test('guided Kataleptic tiers show matching voices and preserve unknown saved va
   await page.getByLabel('Realtime voice', { exact: true }).selectOption('de-DE-SeraphinaMultilingualNeural');
   for (const model of ['gpt-realtime-2','gpt-realtime-2.1','gpt-realtime-2.1-mini','gpt-live-1']) {
     await engine.selectOption(model);
+    await expect(page.getByText('Voice choices from this engine’s Kataleptic catalog.', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Realtime voice', { exact: true }).locator(`option[value="${distinctVoice(model)}"]`)).toHaveCount(1);
+    await expect(page.getByLabel('Realtime voice', { exact: true }).locator('option[value="wrong-shared-voice"]')).toHaveCount(0);
+    if (model.endsWith('mini')) await expect(page.getByLabel('About this engine')).toContainText('Lower cost');
     await expect(page.getByLabel('Realtime voice', { exact: true })).toHaveValue('');
     await expect(page.getByLabel('Custom realtime voice', { exact: true })).toHaveCount(0);
     await page.getByLabel('Realtime voice', { exact: true }).selectOption('marin');
@@ -110,6 +127,7 @@ test('guided Kataleptic tiers show matching voices and preserve unknown saved va
   await expect(page.getByText('Assistant saved.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
   await page.reload();
+  await openSettingsSections(page);
   await expectCatalog(page, 'Realtime voice', 'future-voice');
   await page.screenshot({ path: test.info().outputPath('guided-native-desktop.png'), fullPage: true });
 });

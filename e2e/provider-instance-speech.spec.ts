@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, openSettingsSections } from './fixtures';
 
 test('instance speech hides workspace keys and clears explicit keys when saved', async ({ page }) => {
   await page.goto('/auth');
@@ -13,6 +13,7 @@ test('instance speech hides workspace keys and clears explicit keys when saved',
   await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
   await expect(page).toHaveURL('/overview');
   await page.goto('/settings');
+  await openSettingsSections(page);
   await expect(page.getByText(/Kataleptic is operated by OpenFon/)).toBeVisible();
   for (const label of ['Realtime', 'Transcription']) {
     await expect(page.getByLabel(`${label} API key`, { exact: true })).toHaveCount(0);
@@ -30,6 +31,7 @@ test('instance speech hides workspace keys and clears explicit keys when saved',
   await expect(page.getByText('Provider settings saved.', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save provider settings', exact: true })).toBeEnabled();
   await page.reload();
+  await openSettingsSections(page);
   await expect(page.getByLabel('Realtime API key', { exact: true })).toHaveAttribute('placeholder', 'Saved — leave blank to keep');
   for (const label of ['Realtime', 'Transcription']) {
     await page.getByLabel(`${label} provider`, { exact: true }).selectOption('instance');
@@ -40,6 +42,7 @@ test('instance speech hides workspace keys and clears explicit keys when saved',
   await expect(page.getByText('Provider settings saved.', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save provider settings', exact: true })).toBeEnabled();
   await page.reload();
+  await openSettingsSections(page);
   await expect(page.getByLabel('Realtime API key', { exact: true })).toHaveCount(0);
   const view = await (await page.request.get('/api/me/provider')).json();
   expect(view).toMatchObject({ realtime_provider: 'instance', stt_provider: 'instance',

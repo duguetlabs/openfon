@@ -42,6 +42,8 @@ Follow the [quickstart](docs/quickstart.md) to deploy into **your own Cloudflare
 
 For the conversation-engine comparison, model/voice choices and independent
 component keys, see [the voice configuration guide](docs/voice-configuration.md).
+For where to configure shared business details versus individual assistants, see
+[Settings and assistants](docs/settings-and-assistants.md).
 
 For local development and contributions, see [CONTRIBUTING.md](CONTRIBUTING.md). For a supervised trial, use the [pilot guide](docs/launch/pilot.md), [evaluation template](docs/launch/pilot-evaluation.md) and [cost worksheet](docs/launch/costs.md).
 

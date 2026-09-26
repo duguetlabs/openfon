@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, openSettingsSections } from './fixtures';
 import type { APIResponse, Locator, Page, Request, Route } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 
@@ -21,13 +21,14 @@ async function setup(page: Page) {
   expect(response.ok()).toBe(true);
   const profile = await response.json();
   await page.goto('/settings');
+  await openSettingsSections(page);
   await expect(rows(page)).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Save provider settings', exact: true })).toBeEnabled();
   await newName(page).fill('Created profile');
   return { business, profile, path: `/api/me/business/${business.id}/profiles` };
 }
 const rows = (page: Page) => page.getByRole('button', { name: 'Apply', exact: true }).locator('..');
-const newName = (page: Page) => page.getByPlaceholder('Save current setup as… e.g. "Realtime HD English (Emma)"');
+const newName = (page: Page) => page.getByLabel('New profile name', { exact: true });
 const create = (page: Page) => page.getByRole('button', { name: /^(Save profile|Saving profile…)$/ });
 const frames = (page: Page) => page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
 const matches = (request: Request, method: string, path: string) => request.method() === method && new URL(request.url()).pathname === path;
@@ -105,21 +106,22 @@ test('one pending create admits one POST and one persisted id with confirmed no-
 });
 
 for (const draft of ['Newer name', 'Created profile']) {
-  test(`create acknowledgement preserves later name revision and assistant draft (${draft})`, async ({ page }) => {
-    const { path } = await setup(page);
-    await page.getByRole('radio', { name: /^Pipeline/ }).check();
-    await page.getByLabel('Assistant text model override', { exact: true }).fill('captured-model');
+  test(`create acknowledgement preserves later name revision and business draft (${draft})`, async ({ page }) => {
+    const { path, business } = await setup(page);
+    // Configuration is now edited only in Assistants; seed its saved snapshot.
+    expect((await page.request.put(`/api/me/business/${business.id}/agent`, { data: { engine: 'pipeline', llm_model: 'captured-model' } })).ok()).toBe(true);
+    await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
+    await expect(page.getByLabel('Current primary assistant setup')).toContainText('captured-model');
     const gate = await hold(page, request => matches(request, 'POST', path));
     try {
       await create(page).click(); await expect.poll(() => gate.held.length).toBe(1);
       const submitted = gate.held[0].route.request().postDataJSON();
       expect(submitted.name).toBe('Created profile'); expect(submitted.llm_model).toBe('captured-model');
       await newName(page).fill('Intermediate draft'); await newName(page).fill(draft);
-      await page.getByLabel('Assistant text model override', { exact: true }).fill('newer-model');
       await page.getByLabel('Name', { exact: true }).fill('Newer workspace draft');
       await gate.release(0); await expect(rows(page)).toHaveCount(2);
       await expect(newName(page)).toHaveValue(draft);
-      await expect(page.getByLabel('Assistant text model override', { exact: true })).toHaveValue('newer-model');
+      await expect(page.getByLabel('Current primary assistant setup')).toContainText('captured-model');
       await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Newer workspace draft');
       expect((await persisted(page, path)).find(p => p.name === 'Created profile')?.llm_model).toBe('captured-model');
     } finally { await gate.dispose(); }
@@ -205,7 +207,7 @@ test('independent Settings refresh suppresses list dispatch during committed cre
     await page.getByLabel('Name', { exact: true }).fill('Retained workspace draft');
     await newName(page).fill('Next profile draft');
     await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
-    await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Independent refresh marker');
+    await expect(page.getByLabel('Current primary assistant setup')).toContainText('Independent refresh marker');
     await frames(page);
     // Do not wait for a GET which fixed code intentionally does not dispatch.
     console.log('create-read-suppression-diagnostic', JSON.stringify({ listReads, acknowledged: false }));

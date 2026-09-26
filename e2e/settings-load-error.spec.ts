@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, openSettingsSections } from './fixtures';
 import type { Page, Route } from '@playwright/test';
 
 const providerSave = (page: Page) => page.getByRole('button', { name: 'Save provider settings', exact: true });
@@ -32,6 +32,7 @@ async function openSettings(page: Page, label: string, withProfile = false) {
     expect(response.status()).toBe(201); profileId = (await response.json()).id;
   }
   await page.goto('/settings');
+  await openSettingsSections(page);
   await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Load ownership workshop');
   await expect(providerSave(page)).toBeEnabled();
   if (withProfile) await expect(page.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
@@ -64,7 +65,7 @@ test('accepted automatic settings read clears only an earlier local load failure
   await page.getByLabel('Name', { exact: true }).fill('Newer unsaved business draft');
   await serverMarker(page, businessId, 'Accepted later server assistant');
   await providerSave(page).click();
-  await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Accepted later server assistant');
+  await expect(page.getByLabel('Current primary assistant setup')).toContainText('Accepted later server assistant');
   await expect.poll(() => reads.delivered.includes(4)).toBe(true);
   console.log('settings-load-diagnostic', JSON.stringify({ reads: reads.reads, delivered: reads.delivered, loadAlerts: await alert(page, 'Local load unavailable').count() }));
   await expect(alert(page, 'Local load unavailable')).toHaveCount(0);
@@ -93,7 +94,7 @@ for (const late of ['success', 'failure'] as const) {
       await serverMarker(page, businessId, 'New current assistant');
       await providerSave(page).click();
       if (late === 'success') await expect(alert(page, 'Current load failure')).toBeVisible();
-      else await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('New current assistant');
+      else await expect(page.getByLabel('Current primary assistant setup')).toContainText('New current assistant');
       await expect.poll(() => reads.delivered.includes(4)).toBe(true);
       hold.release(); await expect.poll(() => reads.delivered.includes(2)).toBe(true); await rendered(page);
       expect(reads.reads).toBe(4);
@@ -101,7 +102,7 @@ for (const late of ['success', 'failure'] as const) {
         await expect(alert(page, 'Current load failure')).toBeVisible(); await expect(retrySettings(page)).toBeVisible();
       } else {
         await expect(alert(page, 'Superseded load failure')).toHaveCount(0); await expect(retrySettings(page)).toHaveCount(0);
-        await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('New current assistant');
+        await expect(page.getByLabel('Current primary assistant setup')).toContainText('New current assistant');
       }
     } finally { hold.release(); }
   });
@@ -136,7 +137,7 @@ for (const mutation of ['create', 'rename'] as const) {
       await expect.poll(() => writes).toBe(1); await expect(alert(page, 'Same ownership message')).toBeVisible();
       await page.getByLabel('Name', { exact: true }).fill('Newer draft after refusal');
       hold.release(); await expect.poll(() => reads.delivered.includes(4)).toBe(true);
-      await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Accepted after mutation error');
+      await expect(page.getByLabel('Current primary assistant setup')).toContainText('Accepted after mutation error');
       await expect(alert(page, 'Same ownership message')).toBeVisible();
       await expect(retrySettings(page)).toHaveCount(0);
       await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Newer draft after refusal');
@@ -166,7 +167,7 @@ for (const operation of ['apply', 'delete'] as const) {
     await serverMarker(page, businessId, 'Independent accepted snapshot');
     await page.getByLabel('Name', { exact: true }).fill('Later unsaved workspace');
     await providerSave(page).click();
-    await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Independent accepted snapshot');
+    await expect(page.getByLabel('Current primary assistant setup')).toContainText('Independent accepted snapshot');
     await expect(alert(page, 'The profile change was saved')).toBeVisible();
     const retry = page.getByRole('button', { name: 'Retry profile refresh', exact: true });
     await expect(retry).toBeEnabled(); expect(writes).toBe(1);
@@ -194,7 +195,7 @@ test('independent accepted settings read preserves accepted-write session recove
   await expect(alert(page, 'refreshing the page data failed')).toBeVisible(); expect(writes).toBe(1);
   await serverMarker(page, businessId, 'Independent session marker');
   await providerSave(page).click();
-  await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Independent session marker');
+  await expect(page.getByLabel('Current primary assistant setup')).toContainText('Independent session marker');
   await expect(alert(page, 'refreshing the page data failed')).toBeVisible(); await expect(retrySettings(page)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
   await page.getByLabel('Name', { exact: true }).fill('New draft after accepted write');
