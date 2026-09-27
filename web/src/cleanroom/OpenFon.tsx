@@ -702,6 +702,9 @@ function Desk({
     </>
   );
 }
+function decodePublicSlug(value: string) {
+  try { return decodeURIComponent(value); } catch { return ""; }
+}
 function PublicCall({ slug }: { slug: string }) {
   const [data, setData] = useState<{
     assistantId: string;
@@ -711,6 +714,7 @@ function PublicCall({ slug }: { slug: string }) {
   } | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
+    if (!slug) { setError("This call link is invalid. Ask the business for a new link."); return; }
     void api
       .publicAssistant(slug)
       .then(setData)
@@ -863,6 +867,7 @@ export default function OpenFon() {
     });
   }
   async function load(selected?: string) {
+    const requested = selected || new URLSearchParams(location.search).get("assistant") || location.pathname.match(/^\/assistants\/([^/]+)/)?.[1];
     releaseUnauthorized.current?.();
     releaseUnauthorized.current = auth ? onPrivateUnauthorized(() => { session.invalidate(); clearSession(); }) : null;
     const gen = ++loadGeneration.current;
@@ -907,7 +912,10 @@ export default function OpenFon() {
       if (gen !== loadGeneration.current) return;
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
         setAuth(false); setBoot(null); setAssistant(null); setCalls([]);
-      } else setError(errorText(e));
+      } else {
+        setError(errorText(e));
+        if (requested && requested !== assistant?.id) { setAssistant(null); setMissingTarget(requested); setReplacement(""); }
+      }
       setLoading(false);
     }, showRecovery);
   }
@@ -995,7 +1003,7 @@ export default function OpenFon() {
     finally { assistantMutation.current = false; setAssistantMutating(false); }
   }
   if (publicMatch)
-    return <PublicCall slug={decodeURIComponent(publicMatch[1])} />;
+    return <PublicCall slug={decodePublicSlug(publicMatch[1])} />;
   if (loading && !boot) return <Loading />;
   if (recovery || (!auth && !error)) return <Auth onDone={() => void load()} recovery={recovery} onRetry={() => void signOut()} />;
   return (
@@ -1087,7 +1095,7 @@ export default function OpenFon() {
         <div className="of-global-error">
           <Notice error>
             {error}{" "}
-            <button className="of-text-button" onClick={() => void load()}>
+            <button className="of-text-button" onClick={() => { if (canLeave()) void load(missingTarget || undefined); }}>
               Try again
             </button>
           </Notice>
@@ -1101,7 +1109,7 @@ export default function OpenFon() {
         <Setup onDone={() => load()} />
       ) : (
         <main className="of-main" id="of-main">
-          {missingTarget ? (
+          {loading ? <Loading /> : missingTarget ? (
             <section className="of-business-form of-form">
               <h1>{deletedTarget ? "Receptionist deleted" : "Receptionist unavailable"}</h1>
               <Notice error>{deletedTarget ? "The receptionist was deleted. Existing conversations are still available. Choose your next receptionist before rehearsing." : "The requested receptionist is no longer available in this workspace. Choose a replacement explicitly before rehearsing."}</Notice>
@@ -1111,7 +1119,7 @@ export default function OpenFon() {
               </select></Field>
               {moreAssistants && <Button kind="quiet" disabled={assistantListBusy || loading} onClick={() => void discoverAssistants()}>Find more receptionists</Button>}
               <Button disabled={!replacement || loading} onClick={() => void load(replacement)}>Use selected receptionist</Button>
-              {!deletedTarget && <Button kind="line" disabled={loading} onClick={() => void load()}>Retry requested receptionist</Button>}
+              {!deletedTarget && <Button kind="line" disabled={loading} onClick={() => void load(missingTarget || undefined)}>Retry requested receptionist</Button>}
             </section>
           ) : screen === "story" ? (
             <Welcome
@@ -1130,6 +1138,7 @@ export default function OpenFon() {
             <Conversations initial={callId} query={conversationQuery} onQuery={query => navigate("conversations", false, undefined, query)} assistants={boot.assistants} moreAssistants={moreAssistants} assistantListBusy={assistantListBusy} onMoreAssistants={() => void discoverAssistants()} onSelect={id => navigate("conversations", false, id)} onBack={() => navigate("desk")} />
           ) : screen === "connections" && assistant ? (
             <Connections
+              key={assistant.id}
               assistant={assistant}
               onBack={() => navigate("desk")}
               onSaved={() => api.assistant(assistant.id).then(acceptAssistant)}

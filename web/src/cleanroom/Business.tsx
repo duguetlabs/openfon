@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { api } from "../cleanroom-runtime";
 import type { Workspace } from "../cleanroom-runtime";
@@ -26,13 +26,43 @@ export function Business({ workspace, onBack, onSaved }: { workspace: Workspace;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [refreshPending, setRefreshPending] = useState(false);
+  const acknowledged = useRef<{ submitted: typeof draft; version: number } | null>(null);
+  const draftRef = useRef(draft);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const pending = useRef(false);
   const version = useRef(0);
   const dirty = JSON.stringify(draft) !== JSON.stringify(baseline);
-  useDirtyGuard(dirty || busy);
-  function change(next: typeof draft) { version.current++; setDraft(next); setNotice(""); }
+  useDirtyGuard(dirty || busy || refreshPending);
+  function change(next: typeof draft) { version.current++; draftRef.current = next; setDraft(next); setNotice(""); }
+  async function readAcceptedWorkspace() {
+    const accepted = acknowledged.current;
+    if (!accepted) return;
+    const fresh = (await api.bootstrap()).workspace;
+    if (!mounted.current) return;
+    if (!fresh || fresh.id !== workspace.id) throw new Error("The saved business is unavailable. Retry the refresh.");
+    const canonical = snapshot(fresh);
+    const current = draftRef.current;
+    const next = { ...canonical, workspace: { ...canonical.workspace } };
+    for (const key of basics) if (current.workspace[key] !== accepted.submitted.workspace[key]) next.workspace[key] = current.workspace[key];
+    for (const key of ["hours", "closures", "services", "faqs"] as const) {
+      if (JSON.stringify(current[key]) !== JSON.stringify(accepted.submitted[key])) Object.assign(next, { [key]: current[key] });
+    }
+    draftRef.current = next; setDraft(next); setBaseline(canonical);
+    onSaved(fresh); acknowledged.current = null; setRefreshPending(false);
+    setNotice("Business details saved."); setError("");
+    if (version.current === accepted.version) onBack(true);
+  }
+  async function retryRefresh() {
+    if (pending.current || !acknowledged.current) return;
+    pending.current = true; setBusy(true); setError("");
+    try { await readAcceptedWorkspace(); }
+    catch (e) { if (mounted.current) setError(`Business details were saved, but the latest details could not load. ${errorText(e)}`); }
+    finally { if (mounted.current) { pending.current = false; setBusy(false); } }
+  }
   async function save() {
-    if (pending.current || !dirty) return;
+    if (pending.current || acknowledged.current || !dirty) return;
     pending.current = true; setBusy(true); setError("");
     const submitted = draft;
     const submittedVersion = version.current;
@@ -44,18 +74,18 @@ export function Business({ workspace, onBack, onSaved }: { workspace: Workspace;
     if (JSON.stringify(submitted.faqs) !== JSON.stringify(baseline.faqs)) payload.faqs_json = serializeFaqRows(submitted.faqs);
     try {
       await api.updateWorkspace(workspace.id, payload);
-      const accepted = { ...workspace, ...payload };
-      setBaseline(submitted);
-      onSaved(accepted);
-      setNotice("Business details saved.");
-      if (version.current === submittedVersion) onBack(true);
-    } catch (e) { setError(errorText(e)); }
-    finally { pending.current = false; setBusy(false); }
+      if (!mounted.current) return;
+      acknowledged.current = { submitted, version: submittedVersion };
+      setBaseline(submitted); setRefreshPending(true);
+      await readAcceptedWorkspace();
+    } catch (e) { if (mounted.current) setError(acknowledged.current ? `Business details were saved, but the latest details could not load. ${errorText(e)}` : errorText(e)); }
+    finally { if (mounted.current) { pending.current = false; setBusy(false); } }
   }
   return <section>
     <button className="of-back" onClick={() => onBack()}><Icon name="back" size={18} />Back to your desk</button>
     <div className="of-page-heading"><div><h1>Your business</h1><p>The essentials your receptionist can share with callers.</p></div></div>
     {error && <Notice error>{error}</Notice>}{notice && <Notice>{notice}</Notice>}
+    {refreshPending && <Button kind="line" disabled={busy} onClick={() => void retryRefresh()}>Retry business refresh</Button>}
     <form className="of-business-form of-form" onSubmit={e => { e.preventDefault(); void save(); }}>
       {basics.map(key => <Field key={key} label={labels[key]}>
         {key === "description" ? <textarea rows={4} value={draft.workspace[key] || ""} onChange={e => change({ ...draft, workspace: { ...draft.workspace, [key]: e.target.value } })} />
@@ -93,7 +123,7 @@ export function Business({ workspace, onBack, onSaved }: { workspace: Workspace;
           <Button kind="quiet" onClick={() => change({ ...draft, faqs: draft.faqs.filter((_, index) => index !== i) })}>Remove question {i + 1}</Button>
         </div>)}
       </Rows>
-      <Button type="submit" disabled={busy || !dirty}>{busy ? "Saving…" : "Save business details"}</Button>
+      <Button type="submit" disabled={busy || refreshPending || !dirty}>{busy ? "Saving…" : "Save business details"}</Button>
     </form>
   </section>;
 }

@@ -70,3 +70,67 @@ test('recording disclosure remains visible when debug-config cannot be read',asy
   await page.goto('/test');
   await expect(page.getByText(/Test calls may record audio, transcripts and configuration/)).toBeVisible();
 });
+
+for (const outcome of ['success', 'failure'] as const) test(`recording deletion ${outcome} survives call completion and stale recording reads`, async ({page}) => {
+  await openAuth(page);
+  await page.getByLabel('Email address').fill(`debug-delete-${outcome}-${Date.now()}@example.invalid`);
+  await page.getByLabel(/^Password/).fill('Synthetic-Debug-Password-1234');
+  await page.getByRole('button',{name:'Create account',exact:true}).click();
+  await page.getByLabel('Business name',{exact:true}).fill('Recording race workshop');
+  await page.getByLabel('What do you do?').fill('Synthetic diagnostics race');
+  await page.getByRole('button',{name:'Meet your receptionist',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Start browser conversation'})).toBeVisible();
+  await page.clock.install();
+  const callId=`recording-race-${outcome}`;
+  let callReads=0, debugReads=0, deletes=0, pendingDelete=false, pendingRead=false, staleDelivered=false, deleted=false;
+  let releaseDelete!:()=>void,releaseRead!:()=>void;
+  const deletion=new Promise<void>(resolve=>{releaseDelete=resolve});
+  const read=new Promise<void>(resolve=>{releaseRead=resolve});
+  await page.route(`**/api/me/calls/${callId}`, route=>route.fulfill({json:{
+    id:callId,status:++callReads===1?'active':'completed',environment:'test',channel:'web',
+    started_at:'2026-09-27T09:00:00Z',duration_s:3,summary:'Synthetic recording race.',turns:[],
+  }}));
+  await page.route(`**/api/me/calls/${callId}/debug`,async route=>{
+    if(route.request().method()==='DELETE'){
+      deletes++;
+      if(deletes===1){pendingDelete=true;await deletion;if(outcome==='failure')return route.fulfill({status:503,json:{error:'Synthetic recording deletion refusal'}});}
+      deleted=true;return route.fulfill({json:{available:false}});
+    }
+    debugReads++;
+    if(debugReads===2){pendingRead=true;await read;await route.fulfill({json:{available:true}});staleDelivered=true;return;}
+    return route.fulfill({json:deleted?{available:false}:{available:true,...(callReads>1?{finishedAt:Date.now()}: {})}});
+  });
+  try{
+    await page.goto(`/conversations?call=${callId}`);
+    await page.getByText('Advanced · recording & diagnostics',{exact:true}).click();
+    await expect(page.getByRole('button',{name:'Delete recording',exact:true})).toBeEnabled();
+    await page.getByRole('button',{name:'Refresh recording',exact:true}).click();
+    await expect.poll(()=>pendingRead).toBe(true);
+    await page.getByRole('button',{name:'Delete recording',exact:true}).click();
+    await expect.poll(()=>pendingDelete).toBe(true);
+    await page.clock.runFor(3001);
+    await expect(page.getByText('completed',{exact:true})).toBeVisible();
+    await expect(page.getByRole('button',{name:'Deleting…',exact:true})).toBeDisabled();
+    expect(debugReads).toBe(2);expect(deletes).toBe(1);
+    releaseDelete();
+    if(outcome==='success')await expect(page.getByText(/No recording is available/)).toBeVisible();
+    else await expect(page.getByRole('alert')).toContainText('Synthetic recording deletion refusal');
+    await expect(page.getByRole('button',{name:'Refresh recording',exact:true})).toBeEnabled();
+    releaseRead();
+    await expect.poll(()=>staleDelivered).toBe(true);
+    await page.clock.runFor(1);
+    if(outcome==='success'){
+      await expect(page.getByRole('button',{name:'Delete recording',exact:true})).toHaveCount(0);
+      await expect(page.getByText(/No recording is available/)).toBeVisible();
+    }else{
+      await expect(page.getByRole('button',{name:'Delete recording',exact:true})).toBeEnabled();
+      await page.getByRole('button',{name:'Refresh recording',exact:true}).click();
+      await expect(page.getByRole('link',{name:'Download debug bundle'})).toBeVisible();
+      await expect(page.getByRole('alert')).toContainText('Synthetic recording deletion refusal');
+      expect(deletes).toBe(1);
+      await page.getByRole('button',{name:'Delete recording',exact:true}).click();
+      await expect(page.getByText(/No recording is available/)).toBeVisible();
+      await expect(page.getByRole('alert')).toHaveCount(0);expect(deletes).toBe(2);
+    }
+  }finally{releaseDelete();releaseRead();}
+});

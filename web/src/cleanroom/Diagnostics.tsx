@@ -24,25 +24,30 @@ export function RecordingDisclosure({ recording }: { recording: boolean | null }
 interface Recording { available: boolean; finishedAt?: number; expiresAt?: number; partial?: boolean; interrupted?: boolean }
 export function CallDiagnostics({ callId, active }: { callId: string; active: boolean }) {
   const [recording, setRecording] = useState<Recording | null>(null);
-  const [error, setError] = useState('');
+  const [readError, setReadError] = useState('');
+  const [deleteError, setDeleteError] = useState('');
   const [reload, setReload] = useState(0);
   const [deleting, setDeleting] = useState(false);
   const revision = useRef(0);
   const deletingRef = useRef(false);
+  const mutationRevision = useRef(0);
   const path = `/api/me/calls/${encodeURIComponent(callId)}/debug`;
+  useEffect(() => () => { ++mutationRevision.current; deletingRef.current = false; }, [path]);
   useEffect(() => {
     const run = ++revision.current;
+    if (deletingRef.current) return;
     void request<Recording>(path).then(value => {
-      if (run === revision.current) { setRecording(value); setError(''); }
-    }).catch(e => { if (run === revision.current) setError(errorText(e)); });
+      if (run === revision.current) { setRecording(value); setReadError(''); }
+    }).catch(e => { if (run === revision.current) setReadError(errorText(e)); });
     return () => { ++revision.current; };
   }, [path, active, reload]);
   return <details className="of-call-diagnostics">
     <summary>Advanced · recording & diagnostics</summary>
     <div>
       <h3>Debug recording</h3>
-      {error && <Notice error>{error}</Notice>}
-      {!recording && !error && <p>Checking recording…</p>}
+      {readError && <Notice error>{readError}</Notice>}
+      {deleteError && <Notice error>{deleteError}</Notice>}
+      {!recording && !readError && <p>Checking recording…</p>}
       {recording && !recording.available && <p>No recording is available. Older calls cannot be recovered; recordings expire after seven days or can be deleted.</p>}
       {recording?.available && <>
         <p>{recording.finishedAt ? 'Recording saved.' : 'Recording in progress or being finalized.'}{recording.expiresAt ? ` Expires ${new Date(recording.expiresAt).toLocaleString()}.` : ''}</p>
@@ -53,12 +58,19 @@ export function CallDiagnostics({ callId, active }: { callId: string; active: bo
           <Button kind="danger" disabled={deleting} onClick={() => {
             if (deletingRef.current) return;
             deletingRef.current = true;
-            const run = ++revision.current;
-            setDeleting(true); setError('');
-            void request<{ ok: boolean }>(path, 'DELETE').then(() => {
-              if (run === revision.current) setRecording({ available: false });
-            }).catch(e => { if (run === revision.current) setError(errorText(e)); })
-              .finally(() => { deletingRef.current = false; if (run === revision.current) setDeleting(false); });
+            const run = ++mutationRevision.current;
+            ++revision.current; // A read started before deletion cannot restore its old recording.
+            setDeleting(true); setDeleteError(''); setReadError('');
+            void request<Recording>(path, 'DELETE').then(result => {
+              if (run !== mutationRevision.current) return;
+              if (result?.available !== false) throw new Error('The server did not confirm recording deletion. Refresh its status before trying again.');
+              ++revision.current;
+              setRecording({ available: false });
+            }).catch(e => { if (run === mutationRevision.current) setDeleteError(errorText(e)); })
+              .finally(() => {
+                if (run !== mutationRevision.current) return;
+                deletingRef.current = false; setDeleting(false);
+              });
           }}>{deleting ? 'Deleting…' : 'Delete recording'}</Button>
         </div>
       </>}

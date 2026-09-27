@@ -37,6 +37,7 @@ test('existing business facts remain editable without dropping preserved row fie
   expect(JSON.parse(saved.services_json)[0]).toMatchObject({ price: '€25', duration: '30 minutes', notes: 'Assessment first' });
   expect(JSON.parse(saved.faqs_json)[0]).toMatchObject({ a: 'Behind the workshop.', source: 'Owner' });
   await business(page);
+  await expect(page.getByLabel('Contact phone', { exact: true })).toHaveValue('+43 222 333');
   await page.getByLabel('Contact phone', { exact: true }).fill('+43 123 456');
   await page.getByRole('button', { name: 'Save business details', exact: true }).click();
   await expect(page).toHaveURL(/\/overview$/);
@@ -175,4 +176,41 @@ test('recipe save waits for pending voice drafts instead of leaving an overwrite
   const final = await (await page.request.get(`/api/me/assistants/${assistant.id}`)).json();
   expect(final.name).toBe('Fourth recipe');
   expect(final.language).toBe(saved.language);
+});
+
+
+test('business refresh after an acknowledged save preserves concurrent fields and retries only reads', async ({ page }) => {
+  await signup(page, 'business-read-recovery');
+  const { business: workspace } = await createWorkspace(page);
+  await business(page);
+  let writes = 0, reads = 0;
+  await page.route(`**/api/me/business/${workspace.id}`, async route => {
+    if (route.request().method() === 'PUT') writes++;
+    await route.continue();
+  });
+  await page.route('**/api/me/bootstrap', async route => {
+    reads++;
+    if (reads === 1) return route.fulfill({ status: 503, json: { error: 'Synthetic refresh unavailable' } });
+    await route.continue();
+  });
+  await page.getByLabel('Business name', { exact: true }).fill('  Canonical workshop  ');
+  await page.getByRole('button', { name: 'Save business details', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Business details were saved');
+  await expect(page.getByRole('alert')).toContainText('Synthetic refresh unavailable');
+  expect(writes).toBe(1);
+  expect((await page.request.put(`/api/me/business/${workspace.id}`, { data: { phone: '+43 555 999' } })).ok()).toBe(true);
+  await page.getByRole('textbox', { name: 'What you do', exact: true }).fill('Newer unsaved description');
+  await expect(page.getByRole('button', { name: 'Save business details', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Retry business refresh', exact: true }).click();
+  await expect(page.getByLabel('Business name', { exact: true })).toHaveValue('Canonical workshop');
+  await expect(page.getByLabel('Contact phone', { exact: true })).toHaveValue('+43 555 999');
+  await expect(page.getByRole('textbox', { name: 'What you do', exact: true })).toHaveValue('Newer unsaved description');
+  expect(writes).toBe(1); expect(reads).toBe(2);
+  await expect(page.getByRole('button', { name: 'Save business details', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Save business details', exact: true }).click();
+  await expect(page).toHaveURL(/\/overview$/);
+  expect(writes).toBe(2);
+  await business(page);
+  await expect(page.getByLabel('Contact phone', { exact: true })).toHaveValue('+43 555 999');
+  await expect(page.getByRole('textbox', { name: 'What you do', exact: true })).toHaveValue('Newer unsaved description');
 });

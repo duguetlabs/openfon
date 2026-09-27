@@ -814,8 +814,105 @@ test('historic receptionist and status conversation filters survive edits, histo
   await expect(status).toHaveValue('completed');
   await expect.poll(() => queries.at(-1)?.get('assistantId')).toBe(target.id);
   expect(queries.at(-1)?.get('status')).toBe('completed');
-  await page.screenshot({ path: '/tmp/openfon-brand-integration/conversation-filters-desktop.png', fullPage: true });
+  await page.screenshot({
+    path: '/tmp/openfon-brand-integration/conversation-filters-desktop.png',
+    fullPage: true,
+  });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: '/tmp/openfon-brand-integration/conversation-filters-mobile.png', fullPage: true });
+  await page.screenshot({
+    path: '/tmp/openfon-brand-integration/conversation-filters-mobile.png',
+    fullPage: true,
+  });
 });
+
+test('confirmed history navigation between receptionists resets the previous connection draft', async ({
+  page,
+}) => {
+  const { assistant: primary } = await signup(page);
+  const created = await page.request.post('/api/me/assistants', {
+    data: {
+      name: 'Other receptionist',
+      persona: 'Warm and clear',
+      greeting: 'Hello from the other receptionist.',
+      engine: 'pipeline',
+      language: 'fr',
+    },
+  });
+  expect(created.status()).toBe(201);
+  const other = await created.json();
+  await page.reload();
+  await page.getByLabel('Receptionist', { exact: true }).selectOption(other.id);
+  await connections(page);
+  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('fr');
+  await page.getByRole('button', { name: 'Back to your desk', exact: true }).click();
+  await page.getByLabel('Receptionist', { exact: true }).selectOption(primary.id);
+  await connections(page);
+  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');
+  const writes: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'PUT' && /\/api\/me\/assistants\//.test(request.url()))
+      writes.push(new URL(request.url()).pathname);
+  });
+  await page.getByLabel('Language', { exact: true }).fill('de');
+  let held: Route | undefined;
+  let holdNext = true;
+  await page.route(`**/api/me/assistants/${other.id}`, route => {
+    if (route.request().method() === 'GET' && holdNext) { holdNext = false; held = route; return; }
+    return route.continue();
+  });
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.evaluate(() => history.go(-2));
+  await expect(page).toHaveURL(new RegExp(`assistant=${other.id}`));
+  await expect.poll(() => !!held).toBe(true);
+  await expect(page.getByRole('heading', { name: 'Your connections', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Start browser conversation', exact: true })).toHaveCount(0);
+  const response = held!; held = undefined;
+  await response.fulfill({ status: 503, json: { error: 'Target temporarily unavailable' } });
+  await expect(page.getByRole('alert').filter({ hasText: 'Target temporarily unavailable' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Receptionist unavailable', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Start browser conversation', exact: true })).toHaveCount(0);
+  expect(writes).toEqual([]);
+  await page.getByRole('button', { name: 'Retry requested receptionist', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Your connections', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('fr');
+  await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toBeDisabled();
+  expect(writes).toEqual([]);
+  await page.getByLabel('Language', { exact: true }).fill('es');
+  await page.getByRole('button', { name: 'Save connections', exact: true }).click();
+  await expect(page.getByText('Connections saved.', { exact: false })).toBeVisible();
+  expect(writes).toEqual([`/api/me/assistants/${other.id}`]);
+  expect((await (await page.request.get(`/api/me/assistants/${primary.id}`)).json()).language).toBe('en');
+  expect((await (await page.request.get(`/api/me/assistants/${other.id}`)).json()).language).toBe('es');
+  await page.evaluate(() => history.go(2));
+  await expect(page.getByRole('heading', { name: 'Your connections', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');
+  await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toBeDisabled();
+  expect(writes).toEqual([`/api/me/assistants/${other.id}`]);
+});
+
+for (const path of ['/call/%E0%A4', '/widget/%E0%A4']) {
+  test(`malformed public link ${path} shows an unavailable state without a render crash`, async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    let privateReads = 0;
+    page.on('pageerror', (error) => errors.push(error.message));
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname.startsWith('/api/me')) privateReads++;
+    });
+    // The HTTP server escapes malformed percent bytes before serving the app.
+    // Install the raw history URL before React mounts to exercise its decoder.
+    await page.addInitScript(malformedPath => history.replaceState(history.state, '', malformedPath), path);
+    await page.goto('/call/malformed-test-link');
+    expect(await page.evaluate(() => location.pathname)).toBe(path);
+    await expect(page.getByRole('alert')).toContainText(/invalid|unavailable/i);
+    await expect(page.getByRole('button', { name: 'Start browser conversation', exact: true })).toHaveCount(
+      0,
+    );
+    expect(errors).toEqual([]);
+    expect(privateReads).toBe(0);
+  });
+}
