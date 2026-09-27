@@ -28,6 +28,7 @@ import { Icon } from "./icons";
 import { Rehearsal } from "./Rehearsal";
 import { Knowledge } from "./Knowledge";
 import { CallRows, Conversations } from "./Conversations";
+import { Business } from "./Business";
 import { Connections } from "./Connections";
 import { VoiceChoices } from "./VoiceChoices";
 import { Welcome, DeskIntroduction } from "./Welcome";
@@ -189,11 +190,15 @@ function Auth({ onDone, recovery, onRetry }: {
     </div>
   );
 }
-function Setup({ onDone }: { onDone: () => void }) {
+function Setup({ onDone }: { onDone: () => void | Promise<void> }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [created, setCreated] = useState(false);
+  const pending = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   return (
     <main className="of-setup" id="of-main">
       <div className="of-setup-heading"><span className="of-kicker">A quick introduction</span>
@@ -211,18 +216,24 @@ function Setup({ onDone }: { onDone: () => void }) {
         className="of-form"
         onSubmit={async (e) => {
           e.preventDefault();
-          setBusy(true);
+          if (pending.current) return;
+          pending.current = true; setBusy(true); setError("");
           try {
-            await api.createWorkspace({
+            if (!created) {
+              await api.createWorkspace({
               name,
               description,
               timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            });
-            onDone();
+              });
+              if (!mounted.current) return;
+              setCreated(true);
+            }
+            await onDone();
           } catch (err) {
-            setError(errorText(err));
+            if (mounted.current) setError(errorText(err));
           } finally {
-            setBusy(false);
+            pending.current = false;
+            if (mounted.current) setBusy(false);
           }
         }}
       >
@@ -230,6 +241,7 @@ function Setup({ onDone }: { onDone: () => void }) {
         <Field label="Business name">
           <input
             autoFocus
+            disabled={busy || created}
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -242,111 +254,18 @@ function Setup({ onDone }: { onDone: () => void }) {
         >
           <textarea
             rows={3}
+            disabled={busy || created}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="We’re a local…"
           />
         </Field>
         <Button type="submit" disabled={busy}>
-          {busy ? "Preparing your desk…" : "Meet your receptionist"}
+          {busy ? "Preparing your desk…" : created ? "Retry opening your desk" : "Meet your receptionist"}
           <Icon name="arrow" size={18} />
         </Button>
       </form>
     </main>
-  );
-}
-function Business({
-  workspace,
-  onDone,
-}: {
-  workspace: Workspace;
-  onDone: (saved?: boolean) => void;
-}) {
-  const [draft, setDraft] = useState({ ...workspace });
-  useDirtyGuard(JSON.stringify(draft) !== JSON.stringify(workspace));
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  return (
-    <section>
-      <button className="of-back" onClick={() => onDone()}>
-        <Icon name="back" size={18} />
-        Back to your desk
-      </button>
-      <div className="of-page-heading">
-        <div>
-          <h1>Your business</h1>
-          <p>The essentials your receptionist can share with callers.</p>
-        </div>
-      </div>
-      {error && <Notice error>{error}</Notice>}
-      <form
-        className="of-business-form of-form"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          setBusy(true);
-          try {
-            await api.updateWorkspace(workspace.id, {
-              name: draft.name,
-              description: draft.description,
-              address: draft.address,
-              phone: draft.phone,
-              website: draft.website,
-              timezone: draft.timezone,
-            });
-            onDone(true);
-          } catch (err) {
-            setError(errorText(err));
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        {(
-          [
-            "name",
-            "description",
-            "address",
-            "phone",
-            "website",
-            "timezone",
-          ] as const
-        ).map((key) => (
-          <Field
-            key={key}
-            label={
-              {
-                name: "Business name",
-                description: "What you do",
-                address: "Address",
-                phone: "Contact phone",
-                website: "Website",
-                timezone: "Time zone",
-              }[key]
-            }
-          >
-            {key === "description" ? (
-              <textarea
-                rows={4}
-                value={draft[key] || ""}
-                onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
-              />
-            ) : (
-              <input
-                required={key === "name"}
-                type={
-                  key === "website" ? "url" : key === "phone" ? "tel" : "text"
-                }
-                value={draft[key] || ""}
-                onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
-              />
-            )}
-          </Field>
-        ))}
-        <Button type="submit" disabled={busy}>
-          {busy ? "Saving…" : "Save business details"}
-        </Button>
-      </form>
-    </section>
   );
 }
 function Desk({
@@ -395,6 +314,8 @@ function Desk({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [assistantRefreshPending, setAssistantRefreshPending] = useState(false);
+  const mutation = useRef(false);
   useEffect(() => {
     setDraft(assistant);
   }, [assistant.id]);
@@ -423,7 +344,8 @@ function Desk({
     return () => window.removeEventListener("beforeunload", prevent);
   }, [dirty]);
   async function save() {
-    setBusy(true);
+    if (mutation.current || assistantRefreshPending) return;
+    mutation.current = true; setBusy(true);
     setError("");
     try {
       const patch: Partial<AssistantFields> = {};
@@ -443,10 +365,25 @@ function Desk({
     } catch (e) {
       setError(errorText(e));
     } finally {
-      setBusy(false);
+      mutation.current = false; setBusy(false);
     }
   }
-  useDirtyGuard(dirty);
+  async function refreshAssistant() {
+    try {
+      const saved = await api.assistant(assistant.id);
+      setAssistant(saved);
+      setDraft(current => {
+        const next = { ...saved };
+        for (const key of fields) if (current[key] !== assistant[key]) (next as unknown as Record<string, unknown>)[key] = current[key];
+        return next;
+      });
+      setAssistantRefreshPending(false); setError("");
+    } catch (e) {
+      setAssistantRefreshPending(true);
+      setError(`The change was saved, but the receptionist could not refresh. ${errorText(e)}`);
+    }
+  }
+  useDirtyGuard(dirty || busy);
   const messages = calls.filter(
     (c) => c.environment === "live" && callbackMessage(c.message_json)?.message,
   );
@@ -535,12 +472,7 @@ function Desk({
             "Hours, services and answers customers need",
             <Knowledge
               assistant={assistant}
-              onChanged={() =>
-                void api
-                  .assistant(assistant.id)
-                  .then(setAssistant)
-                  .catch((e) => setError(errorText(e)))
-              }
+              onChanged={() => api.assistant(assistant.id).then(setAssistant)}
             />,
           )}
           {job(
@@ -735,21 +667,30 @@ function Desk({
             Web availability is separate from connecting a phone number.
           </small>
         </div>
+        {assistantRefreshPending && <Button kind="line" disabled={busy} onClick={async () => {
+          if (mutation.current) return;
+          mutation.current = true; setBusy(true);
+          try { await refreshAssistant(); } finally { mutation.current = false; setBusy(false); }
+        }}>Retry assistant refresh</Button>}
         <Button
           kind="line"
-          disabled={busy || dirty}
+          disabled={busy || dirty || assistantRefreshPending}
           onClick={async () => {
-            setBusy(true);
+            if (mutation.current || assistantRefreshPending) return;
+            mutation.current = true; setBusy(true);
             setError("");
             try {
+              const nextState = assistant.state === "active" ? "paused" : "active";
               if (assistant.state === "active")
                 await api.pauseAssistant(assistant.id);
               else await api.activateAssistant(assistant.id);
-              setAssistant(await api.assistant(assistant.id));
+              setAssistant({ ...assistant, state: nextState });
+              setAssistantRefreshPending(true);
+              await refreshAssistant();
             } catch (e) {
               setError(errorText(e));
             } finally {
-              setBusy(false);
+              mutation.current = false; setBusy(false);
             }
           }}
         >
@@ -812,18 +753,33 @@ function PublicCall({ slug }: { slug: string }) {
     </div>
   );
 }
+const screenPaths: Record<string, string> = { desk: "/overview", business: "/business", connections: "/connections", conversations: "/conversations", account: "/account", story: "/about" };
+function screenFromPath() {
+  const path = location.pathname;
+  if (/^\/(?:connections|settings)\/?$/.test(path)) return "connections";
+  if (/^\/(?:conversations|calls)(?:\/|$)/.test(path)) return "conversations";
+  if (/^\/business\/?$/.test(path)) return "business";
+  if (/^\/account\/?$/.test(path)) return "account";
+  if (/^\/about\/?$/.test(path)) return "story";
+  return "desk";
+}
+function callFromLocation() { return new URLSearchParams(location.search).get("call") || location.pathname.match(/^\/calls\/([^/]+)$/)?.[1] || undefined; }
 export default function OpenFon() {
   const [boot, setBoot] = useState<Bootstrap | null>(null);
   const [assistant, setAssistant] = useState<Assistant | null>(null);
   const [calls, setCalls] = useState<Call[]>([]);
-  const [screen, setScreen] = useState("desk");
-  const [callId, setCallId] = useState<string | undefined>();
+  const [screen, setScreen] = useState(screenFromPath);
+  const [callId, setCallId] = useState<string | undefined>(callFromLocation);
+  const historyIndex = useRef<number>(Number(history.state?.openfonIndex) || 0);
+  const restoringHistory = useRef(false);
   const [loading, setLoading] = useState(true);
   const [auth, setAuth] = useState(false);
   const [error, setError] = useState("");
   const [menu, setMenu] = useState(false);
   const [recovery, setRecovery] = useState<SignOutRecovery | null>(null);
-  type ReceptionSnapshot = { boot: Bootstrap; assistant: Assistant | null; calls: Call[] };
+  const [missingTarget, setMissingTarget] = useState<string | null>(null);
+  const [replacement, setReplacement] = useState("");
+  type ReceptionSnapshot = { boot: Bootstrap; assistant: Assistant | null; calls: Call[]; missingTarget: string | null };
   const [session] = useState(() => new SessionCoordinator<ReceptionSnapshot>(browserLogoutIntentStorage));
   const loadGeneration = useRef(0);
   const callsGeneration = useRef(0);
@@ -871,8 +827,8 @@ export default function OpenFon() {
     ++loadGeneration.current;
     ++callsGeneration.current;
     setAuth(false); setBoot(null); setAssistant(null); setCalls([]);
-    setMenu(false); setScreen('desk'); setError(''); setLoading(false);
-    history.replaceState(null, '', '/login');
+    setMenu(false); setScreen('desk'); setError(''); setLoading(false); setMissingTarget(null); setReplacement('');
+    history.replaceState({ openfonIndex: historyIndex.current }, '', '/login');
   }
   function showRecovery(state: SignOutRecovery) {
     clearSession();
@@ -902,17 +858,35 @@ export default function OpenFon() {
     await session.refresh(async () => {
       const b = await api.bootstrap();
       if (gen !== loadGeneration.current) throw new Error('Session changed.');
-      const pathAssistant = location.pathname.match(/^\/assistants\/([^/]+)/)?.[1];
-      const key = selected || assistant?.id ||
-        (b.assistants.some(a => a.id === pathAssistant) ? pathAssistant : undefined) || b.assistants[0]?.id;
-      const a = b.workspace && key ? await api.assistant(key) : null;
+      const pathAssistant = new URLSearchParams(location.search).get("assistant") || location.pathname.match(/^\/assistants\/([^/]+)/)?.[1];
+      const key = selected || pathAssistant || assistant?.id || b.assistants[0]?.id;
+      let unavailable: string | null = null;
+      let a: Assistant | null = null;
+      if (b.workspace && key) {
+        try {
+          a = await api.assistant(key);
+          if (a.business_id !== b.workspace.id) { unavailable = key; a = null; }
+          else if (!b.assistants.some(item => item.id === a!.id)) b.assistants.push(a);
+        } catch (e) { if (e instanceof ApiError && e.status === 404) unavailable = key; else throw e; }
+      }
       if (gen !== loadGeneration.current) throw new Error('Session changed.');
       const result = b.workspace ? await api.calls({ limit: 30, environment: 'all' }) : null;
-      return { boot: b, assistant: a, calls: result?.items || [] };
+      return { boot: b, assistant: a, calls: result?.items || [], missingTarget: unavailable };
     }, snapshot => {
       if (gen !== loadGeneration.current) return;
       setBoot(snapshot.boot); setAssistant(snapshot.assistant); setCalls(snapshot.calls);
+      setMissingTarget(snapshot.missingTarget); setReplacement("");
       setAuth(true); setRecovery(null); setLoading(false);
+      if (/^\/(?:login|signup|auth|onboarding)?\/?$/.test(location.pathname)) {
+        history.replaceState({ ...history.state, openfonIndex: historyIndex.current }, "", "/overview");
+      }
+      if (selected && snapshot.assistant) {
+        const url = new URL(location.href);
+        if (/^\/(?:assistants|studio|test)(?:\/|$)/.test(url.pathname)) url.pathname = "/overview";
+        if (snapshot.assistant.id === snapshot.boot.assistants[0]?.id) url.searchParams.delete("assistant");
+        else url.searchParams.set("assistant", snapshot.assistant.id);
+        history.replaceState({ ...history.state, openfonIndex: historyIndex.current }, "", url.pathname + url.search);
+      }
     }, e => {
       if (gen !== loadGeneration.current) return;
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
@@ -925,9 +899,36 @@ export default function OpenFon() {
     if (!publicMatch) void load();
     return () => { session.invalidate(); ++loadGeneration.current; ++callsGeneration.current; };
   }, []);
-  function navigate(next: string, saved = false) {
+  useEffect(() => {
+    if (publicMatch) return;
+    history.replaceState({ ...history.state, openfonIndex: historyIndex.current }, "");
+    const restore = (event: PopStateEvent) => {
+      if (restoringHistory.current) { restoringHistory.current = false; return; }
+      const targetIndex = Number(event.state?.openfonIndex) || 0;
+      if (!canLeave()) {
+        const delta = historyIndex.current - targetIndex;
+        if (delta) { restoringHistory.current = true; history.go(delta); }
+        return;
+      }
+      historyIndex.current = targetIndex;
+      setScreen(screenFromPath()); setCallId(callFromLocation()); setMenu(false);
+      const targetAssistant = new URLSearchParams(location.search).get("assistant") || location.pathname.match(/^\/assistants\/([^/]+)/)?.[1] || boot?.assistants[0]?.id;
+      if (targetAssistant && targetAssistant !== assistant?.id && boot?.assistants.some(a => a.id === targetAssistant)) void load(targetAssistant);
+      window.scrollTo({ top: 0, behavior: "instant" });
+    };
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, [assistant?.id, boot?.account.id]);
+  function navigate(next: string, saved = false, selectedCall?: string) {
     if (!saved && next !== screen && !canLeave()) return false;
-    setScreen(next);
+    const url = new URL(screenPaths[next] || "/overview", location.origin);
+    if (assistant && assistant.id !== boot?.assistants[0]?.id) url.searchParams.set("assistant", assistant.id);
+    if (selectedCall) url.searchParams.set("call", selectedCall);
+    if (location.pathname + location.search !== url.pathname + url.search) {
+      historyIndex.current++;
+      history.pushState({ openfonIndex: historyIndex.current }, "", url.pathname + url.search);
+    }
+    setScreen(next); setCallId(selectedCall);
     setMenu(false);
     window.scrollTo({ top: 0, behavior: "instant" });
     return true;
@@ -1036,10 +1037,21 @@ export default function OpenFon() {
           <Account email={boot.account.email} onDelete={deleteAccount} onDone={() => navigate('desk')} />
         </main>
       ) : !boot.workspace ? (
-        <Setup onDone={() => void load()} />
+        <Setup onDone={() => load()} />
       ) : (
         <main className="of-main" id="of-main">
-          {screen === "story" ? (
+          {missingTarget ? (
+            <section className="of-business-form of-form">
+              <h1>Receptionist unavailable</h1>
+              <Notice error>The requested receptionist is no longer available in this workspace. Choose a replacement explicitly before rehearsing.</Notice>
+              <Field label="Choose a replacement receptionist"><select value={replacement} onChange={e => setReplacement(e.target.value)}>
+                <option value="">Choose a receptionist…</option>
+                {boot.assistants.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select></Field>
+              <Button disabled={!replacement || loading} onClick={() => void load(replacement)}>Use selected receptionist</Button>
+              <Button kind="line" disabled={loading} onClick={() => void load()}>Retry requested receptionist</Button>
+            </section>
+          ) : screen === "story" ? (
             <Welcome
               inApp
               brand={<Brand inverse />}
@@ -1049,9 +1061,8 @@ export default function OpenFon() {
           ) : screen === "business" ? (
             <Business
               workspace={boot.workspace}
-              onDone={(saved) => {
-                if (navigate("desk", saved)) void load();
-              }}
+              onBack={(saved) => { navigate("desk", saved); }}
+              onSaved={workspace => setBoot(current => current ? { ...current, workspace } : current)}
             />
           ) : screen === "conversations" ? (
             <Conversations initial={callId} onBack={() => navigate("desk")} />
@@ -1106,8 +1117,7 @@ export default function OpenFon() {
                 onConnections={() => navigate("connections")}
                 onBusiness={() => navigate("business")}
                 onConversations={(id) => {
-                  setCallId(id);
-                  navigate("conversations");
+                  navigate("conversations", false, id);
                 }}
                 refreshCalls={() => void refreshCalls()}
                 onStory={() => navigate("story")}
