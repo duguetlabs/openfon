@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { api, ApiError, callbackMessage, callDate, RehearsalController, parseAssistantRecipe, exportAssistantRecipe, assistantRecipePatch, supportedLanguages, voiceChoicesFor } from '../web/src/cleanroom-runtime';
+import { api, ApiError, onPrivateUnauthorized, callbackMessage, callDate, RehearsalController, parseAssistantRecipe, exportAssistantRecipe, assistantRecipePatch, supportedLanguages, voiceChoicesFor } from '../web/src/cleanroom-runtime';
 import type { VoiceEvent } from '../web/src/voice';
 import type { ProviderCatalog } from '../web/src/cleanroom-runtime';
 import { OPENAI_REALTIME_VOICES } from '../src/provider-settings';
@@ -39,6 +39,25 @@ describe('model-scoped language and voice choices', () => {
 });
 
 describe('clean-room API failure contract', () => {
+  it('expires only the current private session and ignores stale or public authentication failures', async () => {
+    const first = vi.fn(), current = vi.fn();
+    const releaseFirst = onPrivateUnauthorized(first);
+    let resolve!: (response: Response) => void;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(r => { resolve = r; })));
+    const pending = api.provider();
+    const releaseCurrent = onPrivateUnauthorized(current);
+    releaseFirst();
+    resolve(new Response(JSON.stringify({error:'Old session expired'}), {status:401}));
+    await expect(pending).rejects.toMatchObject({status:401});
+    expect(first).not.toHaveBeenCalled(); expect(current).not.toHaveBeenCalled();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', {status:401})));
+    await expect(api.login('a@example.invalid','wrong')).rejects.toMatchObject({status:401});
+    expect(current).not.toHaveBeenCalled();
+    await expect(api.provider()).rejects.toMatchObject({status:401});
+    await expect(api.provider()).rejects.toMatchObject({status:401});
+    expect(current).toHaveBeenCalledTimes(1);
+    releaseCurrent();
+  });
   it.each(['null', '{}', 'not-json'])('requires an explicit logout/deletion acknowledgment: %s', async body => {
     const fetch = vi.fn(async () => new Response(body));
     vi.stubGlobal('fetch', fetch);

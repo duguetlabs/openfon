@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, callbackMessage, callDate } from "../cleanroom-runtime";
+import { api, ApiError, callbackMessage, callDate } from "../cleanroom-runtime";
 import type { Call, CallDetail, Page } from "../cleanroom-runtime";
 import { Button, Empty, Notice, errorText } from "./ui";
 import { Icon } from "./icons";
@@ -68,95 +68,114 @@ export function CallRows({
 export function Conversations({
   initial,
   onBack,
+  onSelect,
+  query,
+  onQuery,
 }: {
   initial?: string;
+  onSelect: (id?: string) => void;
+  query: string;
+  onQuery: (search: string, environment: string) => void;
   onBack: () => void;
 }) {
+  const params = new URLSearchParams(query);
   const [page, setPage] = useState<Page<Call>>({ items: [], nextCursor: null });
   const [detail, setDetail] = useState<CallDetail | null>(null);
-  const [filter, setFilter] = useState<"all" | "test" | "live">("all");
-  const [search, setSearch] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | undefined>(initial);
+  const selected = useRef(initial);
+  const [filter, setFilter] = useState<"all" | "test" | "live">(params.get("environment") === "test" ? "test" : params.get("environment") === "live" ? "live" : "all");
+  const [search, setSearch] = useState(params.get("search") || "");
+  const [listError, setListError] = useState("");
+  const [detailError, setDetailError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [listBusy, setListBusy] = useState(false);
+  const [detailBusy, setDetailBusy] = useState(false);
+  const [savingQuestion, setSavingQuestion] = useState(false);
+  const questionPending = useRef(false);
   const [notice, setNotice] = useState("");
   const listGeneration = useRef(0);
   const detailGeneration = useRef(0);
-  async function load(cursor?: string) {
+  const poll = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const polls = useRef(0);
+  const busy = selectedId ? detailBusy : listBusy;
+  function clearPoll() { if (poll.current) clearTimeout(poll.current); poll.current = null; }
+  async function load(cursor?: string, selectedFilter = filter, selectedSearch = search) {
     const run = ++listGeneration.current;
-    setBusy(true);
-    setError("");
+    setListBusy(true); setListError("");
     try {
-      const data = await api.calls({
-        environment: filter,
-        search,
-        cursor,
-        limit: 30,
-      });
-      if (run === listGeneration.current)
-        setPage((p) =>
-          cursor ? { ...data, items: [...p.items, ...data.items] } : data,
-        );
-    } catch (e) {
-      if (run === listGeneration.current) setError(errorText(e));
-    } finally {
-      if (run === listGeneration.current) setBusy(false);
-    }
+      const data = await api.calls({ environment: selectedFilter, search: selectedSearch, cursor, limit: 30 });
+      if (run === listGeneration.current) setPage(current => cursor ? { ...data, items: [...current.items, ...data.items] } : data);
+    } catch (e) { if (run === listGeneration.current) setListError(errorText(e)); }
+    finally { if (run === listGeneration.current) setListBusy(false); }
   }
-  async function open(id: string) {
+  async function open(id: string, automatic = false, failures = 0) {
+    clearPoll();
+    if (!automatic) {
+      polls.current = 0;
+      if (selected.current !== id) { setActionError(""); setNotice(""); setDetail(null); }
+      selected.current = id; setSelectedId(id);
+    }
     const run = ++detailGeneration.current;
-    setBusy(true);
-    setError("");
+    setDetailBusy(true);
+    if (!automatic) setDetailError("");
     try {
       const found = await api.call(id);
       let name = found.assistant_name;
       if (!name && found.assistant_id) {
-        try {
-          name = (await api.assistant(found.assistant_id)).name;
-        } catch {
-          /* Deleted assistants retain their original call record. */
-        }
+        try { name = (await api.assistant(found.assistant_id)).name; }
+        catch { /* A deleted receptionist does not remove the conversation. */ }
       }
-      if (run === detailGeneration.current)
-        setDetail({ ...found, assistant_name: name });
+      if (run !== detailGeneration.current || selected.current !== id) return;
+      setDetail({ ...found, assistant_name: name }); setDetailError("");
+      if (["active", "pending", "ringing", "connecting"].includes(found.status) && polls.current++ < 60) {
+        poll.current = setTimeout(() => { if (selected.current === id) void open(id, true); }, 3000);
+      }
     } catch (e) {
-      if (run === detailGeneration.current) setError(errorText(e));
-    } finally {
-      if (run === detailGeneration.current) setBusy(false);
-    }
+      if (run !== detailGeneration.current || selected.current !== id) return;
+      setDetailError(errorText(e));
+      const retryable = !(e instanceof ApiError) || e.status >= 500 || e.status === 408 || e.status === 429;
+      if (retryable && failures < 2) poll.current = setTimeout(() => {
+        if (selected.current === id) void open(id, true, failures + 1);
+      }, 3000);
+    } finally { if (run === detailGeneration.current) setDetailBusy(false); }
   }
   useEffect(() => {
-    if (initial) void open(initial);
-    return () => {
-      detailGeneration.current++;
-    };
-  }, [initial]);
-  useEffect(() => {
-    void load();
-    return () => {
-      listGeneration.current++;
-    };
-  }, [filter]);
+    let active = true;
+    const route = new URLSearchParams(query);
+    const routeFilter = route.get("environment") === "test" ? "test" : route.get("environment") === "live" ? "live" : "all";
+    const routeSearch = route.get("search") || "";
+    setFilter(routeFilter); setSearch(routeSearch);
+    Promise.resolve().then(() => {
+      if (!active) return;
+      if (initial) void open(initial);
+      else {
+        selected.current = undefined; setSelectedId(undefined); setDetail(null); setDetailError(""); setActionError("");
+        void load(undefined, routeFilter, routeSearch);
+      }
+    });
+    return () => { active = false; detailGeneration.current++; listGeneration.current++; clearPoll(); };
+  }, [initial, query]);
   const message = detail ? callbackMessage(detail.message_json) : null;
   return (
     <section className="of-brand-operations of-brand-conversations">
       <button
         className="of-back"
         onClick={
-          detail
+          selectedId
             ? () => {
-                detailGeneration.current++;
-                setDetail(null);
-                setNotice("");
+                detailGeneration.current++; clearPoll();
+                selected.current = undefined; setSelectedId(undefined); setDetail(null);
+                setNotice(""); setActionError(""); setDetailError(""); onSelect();
               }
             : onBack
         }
       >
         <Icon name="back" size={18} />
-        {detail ? "All conversations" : "Back to your desk"}
+        {selectedId ? "All conversations" : "Back to your desk"}
       </button>
       <div className="of-page-heading">
         <div>
-          <h1>{detail ? "The conversation" : "Messages & conversations"}</h1>
+          <h1>{selectedId ? "The conversation" : "Messages & conversations"}</h1>
           <p>
             {detail
               ? `${callDate(detail.started_at).toLocaleString()} · ${detail.environment === "test" ? "Browser rehearsal" : "Live conversation"}`
@@ -166,12 +185,13 @@ export function Conversations({
         <Button
           kind="line"
           disabled={busy}
-          onClick={() => (detail ? void open(detail.id) : void load())}
+          onClick={() => (selectedId ? void open(selectedId) : void load())}
         >
-          {busy ? "Refreshing…" : "Refresh"}
+          {busy ? "Refreshing…" : selectedId && detailError ? "Retry call" : "Refresh"}
         </Button>
       </div>
-      {error && <Notice error>{error}</Notice>}
+      {(selectedId ? detailError : listError) && <Notice error>{selectedId ? detailError : listError}</Notice>}
+      {actionError && <Notice error>{actionError}</Notice>}
       {notice && <Notice>{notice}</Notice>}
       {detail ? (
         <div className="of-conversation-layout">
@@ -247,15 +267,20 @@ export function Conversations({
                   {turn.role === "caller" && (
                     <button
                       className="of-text-button"
+                      disabled={savingQuestion}
                       onClick={async () => {
+                        if (questionPending.current) return;
+                        questionPending.current = true; setSavingQuestion(true); setActionError("");
+                        const callId = detail.id;
                         try {
                           await api.knowledgeFromTurn(detail.id, turn.id);
+                          if (selected.current !== callId) return;
                           setNotice(
                             "Saved as a draft question. Add its answer under “What they know” before using it in calls.",
                           );
                         } catch (e) {
-                          setError(errorText(e));
-                        }
+                          if (selected.current === callId) setActionError(errorText(e));
+                        } finally { questionPending.current = false; setSavingQuestion(false); }
                       }}
                     >
                       Save as a question to answer
@@ -268,13 +293,16 @@ export function Conversations({
             )}
           </section>
         </div>
+      ) : selectedId ? (
+        <p className="of-help">{busy ? "Opening conversation…" : "Conversation details are unavailable. Retry the request or return to all conversations."}</p>
       ) : (
         <>
           <form
             className="of-list-toolbar"
             onSubmit={(e) => {
               e.preventDefault();
-              void load();
+              if (search === (params.get("search") || "") && filter === (params.get("environment") || "all")) void load();
+              else onQuery(search, filter);
             }}
           >
             <input
@@ -286,7 +314,7 @@ export function Conversations({
             <select
               aria-label="Conversation type"
               value={filter}
-              onChange={(e) => setFilter(e.target.value as typeof filter)}
+              onChange={(e) => onQuery(search, e.target.value)}
             >
               <option value="all">All conversations</option>
               <option value="live">Live conversations</option>
@@ -297,7 +325,7 @@ export function Conversations({
             </Button>
           </form>
           {page.items.length ? (
-            <CallRows calls={page.items} onOpen={(id) => void open(id)} />
+            <CallRows calls={page.items} onOpen={onSelect} />
           ) : (
             !busy && (
               <Empty title="No conversations here yet">

@@ -4,8 +4,24 @@ export class ApiError extends Error {
   constructor(message: string, public readonly status: number, public readonly retryAfter: string | null = null) { super(message); this.name = 'ApiError'; }
 }
 
+type UnauthorizedBoundary = { notify: () => void };
+let unauthorizedBoundary: UnauthorizedBoundary | null = null;
+/** A new boundary invalidates callbacks from requests started by an earlier session. */
+export function onPrivateUnauthorized(notify: () => void): () => void {
+  const boundary = { notify };
+  unauthorizedBoundary = boundary;
+  return () => { if (unauthorizedBoundary === boundary) unauthorizedBoundary = null; };
+}
+
+function expireUnauthorized(path: string, status: number, boundary: UnauthorizedBoundary | null) {
+  if (status !== 401 || !/^\/api\/me(?:\/|$)/.test(path) || !boundary || boundary !== unauthorizedBoundary) return;
+  unauthorizedBoundary = null;
+  boundary.notify();
+}
+
 /** Same-origin cookies only. No retries of uncertain writes and no credential persistence. */
 export async function request<T>(path: string, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
+  const boundary = unauthorizedBoundary;
   const response = await fetch(path, {
     method, credentials: 'same-origin', signal,
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
@@ -14,6 +30,7 @@ export async function request<T>(path: string, method = 'GET', body?: unknown, s
   const data: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     const message = data && typeof data === 'object' && 'error' in data && typeof data.error === 'string' ? data.error : `Request failed (${response.status}). Please try again.`;
+    expireUnauthorized(path, response.status, boundary);
     throw new ApiError(message, response.status, response.headers.get('Retry-After'));
   }
   return data as T;
@@ -41,7 +58,7 @@ export const api = {
   deleteAccount: (body: { currentPassword: string; confirmation: 'DELETE' }) => confirmedMutation('/api/me/account', 'DELETE', body),
   createWorkspace: (patch: Partial<Workspace>) => request<Workspace>('/api/me/business', 'POST', patch),
   updateWorkspace: (key: string, patch: Partial<Workspace>) => request<Ok>(`/api/me/business/${id(key)}`, 'PUT', patch),
-  assistants: () => request<AssistantSummary[]>('/api/me/assistants'),
+  assistants: (offset = 0) => request<AssistantSummary[]>(`/api/me/assistants?offset=${offset}`),
   assistant: (key: string) => request<Assistant>(`/api/me/assistants/${id(key)}`),
   createAssistant: (patch: Partial<AssistantFields>) => request<Assistant>('/api/me/assistants', 'POST', patch),
   saveAssistant: (key: string, patch: Partial<AssistantFields>) => request<Assistant>(`/api/me/assistants/${id(key)}`, 'PUT', patch),
@@ -68,7 +85,9 @@ export const api = {
   providerCatalog: () => request<ProviderCatalog>('/api/me/provider/catalog'),
   checkProvider: (assistantId: string) => request<Ok & { model: string }>('/api/me/provider/check', 'POST', { assistantId }),
   voicePreview: async (assistantId: string, voice: Pick<AssistantFields, 'engine' | 'language' | 'voice' | 'realtime_model' | 'realtime_voice'>, signal?: AbortSignal): Promise<Blob> => {
-    const response = await fetch(`/api/me/assistants/${id(assistantId)}/voice-preview`, {
+    const boundary = unauthorizedBoundary;
+    const path = `/api/me/assistants/${id(assistantId)}/voice-preview`;
+    const response = await fetch(path, {
       method: 'POST', credentials: 'same-origin', signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ engine: voice.engine, language: voice.language, voice: voice.voice, realtime_model: voice.realtime_model, realtime_voice: voice.realtime_voice }),
@@ -76,6 +95,7 @@ export const api = {
     if (!response.ok) {
       const data: unknown = await response.json().catch(() => null);
       const message = data && typeof data === 'object' && 'error' in data && typeof data.error === 'string' ? data.error : 'Voice preview failed. Check the saved speech provider and try again.';
+      expireUnauthorized(path, response.status, boundary);
       throw new ApiError(message, response.status, response.headers.get('Retry-After'));
     }
     return response.blob();

@@ -1,27 +1,28 @@
+import { openAuth, connections } from './cleanroom-helpers';
 import { test, expect } from './fixtures';
 
 test('saved voice persists and six calls release audio, including suspended playback recovery', async ({ page }) => {
   test.setTimeout(60000);
-  await page.goto('/auth');
+  await openAuth(page);
   await page.getByLabel('Email').fill(`playback-${Date.now()}@example.invalid`);
-  await page.getByLabel('Password', { exact: true }).fill('Synthetic-Playback-Password-1234');
+  await page.getByLabel(/^Password/).fill('Synthetic-Playback-Password-1234');
   await page.getByRole('button', { name: 'Create account', exact: true }).click();
   await page.getByLabel('Business name', { exact: true }).fill('Audio recovery test');
   await page.getByLabel('What do you do?').fill('Synthetic audio validation');
-  await page.getByRole('button', { name: 'Continue →' }).click();
-  await page.getByRole('button', { name: 'Continue →' }).click();
-  await page.getByRole('button', { name: /Create.*assistant|Save.*assistant|Open.*studio/i }).click();
+  await page.getByRole('button', { name: 'Meet your receptionist', exact: true }).click();
   // Onboarding is already mounted at /overview; wait for its final save/refresh.
-  await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
-  await expect(page).toHaveURL('/overview');
+  await expect(page.getByRole('button', { name: 'Start browser conversation' })).toBeVisible();
   const { assistants } = await (await page.request.get('/api/me/bootstrap')).json();
   const id = assistants[0].id;
+  expect((await page.request.put(`/api/me/assistants/${id}`, {data:{name:'Playback receptionist',persona:'Helpful',language:'en'}})).status()).toBe(200);
   await page.route('**/voice-preview', route => route.fulfill({ status: 503, json: { error: 'No provider in synthetic test' } }));
   await page.goto(`/assistants/${id}`);
-  await page.getByLabel('Conversation engine', { exact: true }).selectOption('gpt-realtime-2');
-  await page.getByLabel('Realtime voice', { exact: true }).selectOption('alloy');
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Assistant saved' })).toBeVisible();
+  await connections(page);
+  await page.getByRole('combobox', {name:'Conversation engine',exact:true}).selectOption('realtime');
+  await page.getByLabel('Realtime model', {exact:true}).fill('gpt-realtime-2');
+  await page.getByLabel('Realtime voice', {exact:true}).fill('alloy');
+  await page.getByRole('button', {name:'Save connections',exact:true}).click();
+  await expect(page.getByRole('status').filter({hasText:'Connections saved'})).toBeVisible();
   const saved = await (await page.request.get(`/api/me/assistants/${id}`)).json();
   expect(saved).toMatchObject({ realtime_model: 'gpt-realtime-2', realtime_voice: 'alloy' });
   await page.goto(`/test?assistant=${id}`);
@@ -65,7 +66,7 @@ test('saved voice persists and six calls release audio, including suspended play
   });
   await page.route('**/api/me/test-calls/synthetic-only', route => route.fulfill({ json: { ok: true } }));
   for (let n = 1; n <= 6; n++) {
-    await page.getByRole('button', { name: 'Start test call', exact: true }).click();
+    await page.getByRole('button', { name: 'Start browser conversation', exact: true }).click();
     await expect(page.getByText('Synthetic audible answer')).toBeVisible();
     if (n === 4) {
       // Explicitly suspend an existing real context to simulate OS/browser
@@ -74,13 +75,13 @@ test('saved voice persists and six calls release audio, including suspended play
         const state = (window as any).audioProbe; state.blocked = true;
         await state.contexts.at(-1).suspend();
       });
-      await expect(page.getByRole('button', { name: 'Enable audio', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Enable speaker audio', exact: true })).toBeVisible();
       await page.evaluate(() => { (window as any).audioProbe.allow = true; });
-      await page.getByRole('button', { name: 'Enable audio', exact: true }).click();
-      await expect(page.getByRole('button', { name: 'Enable audio', exact: true })).not.toBeVisible();
+      await page.getByRole('button', { name: 'Enable speaker audio', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Enable speaker audio', exact: true })).not.toBeVisible();
     }
     await expect.poll(() => page.evaluate(() => (window as any).audioProbe.completed)).toBe(n);
-    await page.getByRole('button', { name: 'End test call', exact: true }).click();
+    await page.getByRole('button', { name: 'End conversation', exact: true }).click();
     await expect.poll(() => page.evaluate(() => (window as any).audioProbe.contexts.every((c: AudioContext) => c.state === 'closed'))).toBe(true);
   }
   expect(await page.evaluate(() => (window as any).audioProbe.contexts.length)).toBe(6);

@@ -36,7 +36,7 @@ export function Business({ workspace, onBack, onSaved }: { workspace: Workspace;
     pending.current = true; setBusy(true); setError("");
     const submitted = draft;
     const submittedVersion = version.current;
-    const payload: Partial<Workspace> = Object.fromEntries(basics.map(key => [key, submitted.workspace[key]]));
+    const payload: Partial<Workspace> = Object.fromEntries(basics.filter(key => submitted.workspace[key] !== baseline.workspace[key]).map(key => [key, submitted.workspace[key]]));
     // Do not normalize or discard historical JSON on an unrelated contact edit.
     if (JSON.stringify(submitted.hours) !== JSON.stringify(baseline.hours)) payload.hours_json = serializeHourRows(submitted.hours);
     if (JSON.stringify(submitted.closures) !== JSON.stringify(baseline.closures)) payload.closures_json = serializeClosureRows(submitted.closures);

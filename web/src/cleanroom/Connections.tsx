@@ -214,6 +214,7 @@ export function Connections({
       setSummary(s);
       setSavedSummary(s);
       setLoadFailed(false);
+      setError("");
       try { await loadPresets(recovery); } catch (e) {
         refreshKind.current = "list"; setRefreshPending(true); setError(errorText(e));
       }
@@ -455,7 +456,7 @@ export function Connections({
               provider={provider}
               catalog={catalog}
               model={voice.realtime_model ?? assistant.realtime_model}
-              pending={Object.keys(patch).length > 0}
+              pending={voiceDirty}
             />
             <Button
               kind="line"
@@ -855,10 +856,12 @@ export function Connections({
                     />
                     Also replace language, engine and voice settings
                   </label>
+                  {voiceDirty && <p className="of-help">Save your connection and voice edits before saving this recipe.</p>}
                   <div className="of-actions">
                     <Button
-                      disabled={blocked}
+                      disabled={blocked || voiceDirty}
                       onClick={async () => {
+                        if (voiceDirty) return;
                         const token = begin("settings"); if (!token) return;
                         try {
                           await api.saveAssistant(

@@ -6,7 +6,7 @@
  * FORM: Owner-selected identity adaptation; provider/runtime and saved-state behavior preserved.
  */
 import { useEffect, useState, useRef } from "react";
-import { api, ApiError, callbackMessage } from "../cleanroom-runtime";
+import { api, ApiError, callbackMessage, onPrivateUnauthorized } from "../cleanroom-runtime";
 import type {
   Assistant,
   AssistantFields,
@@ -770,6 +770,7 @@ export default function OpenFon() {
   const [calls, setCalls] = useState<Call[]>([]);
   const [screen, setScreen] = useState(screenFromPath);
   const [callId, setCallId] = useState<string | undefined>(callFromLocation);
+  const [conversationQuery, setConversationQuery] = useState(location.search);
   const historyIndex = useRef<number>(Number(history.state?.openfonIndex) || 0);
   const restoringHistory = useRef(false);
   const [loading, setLoading] = useState(true);
@@ -779,9 +780,17 @@ export default function OpenFon() {
   const [recovery, setRecovery] = useState<SignOutRecovery | null>(null);
   const [missingTarget, setMissingTarget] = useState<string | null>(null);
   const [replacement, setReplacement] = useState("");
+  const [deletedTarget, setDeletedTarget] = useState(false);
+  const [moreAssistants, setMoreAssistants] = useState(false);
+  const [assistantListBusy, setAssistantListBusy] = useState(false);
+  const assistantOffset = useRef(0);
+  const assistantMutation = useRef(false);
+  const [assistantMutating, setAssistantMutating] = useState(false);
+
   type ReceptionSnapshot = { boot: Bootstrap; assistant: Assistant | null; calls: Call[]; missingTarget: string | null };
   const [session] = useState(() => new SessionCoordinator<ReceptionSnapshot>(browserLogoutIntentStorage));
   const loadGeneration = useRef(0);
+  const releaseUnauthorized = useRef<(() => void) | null>(null);
   const callsGeneration = useRef(0);
   const publicMatch = location.pathname.match(
     /^\/(?:call|widget)\/([^/]+)\/?$/,
@@ -824,6 +833,8 @@ export default function OpenFon() {
     }
   }
   function clearSession() {
+    releaseUnauthorized.current?.();
+    releaseUnauthorized.current = null;
     ++loadGeneration.current;
     ++callsGeneration.current;
     setAuth(false); setBoot(null); setAssistant(null); setCalls([]);
@@ -852,6 +863,8 @@ export default function OpenFon() {
     });
   }
   async function load(selected?: string) {
+    releaseUnauthorized.current?.();
+    releaseUnauthorized.current = auth ? onPrivateUnauthorized(() => { session.invalidate(); clearSession(); }) : null;
     const gen = ++loadGeneration.current;
     setLoading(true);
     setError('');
@@ -875,7 +888,10 @@ export default function OpenFon() {
     }, snapshot => {
       if (gen !== loadGeneration.current) return;
       setBoot(snapshot.boot); setAssistant(snapshot.assistant); setCalls(snapshot.calls);
-      setMissingTarget(snapshot.missingTarget); setReplacement("");
+      assistantOffset.current = 0; setMoreAssistants(snapshot.boot.assistants.length >= 32); setAssistantListBusy(false);
+      setMissingTarget(snapshot.missingTarget); setReplacement(""); setDeletedTarget(false);
+      releaseUnauthorized.current?.();
+      releaseUnauthorized.current = onPrivateUnauthorized(() => { session.invalidate(); clearSession(); });
       setAuth(true); setRecovery(null); setLoading(false);
       if (/^\/(?:login|signup|auth|onboarding)?\/?$/.test(location.pathname)) {
         history.replaceState({ ...history.state, openfonIndex: historyIndex.current }, "", "/overview");
@@ -897,7 +913,7 @@ export default function OpenFon() {
   }
   useEffect(() => {
     if (!publicMatch) void load();
-    return () => { session.invalidate(); ++loadGeneration.current; ++callsGeneration.current; };
+    return () => { releaseUnauthorized.current?.(); session.invalidate(); ++loadGeneration.current; ++callsGeneration.current; };
   }, []);
   useEffect(() => {
     if (publicMatch) return;
@@ -911,7 +927,7 @@ export default function OpenFon() {
         return;
       }
       historyIndex.current = targetIndex;
-      setScreen(screenFromPath()); setCallId(callFromLocation()); setMenu(false);
+      setScreen(screenFromPath()); setCallId(callFromLocation()); setConversationQuery(location.search); setMenu(false);
       const targetAssistant = new URLSearchParams(location.search).get("assistant") || location.pathname.match(/^\/assistants\/([^/]+)/)?.[1] || boot?.assistants[0]?.id;
       if (targetAssistant && targetAssistant !== assistant?.id && boot?.assistants.some(a => a.id === targetAssistant)) void load(targetAssistant);
       window.scrollTo({ top: 0, behavior: "instant" });
@@ -919,19 +935,63 @@ export default function OpenFon() {
     window.addEventListener("popstate", restore);
     return () => window.removeEventListener("popstate", restore);
   }, [assistant?.id, boot?.account.id]);
-  function navigate(next: string, saved = false, selectedCall?: string) {
+  function navigate(next: string, saved = false, selectedCall?: string, query?: { search: string; environment: string }) {
     if (!saved && next !== screen && !canLeave()) return false;
     const url = new URL(screenPaths[next] || "/overview", location.origin);
     if (assistant && assistant.id !== boot?.assistants[0]?.id) url.searchParams.set("assistant", assistant.id);
+    if (next === "conversations" && screen === "conversations") {
+      const current = new URLSearchParams(location.search);
+      for (const key of ["search", "environment"]) if (current.has(key)) url.searchParams.set(key, current.get(key)!);
+    }
+    if (query) {
+      if (query.search) url.searchParams.set("search", query.search); else url.searchParams.delete("search");
+      if (query.environment !== "all") url.searchParams.set("environment", query.environment); else url.searchParams.delete("environment");
+    }
     if (selectedCall) url.searchParams.set("call", selectedCall);
     if (location.pathname + location.search !== url.pathname + url.search) {
       historyIndex.current++;
       history.pushState({ openfonIndex: historyIndex.current }, "", url.pathname + url.search);
     }
-    setScreen(next); setCallId(selectedCall);
+    setScreen(next); setCallId(selectedCall); setConversationQuery(url.search);
     setMenu(false);
     window.scrollTo({ top: 0, behavior: "instant" });
     return true;
+  }
+  async function discoverAssistants() {
+    if (assistantListBusy || !boot?.workspace) return;
+    const gen = loadGeneration.current;
+    setAssistantListBusy(true); setError("");
+    try {
+      let offset = assistantOffset.current;
+      let items;
+      do {
+        items = await api.assistants(offset);
+        if (gen !== loadGeneration.current) return;
+        offset += items.length;
+      } while (items.length === 32 && items.every(item => boot.assistants.some(existing => existing.id === item.id)));
+      assistantOffset.current = offset;
+      setMoreAssistants(items.length === 32);
+      setBoot(current => current ? { ...current, assistants: [...current.assistants, ...items.filter(item => !current.assistants.some(existing => existing.id === item.id))] } : current);
+    } catch (e) { if (gen === loadGeneration.current) setError(errorText(e)); }
+    finally { if (gen === loadGeneration.current) setAssistantListBusy(false); }
+  }
+  async function removeAssistant() {
+    if (!assistant || assistant.state === "active" || assistantMutation.current || !canLeave()) return;
+    if (!confirm(`Delete “${assistant.name || "Receptionist"}”? This cannot be undone. Existing conversations will remain.`)) return;
+    assistantMutation.current = true; setAssistantMutating(true); setError("");
+    const gen = loadGeneration.current;
+    try {
+      await api.deleteAssistant(assistant.id);
+      if (gen !== loadGeneration.current) return;
+      ++loadGeneration.current; setAssistantListBusy(false);
+      const remaining = boot!.assistants.filter(item => item.id !== assistant.id);
+      setBoot(current => current ? { ...current, assistants: remaining } : current);
+      setAssistant(null);
+      const url = new URL(location.href); url.searchParams.delete("assistant");
+      history.replaceState(history.state, "", url.pathname + url.search);
+      setMissingTarget(remaining.length ? assistant.id : null); setReplacement(""); setDeletedTarget(true);
+    } catch (e) { if (gen === loadGeneration.current) setError(errorText(e)); }
+    finally { assistantMutation.current = false; setAssistantMutating(false); }
   }
   if (publicMatch)
     return <PublicCall slug={decodeURIComponent(publicMatch[1])} />;
@@ -1042,14 +1102,15 @@ export default function OpenFon() {
         <main className="of-main" id="of-main">
           {missingTarget ? (
             <section className="of-business-form of-form">
-              <h1>Receptionist unavailable</h1>
-              <Notice error>The requested receptionist is no longer available in this workspace. Choose a replacement explicitly before rehearsing.</Notice>
+              <h1>{deletedTarget ? "Receptionist deleted" : "Receptionist unavailable"}</h1>
+              <Notice error>{deletedTarget ? "The receptionist was deleted. Existing conversations are still available. Choose your next receptionist before rehearsing." : "The requested receptionist is no longer available in this workspace. Choose a replacement explicitly before rehearsing."}</Notice>
               <Field label="Choose a replacement receptionist"><select value={replacement} onChange={e => setReplacement(e.target.value)}>
                 <option value="">Choose a receptionist…</option>
                 {boot.assistants.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select></Field>
+              {moreAssistants && <Button kind="quiet" disabled={assistantListBusy || loading} onClick={() => void discoverAssistants()}>Find more receptionists</Button>}
               <Button disabled={!replacement || loading} onClick={() => void load(replacement)}>Use selected receptionist</Button>
-              <Button kind="line" disabled={loading} onClick={() => void load()}>Retry requested receptionist</Button>
+              {!deletedTarget && <Button kind="line" disabled={loading} onClick={() => void load()}>Retry requested receptionist</Button>}
             </section>
           ) : screen === "story" ? (
             <Welcome
@@ -1065,7 +1126,7 @@ export default function OpenFon() {
               onSaved={workspace => setBoot(current => current ? { ...current, workspace } : current)}
             />
           ) : screen === "conversations" ? (
-            <Conversations initial={callId} onBack={() => navigate("desk")} />
+            <Conversations initial={callId} query={conversationQuery} onQuery={(search, environment) => navigate("conversations", false, undefined, { search, environment })} onSelect={id => navigate("conversations", false, id)} onBack={() => navigate("desk")} />
           ) : screen === "connections" && assistant ? (
             <Connections
               assistant={assistant}
@@ -1079,18 +1140,22 @@ export default function OpenFon() {
                 <select
                   id="of-receptionist"
                   value={assistant.id}
+                  disabled={loading || assistantMutating}
                   onChange={(e) => {
                     if (canLeave()) void load(e.target.value);
                   }}
                 >
                   {boot.assistants.map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.name}
+                      {a.name || "Unnamed receptionist"}
                     </option>
                   ))}
                 </select>
+                {moreAssistants && <Button kind="quiet" disabled={assistantListBusy || loading || assistantMutating} onClick={() => void discoverAssistants()}>{assistantListBusy ? "Loading receptionists…" : "Find more receptionists"}</Button>}
+                {assistant.state !== "active" && <Button kind="quiet" disabled={loading || assistantMutating} onClick={() => void removeAssistant()}>Delete receptionist</Button>}
                 <button
                   className="of-text-button"
+                  disabled={loading || assistantMutating}
                   onClick={async () => {
                     if (!canLeave()) return;
                     const name = prompt("Name for your new receptionist");

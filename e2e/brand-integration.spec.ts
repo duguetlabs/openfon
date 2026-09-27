@@ -23,6 +23,7 @@ test('existing business facts remain editable without dropping preserved row fie
   };
   expect((await page.request.put(`/api/me/business/${workspace.id}`, { data: facts })).ok()).toBe(true);
   await page.reload(); await business(page); await revealFacts(page);
+  expect((await page.request.put(`/api/me/business/${workspace.id}`, { data: { phone: '+43 222 333' } })).ok()).toBe(true);
   await page.getByLabel('Monday opening time', { exact: true }).fill('08:30');
   await page.getByLabel('Closure 1 reason', { exact: true }).fill('New year closure');
   await page.getByLabel('Service 1 price', { exact: true }).fill('€25');
@@ -30,6 +31,7 @@ test('existing business facts remain editable without dropping preserved row fie
   await page.getByRole('button', { name: 'Save business details', exact: true }).click();
   await expect(page).toHaveURL(/\/overview$/);
   const saved = (await (await page.request.get('/api/me/bootstrap')).json()).workspace;
+  expect(saved.phone).toBe('+43 222 333');
   expect(JSON.parse(saved.hours_json)[0]).toMatchObject({ open: '08:30', note: 'Side entrance' });
   expect(JSON.parse(saved.closures_json)[0]).toMatchObject({ reason: 'New year closure', note: 'Annual' });
   expect(JSON.parse(saved.services_json)[0]).toMatchObject({ price: '€25', duration: '30 minutes', notes: 'Assessment first' });
@@ -116,4 +118,29 @@ test('integrated brand keeps business and connection controls usable on desktop 
   await page.screenshot({ path: '/tmp/openfon-brand-integration/connections-mobile.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.screenshot({ path: '/tmp/openfon-brand-integration/connections-desktop.png', fullPage: true });
+});
+
+test('recipe save waits for pending voice drafts instead of leaving an overwrite behind', async ({ page }) => {
+  await signup(page, 'recipe-draft');
+  const { assistant } = await createWorkspace(page);
+  const saved = await (await page.request.get(`/api/me/assistants/${assistant.id}`)).json();
+  const fields = ['name', 'greeting', 'persona', 'language', 'voice', 'take_messages', 'custom_instructions', 'engine', 'realtime_model', 'realtime_voice', 'llm_model'];
+  const portable = Object.fromEntries(fields.map(key => [key, key === 'take_messages' ? !!saved[key] : saved[key]]));
+  portable.name = 'Portable receptionist'; portable.persona = 'Helpful receptionist.';
+  await connections(page);
+  await page.getByRole('textbox', { name: 'Language', exact: true }).fill('de');
+  await expect(page.getByText('Save connection changes to see applicable routing evidence.', { exact: true })).toBeVisible();
+  await page.locator('input[type="file"]').setInputFiles({ name: 'saved.openfon.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ format: 'openfon-assistant', version: 1, assistant: portable })) });
+  await page.getByRole('checkbox', { name: 'Also replace language, engine and voice settings' }).check();
+  const apply = page.getByRole('button', { name: 'Save this recipe', exact: true });
+  await expect(apply).toBeDisabled();
+  await expect(page.getByText('Save your connection and voice edits before saving this recipe.')).toBeVisible();
+  expect((await (await page.request.get(`/api/me/assistants/${assistant.id}`)).json()).language).toBe(saved.language);
+  await page.getByRole('button', { name: 'Save connections', exact: true }).click();
+  await expect(apply).toBeEnabled();
+  expect((await (await page.request.get(`/api/me/assistants/${assistant.id}`)).json()).language).toBe('de');
+  await apply.click();
+  await expect(page.getByText('Recipe imported into this receptionist.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Language', exact: true })).toHaveValue(saved.language);
+  await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toBeDisabled();
 });

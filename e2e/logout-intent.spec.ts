@@ -1,3 +1,4 @@
+import { signup, signOut } from './cleanroom-helpers';
 import { test as base, expect } from './fixtures';
 import type { Page, Route } from '@playwright/test';
 
@@ -16,11 +17,7 @@ const key = 'openfon.logout-intent.v1';
 const marker = JSON.stringify({ version: 1, id: '00112233-4455-4677-8899-aabbccddeeff', phase: 'unconfirmed' });
 
 async function signedIn(page: Page, label: string) {
-  await page.goto('/auth');
-  await page.getByLabel('Email').fill(`logout-${label}-${Date.now()}@example.invalid`);
-  await page.getByLabel('Password', { exact: true }).fill('Synthetic-Logout-Password-1234');
-  await page.getByRole('button', { name: 'Create account', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
+  await signup(page, `logout-${label}`, 'Synthetic-Logout-Password-1234');
 }
 function authReads(page: Page) {
   const reads: string[] = [];
@@ -34,7 +31,7 @@ function authReads(page: Page) {
 async function locked(page: Page, text: string) {
   await expect(page.getByRole('alert').filter({ hasText: text })).toBeVisible();
   await expect(page.getByLabel('Email')).toBeDisabled();
-  await expect(page.getByLabel('Password', { exact: true })).toBeDisabled();
+  await expect(page.getByLabel(/^Password/)).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toHaveCount(0);
 }
 
@@ -47,7 +44,7 @@ test('[original] failed logout survives reload with a valid cookie and explicit 
     writes++;
     return writes <= 2 ? route.fulfill({ status: 503, json: { error: 'Synthetic revocation failure' } }) : route.continue();
   });
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await signOut(page);
   await locked(page, 'server sign-out was not confirmed');
   expect((await page.request.get('/api/me')).status()).toBe(200); // Still-valid real cookie.
   const reads = authReads(page);
@@ -74,7 +71,7 @@ test('[original] pending logout survives reload without automatic retry or authe
   // Keep a routed request unhandled, without a detached promise/timer. The
   // browser's reload aborts the document request; fixture teardown settles our route.
   await page.route('**/api/auth/logout', route => { writes++; pendingRoutes.push(route); });
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await signOut(page);
   await expect.poll(() => writes).toBe(1);
   await expect(page.getByRole('status').filter({ hasText: 'Confirming server sign-out' })).toBeVisible();
   expect((await page.request.get('/api/me')).status()).toBe(200);
@@ -131,7 +128,7 @@ test('write failure retains local clear and the live coordinator memory gate', a
   let writes = 0;
   await page.route('**/api/auth/logout', route => { writes++; return route.fulfill({ status: 503, json: { error: 'Synthetic revocation failure' } }); });
   const reads = authReads(page);
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await signOut(page);
   await locked(page, 'server sign-out was not confirmed');
   expect(reads).toEqual([]); expect(writes).toBe(1);
   expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBeNull();
@@ -151,7 +148,7 @@ test('confirmed revocation with removal failure reloads into local-only cleanup'
   let writes = 0;
   await page.route('**/api/auth/logout', route => { writes++; return route.continue(); });
   const reads = authReads(page);
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await signOut(page);
   await locked(page, 'Server sign-out succeeded');
   expect(JSON.parse((await page.evaluate(key => sessionStorage.getItem(key), key))!).phase).toBe('confirmed');
   expect((await page.request.get('/api/me')).status()).toBe(401);
@@ -171,11 +168,9 @@ test('ordinary absent marker preserves signed-in reload and normal confirmed sig
   await signedIn(page, 'ordinary');
   const reads = authReads(page);
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
-  expect(reads).toContain('/api/me');
-  expect(reads).toContain('/api/me/business');
+  await expect(page.locator('.of-workspace-button')).toBeVisible();
   expect(reads).toContain('/api/me/bootstrap');
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await signOut(page);
   await expect(page.getByLabel('Email')).toBeEnabled();
   await expect(page.getByRole('alert')).toHaveCount(0);
   expect(await page.evaluate(key => sessionStorage.getItem(key), key)).toBeNull();

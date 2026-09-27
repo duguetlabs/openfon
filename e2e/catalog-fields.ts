@@ -1,6 +1,8 @@
 import { expect, type Page } from '@playwright/test';
+import { openAssistantAdvanced } from './fixtures';
 
 export async function fillCatalog(page: Page, label: string, value: string) {
+  if (['Language model', 'Realtime model'].includes(label)) await openAssistantAdvanced(page);
   await page.getByLabel(label, { exact: true }).selectOption('__custom');
   await page.getByLabel(`Custom ${label.toLowerCase()}`, { exact: true }).fill(value);
 }
