@@ -143,4 +143,36 @@ test('recipe save waits for pending voice drafts instead of leaving an overwrite
   await expect(page.getByText('Recipe imported into this receptionist.', { exact: true })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Language', exact: true })).toHaveValue(saved.language);
   await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toBeDisabled();
+  const importRecipe = async (name: string, language: string) => {
+    await page.locator('input[type="file"]').setInputFiles({ name: `${language}.openfon.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ format: 'openfon-assistant', version: 1, assistant: { ...portable, name, language } })) });
+    await expect(page.getByRole('heading', { name: `Review “${name}”`, exact: true })).toBeVisible();
+  };
+  const includeVoice = page.getByRole('checkbox', { name: 'Also replace language, engine and voice settings' });
+  await importRecipe('Second recipe', 'fr');
+  await expect(includeVoice).not.toBeChecked();
+  await includeVoice.check();
+  await importRecipe('Third recipe', 'es');
+  await expect(includeVoice).not.toBeChecked();
+  await includeVoice.check();
+  await page.locator('.of-import-review').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await importRecipe('Fourth recipe', 'it');
+  await expect(includeVoice).not.toBeChecked();
+  let releaseImport!: () => void;
+  const importAck = new Promise<void>(resolve => { releaseImport = resolve; });
+  let importWritten = false;
+  await page.route(`**/api/me/assistants/${assistant.id}`, async route => {
+    if (route.request().method() !== 'PUT') return route.continue();
+    const response = await route.fetch(); importWritten = true;
+    await importAck; await route.fulfill({ response });
+  });
+  await apply.click();
+  await expect.poll(() => importWritten).toBe(true);
+  await expect(page.locator('input[type="file"]')).toBeDisabled();
+  await expect(includeVoice).toBeDisabled();
+  await expect(page.locator('.of-import-review').getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
+  releaseImport();
+  await expect(page.getByRole('heading', { name: 'Review “Fourth recipe”', exact: true })).not.toBeVisible();
+  const final = await (await page.request.get(`/api/me/assistants/${assistant.id}`)).json();
+  expect(final.name).toBe('Fourth recipe');
+  expect(final.language).toBe(saved.language);
 });

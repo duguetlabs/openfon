@@ -722,3 +722,100 @@ test('a queued search navigation cannot overwrite a newer typed draft', async ({
   await page.goForward();
   await expect(page.getByLabel('Search conversations')).toHaveValue('second');
 });
+
+test('loading another conversation page uses the committed search while retaining an unsubmitted draft', async ({
+  page,
+}) => {
+  await signup(page);
+  const queries: URLSearchParams[] = [];
+  await page.route('**/api/me/calls?**', (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    queries.push(query);
+    const pageTwo = query.has('cursor');
+    const submittedSecond = query.get('search') === 'second';
+    const summary = submittedSecond
+      ? 'Submitted second search'
+      : pageTwo
+        ? 'Second page of first search'
+        : 'First page of first search';
+    return route.fulfill({
+      json: {
+        items: [
+          {
+            id: summary,
+            status: 'completed',
+            environment: 'live',
+            started_at: '2026-09-13T00:00:00Z',
+            summary,
+          },
+        ],
+        nextCursor: !pageTwo && !submittedSecond ? 'next-page-token' : null,
+      },
+    });
+  });
+  await page.goto('/conversations?search=first');
+  await expect(page.getByText('First page of first search', { exact: true })).toBeVisible();
+  await page.getByLabel('Search conversations').fill('second');
+  await page.getByRole('button', { name: 'Load more', exact: true }).click();
+  await expect(page.getByText('Second page of first search', { exact: true })).toBeVisible();
+  await expect(page.getByText('First page of first search', { exact: true })).toBeVisible();
+  const continuation = queries.find((query) => query.has('cursor'))!;
+  expect(continuation.get('search')).toBe('first');
+  expect(continuation.get('cursor')).toBe('next-page-token');
+  await expect(page.getByLabel('Search conversations')).toHaveValue('second');
+  await expect(page).toHaveURL(/search=first/);
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await expect(page.getByText('Submitted second search', { exact: true })).toBeVisible();
+  await expect(page.getByText('First page of first search', { exact: true })).toHaveCount(0);
+  expect(queries.at(-1)?.has('cursor')).toBe(false);
+  await page.getByLabel('Search conversations').fill('all');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await expect(page).toHaveURL(/search=all/);
+  await expect.poll(() => queries.at(-1)?.get('search')).toBe('all');
+});
+
+test('historic receptionist and status conversation filters survive edits, history and reload', async ({
+  page,
+}) => {
+  const { assistant } = await signup(page);
+  const created = await page.request.post('/api/me/assistants', { data: { name: 'Filter target' } });
+  expect(created.status()).toBe(201);
+  const target = await created.json();
+  const queries: URLSearchParams[] = [];
+  await page.route('**/api/me/calls?**', (route) => {
+    queries.push(new URL(route.request().url()).searchParams);
+    return route.fulfill({ json: { items: [], nextCursor: null } });
+  });
+  await page.goto(`/calls?assistantId=${target.id}&status=failed`);
+  const receptionist = page.getByRole('combobox', { name: 'Receptionist filter', exact: true });
+  const status = page.getByRole('combobox', { name: 'Call status', exact: true });
+  await expect(receptionist).toHaveValue(target.id);
+  await expect(status).toHaveValue('failed');
+  await expect
+    .poll(() =>
+      queries.some((query) => query.get('assistantId') === target.id && query.get('status') === 'failed'),
+    )
+    .toBe(true);
+  await status.selectOption('completed');
+  await expect(page).toHaveURL(/status=completed/);
+  await receptionist.selectOption(assistant.id);
+  await expect.poll(() => queries.at(-1)?.get('assistantId')).toBe(assistant.id);
+  expect(queries.at(-1)?.get('status')).toBe('completed');
+  await page.goBack();
+  await expect(receptionist).toHaveValue(target.id);
+  await expect(status).toHaveValue('completed');
+  await page.goBack();
+  await expect(receptionist).toHaveValue(target.id);
+  await expect(status).toHaveValue('failed');
+  await page.goForward();
+  await expect(status).toHaveValue('completed');
+  await page.reload();
+  await expect(receptionist).toHaveValue(target.id);
+  await expect(status).toHaveValue('completed');
+  await expect.poll(() => queries.at(-1)?.get('assistantId')).toBe(target.id);
+  expect(queries.at(-1)?.get('status')).toBe('completed');
+  await page.screenshot({ path: '/tmp/openfon-brand-integration/conversation-filters-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: '/tmp/openfon-brand-integration/conversation-filters-mobile.png', fullPage: true });
+});

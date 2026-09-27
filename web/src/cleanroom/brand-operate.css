@@ -86,8 +86,8 @@
 .of-brand-call-list .of-call-title strong { font-size: 1.0625rem; font-weight: 750; }
 .of-brand-call-list .of-call-title span { font-size: 1rem; line-height: 1.5; margin-top: 6px; }
 .of-brand-call-list .of-call-meta { font-size: .875rem; gap: 6px; }
-.of-brand-conversations .of-list-toolbar { gap: 16px; margin-bottom: 32px; align-items: center; }
-.of-brand-conversations .of-list-toolbar input { flex: 1; max-width: none; }
+.of-brand-conversations .of-list-toolbar { gap: 16px; margin-bottom: 32px; align-items: center; flex-wrap: wrap; }
+.of-brand-conversations .of-list-toolbar input { flex: 1 1 240px; max-width: none; }
 .of-brand-conversations .of-list-toolbar select { width: 220px; }
 .of-brand-conversations .of-conversation-layout { grid-template-columns: minmax(0, .95fr) minmax(0, 1.2fr); gap: 40px; }
 .of-brand-conversations .of-message-detail { padding: 32px; background: white; border-radius: 16px; }
@@ -185,7 +185,7 @@
   .of-brand-conversations .of-transcript { padding: 24px; }
   .of-brand-conversations .of-list-toolbar { flex-wrap: wrap; gap: 12px; }
   .of-brand-conversations .of-list-toolbar input { flex-basis: 100%; }
-  .of-brand-conversations .of-list-toolbar select { flex: 1; width: auto; min-width: 0; }
+  .of-brand-conversations .of-list-toolbar select { flex: 1 1 200px; width: auto; min-width: 0; }
   .of-brand-knowledge .of-knowledge-editor { padding: 20px; }
   .of-brand-knowledge .of-inline-controls { align-items: stretch; flex-direction: column; }
   .of-brand-knowledge .of-inline-controls .of-button { align-self: start; }

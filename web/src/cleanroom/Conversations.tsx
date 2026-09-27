@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, callbackMessage, callDate } from "../cleanroom-runtime";
-import type { Call, CallDetail, Page } from "../cleanroom-runtime";
+import type { AssistantSummary, Call, CallDetail, Page } from "../cleanroom-runtime";
 import { Button, Empty, Notice, errorText } from "./ui";
 import { Icon } from "./icons";
 import { CallDiagnostics } from './Diagnostics';
@@ -71,11 +71,19 @@ export function Conversations({
   onSelect,
   query,
   onQuery,
+  assistants,
+  moreAssistants,
+  assistantListBusy,
+  onMoreAssistants,
 }: {
   initial?: string;
   onSelect: (id?: string) => void;
   query: string;
-  onQuery: (search: string, environment: string) => void;
+  onQuery: (query: Record<string, string>) => void;
+  assistants: AssistantSummary[];
+  moreAssistants: boolean;
+  assistantListBusy: boolean;
+  onMoreAssistants: () => void;
   onBack: () => void;
 }) {
   const params = new URLSearchParams(query);
@@ -99,11 +107,17 @@ export function Conversations({
   const polls = useRef(0);
   const busy = selectedId ? detailBusy : listBusy;
   function clearPoll() { if (poll.current) clearTimeout(poll.current); poll.current = null; }
-  async function load(cursor?: string, selectedFilter = filter, selectedSearch = search) {
+  async function load(cursor?: string) {
     const run = ++listGeneration.current;
     setListBusy(true); setListError("");
+    if (!cursor) setPage({ items: [], nextCursor: null });
     try {
-      const data = await api.calls({ environment: selectedFilter, search: selectedSearch, cursor, limit: 30 });
+      const committed = new URLSearchParams(query);
+      const environment = committed.get("environment") === "test" ? "test" : committed.get("environment") === "live" ? "live" : "all";
+      const data = await api.calls({ environment, search: committed.get("search") || "", assistantId: committed.get("assistantId") || undefined,
+        status: committed.get("status") || undefined, intent: committed.get("intent") || undefined,
+        direction: committed.get("direction") === "outbound" ? "outbound" : committed.get("direction") === "inbound" ? "inbound" : undefined,
+        from: committed.get("from") || undefined, to: committed.get("to") || undefined, cursor, limit: 30 });
       if (run === listGeneration.current) setPage(current => cursor ? { ...data, items: [...current.items, ...data.items] } : data);
     } catch (e) { if (run === listGeneration.current) setListError(errorText(e)); }
     finally { if (run === listGeneration.current) setListBusy(false); }
@@ -150,7 +164,7 @@ export function Conversations({
       if (initial) void open(initial);
       else {
         selected.current = undefined; setSelectedId(undefined); setDetail(null); setDetailError(""); setActionError("");
-        void load(undefined, routeFilter, routeSearch);
+        void load();
       }
     });
     return () => { active = false; detailGeneration.current++; listGeneration.current++; clearPoll(); };
@@ -302,7 +316,7 @@ export function Conversations({
             onSubmit={(e) => {
               e.preventDefault();
               if (search === (params.get("search") || "") && filter === (params.get("environment") || "all")) void load();
-              else onQuery(search, filter);
+              else onQuery({ search, environment: filter });
             }}
           >
             <input
@@ -314,15 +328,23 @@ export function Conversations({
             <select
               aria-label="Conversation type"
               value={filter}
-              onChange={(e) => onQuery(search, e.target.value)}
+              onChange={(e) => onQuery({ search, environment: e.target.value })}
             >
               <option value="all">All conversations</option>
               <option value="live">Live conversations</option>
               <option value="test">Browser rehearsals</option>
             </select>
-            <Button type="submit" kind="line">
-              Search
-            </Button>
+            <select aria-label="Receptionist filter" value={params.get("assistantId") || ""} onChange={e => onQuery({ search, assistantId: e.target.value })}>
+              <option value="">All receptionists</option>
+              {params.get("assistantId") && !assistants.some(item => item.id === params.get("assistantId")) && <option value={params.get("assistantId")!}>Selected receptionist</option>}
+              {assistants.map(item => <option key={item.id} value={item.id}>{item.name || "Unnamed receptionist"}</option>)}
+            </select>
+            <select aria-label="Call status" value={params.get("status") || ""} onChange={e => onQuery({ search, status: e.target.value })}>
+              <option value="">All statuses</option>
+              {["active", "completed", "failed", "abandoned"].map(status => <option key={status} value={status}>{status}</option>)}
+            </select>
+            <Button type="submit" kind="line">Search</Button>
+            {moreAssistants && <Button type="button" kind="quiet" disabled={assistantListBusy} onClick={onMoreAssistants}>{assistantListBusy ? "Loading receptionists…" : "Find more receptionists"}</Button>}
           </form>
           {page.items.length ? (
             <CallRows calls={page.items} onOpen={onSelect} />

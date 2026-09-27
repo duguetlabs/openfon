@@ -1,3 +1,4 @@
+import { PREVIEW_TEXT } from '../src/voice-preview-text';
 import { test, expect } from './fixtures';
 import type { Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
@@ -206,7 +207,7 @@ test('voice sampling previews a local draft without saving or reserving a conver
   await page.getByLabel('Their first words').fill('A sample from my unsaved greeting.');
   await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('de');
   await page.getByRole('button', { name: 'Listen to a sample' }).click();
-  await expect.poll(() => page.evaluate(() => (window as unknown as { __cleanroomSamples: unknown[] }).__cleanroomSamples)).toEqual([{ text: 'A sample from my unsaved greeting.', lang: 'de' }]);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __cleanroomSamples: unknown[] }).__cleanroomSamples)).toEqual([{ text: PREVIEW_TEXT.de, lang: 'de' }]);
   expect(writes).toEqual([]);
   const persisted = await (await page.request.get(`/api/me/assistants/${id}`)).json();
   expect(persisted.language).toBe('en');

@@ -36,6 +36,7 @@ export function Connections({
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [recipe, setRecipe] = useState<AssistantRecipe | null>(null);
+  const recipeLoad = useRef(0);
   const [summary, setSummary] = useState<SummarySettings | null>(null);
   const [summaryKey, setSummaryKey] = useState("");
   const [savedSummary, setSavedSummary] = useState<SummarySettings | null>(
@@ -791,19 +792,24 @@ export function Connections({
                   Import recipe
                   <input
                     type="file"
+                    disabled={blocked}
                     accept="application/json,.json"
                     onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
+                      const revision = ++recipeLoad.current;
+                      setRecipe(null); setIncludeVoice(false);
                       try {
                         if (file.size > 65536)
                           throw new Error(
                             "Choose a recipe smaller than 64 KiB.",
                           );
-                        setRecipe(parseAssistantRecipe(await file.text()));
+                        const parsed = parseAssistantRecipe(await file.text());
+                        if (revision !== recipeLoad.current) return;
+                        setRecipe(parsed); setIncludeVoice(false);
                         setError("");
                       } catch (err) {
-                        setError(errorText(err));
+                        if (revision === recipeLoad.current) setError(errorText(err));
                       }
                       e.target.value = "";
                     }}
@@ -852,6 +858,7 @@ export function Connections({
                     <input
                       type="checkbox"
                       checked={includeVoice}
+                      disabled={blocked}
                       onChange={(e) => setIncludeVoice(e.target.checked)}
                     />
                     Also replace language, engine and voice settings
@@ -871,7 +878,7 @@ export function Connections({
                               includeVoice,
                             ) as Partial<AssistantFields>,
                           );
-                          setRecipe(null);
+                          ++recipeLoad.current; setRecipe(null); setIncludeVoice(false);
                           setNotice("Recipe imported into this receptionist.");
                           try { await onSaved(); } catch (e) { setConnectionsRefreshPending(true); throw e; }
                         } catch (e) {
@@ -883,7 +890,7 @@ export function Connections({
                     >
                       Save this recipe
                     </Button>
-                    <Button kind="quiet" onClick={() => setRecipe(null)}>
+                    <Button kind="quiet" disabled={blocked} onClick={() => { ++recipeLoad.current; setRecipe(null); setIncludeVoice(false); }}>
                       Cancel
                     </Button>
                   </div>

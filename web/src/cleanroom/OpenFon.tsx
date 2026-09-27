@@ -935,17 +935,18 @@ export default function OpenFon() {
     window.addEventListener("popstate", restore);
     return () => window.removeEventListener("popstate", restore);
   }, [assistant?.id, boot?.account.id]);
-  function navigate(next: string, saved = false, selectedCall?: string, query?: { search: string; environment: string }) {
+  function navigate(next: string, saved = false, selectedCall?: string, query?: Record<string, string>) {
     if (!saved && next !== screen && !canLeave()) return false;
     const url = new URL(screenPaths[next] || "/overview", location.origin);
     if (assistant && assistant.id !== boot?.assistants[0]?.id) url.searchParams.set("assistant", assistant.id);
     if (next === "conversations" && screen === "conversations") {
       const current = new URLSearchParams(location.search);
-      for (const key of ["search", "environment"]) if (current.has(key)) url.searchParams.set(key, current.get(key)!);
+      for (const key of ["search", "environment", "assistantId", "status", "intent", "direction", "from", "to"]) if (current.has(key)) url.searchParams.set(key, current.get(key)!);
     }
     if (query) {
-      if (query.search) url.searchParams.set("search", query.search); else url.searchParams.delete("search");
-      if (query.environment !== "all") url.searchParams.set("environment", query.environment); else url.searchParams.delete("environment");
+      for (const [key, value] of Object.entries(query)) {
+        if (value && !(key === "environment" && value === "all")) url.searchParams.set(key, value); else url.searchParams.delete(key);
+      }
     }
     if (selectedCall) url.searchParams.set("call", selectedCall);
     if (location.pathname + location.search !== url.pathname + url.search) {
@@ -1126,7 +1127,7 @@ export default function OpenFon() {
               onSaved={workspace => setBoot(current => current ? { ...current, workspace } : current)}
             />
           ) : screen === "conversations" ? (
-            <Conversations initial={callId} query={conversationQuery} onQuery={(search, environment) => navigate("conversations", false, undefined, { search, environment })} onSelect={id => navigate("conversations", false, id)} onBack={() => navigate("desk")} />
+            <Conversations initial={callId} query={conversationQuery} onQuery={query => navigate("conversations", false, undefined, query)} assistants={boot.assistants} moreAssistants={moreAssistants} assistantListBusy={assistantListBusy} onMoreAssistants={() => void discoverAssistants()} onSelect={id => navigate("conversations", false, id)} onBack={() => navigate("desk")} />
           ) : screen === "connections" && assistant ? (
             <Connections
               assistant={assistant}
