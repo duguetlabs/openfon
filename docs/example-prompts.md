@@ -1,8 +1,8 @@
 # Local business prompt examples
 
-These fictional examples are available in **Assistants → Configure → Personality & purpose → Example prompts**. Select an example, preview it, and choose **Use this prompt** to fill **Additional instructions**. Existing instructions require replacement confirmation. Nothing is saved until you choose **Save changes**.
+These fictional examples are available in **How they help → Use an example**. Select an example, preview it, and choose **Use these instructions** to fill **Anything else they should know?**. Existing instructions require replacement confirmation. Nothing is saved until you choose **Save brief**.
 
-Set your actual business name and description in **Settings**, enter verified hours, services and prices there or in approved **Knowledge**, and choose the assistant’s default language and opening greeting separately. Example selection does not change these settings or any provider/model/voice configuration. Prompts guide behavior; they do not add calendar booking, medical assessment or repair diagnostics.
+Set your actual business name and description in your **Business brief**, enter verified hours, services and prices there or in approved **Knowledge**, and choose the assistant’s default language and opening greeting separately. Example selection does not change these settings or any provider/model/voice configuration. Prompts guide behavior; they do not add calendar booking, medical assessment or repair diagnostics.
 
 Use these suggested greetings only after replacing the fictional name with your own. Leave the greeting empty to use the generated greeting for your configured business and language. Test the assistant privately before publishing.
 

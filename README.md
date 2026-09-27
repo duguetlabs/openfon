@@ -45,6 +45,14 @@ component keys, see [the voice configuration guide](docs/voice-configuration.md)
 For where to configure shared business details versus individual assistants, see
 [Settings and assistants](docs/settings-and-assistants.md).
 
+The workspace opens at your **reception desk**: prepare the business brief, rehearse
+with the saved receptionist, and review callers’ messages. **Connections** contains
+provider choices, reusable voice setups and [portable recipes](docs/assistant-recipes.md).
+The [Brand Identity book](docs/brand/identity/index.html) supplies the visual system.
+[Kataleptic routing evidence](docs/kataleptic-routing.md) distinguishes configured
+models from voice character and live-call acceptance. See the [functional contract](docs/cleanroom-functional-contract.md)
+and [validation record](docs/cleanroom-validation.md) for scope and verification limits.
+
 For local development and contributions, see [CONTRIBUTING.md](CONTRIBUTING.md). For a supervised trial, use the [pilot guide](docs/launch/pilot.md), [evaluation template](docs/launch/pilot-evaluation.md) and [cost worksheet](docs/launch/costs.md).
 
 ### Configuration

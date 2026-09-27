@@ -1,0 +1,203 @@
+/* Pinned identity: warm welcome, clear next step. These operation-only rules
+   preserve existing controls and state while giving source, test and outcome
+   their own stable reading surfaces. No marketing effects on real data. */
+.of-brand-operations,
+.of-station.of-brand-rehearsal,
+.of-knowledge.of-brand-knowledge,
+.of-voice-choices.of-brand-voice,
+.of-call-list.of-brand-call-list {
+  font-family: var(--of-body, "Nunito Sans", "Avenir Next", sans-serif);
+  color: var(--of-ink);
+}
+.of-brand-operations .of-page-heading { margin: 28px 0 36px; gap: 24px; }
+.of-brand-operations .of-page-heading h1 {
+  font-family: var(--of-display, "Lilita One", sans-serif);
+  font-size: 2.75rem;
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+.of-brand-operations .of-page-heading p { font-size: 1rem; line-height: 1.6; max-width: 65ch; }
+.of-brand-operations .of-back { min-height: 44px; font-size: .9375rem; font-weight: 750; }
+.of-brand-operations h2 { font-family: var(--of-display, "Lilita One", sans-serif); font-size: 1.875rem; font-weight: 400; letter-spacing: 0; line-height: 1.15; }
+.of-brand-operations .of-reading-title,
+.of-brand-knowledge .of-reading-title,
+.of-brand-voice .of-reading-title,
+.of-brand-rehearsal .of-reading-title {
+  font-family: var(--of-body, "Nunito Sans", sans-serif);
+  font-size: 1.25rem;
+  line-height: 1.35;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+/* Rehearsal: saved words first, one clear action, actual transcript below. */
+.of-station.of-brand-rehearsal {
+  background: white;
+  border: 1px solid var(--of-line);
+  border-radius: 16px;
+  padding: 28px;
+  min-height: 0;
+  align-self: start;
+}
+.of-brand-rehearsal .of-station-top { gap: 12px; border-bottom: 1px solid var(--of-line); padding-bottom: 20px; }
+.of-station.of-brand-rehearsal .of-kicker { color: var(--of-blue); font-size: .875rem; font-weight: 750; letter-spacing: 0; text-transform: none; }
+.of-brand-rehearsal .of-station-state { color: var(--of-muted); font-size: .875rem; gap: 8px; }
+.of-brand-rehearsal .of-station-state i { width: 6px; height: 6px; background: var(--of-muted); }
+.of-station.of-brand-rehearsal.is-live .of-station-state i { background: #216246; }
+.of-brand-rehearsal .of-greeting { padding-top: 24px; flex-grow: 0; }
+.of-brand-rehearsal .of-greeting h2 {
+  font: 400 2rem/1.12 var(--of-display, "Lilita One", sans-serif);
+  letter-spacing: 0;
+  margin-bottom: 20px;
+}
+.of-brand-rehearsal .of-greeting h2.of-reading-title { font: 750 1.5rem/1.3 var(--of-body, "Nunito Sans", sans-serif); }
+.of-brand-rehearsal .of-greeting > p { color: var(--of-muted); font-size: 1rem; line-height: 1.6; max-width: 42ch; margin: 20px 0 0; }
+.of-brand-rehearsal .of-saved-welcome { margin: 0; padding: 24px; background: var(--of-butter); border-radius: 16px; }
+.of-brand-rehearsal .of-saved-welcome > span { display: block; font-size: .875rem; font-weight: 750; margin-bottom: 12px; }
+.of-brand-rehearsal .of-saved-welcome p { margin: 0; font: 600 1.1875rem/1.5 var(--of-body, "Nunito Sans", sans-serif); color: var(--of-ink); max-width: none; overflow-wrap: anywhere; }
+.of-brand-rehearsal .of-call-action { display: block; margin-top: 24px; }
+.of-brand-rehearsal .of-call-button { display: flex; justify-content: center; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 14px 20px; border: 0; border-radius: 8px; background: var(--of-blue); color: white; font-size: 1rem; font-weight: 750; transition: background 180ms; }
+.of-brand-rehearsal .of-call-button:hover:not(:disabled) { background: #18449f; }
+.of-brand-rehearsal .of-call-button.end { background: #a52f3f; }
+.of-brand-rehearsal .of-call-button.end:hover { background: #862637; }
+.of-brand-rehearsal .of-call-button > span { margin: 0; color: inherit; max-width: none; font-size: inherit; }
+.of-brand-rehearsal .of-call-guidance { color: var(--of-muted); font-size: .875rem; line-height: 1.5; margin: 12px 0 0; text-align: center; }
+.of-brand-rehearsal .of-station-error { background: #faedef; color: #862637; padding: 16px; border-radius: 8px; font-size: .9375rem; margin: 20px 0 0; overflow-wrap: anywhere; }
+.of-brand-rehearsal .of-white-link { color: var(--of-blue); font-size: .9375rem; min-height: 44px; font-weight: 750; }
+.of-brand-rehearsal .of-live-transcript { border-top: 1px solid var(--of-line); padding-top: 24px; margin-top: 24px; max-height: 340px; }
+.of-brand-rehearsal .of-live-transcript p { color: var(--of-ink); padding: 16px; background: var(--of-paper, #f3f5f8); border-radius: 8px; font-size: 1rem; line-height: 1.6; margin-bottom: 12px; overflow-wrap: anywhere; }
+.of-brand-rehearsal .of-live-transcript p.is-caller { background: white; padding-left: 0; }
+.of-brand-rehearsal .of-live-transcript strong { color: var(--of-muted); font-size: .875rem; margin-bottom: 8px; }
+.of-brand-rehearsal .of-chat-input { border: 1px solid #8192aa; border-radius: 8px; margin-top: 20px; }
+.of-brand-rehearsal .of-chat-input input { min-height: 48px; font-size: 1rem; }
+.of-brand-rehearsal .of-chat-input button { min-width: 48px; border-radius: 8px; }
+.of-brand-rehearsal .of-audio-meter { height: 48px; margin-top: 20px; }
+.of-brand-rehearsal .of-audio-meter i { background: var(--of-blue); }
+
+/* Actual messages use butter. Empty or ordinary call records stay white. */
+.of-call-list.of-brand-call-list { border-top: 1px solid var(--of-line); }
+.of-brand-call-list > button { padding: 24px 16px; gap: 20px; border-bottom: 1px solid var(--of-line); }
+.of-brand-call-list > button:hover { background: #eaf0fc; }
+.of-brand-call-list > button.has-message { background: #fbf6da; }
+.of-brand-call-list > button.has-message:hover { background: var(--of-butter); }
+.of-brand-call-list .of-message-symbol { width: 44px; height: 44px; border-radius: 8px; color: var(--of-blue); background: white; }
+.of-brand-call-list .of-message-symbol.has-message { color: var(--of-ink); background: var(--of-butter); }
+.of-brand-call-list .of-call-title strong { font-size: 1.0625rem; font-weight: 750; }
+.of-brand-call-list .of-call-title span { font-size: 1rem; line-height: 1.5; margin-top: 6px; }
+.of-brand-call-list .of-call-meta { font-size: .875rem; gap: 6px; }
+.of-brand-conversations .of-list-toolbar { gap: 16px; margin-bottom: 32px; align-items: center; }
+.of-brand-conversations .of-list-toolbar input { flex: 1; max-width: none; }
+.of-brand-conversations .of-list-toolbar select { width: 220px; }
+.of-brand-conversations .of-conversation-layout { grid-template-columns: minmax(0, .95fr) minmax(0, 1.2fr); gap: 40px; }
+.of-brand-conversations .of-message-detail { padding: 32px; background: white; border-radius: 16px; }
+.of-brand-conversations .of-message-detail.is-message-slip { background: var(--of-butter); }
+.of-brand-conversations .of-message-body { font-size: 1.1875rem; line-height: 1.6; margin: 24px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.of-brand-conversations .of-message-detail dl { border-color: #8192aa; font-size: .9375rem; line-height: 1.5; gap: 16px; padding-top: 24px; margin-top: 24px; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); }
+.of-brand-conversations .is-message-slip dt { color: var(--of-ink); }
+.of-brand-conversations .of-message-next-step { margin-top: 24px; padding-top: 20px; border-top: 1px solid #a69e69; }
+.of-brand-conversations .of-message-next-step span { font-size: .875rem; font-weight: 750; }
+.of-brand-conversations .of-message-next-step p { color: var(--of-ink); margin: 8px 0 0; font-size: 1rem; line-height: 1.6; }
+.of-brand-conversations .of-transcript { background: white; padding: 32px; border-radius: 16px; }
+.of-brand-conversations .of-transcript article { padding: 24px 0; border-color: var(--of-line); }
+.of-brand-conversations .of-transcript article:last-child { padding-bottom: 0; }
+.of-brand-conversations .of-transcript article > strong { font-size: .875rem; font-weight: 750; color: var(--of-blue); }
+.of-brand-conversations .of-transcript article.is-caller > strong { color: var(--of-muted); }
+.of-brand-conversations .of-transcript article p { font-size: 1rem; line-height: 1.6; color: var(--of-ink); overflow-wrap: anywhere; }
+.of-brand-conversations .of-transcript .of-text-button { font-size: .875rem; min-height: 44px; margin-top: 12px; }
+
+/* Source editing and voice sampling stay deliberately quiet. */
+.of-knowledge.of-brand-knowledge { padding-top: 8px; }
+.of-brand-knowledge > .of-help { font-size: 1rem; line-height: 1.6; max-width: 65ch; }
+.of-brand-knowledge .of-inline-controls { gap: 16px; margin: 24px 0; align-items: end; flex-wrap: wrap; }
+.of-brand-knowledge .of-inline-controls .of-field { min-width: 180px; }
+.of-brand-knowledge .of-inline-controls .of-button { font-size: .875rem; min-height: 44px; }
+.of-brand-knowledge .of-answer-list { margin: 24px 0; border-top: 1px solid var(--of-line); }
+.of-brand-knowledge .of-answer-list > button { padding: 20px 0; min-height: 76px; }
+.of-brand-knowledge .of-answer-list strong { font-size: 1rem; line-height: 1.5; }
+.of-brand-knowledge .of-answer-list small { font-size: .875rem; line-height: 1.5; margin-top: 8px; }
+.of-brand-knowledge .of-answer-list > button:hover strong { color: var(--of-blue); }
+.of-brand-knowledge .of-knowledge-editor { padding: 24px; background: var(--of-paper, #f3f5f8); border-radius: 16px; gap: 24px; }
+.of-brand-knowledge .of-knowledge-editor h3 { margin: 0; }
+.of-brand-knowledge .of-check { align-items: start; font-size: .9375rem; line-height: 1.5; }
+.of-brand-knowledge .of-check input { margin-top: 3px; }
+.of-brand-knowledge > .of-help:last-child { font-size: .875rem; margin-top: 20px; }
+.of-voice-choices.of-brand-voice { margin-top: 8px; padding-top: 24px; }
+.of-brand-voice .of-voice-heading h3 { margin: 0 0 8px; }
+.of-brand-voice .of-voice-heading p { margin: 0 0 24px; font-size: .9375rem; color: var(--of-muted); line-height: 1.6; }
+.of-brand-voice .of-voice-sample { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--of-line); align-items: center; flex-wrap: wrap; }
+.of-brand-voice .of-voice-sample small { font-size: .875rem; line-height: 1.5; }
+.of-brand-voice .of-sample-result { padding: 20px; background: var(--of-paper, #f3f5f8); border-radius: 16px; margin-top: 24px; }
+.of-brand-voice .of-sample-result figcaption { font-size: .875rem; line-height: 1.5; color: var(--of-ink); }
+.of-brand-voice audio { display: block; width: 100%; }
+
+/* Provider choice remains a secondary, explicit configuration task. */
+.of-brand-connections .of-settings-layout { grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: 40px; }
+.of-brand-connections .of-settings-layout > aside { position: static; background: white; border: 1px solid var(--of-line); padding: 28px; border-radius: 16px; }
+.of-brand-connections .of-settings-layout > aside h2 { font-size: 1.875rem; }
+.of-brand-connections .of-settings-layout > aside p { font-size: .9375rem; line-height: 1.6; }
+.of-brand-connections .of-settings-fact { display: block; padding: 20px 0; border-color: var(--of-line); }
+.of-brand-connections .of-settings-fact span { font-size: .875rem; margin-bottom: 8px; }
+.of-brand-connections .of-settings-fact strong { font-size: 1rem; font-weight: 750; }
+.of-brand-connections .of-settings-layout > aside .of-button { font-size: .9375rem; min-height: 48px; margin-top: 24px; }
+.of-brand-connections .of-setting-section { padding: 28px; margin-bottom: 24px; border: 0; background: white; border-radius: 16px; }
+.of-brand-connections .of-setting-section .of-help { font-size: 1rem; line-height: 1.6; }
+.of-brand-connections .of-setting-section > .of-two-fields { margin-top: 24px; }
+.of-brand-connections .of-provider-section { margin: 0 0 12px; border: 1px solid var(--of-line); border-radius: 16px; background: white; }
+.of-brand-connections .of-provider-section summary { padding: 22px 28px; font-size: 1.0625rem; font-weight: 750; gap: 16px; }
+.of-brand-connections .of-provider-section summary small { font-size: .875rem; }
+.of-brand-connections .of-provider-section > .of-form { padding: 4px 28px 28px; margin: 0; border-radius: 16px; gap: 24px; }
+.of-brand-connections .of-save-row { margin: 24px 0 40px; }
+.of-brand-connections .of-import-review { background: var(--of-paper, #f3f5f8); padding: 24px; border-radius: 16px; }
+.of-brand-connections .of-import-review h3 { font: 750 1.25rem/1.35 var(--of-body, "Nunito Sans", sans-serif); }
+.of-brand-connections .of-recipe-fields { font-size: .9375rem; line-height: 1.6; gap: 8px; }
+.of-brand-connections .of-recipe-fields dt { margin-top: 12px; }
+.of-brand-connections .of-recipe-fields dd { color: var(--of-ink); overflow-wrap: anywhere; }
+.of-brand-connections .of-route-evidence { border-color: var(--of-line); padding-top: 24px; }
+.of-brand-connections .of-route-evidence h3 { font-size: 1rem; margin-bottom: 16px; }
+/* Supersede legacy compact !important declarations without changing global CSS. */
+.of-brand-connections .of-route-evidence p { font-size: .875rem !important; line-height: 1.6 !important; margin-bottom: 16px; }
+.of-brand-connections .of-route-evidence small { font-size: .875rem; line-height: 1.6; color: var(--of-muted); }
+.of-brand-connections .of-preset-row { padding: 20px 0; }
+.of-brand-connections .of-preset-row strong { font-size: 1rem; }
+.of-brand-connections .of-preset-row small { font-size: .875rem; }
+
+@media (max-width: 980px) {
+  .of-station.of-brand-rehearsal { padding: 24px; }
+  .of-brand-rehearsal .of-saved-welcome { padding: 20px; }
+  .of-brand-connections .of-settings-layout { grid-template-columns: 240px minmax(0, 1fr); gap: 24px; }
+  .of-brand-connections .of-settings-layout > aside { padding: 24px; }
+  .of-brand-conversations .of-conversation-layout { gap: 24px; }
+}
+@media (max-width: 760px) {
+  .of-brand-operations .of-page-heading { margin: 24px 0 28px; gap: 20px; }
+  .of-brand-operations .of-page-heading h1 { font-size: 2.25rem; }
+  .of-brand-rehearsal .of-station-top { align-items: start; }
+  .of-brand-rehearsal .of-greeting h2 { font-size: 1.875rem; }
+  .of-brand-rehearsal .of-saved-welcome p { font-size: 1.0625rem; }
+  .of-brand-call-list > button { gap: 12px; padding: 20px 0; align-items: start; }
+  .of-brand-call-list .of-call-title strong { font-size: 1rem; }
+  .of-brand-call-list .of-call-title span { font-size: .9375rem; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .of-brand-call-list .of-call-meta { font-size: .875rem; min-width: 62px; }
+  .of-brand-call-list .of-message-symbol { width: 36px; height: 36px; }
+  .of-brand-conversations .of-conversation-layout { grid-template-columns: 1fr; gap: 32px; }
+  .of-brand-conversations .of-message-detail,
+  .of-brand-conversations .of-transcript { padding: 24px; }
+  .of-brand-conversations .of-list-toolbar { flex-wrap: wrap; gap: 12px; }
+  .of-brand-conversations .of-list-toolbar input { flex-basis: 100%; }
+  .of-brand-conversations .of-list-toolbar select { flex: 1; width: auto; min-width: 0; }
+  .of-brand-knowledge .of-knowledge-editor { padding: 20px; }
+  .of-brand-knowledge .of-inline-controls { align-items: stretch; flex-direction: column; }
+  .of-brand-knowledge .of-inline-controls .of-button { align-self: start; }
+  .of-brand-connections .of-settings-layout { grid-template-columns: 1fr; gap: 28px; }
+  .of-brand-connections .of-settings-layout > aside { padding: 24px; }
+  .of-brand-connections .of-setting-section { padding: 24px; }
+  .of-brand-connections .of-provider-section summary { padding: 20px 24px; flex-wrap: wrap; }
+  .of-brand-connections .of-provider-section > .of-form { padding: 0 24px 24px; }
+  .of-brand-connections .of-import-review { padding: 20px; }
+  .of-brand-connections .of-provider-section summary small { max-width: 50%; overflow-wrap: anywhere; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .of-brand-rehearsal .of-call-button,
+  .of-brand-rehearsal .of-audio-meter i { transition: none; }
+}

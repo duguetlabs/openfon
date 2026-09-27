@@ -54,10 +54,9 @@ export function sameLlmEndpoint(a: string, b: string): boolean {
 export const KATALEPTIC_API = 'https://api.kataleptic.com/v1';
 export const RETIRED_KATALEPTIC_CHAT_MODELS = new Set(['qwen3-8b', 'qwen2.5-coder-7b', 'mistral-nemo-12b', 'gemma3-27b', 'glm4-9b']);
 // Only on Kataleptic itself: another endpoint may serve a model of the same name.
-function liveKatalepticModel(env: Env, baseUrl: string, model: string): string {
+function liveKatalepticModel(_env: Env, baseUrl: string, model: string): string {
   if (!RETIRED_KATALEPTIC_CHAT_MODELS.has(model) || !sameLlmEndpoint(baseUrl, KATALEPTIC_API)) return model;
-  const instanceDefault = sameLlmEndpoint(env.DEFAULT_LLM_BASE_URL, KATALEPTIC_API) && !RETIRED_KATALEPTIC_CHAT_MODELS.has(env.DEFAULT_LLM_MODEL);
-  return instanceDefault ? env.DEFAULT_LLM_MODEL : 'llama-3.3-70b';
+  throw new LlmConfigError('This Kataleptic text model is retired. Choose an available model; no substitute was used.');
 }
 
 export function resolveLlm(env: Env, settings: AgentSettings | null): LlmConfig {

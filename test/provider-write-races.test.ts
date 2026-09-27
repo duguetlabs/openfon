@@ -106,6 +106,9 @@ for (const writer of writers) {
 
   it.each(['url', 'key', 'missing-to-present', 'present-to-missing'])
   (`${writer} detects checked provider changes (%s)`, async change => {
+    // Deleted provider rows inherit a gateway that supports this fixture's
+    // custom model, so the write reaches the intended concurrency barrier.
+    env.REALTIME_BASE_URL = 'wss://custom.example/realtime';
     await setup();
     if (change === 'missing-to-present') db.exec("DELETE FROM provider_settings WHERE business_id='b1'");
     const hold = holdWrite(); const pending = save(writer);

@@ -40,7 +40,7 @@ export class SignOutRecoveryError extends Error {
   }
 }
 
-export class CompatibilitySessionCoordinator {
+export class CompatibilitySessionCoordinator<Snapshot = CompatibilitySessionSnapshot> {
   private generation = 0;
   private deletionAttempt = 0;
   private signOutState: 'idle' | SignOutRecovery = 'idle';
@@ -63,8 +63,8 @@ export class CompatibilitySessionCoordinator {
   }
 
   async refresh(
-    load: () => Promise<CompatibilitySessionSnapshot>,
-    publish: (snapshot: CompatibilitySessionSnapshot) => void,
+    load: () => Promise<Snapshot>,
+    publish: (snapshot: Snapshot) => void,
     failed: (error: unknown) => void,
     blocked?: (recovery: SignOutRecovery) => void
   ): Promise<void> {

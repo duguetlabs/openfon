@@ -1,5 +1,6 @@
 import type { AgentSettings, Env } from './types';
 import { LlmConfigError, validateLlmBaseUrl } from './providers';
+import { knownKatalepticConversationModel, REALTIME_BACKENDS } from './backend-registry';
 
 export type RealtimeProvider = 'kataleptic' | 'openai' | 'custom';
 export interface RealtimeSettings {
@@ -13,8 +14,6 @@ export interface RealtimeConfig {
   apiKey: string;
   model: string;
   protocol: 'gateway' | 'openai';
-  /** The retired selection replaced by `model`; its voice belonged to that tier. */
-  retiredModel?: string;
 }
 export const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime';
 export const KATALEPTIC_HD_MODEL = 'kataleptic-realtime-hd';
@@ -33,7 +32,7 @@ export function isGptLiveModel(model: string): boolean {
 // Another gateway speaking the same protocol keeps its own models.
 const KATALEPTIC_HOST = 'api.kataleptic.com';
 export function gatewayRealtimeModel(model: string): boolean {
-  return model === KATALEPTIC_HD_MODEL || model.startsWith('gpt-realtime') || isGptLiveModel(model);
+  return knownKatalepticConversationModel(model);
 }
 function katalepticGateway(config: Pick<RealtimeConfig, 'protocol' | 'baseUrl'>): boolean {
   if (config.protocol !== 'gateway') return false;
@@ -51,9 +50,10 @@ export function resolveRealtime(env: Env & { REALTIME_PROVIDER?: RealtimeProvide
   const instance = selection === 'instance';
   const provider = instance ? env.REALTIME_PROVIDER || 'kataleptic' : selection;
   if (!['kataleptic', 'openai', 'custom'].includes(provider)) throw new LlmConfigError('Unsupported realtime provider.');
-  const protocol = provider === 'kataleptic' ? 'gateway' : 'openai';
+  const adapter = REALTIME_BACKENDS[provider];
+  const protocol = adapter.protocol;
   const baseUrl = instance ? env.REALTIME_BASE_URL : settings?.realtime_base_url?.trim() ||
-    (provider === 'openai' ? OPENAI_REALTIME_URL : provider === 'kataleptic' ? KATALEPTIC_REALTIME_URL : '');
+    adapter.defaultUrl;
   let url: URL;
   try { url = new URL(baseUrl); } catch { throw new LlmConfigError('Realtime endpoint must be an absolute WebSocket URL.'); }
   if (!['ws:', 'wss:'].includes(url.protocol) || url.username || url.password || url.hash) {
@@ -70,11 +70,11 @@ export function resolveRealtime(env: Env & { REALTIME_PROVIDER?: RealtimeProvide
   const apiKey = instance ? env.REALTIME_API_KEY || (protocol === 'gateway' ? env.DEFAULT_LLM_API_KEY : '') || '' : settings?.realtime_api_key || '';
   if (!instance && !apiKey) throw new LlmConfigError('This realtime provider needs its own API key.');
   if (protocol === 'openai' && !apiKey) throw new LlmConfigError('OpenAI realtime requires a realtime API key.');
-  const model = settings?.realtime_model || (instance ? env.REALTIME_MODEL : protocol === 'openai' ? 'gpt-realtime' : defaultGatewayModel(baseUrl));
-  // A stored cascade selection would fail every call. Serve the HD tier instead;
-  // migration 0024 rewrites the stored rows, this covers anything it missed.
+  const model = settings?.realtime_model || (instance ? env.REALTIME_MODEL : protocol === 'openai' ? adapter.defaultModel : defaultGatewayModel(baseUrl));
+  // A selected model must never quietly become another model. Migration 0024
+  // handles historical records; stale/unknown selections now require repair.
   if (katalepticGateway({ protocol, baseUrl }) && !gatewayRealtimeModel(model)) {
-    return { provider, baseUrl, apiKey, model: KATALEPTIC_HD_MODEL, protocol, retiredModel: model };
+    throw new LlmConfigError('This Kataleptic conversation model is unavailable. Choose a supported conversation model; no substitute was used.');
   }
   if (provider === 'openai' && !/^gpt-(realtime|4o.*realtime)/.test(model)) {
     throw new LlmConfigError('Choose an OpenAI realtime model for the OpenAI provider.');
@@ -84,15 +84,19 @@ export function resolveRealtime(env: Env & { REALTIME_PROVIDER?: RealtimeProvide
   if (isGptLiveModel(model) && protocol !== 'gateway') {
     throw new LlmConfigError('GPT-Live is available only through the Kataleptic gateway.');
   }
+  if (isGptLiveModel(model) && settings?.realtime_voice && !GPT_LIVE_VOICES.includes(settings.realtime_voice)) {
+    throw new LlmConfigError('Choose a supported GPT-Live voice; no substitute was used.');
+  }
   return { provider, baseUrl, apiKey, model, protocol };
 }
 
 // Piper voice ids (`de_DE-thorsten-medium`) belonged to the retired cascade; no
 // Kataleptic tier accepts them now. Azure names use a hyphen (`de-DE-…`).
 const PIPER_VOICE = /^[a-z]{2}_[A-Z]{2}-/;
-/** The explicit voice to request, or '' when it belongs to a retired tier. */
+/** Reject an unavailable explicit voice rather than changing the sound. */
 export function liveRealtimeVoice(config: RealtimeConfig, voice: string): string {
-  return config.retiredModel || (katalepticGateway(config) && PIPER_VOICE.test(voice)) ? '' : voice;
+  if (katalepticGateway(config) && PIPER_VOICE.test(voice)) throw new LlmConfigError('This Kataleptic voice is retired. Choose a supported voice; no substitute was used.');
+  return voice;
 }
 
 export function realtimeConnection(config: RealtimeConfig): { url: string; headers?: Record<string, string> } {

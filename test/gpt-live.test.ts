@@ -212,11 +212,19 @@ describe('GPT-Live session start', () => {
     caller.receive({ type: 'hangup' }); await flush();
   });
 
-  it('defaults the delegation model and omits a voice outside the GPT-Live catalog', async () => {
-    const { start, caller } = await call({ settings: { realtime_voice: 'en-US-AvaMultilingualNeural' } });
+  it('defaults the delegation model and omits an intentionally blank voice', async () => {
+    const { start, caller } = await call({ settings: { realtime_voice: '' } });
     expect(start!.session.audio).toEqual({ format: { type: 'audio/pcm', rate: 24000 } });
     expect(start!.session.delegation.responses.model).toBe('gpt-5.4-mini');
     caller.receive({ type: 'hangup' }); await flush();
+  });
+
+  it('rejects an explicit unsupported voice before connecting a call', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { start, caller } = await call({ settings: { realtime_voice: 'future-voice' } });
+    expect(start).toBeUndefined();
+    expect(upgrades).toHaveLength(0);
+    expect(caller.of('error')).toHaveLength(1);
   });
 
   it.each([
@@ -778,14 +786,10 @@ describe('GPT-Live voice preview', () => {
     expect(ws.closed).not.toBeNull();
   });
 
-  it('is what generateVoicePreview uses for gpt-live-1, with a GPT-Live voice only', async () => {
+  it('refuses an unsupported explicit GPT-Live voice before connecting', async () => {
     const promise = generateVoicePreview(ENV as unknown as Env, { ...SETTINGS, realtime_voice: 'en-US-AvaMultilingualNeural' } as unknown as AgentSettings, new AbortController().signal);
-    const rejected = expect(promise).rejects.toThrow('Voice preview failed');
-    await flush();
-    expect(upgrades[0].url).toBe('https://api.kataleptic.com/v1/live/sessions');
-    expect(gateways[0].of('session.start')[0].session.audio.output).toBeUndefined();
-    gateways[0].receive({ type: 'error', error: { code: 'x' } });
-    await rejected;
+    await expect(promise).rejects.toThrow('supported GPT-Live voice');
+    expect(upgrades).toHaveLength(0);
   });
 
   it('rejects a session that confirms another voice', async () => {
