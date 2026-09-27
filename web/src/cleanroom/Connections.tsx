@@ -29,6 +29,7 @@ export function Connections({
 }) {
   const [provider, setProvider] = useState<Provider | null>(null);
   const [catalog, setCatalog] = useState<ProviderCatalog | null>(null);
+  const [catalogUnavailable, setCatalogUnavailable] = useState(false);
   const [patch, setPatch] = useState<ProviderPatch>({});
   const [voice, setVoice] = useState<Partial<AssistantFields>>({});
   const [error, setError] = useState("");
@@ -79,12 +80,13 @@ export function Connections({
   const [refreshPending, setRefreshPending] = useState(false);
   const refreshKind = useRef<"apply" | "list">("list");
   const [loadFailed, setLoadFailed] = useState(false);
-  const blocked = busy || renaming || refreshPending;
+  const [connectionsRefreshPending, setConnectionsRefreshPending] = useState(false);
+  const blocked = busy || renaming || refreshPending || connectionsRefreshPending;
   const voiceDirty = Object.keys(voice).length > 0 || Object.keys(patch).length > 0;
 
   function begin(kind: "create" | "setup" | "settings", recovery = false) {
     // Blur runs before click; refs admit writes before React renders disabled controls.
-    if (operation.current || renames.current.size || (refreshPending && !recovery)) return null;
+    if (operation.current || renames.current.size || ((refreshPending || connectionsRefreshPending) && !recovery)) return null;
     const token = { kind };
     operation.current = token;
     listGeneration.current++;
@@ -203,11 +205,12 @@ export function Connections({
     try {
       const [p, c, s] = await Promise.all([
         api.provider(),
-        api.providerCatalog(),
+        api.providerCatalog().catch(() => null),
         api.summaries(),
       ]);
       setProvider(p);
       setCatalog(c);
+      setCatalogUnavailable(!c);
       setSummary(s);
       setSavedSummary(s);
       setLoadFailed(false);
@@ -228,8 +231,23 @@ export function Connections({
         "",
     );
   const set = (key: keyof ProviderPatch, val: string | boolean) =>
-    setPatch((p) => ({ ...p, [key]: val }));
+    setPatch((p) => {
+      const next = { ...p, [key]: val };
+      if (val === (provider as unknown as Record<string, unknown>)?.[key] ||
+          (!val && ['apiKey','realtime_api_key','stt_api_key','tts_api_key'].includes(key))) delete next[key];
+      return next;
+    });
+  function catalogApplies(kind: 'text' | 'transcription' | 'realtime') {
+    if (kind === 'realtime') return (value('realtime_provider') === 'instance' ? provider?.effective_realtime_provider : value('realtime_provider')) === 'kataleptic';
+    const endpoint = kind === 'text' ? value('baseUrl') : value('stt_base_url');
+    try { return new URL(endpoint).href.replace(/\/$/, '') === 'https://api.kataleptic.com/v1'; } catch { return false; }
+  }
+  function inactiveCapability(key: string) {
+    const capability = key.startsWith('realtime_') ? 'realtime' : key.startsWith('stt_') ? 'stt' : key.startsWith('tts_') ? 'tts' : null;
+    return capability && ['instance', 'browser'].includes(value(`${capability}_provider`));
+  }
   function endpoint(key: keyof ProviderPatch, label: string) {
+    if (inactiveCapability(key)) return null;
     return (
       <Field label={label}>
         <input
@@ -242,6 +260,7 @@ export function Connections({
     );
   }
   function model(key: keyof ProviderPatch, label: string) {
+    if (inactiveCapability(key)) return null;
     return (
       <Field label={label}>
         <input
@@ -260,10 +279,23 @@ export function Connections({
     configured: boolean,
     clear: keyof ProviderPatch,
   ) {
+    const capability = key === 'realtime_api_key' ? 'realtime' : key === 'stt_api_key' ? 'stt' : key === 'tts_api_key' ? 'tts' : null;
+    const label = capability === 'realtime' ? 'Realtime API key' : capability === 'stt' ? 'Transcription API key' : capability === 'tts' ? 'Speech API key' : 'Text API key';
+    if (capability && inactiveCapability(key)) {
+      const mode = value(`${capability}_provider`);
+      const savedMode = provider?.[`${capability}_provider`];
+      return <p className="of-help">{mode === 'browser'
+        ? 'Browser speech uses this device. No provider key is used.'
+        : `Instance ${capability === 'stt' ? 'transcription' : capability === 'tts' ? 'speech' : 'realtime'} uses the operator’s key. ${savedMode === 'instance' ? (configured ? 'An operator key is configured; connection not verified.' : 'No operator key is configured.') : ''}`}
+        {savedMode !== mode && ' Save to use the instance configuration and remove the saved workspace key.'}
+      </p>;
+    }
+    // Operator presence never means that a workspace credential is stored.
+    if (capability && provider?.[`${capability}_provider`] === 'instance') configured = false;
     return (
       <>
         <Field
-          label="API key"
+          label={label}
           hint={
             configured
               ? "A key is already stored. Leave blank to keep it."
@@ -292,11 +324,13 @@ export function Connections({
     );
   }
   async function save() {
+    if (!voiceDirty) return;
     const token = begin("settings");
     if (!token) return;
     setError("");
     setNotice("");
     let providerSaved = false;
+    let stage: "provider" | "provider-read" | "voice" | "assistant-read" = "provider";
     try {
       const clean = { ...patch };
       for (const key of [
@@ -306,9 +340,7 @@ export function Connections({
         "tts_api_key",
       ] as const)
         if (!clean[key]) delete clean[key];
-      await api.saveProvider(clean);
-      providerSaved = true;
-      await onSaved();
+      if (Object.keys(clean).length) { await api.saveProvider(clean); providerSaved = true; }
       setPatch(
         (current) =>
           Object.fromEntries(
@@ -318,7 +350,9 @@ export function Connections({
             ),
           ) as ProviderPatch,
       );
+      stage = "provider-read";
       setProvider(await api.provider());
+      stage = "voice";
       if (Object.keys(voice).length) {
         await api.saveAssistant(assistant.id, voice);
         setVoice(
@@ -331,17 +365,33 @@ export function Connections({
             ) as Partial<AssistantFields>,
         );
       }
+      stage = "assistant-read";
       await onSaved();
       setNotice(
         "Connections saved. Run a connection check, then rehearse to verify the full conversation.",
       );
     } catch (e) {
+      if (stage === "provider-read" || stage === "assistant-read") setConnectionsRefreshPending(true);
       setError(
         `${providerSaved ? "Provider connections were saved, but the remaining update failed. Your unsaved voice choices are retained. " : ""}${errorText(e)}`,
       );
     } finally {
       finish(token);
     }
+  }
+  async function refreshConnections() {
+    const token = begin("settings", true); if (!token) return;
+    try {
+      if (loadFailed) await load(true);
+      else {
+        const current = await api.provider();
+        await onSaved();
+        setProvider(current);
+        setConnectionsRefreshPending(false);
+        setError("");
+      }
+    } catch (e) { setError(`Refreshing connections failed: ${errorText(e)}`); }
+    finally { finish(token); }
   }
   function download() {
     try {
@@ -375,10 +425,8 @@ export function Connections({
       </div>
       {error && <Notice error>{error}</Notice>}
       {notice && <Notice>{notice}</Notice>}
-      {loadFailed && <Button kind="line" disabled={blocked} onClick={async () => {
-        const token = begin("settings"); if (!token) return;
-        try { await load(true); } finally { finish(token); }
-      }}>Retry connections refresh</Button>}
+      {catalogUnavailable && <Notice>The live Kataleptic catalog is temporarily unavailable. Saved connections and custom model IDs remain usable.</Notice>}
+      {(loadFailed || connectionsRefreshPending) && <Button kind="line" disabled={busy || renaming} onClick={() => void refreshConnections()}>Retry connections refresh</Button>}
       {!provider ? (
         <Loading />
       ) : (
@@ -576,6 +624,7 @@ export function Connections({
                           ...p,
                           realtime_provider:
                             kind as Provider["realtime_provider"],
+                          ...(kind === 'instance' ? { realtime_api_key:'', realtime_clear_api_key:false } : {}),
                           ...(kind === "kataleptic"
                             ? {
                                 realtime_base_url:
@@ -618,6 +667,7 @@ export function Connections({
                         setPatch((p) => ({
                           ...p,
                           stt_provider: kind as Provider["stt_provider"],
+                          ...(kind === 'instance' ? { stt_api_key:'', stt_clear_api_key:false } : {}),
                           ...(kind === "openai"
                             ? {
                                 stt_base_url: "https://api.openai.com/v1",
@@ -650,7 +700,13 @@ export function Connections({
                   <Field label="Voice provider">
                     <select
                       value={value("tts_provider")}
-                      onChange={(e) => set("tts_provider", e.target.value)}
+                      onChange={(e) => {
+                        const kind = e.target.value as Provider['tts_provider'];
+                        setPatch(p => ({ ...p, tts_provider:kind,
+                          ...(['instance', 'browser'].includes(kind) ? {tts_api_key:'',tts_clear_api_key:false} : {}),
+                          ...(kind === 'openai' ? {tts_base_url:'https://api.openai.com/v1',tts_model:'gpt-4o-mini-tts'} : kind === 'azure' ? {tts_base_url:'',tts_model:''} : {}),
+                        }));
+                      }}
                     >
                       <option value="instance">Instance default</option>
                       <option value="browser">Browser voice</option>
@@ -669,7 +725,7 @@ export function Connections({
                 </div>
               </details>
               <div className="of-actions of-save-row">
-                <Button type="submit" disabled={blocked}>
+                <Button type="submit" disabled={blocked || !voiceDirty}>
                   {busy ? "Saving…" : "Save connections"}
                 </Button>
               </div>
@@ -814,7 +870,7 @@ export function Connections({
                           );
                           setRecipe(null);
                           setNotice("Recipe imported into this receptionist.");
-                          await onSaved();
+                          try { await onSaved(); } catch (e) { setConnectionsRefreshPending(true); throw e; }
                         } catch (e) {
                           setError(errorText(e));
                         } finally {
@@ -869,7 +925,7 @@ export function Connections({
       {(["text", "transcription", "realtime"] as const).map((kind) => (
         <datalist key={kind} id={`of-${kind}-models`}>
           {catalog?.models
-            .filter((m) => m.kind === kind)
+            .filter((m) => m.kind === kind && catalogApplies(kind))
             .map((m) => (
               <option key={m.id} value={m.id}>
                 {m.label}
@@ -882,7 +938,7 @@ export function Connections({
           key={engine}
           id={engine === "pipeline" ? "of-voices" : "of-realtime-voices"}
         >
-          {(provider && catalog && Object.keys(patch).length === 0
+          {(provider && Object.keys(patch).length === 0
             ? voiceChoicesFor(
                 { ...assistant, ...voice, engine },
                 provider,

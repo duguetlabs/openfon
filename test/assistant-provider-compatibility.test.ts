@@ -132,3 +132,21 @@ it('scopes provider-view identity evidence to the exact public Kataleptic endpoi
   const custom = await request('/api/me/provider');
   expect((await custom.json() as { realtimeRoute: unknown }).realtimeRoute).toBeNull();
 });
+
+it('allows the Connections provider-first GPT-Live to OpenAI migration', async () => {
+  expect((await request('/api/me/assistants/asst_b1', {
+    engine: 'realtime', realtime_model: 'gpt-live-1', realtime_voice: 'marin',
+  })).status).toBe(200);
+  const switched = await request('/api/me/provider', {
+    realtime_provider: 'openai', realtime_base_url: 'wss://api.openai.com/v1/realtime',
+    realtime_api_key: 'synthetic-direct-key',
+  });
+  expect(switched.status).toBe(200);
+  const refreshed = await request('/api/me/assistants/asst_b1');
+  expect(await refreshed.json()).toMatchObject({ realtime_model: '', realtime_voice: 'marin' });
+  expect((await request('/api/me/assistants/asst_b1', {
+    engine: 'realtime', realtime_model: 'gpt-realtime', realtime_voice: 'cedar',
+  })).status).toBe(200);
+  expect(await (await request('/api/me/assistants/asst_b1')).json())
+    .toMatchObject({ engine: 'realtime', realtime_model: 'gpt-realtime', realtime_voice: 'cedar' });
+});

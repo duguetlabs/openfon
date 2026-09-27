@@ -1,3 +1,4 @@
+import { GPT_LIVE_VOICES } from './realtime-voices';
 import type { AgentSettings, Env } from './types';
 import { LlmConfigError, validateLlmBaseUrl } from './providers';
 import { knownKatalepticConversationModel, REALTIME_BACKENDS } from './backend-registry';
@@ -21,7 +22,7 @@ export const KATALEPTIC_REALTIME_URL = 'wss://api.kataleptic.com/v1/realtime';
 /** Full-duplex GPT-Live. It speaks its own protocol on its own endpoint; see src/gpt-live.ts. */
 export const GPT_LIVE_MODEL = 'gpt-live-1';
 /** Voices supported by the current GPT-Live adapter and its preview path. */
-export const GPT_LIVE_VOICES = ['marin', 'cedar', 'alloy', 'coral', 'shimmer', 'verse', 'ash', 'sage', 'ballad', 'echo', 'arbor', 'breeze', 'cove', 'ember', 'juniper', 'maple', 'sol', 'spruce', 'vale'];
+export { GPT_LIVE_VOICES } from './realtime-voices';
 export function isGptLiveModel(model: string): boolean {
   return model === GPT_LIVE_MODEL;
 }

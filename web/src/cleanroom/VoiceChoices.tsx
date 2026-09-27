@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, supportedLanguages, voiceChoicesFor } from "../cleanroom-runtime";
 import type {
   Assistant,
@@ -6,6 +6,7 @@ import type {
   ProviderCatalog,
 } from "../cleanroom-runtime";
 import { Button, Field, Notice, errorText } from "./ui";
+import { PREVIEW_TEXT } from '../../../src/voice-preview-text';
 export function VoiceChoices({
   draft,
   onChange,
@@ -15,21 +16,28 @@ export function VoiceChoices({
 }) {
   const [provider, setProvider] = useState<Provider | null>(null);
   const [catalog, setCatalog] = useState<ProviderCatalog | null>(null);
+  const [catalogUnavailable, setCatalogUnavailable] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [sample, setSample] = useState("");
   const [sampleLabel, setSampleLabel] = useState("");
   const localPreview = useRef(false);
   const sampleUrl = useRef("");
-  const audio = useRef<HTMLAudioElement>(null);
+  const audio = useRef<HTMLAudioElement | null>(null);
+  const audioRef = useCallback((element: HTMLAudioElement | null) => {
+    // React detaches refs before passive cleanup, so stop a removed player here.
+    if (!element) audio.current?.pause();
+    audio.current = element;
+  }, []);
   const request = useRef<AbortController | null>(null);
   useEffect(() => {
     let active = true;
-    Promise.all([api.provider(), api.providerCatalog()])
+    Promise.all([api.provider(), api.providerCatalog().catch(() => null)])
       .then(([p, c]) => {
         if (active) {
           setProvider(p);
           setCatalog(c);
+          setCatalogUnavailable(!c);
         }
       })
       .catch((e) => {
@@ -72,7 +80,7 @@ export function VoiceChoices({
     !realtime && provider?.effective_tts_provider === "browser";
   const selected = realtime ? draft.realtime_voice : draft.voice;
   const choices =
-    provider && catalog ? voiceChoicesFor(draft, provider, catalog) : [];
+    provider ? voiceChoicesFor(draft, provider, catalog) : [];
   async function preview() {
     request.current?.abort();
     const controller = new AbortController();
@@ -88,7 +96,7 @@ export function VoiceChoices({
           );
         speechSynthesis.cancel();
         const speech = new SpeechSynthesisUtterance(
-          draft.greeting || "Hello. How can I help you today?",
+          PREVIEW_TEXT[draft.language] || PREVIEW_TEXT.en,
         );
         speech.lang = draft.language;
         const local = speechSynthesis
@@ -127,6 +135,7 @@ export function VoiceChoices({
         controller.signal,
       );
       if (controller.signal.aborted) return;
+      if (blob.size > 960044) throw new Error('Voice sample is too large.');
       if (sampleUrl.current) URL.revokeObjectURL(sampleUrl.current);
       sampleUrl.current = URL.createObjectURL(blob);
       setSample(sampleUrl.current);
@@ -205,19 +214,26 @@ export function VoiceChoices({
               : "Preparing sample…"
             : "Listen to a sample"}
         </Button>
+        {busy && <Button kind="quiet" onClick={() => {
+          request.current?.abort();
+          audio.current?.pause();
+          if (localPreview.current) { window.speechSynthesis?.cancel(); localPreview.current = false; }
+          setBusy(false);
+        }}>Stop sample</Button>}
         <small>A short preview of these voice choices.</small>
       </div>
       {sample && (
         <figure className="of-sample-result">
           <figcaption>Voice sample: {sampleLabel}</figcaption>
           <audio
-            ref={audio}
+            ref={audioRef}
             controls
             src={sample}
             aria-label={`Receptionist voice sample: ${sampleLabel}`}
           />
         </figure>
       )}
+      {catalogUnavailable && <Notice>The live Kataleptic catalog is temporarily unavailable. Saved settings remain usable.</Notice>}
       {error && <Notice error>{error}</Notice>}
     </div>
   );

@@ -1,3 +1,4 @@
+import { GPT_LIVE_VOICES } from '../../../src/realtime-voices';
 import { PREVIEW_TEXT } from '../../../src/voice-preview-text';
 import type { AssistantFields, Option, Provider, ProviderCatalog } from './types';
 
@@ -11,15 +12,15 @@ const modernSpeech = [...legacySpeech, 'ash', 'ballad', 'coral', 'sage', 'verse'
 type VoiceProvider = Pick<Provider, 'effective_realtime_provider' | 'effective_realtime_model' | 'effective_tts_provider' | 'tts_model'>;
 
 /** Suggestions are scoped to the transport and model; custom providers keep their own namespaces. */
-export function voiceChoicesFor(assistant: Pick<AssistantFields, 'engine' | 'realtime_model'>, provider: VoiceProvider, catalog: ProviderCatalog): Option[] {
+export function voiceChoicesFor(assistant: Pick<AssistantFields, 'engine' | 'realtime_model'>, provider: VoiceProvider, catalog: ProviderCatalog | null): Option[] {
   if (assistant.engine === 'realtime') {
     const model = assistant.realtime_model || provider.effective_realtime_model;
     if (provider.effective_realtime_provider === 'openai') return options(directRealtime);
     if (provider.effective_realtime_provider !== 'kataleptic') return [];
-    if (model === 'kataleptic-realtime-hd') return catalog.voices.azure;
-    return catalog.voices.realtime[model] || [];
+    if (model === 'kataleptic-realtime-hd') return catalog?.voices?.azure || options(['en-US-AvaMultilingualNeural', 'de-DE-SeraphinaMultilingualNeural']);
+    return catalog?.voices?.realtime?.[model] || (model === 'gpt-live-1' ? options(GPT_LIVE_VOICES) : ['gpt-realtime-2','gpt-realtime-2.1','gpt-realtime-2.1-mini'].includes(model) ? options(directRealtime) : []);
   }
-  if (provider.effective_tts_provider === 'azure') return catalog.voices.azure;
+  if (provider.effective_tts_provider === 'azure') return catalog?.voices?.azure || options(['en-US-AvaMultilingualNeural', 'de-DE-SeraphinaMultilingualNeural']);
   if (provider.effective_tts_provider === 'openai') {
     return options(provider.tts_model === 'gpt-4o-mini-tts' ? modernSpeech : legacySpeech);
   }

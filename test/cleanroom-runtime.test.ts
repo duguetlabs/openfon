@@ -21,6 +21,17 @@ describe('model-scoped language and voice choices', () => {
     expect(voiceChoicesFor({ engine: 'realtime', realtime_model: '' }, { ...provider, effective_realtime_provider: 'openai' }, catalog).map(v => v.id)).toEqual(OPENAI_REALTIME_VOICES);
     expect(voiceChoicesFor({ engine: 'realtime', realtime_model: 'gpt-live-1' }, { ...provider, effective_realtime_provider: 'custom' }, catalog)).toEqual([]);
   });
+  it('keeps fallback voice contracts distinct when optional discovery is unavailable', () => {
+    const ids = (model: string) => voiceChoicesFor({ engine: 'realtime', realtime_model: model }, provider, null).map(v => v.id);
+    expect(ids('gpt-live-1')).toContain('breeze');
+    for (const model of ['gpt-realtime-2', 'gpt-realtime-2.1', 'gpt-realtime-2.1-mini']) {
+      expect(ids(model)).toEqual(OPENAI_REALTIME_VOICES);
+      expect(ids(model)).not.toContain('breeze');
+    }
+    expect(ids('kataleptic-realtime-hd')).toContain('de-DE-SeraphinaMultilingualNeural');
+    expect(ids('unknown-custom-model')).toEqual([]);
+    expect(voiceChoicesFor({engine:'realtime',realtime_model:'gpt-live-1'}, {...provider,effective_realtime_provider:'custom'}, null)).toEqual([]);
+  });
   it('keeps legacy OpenAI speech voices separate from realtime and custom speech', () => {
     expect(voiceChoicesFor({ engine: 'pipeline', realtime_model: '' }, { ...provider, effective_tts_provider: 'openai', tts_model: 'tts-1' }, catalog).map(v => v.id)).toEqual(['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']);
     expect(voiceChoicesFor({ engine: 'pipeline', realtime_model: '' }, { ...provider, effective_tts_provider: 'custom' }, catalog)).toEqual([]);
