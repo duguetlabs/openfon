@@ -533,6 +533,7 @@ test('historical receptionists are discoverable, deduplicated, selected correctl
   const created = await page.request.post('/api/me/assistants', {
     data: {
       name: 'Historical page two',
+      language: 'de',
       persona: 'Warm and clear',
       greeting: 'Hello from the selected receptionist.',
       engine: 'pipeline',
@@ -562,6 +563,8 @@ test('historical receptionists are discoverable, deduplicated, selected correctl
     return route.fulfill({ json: [primary, target] });
   });
   await page.goto('/overview');
+  await connections(page);
+  await page.getByRole('button', { name: 'Back to your desk', exact: true }).click();
   const select = page.getByLabel('Receptionist', { exact: true });
   await expect(select.locator('option')).toHaveCount(32);
   await page.getByRole('button', { name: 'Find more receptionists', exact: true }).click();
@@ -585,6 +588,21 @@ test('historical receptionists are discoverable, deduplicated, selected correctl
   await expect(page).toHaveURL(new RegExp(`assistant=${target.id}`));
   await page.getByRole('button', { name: 'Back to your desk', exact: true }).click();
   await page.reload();
+  await expect(select).toHaveValue(target.id);
+  // Reset the current bootstrap to its first page, then traverse older entries.
+  // History must fetch the requested owned target even when it is no longer cached.
+  await select.selectOption(primary.id);
+  await expect(select).toHaveValue(primary.id);
+  await expect(select.locator(`option[value="${target.id}"]`)).toHaveCount(0);
+  await page.goBack();
+  await expect(page.getByRole('heading', { name: 'Your connections', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('de');
+  await page.goBack();
+  await expect(select).toHaveValue(target.id);
+  await page.goBack();
+  await expect(page.getByRole('heading', { name: 'Your connections', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');
+  await page.goForward();
   await expect(select).toHaveValue(target.id);
   await page.getByRole('button', { name: 'Enable web calls', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Pause web calls', exact: true })).toBeEnabled();

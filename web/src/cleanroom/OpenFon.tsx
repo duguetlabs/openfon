@@ -929,7 +929,7 @@ export default function OpenFon() {
       historyIndex.current = targetIndex;
       setScreen(screenFromPath()); setCallId(callFromLocation()); setConversationQuery(location.search); setMenu(false);
       const targetAssistant = new URLSearchParams(location.search).get("assistant") || location.pathname.match(/^\/assistants\/([^/]+)/)?.[1] || boot?.assistants[0]?.id;
-      if (targetAssistant && targetAssistant !== assistant?.id && boot?.assistants.some(a => a.id === targetAssistant)) void load(targetAssistant);
+      if (targetAssistant && targetAssistant !== assistant?.id) void load(targetAssistant);
       window.scrollTo({ top: 0, behavior: "instant" });
     };
     window.addEventListener("popstate", restore);
