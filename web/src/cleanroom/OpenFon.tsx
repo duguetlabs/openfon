@@ -1010,8 +1010,10 @@ export default function OpenFon() {
     } catch (e) { if (gen === loadGeneration.current) setError(errorText(e)); }
     finally { if (gen === loadGeneration.current) setAssistantListBusy(false); }
   }
+  const isPrimaryAssistant = Boolean(assistant && boot?.workspace &&
+    assistant.business_id === boot.workspace.id && assistant.public_slug === boot.workspace.slug);
   async function removeAssistant() {
-    if (!assistant || assistant.state === "active" || assistantMutation.current || !canLeave()) return;
+    if (!assistant || isPrimaryAssistant || assistant.state === "active" || assistantMutation.current || !canLeave()) return;
     if (!confirm(`Delete “${assistant.name || "Receptionist"}”? This cannot be undone. Existing conversations will remain.`)) return;
     assistantMutation.current = true; setAssistantMutating(true); setError("");
     const gen = loadGeneration.current;
@@ -1188,7 +1190,7 @@ export default function OpenFon() {
                   ))}
                 </select>
                 {moreAssistants && <Button kind="quiet" disabled={assistantListBusy || loading || assistantMutating} onClick={() => void discoverAssistants()}>{assistantListBusy ? "Loading receptionists…" : "Find more receptionists"}</Button>}
-                {assistant.state !== "active" && <Button kind="quiet" disabled={loading || assistantMutating} onClick={() => void removeAssistant()}>Delete receptionist</Button>}
+                {!isPrimaryAssistant && assistant.state !== "active" && <Button kind="quiet" disabled={loading || assistantMutating} onClick={() => void removeAssistant()}>Delete receptionist</Button>}
                 <button
                   className="of-text-button"
                   disabled={loading || assistantMutating}

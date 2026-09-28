@@ -526,6 +526,43 @@ test('call detail stops permanent errors and bounds transient retries with manua
   expect(count).toBe(5);
 });
 
+test('primary receptionists never offer deletion while a secondary draft remains deletable', async ({ page }) => {
+  const { assistant } = await signup(page);
+  const bootstrap = await (await page.request.get('/api/me/bootstrap')).json();
+  const primary = await (await page.request.get(`/api/me/assistants/${assistant.id}`)).json();
+  expect(primary).toMatchObject({
+    business_id: bootstrap.workspace.id, public_slug: bootstrap.workspace.slug, state: 'draft'
+  });
+  const remove = page.getByRole('button', { name: 'Delete receptionist', exact: true });
+  await expect(remove).toHaveCount(0);
+  await page.getByRole('button', { name: 'Enable web calls', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Pause web calls', exact: true })).toBeEnabled();
+  await expect(remove).toHaveCount(0);
+  await page.getByRole('button', { name: 'Pause web calls', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Enable web calls', exact: true })).toBeEnabled();
+  await expect(remove).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Enable web calls', exact: true })).toBeEnabled();
+  await expect(remove).toHaveCount(0);
+  expect((await (await page.request.get(`/api/me/assistants/${assistant.id}`)).json()).state).toBe('paused');
+  const created = await page.request.post('/api/me/assistants', { data: {
+    name: 'Secondary draft', language: 'en', persona: 'Warm and clear',
+    greeting: 'Hello from the secondary receptionist.', engine: 'pipeline'
+  } });
+  expect(created.status()).toBe(201);
+  const secondary = await created.json();
+  expect(secondary.state).toBe('draft');
+  expect(secondary.public_slug).not.toBe(primary.public_slug);
+  await page.goto(`/overview?assistant=${secondary.id}`);
+  await whoAnswers(page);
+  await expect(page.getByLabel('Receptionist name', { exact: true })).toHaveValue('Secondary draft');
+  await expect(remove).toBeEnabled();
+  await page.getByLabel('Receptionist', { exact: true }).selectOption(primary.id);
+  await whoAnswers(page);
+  await expect(page.getByLabel('Receptionist name', { exact: true })).toHaveValue('Alex');
+  await expect(remove).toHaveCount(0);
+});
+
 test('historical receptionists are discoverable, deduplicated, selected correctly and safely deleted', async ({
   page,
 }) => {
