@@ -196,6 +196,7 @@ function Setup({ onDone }: { onDone: () => void | Promise<void> }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [created, setCreated] = useState(false);
+  useDirtyGuard(!created && Boolean(name.trim() || description.trim()));
   const pending = useRef(false);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);

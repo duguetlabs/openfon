@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { signup, signOut } from './cleanroom-helpers';
+import { signup, signOut, workspaceMenu } from './cleanroom-helpers';
 
 async function fresh(page: import('@playwright/test').Page) {
   await signup(page, 'setup-recovery');
@@ -140,6 +140,7 @@ test('signout makes a pending setup acknowledgement obsolete without further wri
   try {
     await finish(page).click();
     await expect.poll(() => !!held).toBe(true);
+    page.once('dialog', (dialog) => dialog.accept());
     await signOut(page);
     await expect(page.getByLabel('Email address')).toBeEnabled();
     const later: string[] = [];
@@ -151,6 +152,92 @@ test('signout makes a pending setup acknowledgement obsolete without further wri
     await page.evaluate(() => new Promise<void>((resolve) => setTimeout(resolve, 50)));
     expect(later).toEqual([]);
     await expect(page.getByLabel('Email address')).toBeEnabled();
+  } finally {
+    if (held) await held.abort();
+  }
+});
+
+test('unsaved setup fields survive cancelled account, history, reload and signout navigation', async ({
+  page,
+}) => {
+  await signup(page, 'setup-guard');
+  await workspaceMenu(page, 'Your account');
+  await page.getByRole('button', { name: 'Back to your desk', exact: true }).click();
+  await page.getByLabel('Business name', { exact: true }).fill('Keep this introduction');
+  await page.getByLabel('What do you do?').fill('Keep this business description.');
+  let writes = 0;
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/me/business') writes++;
+  });
+  for (const action of [
+    () => workspaceMenu(page, 'Your account'),
+    () => page.goBack(),
+    () => page.reload({ timeout: 1500 }),
+    () => signOut(page),
+  ]) {
+    const prompted = page.waitForEvent('dialog');
+    const changing = action().catch(() => undefined);
+    await (await prompted).dismiss();
+    await changing;
+    await expect(page.getByLabel('Business name', { exact: true })).toHaveValue('Keep this introduction');
+    await expect(page.getByLabel('What do you do?')).toHaveValue('Keep this business description.');
+    if (await page.getByRole('button', { name: 'Close menu', exact: true }).isVisible())
+      await page.getByRole('button', { name: 'Close menu', exact: true }).click();
+  }
+  expect(writes).toBe(0);
+  page.once('dialog', (dialog) => dialog.accept());
+  await workspaceMenu(page, 'Your account');
+  await expect(page.getByRole('heading', { name: 'Your account', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Back to your desk', exact: true }).click();
+  await expect(page.getByLabel('Business name', { exact: true })).toHaveValue('');
+  expect(writes).toBe(0);
+});
+
+test('acknowledged setup can leave a pending display read without another draft prompt or creation', async ({
+  page,
+}) => {
+  await fresh(page);
+  let acknowledged = false;
+  let writes = 0;
+  let held: import('@playwright/test').Route | undefined;
+  await page.route('**/api/me/business', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    writes++;
+    const response = await route.fetch();
+    expect(response.ok()).toBe(true);
+    acknowledged = true;
+    await route.fulfill({ response });
+  });
+  await page.route('**/api/me/bootstrap', (route) => {
+    if (acknowledged && !held) {
+      held = route;
+      return;
+    }
+    return route.continue();
+  });
+  let prompts = 0;
+  page.on('dialog', async (dialog) => {
+    prompts++;
+    await dialog.accept();
+  });
+  try {
+    await finish(page).click();
+    await expect.poll(() => !!held).toBe(true);
+    await workspaceMenu(page, 'Your account');
+    await expect(page.getByRole('heading', { name: 'Your account', exact: true })).toBeVisible();
+    expect(prompts).toBe(0);
+    const delivered = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === '/api/me/bootstrap',
+    );
+    const route = held!;
+    held = undefined;
+    await page.unroute('**/api/me/bootstrap');
+    await route.continue();
+    await (await delivered).finished();
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByRole('heading', { name: 'Your account', exact: true })).toBeVisible();
+    expect(writes).toBe(1);
+    expect(prompts).toBe(0);
   } finally {
     if (held) await held.abort();
   }

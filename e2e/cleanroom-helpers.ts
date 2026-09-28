@@ -28,11 +28,11 @@ export async function createWorkspace(page: Page, name = 'Browser validation wor
 }
 
 export async function workspaceMenu(page: Page, action: string) {
-  const banner = page.getByRole('banner');
-  if (!(await banner.getByRole('button', { name: action, exact: true }).isVisible())) {
+  const menu = page.getByRole('banner').locator('.of-workspace-menu');
+  if (!(await menu.getByRole('button', { name: action, exact: true }).isVisible())) {
     await page.locator('.of-workspace-button').click();
   }
-  await banner.getByRole('button', { name: action, exact: true }).click();
+  await menu.getByRole('button', { name: action, exact: true }).click();
 }
 
 export async function signOut(page: Page) { await workspaceMenu(page, 'Sign out'); }

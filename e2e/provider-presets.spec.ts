@@ -202,17 +202,17 @@ test('confirmed provider save survives a failed refresh without resending creden
   await expect(key).toHaveValue('');
   expect(writes).toBe(1);
 
-  // A second injected failure also leaves the acknowledged draft clean before
-  // recovery: navigation must not suggest discarding changes already saved.
+  // The acknowledged draft stays clean, while unresolved display recovery
+  // requires an explicit decision to leave. Leaving never resends the write.
   failRefresh = true;
   await page.getByLabel('Workspace text model', {exact:true}).fill('second-confirmed-model');
   await page.getByRole('button', { name: 'Save connections', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Provider connections were saved');
   const dialogs: string[] = [];
-  page.on('dialog', async dialog => { dialogs.push(dialog.type()); await dialog.dismiss(); });
+  page.on('dialog', async dialog => { dialogs.push(dialog.type()); await dialog.accept(); });
   await workspaceMenu(page, 'Messages & conversations');
   await expect(page).toHaveURL('/conversations');
-  expect(dialogs).toEqual([]);
+  expect(dialogs).toEqual(['confirm']);
   expect(writes).toBe(2);
   const latest = await (await page.request.get('/api/me/provider')).json();
   expect(latest).toMatchObject({ model: 'second-confirmed-model', workspaceApiKeyConfigured: true });

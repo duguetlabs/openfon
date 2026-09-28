@@ -197,6 +197,7 @@ export function Connections({
     finally { listGeneration.current++; finish(token); }
   }
   useDirtyGuard(
+    blocked ||
     Object.keys(patch).length > 0 ||
       Object.keys(voice).length > 0 ||
       !!summaryKey ||
