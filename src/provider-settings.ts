@@ -1,4 +1,5 @@
-import { resolveRealtime } from './realtime-providers';
+import { GPT_LIVE_VOICES, isGptLiveModel, KATALEPTIC_REALTIME_URL, liveRealtimeVoice, resolveRealtime } from './realtime-providers';
+import { knownKatalepticConversationModel } from './backend-registry';
 import type { AgentSettings, Env, ProviderSettings } from './types';
 import { LlmConfigError, speechEndpointError, sameLlmEndpoint, validateLlmBaseUrl } from './providers';
 
@@ -109,6 +110,8 @@ export function presetCompatibilityError(env: Env, provider: ProviderSettings | 
   if (preset.engine !== 'realtime') return null;
   try {
     const config = resolveRealtime(env, { ...provider, ...preset } as AgentSettings);
+    // Applying a stale preset must not install a voice that pickup will reject.
+    if (preset.realtime_voice) liveRealtimeVoice(config, preset.realtime_voice);
     if (config.provider === 'openai') {
       if (config.model === 'gpt-realtime-2') return 'Preset uses a Kataleptic gateway model. Choose a direct OpenAI realtime model before applying it.';
       if (preset.realtime_voice && !OPENAI_REALTIME_VOICES.includes(preset.realtime_voice)) {
@@ -129,6 +132,21 @@ export function assistantCompatibilityError(env: Env, provider: ProviderSettings
   if (settings.engine !== 'realtime') return null;
   const selection = provider?.realtime_provider || 'instance';
   const effectiveProvider = selection === 'instance' ? env.REALTIME_PROVIDER || 'kataleptic' : selection;
+  if (effectiveProvider === 'kataleptic') {
+    const effectiveModel = settings.realtime_model || (selection === 'instance' ? env.REALTIME_MODEL : '');
+    if (isGptLiveModel(effectiveModel) && settings.realtime_voice && !GPT_LIVE_VOICES.includes(settings.realtime_voice)) {
+      return 'Choose a supported GPT-Live voice; no substitute will be used.';
+    }
+    const baseUrl = selection === 'instance' ? env.REALTIME_BASE_URL : provider?.realtime_base_url || KATALEPTIC_REALTIME_URL;
+    let canonicalGateway = false;
+    try { canonicalGateway = new URL(baseUrl).hostname === 'api.kataleptic.com'; } catch { /* Endpoint validation owns malformed URLs. */ }
+    if (canonicalGateway && settings.realtime_model && !knownKatalepticConversationModel(settings.realtime_model)) {
+      return 'Choose a supported Kataleptic conversation model; this model is unavailable and will not be substituted.';
+    }
+    if (canonicalGateway && settings.realtime_voice && /^[a-z]{2}_[A-Z]{2}-/.test(settings.realtime_voice)) {
+      return 'Choose a supported Kataleptic voice; this voice is retired and will not be substituted.';
+    }
+  }
   if (effectiveProvider !== 'openai') return null;
   const model = settings.realtime_model;
   if (model && (model === 'gpt-realtime-2' || !/^gpt-(realtime|4o.*realtime)/.test(model))) {

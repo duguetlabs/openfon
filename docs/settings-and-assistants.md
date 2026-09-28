@@ -1,35 +1,21 @@
-# Settings and assistants
+# Your reception desk and connections
 
-OpenFon keeps shared workspace configuration separate from each assistant’s
-conversation. Changing a business detail does not overwrite an assistant’s voice
-or instructions.
+OpenFon opens at your reception desk. Prepare the business brief, choose how your receptionist answers, rehearse with the saved configuration, and review callers’ messages. Shared business facts and provider connections remain separate from each receptionist’s behavior.
 
 | Where | What belongs here | Applies to |
 | --- | --- | --- |
-| Settings → Business | Name, contact details, opening hours, services, closures and common FAQs | All assistants in this workspace |
-| Settings → AI connections | Provider endpoints, component API keys and shared model defaults | Assistants using that component |
-| Settings → Call summaries | The provider and model used after conversations finish | Workspace call summaries |
-| Assistants → Configure | Personality, greeting, instructions, language, engine, model and voice | The selected assistant |
-| Knowledge | Reusable approved answers grouped into collections | Assistants attached to each collection |
+| Business brief | Business name, description, contact details and hours | Workspace |
+| Who answers | First words, tone, language and voice | Selected receptionist |
+| What they know | Services, FAQs and approved knowledge collections | Attached receptionists |
+| How they help | Message-taking and extra handling instructions; optional bilingual examples | Selected receptionist |
+| Connections | Engines, provider endpoints, keys, model defaults and summaries | Workspace connections; selected receptionist’s engine and overrides |
+| Messages | Call details, transcripts and callback outcomes | Workspace calls |
+| Account | Account export and confirmed deletion | Signed-in account |
 
-Expand an AI connection to configure text generation, speech recognition,
-realtime voice or speech synthesis. Each component supports its own provider
-configuration; credentials stay in workspace settings rather than voice profiles.
-An assistant’s engine determines which components it uses. Realtime conversation
-models provide their own listening and speaking; Pipeline uses separate components.
+Save your brief before rehearsing. Unsaved edits survive switching between brief sections. Provider, voice and summary controls have explicit save actions; closing a disclosure does not discard its values. A connection check tests the provider request only; a browser conversation is needed to assess the complete conversation and audio.
 
-Business, AI connections and call summaries have separate save buttons. Jumping
-between these sections or closing a connection does not discard entered values.
-Save before navigating to another page. A provider connection check only verifies
-the named component; use a test call to check the conversation and audio.
+**Connections → Reusable voice setups** saves the selected receptionist’s current engine, model, language and voice under a name. Names save when their field loses focus. Use or delete a setup only after a pending rename finishes; actions are not queued behind the rename. Save pending voice and connection changes before using or creating a setup. Applying a setup changes only the selected receptionist and uses the destination workspace’s provider connections. A failed display refresh offers a read-only retry instead of repeating an acknowledged mutation.
 
-Existing engine profiles remain under **Settings → Saved voice setups**. They
-apply only to the primary assistant. Applying one replaces that assistant’s engine,
-model, language and voice, while other assistants and unsaved business details stay
-unchanged. To create a setup, first configure the primary assistant in Assistants,
-save it, then return to Settings and save the current setup under a name.
+**Connections → Take your receptionist with you** exports the saved configuration or reviews a local recipe. **Save this recipe** explicitly saves the reviewed behavior. Voice settings are optional and initially excluded. Provider connections, shared business facts and attached knowledge remain in the destination. See [assistant recipes](assistant-recipes.md).
 
-In summary compatibility mode, assistant text-model overrides may still determine
-call summaries. Select the workspace text provider or a separate summary provider
-to make summaries independent. This redesign does not change saved configurations
-or automatically migrate compatibility settings.
+Summary compatibility mode follows the assistant’s text-model override. Select the workspace connection or a separate summary provider to make summaries independent. Existing saved configurations are not automatically migrated.

@@ -1,0 +1,9 @@
+.of-station.of-brand-rehearsal .of-recording-disclosure { color:var(--of-muted); font:400 14px/1.6 var(--of-body); text-align:left; margin:0 0 20px; }
+.of-recording-disclosure strong { color:var(--of-ink); }
+.of-call-diagnostics { margin-top:32px; padding:0 24px; border:1px solid var(--of-line); border-radius:16px; background:white; }
+.of-call-diagnostics > summary { cursor:pointer; min-height:52px; padding:14px 0; font-weight:750; }
+.of-call-diagnostics > div { padding:8px 0 24px; }
+.of-call-diagnostics h3 { margin:0 0 12px; }
+.of-call-diagnostics p { color:var(--of-muted); }
+.of-diagnostic-actions { display:flex; align-items:center; flex-wrap:wrap; gap:16px; margin:20px 0; }
+.of-diagnostic-actions a { text-decoration:none; }

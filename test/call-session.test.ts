@@ -844,33 +844,14 @@ describe('realtime session payload', () => {
 
   const KATALEPTIC_REALTIME = { REALTIME_BASE_URL: 'wss://api.kataleptic.com/v1/realtime' };
 
-  it('lets HD manage the voice instead of a voice chosen for the retired tier', async () => {
-    const { session } = newSession('realtime', { realtime_model: 'kataleptic-realtime', realtime_voice: 'de_DE-thorsten-medium' }, KATALEPTIC_REALTIME);
+  it.each(['kataleptic-realtime', 'llama-3.3-70b', 'gpt-realtime-whisper'])('refuses %s without connecting to a substitute', async model => {
+    const before = gatewayRequests.length;
+    const { session } = newSession('realtime', { realtime_model: model }, KATALEPTIC_REALTIME);
     await session.fetch(upgradeRequest());
     serverSockets.at(-1)!.receive({ type: 'start' });
     await flush();
-    upstreamSockets.at(-1)!.emit('open', {});
-    await flush();
-    const update = upstreamSockets.at(-1)!.messages().find((m) => m.type === 'session.update')!.session as { audio?: { output?: { voice?: string } } };
-    expect(new URL(gatewayRequests.at(-1)!.url).searchParams.get('model')).toBe('kataleptic-realtime-hd');
-    expect(update.audio?.output?.voice).not.toBe('de_DE-thorsten-medium');
-    expect(update.audio?.output?.voice).toMatch(/Neural$/);
-  });
-
-  it('connects a stored retired cascade selection to the HD tier with its tuning', async () => {
-    // Kataleptic answers `model_retired` for the cascade. A row the migration
-    // missed must still reach a live tier instead of failing the call.
-    for (const model of ['kataleptic-realtime', 'llama-3.3-70b']) {
-      const { session } = newSession('realtime', { realtime_model: model }, KATALEPTIC_REALTIME);
-      await session.fetch(upgradeRequest());
-      serverSockets.at(-1)!.receive({ type: 'start' });
-      await flush();
-      upstreamSockets.at(-1)!.emit('open', {});
-      await flush();
-      const update = upstreamSockets.at(-1)!.messages().find((m) => m.type === 'session.update')!.session as { audio?: { input?: { turn_detection?: unknown } } };
-      expect(update.audio?.input?.turn_detection).toEqual(TUNED_SERVER_VAD);
-      expect(new URL(gatewayRequests.at(-1)!.url).searchParams.get('model')).toBe('kataleptic-realtime-hd');
-    }
+    expect(gatewayRequests).toHaveLength(before);
+    expect(serverSockets.at(-1)!.messages().some(message => message.type === 'error')).toBe(true);
   });
 
   it('never asks for noise reduction, on any tier', async () => {

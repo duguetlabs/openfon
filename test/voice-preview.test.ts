@@ -19,7 +19,7 @@ async function start(signal = new AbortController().signal) {
   return { promise };
 }
 function acknowledge() {
-  ws.message({ type: 'session.updated', session: { instructions: ws.sent[0].session.instructions } });
+  ws.message({ type: 'session.updated', session: ws.sent[0].session });
   ws.message({ type: 'response.created', response: { id: 'r1' } });
 }
 it('uses selected model/voice and server authorization; waits for the applied prompt before generating', async () => {
@@ -43,6 +43,13 @@ it.each(['empty', 'wrong-id', 'failed', 'invalid-json', 'oversize', 'event-flood
   if (mode === 'odd-pcm') ws.message({ type: 'response.output_audio.delta', response_id: 'r1', delta: 'AA==' });
   ws.message({ type: 'response.done', response: { id: 'r1', status: mode === 'failed' ? 'failed' : 'completed' } });
   await rejected; expect(ws.close).toHaveBeenCalledOnce();
+});
+it.each(['alloy', undefined])('rejects an acknowledged wrong or missing selected voice (%s) before generation', async voice => {
+  const { promise } = await start(); const rejected = expect(promise).rejects.toThrow('Voice preview failed');
+  ws.message({ type: 'session.updated', session: { ...ws.sent[0].session, audio: { output: { voice } } } });
+  await rejected;
+  expect(ws.sent.map(event => event.type)).toEqual(['session.update']);
+  expect(ws.close).toHaveBeenCalledOnce();
 });
 it('deadline covers a stalled upgrade and disposes a late socket', async () => {
   vi.useFakeTimers(); let resolve!: (value: unknown) => void;

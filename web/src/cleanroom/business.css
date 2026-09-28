@@ -1,0 +1,6 @@
+.of-business-details { margin: 0; }
+.of-business-row { padding-block: 8px 22px; border-bottom: 1px solid var(--of-line); display: grid; gap: 16px; min-width: 0; }
+.of-business-row .of-button { justify-self: start; }
+.of-business-pair { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+.of-business-pair input { min-width: 0; }
+@media(max-width:480px) { .of-business-pair { grid-template-columns: minmax(0,1fr); } }

@@ -1,3 +1,4 @@
+import { signup, createWorkspace, workspaceMenu, signOut } from './cleanroom-helpers';
 import { test as base, expect } from './fixtures';
 import type { APIResponse, Page, Route } from '@playwright/test';
 
@@ -21,17 +22,9 @@ const key = 'openfon.logout-intent.v1';
 const password = 'Synthetic-Deletion-Password-1234';
 
 async function setup(page: Page) {
-  await page.goto('/auth');
-  await page.getByLabel('Email').fill(`deletion-${Date.now()}-${Math.random().toString(36).slice(2)}@example.invalid`);
-  await page.getByLabel('Password', { exact: true }).fill(password);
-  await page.getByRole('button', { name: 'Create account', exact: true }).click();
-  await page.getByLabel('Business name', { exact: true }).fill('Synthetic deletion workshop');
-  await page.getByLabel('What do you do?').fill('Synthetic local fixture.');
-  await page.getByRole('button', { name: 'Continue →' }).click();
-  await page.getByRole('button', { name: 'Continue →' }).click();
-  await page.getByRole('button', { name: /Create.*assistant|Save.*assistant|Open.*studio/i }).click();
-  await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
-  await page.getByRole('link', { name: 'Account', exact: true }).click();
+  await signup(page, 'deletion', password);
+  await createWorkspace(page, 'Synthetic deletion workshop');
+  await workspaceMenu(page, 'Your account');
   await expect(page.getByRole('heading', { name: 'Your account' })).toBeVisible();
   await page.getByLabel('Current password to confirm deletion').fill(password);
   await page.getByLabel('Type DELETE to confirm').fill('DELETE');
@@ -145,7 +138,7 @@ test('late DELETE acknowledgement preserves a newer failed sign-out intent', asy
   await setup(page); const count = writes(page), held = await heldDelete(page, owned);
   await page.route('**/api/auth/logout', route => route.fulfill({ status: 503, json: { error: 'Synthetic newer sign-out failure' } }));
   await submit(page); await held.ready();
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await signOut(page);
   await expect(page.getByRole('alert')).toContainText('server sign-out was not confirmed');
   const newer = await page.evaluate(key => sessionStorage.getItem(key), key);
   expect(newer).not.toBeNull();

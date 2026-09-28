@@ -8,6 +8,8 @@ it('filters protocol-incompatible streaming STT, aliases, and untrusted identifi
     model('chat-one', ['text'], ['text']), model('alias/chat-one', ['text'], ['text']), model('gpt-realtime-2', ['audio'], ['audio']),
     model('whisper', ['audio'], ['text']), model('whisper-stream', ['audio'], ['text']), model('<script>', ['text'], ['text']),
     model('kataleptic-realtime', ['audio'], ['audio']), model('whisper-large-v3-turbo', ['audio'], ['text']), model('mistral-nemo-12b', ['text'], ['text']),
+    model('gpt-realtime-whisper', ['audio', 'text'], ['text']), model('gpt-live-transcribe', ['audio', 'text'], ['text']),
+    model('gpt-realtime-future', ['audio'], ['audio']),
   ] } : { 'gpt-realtime-2': { voices: ['marin'] }, 'kataleptic-realtime': { voices_by_language: { de: 'de_DE-thorsten-medium' } } }));
   vi.stubGlobal('fetch', fetcher);
   const [a,b] = await Promise.all([providerCatalog(), providerCatalog()]);

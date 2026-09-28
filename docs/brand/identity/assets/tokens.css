@@ -1,0 +1,19 @@
+/* OpenFon identity tokens v1. No global styling or network font dependency. */
+:root {
+  --of-brand-blue: #2457c5;
+  --of-brand-blue-deep: #18449f;
+  --of-brand-ink: #152a49;
+  --of-brand-butter: #f6e99b;
+  --of-brand-paper: #f3f5f8;
+  --of-brand-white: #ffffff;
+  --of-brand-muted: #5f708a;
+  --of-brand-line: #dce3ed;
+  --of-brand-success: #216246;
+  --of-brand-error: #a52f3f;
+  --of-brand-display: "Lilita One", sans-serif;
+  --of-brand-body: "Nunito Sans", "Avenir Next", "Segoe UI", sans-serif;
+  --of-brand-radius-control: 8px;
+  --of-brand-radius-sheet: 16px;
+  --of-brand-duration: 180ms;
+  --of-brand-ease: cubic-bezier(.16, 1, .3, 1);
+}

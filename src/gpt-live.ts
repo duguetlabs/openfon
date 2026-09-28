@@ -24,7 +24,7 @@
 // needs from the stream instead: audible segments from the audio itself, turns
 // from transcript timing, and the end of a farewell from the silence after it.
 import type { CallDebug } from './call-debug';
-import { isFarewell } from './providers';
+import { isFarewell, LlmConfigError } from './providers';
 import { GPT_LIVE_MODEL, GPT_LIVE_VOICES, gptLiveConnection, type RealtimeConfig } from './realtime-providers';
 import { parseRealtimeMessage, transcriptBytes, MAX_TRANSCRIPT_FIELD_BYTES } from './realtime-input';
 
@@ -101,7 +101,8 @@ export class GptLiveProtocolError extends Error {
 }
 
 export function gptLiveVoice(voice: string): string {
-  return GPT_LIVE_VOICES.includes(voice) ? voice : '';
+  if (voice && !GPT_LIVE_VOICES.includes(voice)) throw new LlmConfigError('Choose a supported GPT-Live voice; no substitute was used.');
+  return voice;
 }
 
 export function gptLiveSessionStart(options: GptLiveSessionOptions): { type: 'session.start'; session: Record<string, unknown> } {

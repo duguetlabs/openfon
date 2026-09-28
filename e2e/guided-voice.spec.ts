@@ -1,148 +1,100 @@
+import { signup, createWorkspace, connections } from './cleanroom-helpers';
 import { test, expect, openSettingsSections } from './fixtures';
-import { fillCatalog, expectCatalog } from './catalog-fields';
 
 test('custom pipeline saves separate BYOK components and guided voices without exposing keys', async ({ page }) => {
-  await page.goto('/auth');
-  await page.getByLabel('Email').fill(`guided-${Date.now()}@example.invalid`);
-  await page.getByLabel('Password', { exact: true }).fill('Synthetic-Presets-Password-1234');
-  await page.getByRole('button', { name: 'Create account', exact: true }).click();
-  await page.getByLabel('Business name', { exact: true }).fill('Guided voice workshop');
-  await page.getByLabel('What do you do?').fill('Synthetic configuration validation');
-  await page.getByRole('button', { name: 'Continue →' }).click();
-  await page.getByRole('button', { name: 'Continue →' }).click();
-  await page.getByRole('button', { name: /Create.*assistant|Save.*assistant|Open.*studio/i }).click();
-  await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
-  await expect(page).toHaveURL('/overview');
-  await page.goto('/settings');
-  await openSettingsSections(page);
-  // The local instance is a custom provider; never suggest Kataleptic IDs for it.
-  await expect(page.getByLabel('Workspace text model', { exact: true }).locator('option[value="llama-3.3-70b"]')).toHaveCount(0);
-  await fillCatalog(page, 'Workspace text model', 'previous-custom-model');
-  await page.getByLabel('Text provider preset', { exact: true }).selectOption('openai');
+  await signup(page, 'guided'); await createWorkspace(page, 'Guided voice workshop');
+  await connections(page); await openSettingsSections(page);
+  await expect(page.locator('#of-text-models option[value="llama-3.3-70b"]')).toHaveCount(0);
+  await page.getByLabel('Workspace text model', { exact: true }).fill('previous-custom-model');
+  await page.getByRole('combobox', { name: 'Provider preset', exact: true }).selectOption('openai');
   await expect(page.getByLabel('Workspace text model', { exact: true })).toHaveValue('gpt-4.1-mini');
-  await expect(page.getByLabel('Custom workspace text model', { exact: true })).toHaveCount(0);
-  await page.getByLabel('Text API key', { exact: true }).fill('synthetic-text-private');
-  await page.getByLabel('Transcription provider', { exact: true }).selectOption('openai');
-  await page.getByLabel('Transcription API key', { exact: true }).fill('synthetic-stt-private');
-  await page.getByLabel('Speech synthesis provider', { exact: true }).selectOption('azure');
-  await expect(page.getByLabel('Speech synthesis base URL', { exact: true })).toHaveValue('');
-  await page.getByLabel('Speech synthesis API key', { exact: true }).fill('synthetic-azure-key');
-  await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
+  await page.getByLabel(/^Text API key/).fill('synthetic-text-private');
+  await page.getByRole('combobox', { name: 'Transcription provider', exact: true }).selectOption('openai');
+  await page.getByLabel(/^Transcription API key/).fill('synthetic-stt-private');
+  await page.getByRole('combobox', { name: 'Voice provider', exact: true }).selectOption('azure');
+  await expect(page.getByLabel('Speech API URL', { exact: true })).toHaveValue('');
+  await page.getByLabel(/^Speech API key/).fill('synthetic-azure-key');
+  await page.getByRole('button', { name: 'Save connections', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Speech URL');
-  await page.getByLabel('Speech synthesis provider', { exact: true }).selectOption('openai');
-  await expect(page.getByLabel('Speech synthesis model', { exact: true })).toHaveValue('gpt-4o-mini-tts');
-  await page.getByLabel('Speech synthesis API key', { exact: true }).fill('synthetic-speech-private');
-  await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
-  await expect(page.getByText('Provider settings saved.', { exact: false })).toBeVisible();
-  await page.reload();
-  await openSettingsSections(page);
-  for (const name of ['Text','Transcription','Speech synthesis']) await expect(page.getByLabel(`${name} API key`, { exact: true })).toHaveValue('');
-  const response = await page.request.get('/api/me/provider');
-  const view = await response.json();
+  await page.getByRole('combobox', { name: 'Voice provider', exact: true }).selectOption('openai');
+  await expect(page.getByLabel('Speech model', { exact: true })).toHaveValue('gpt-4o-mini-tts');
+  await page.getByLabel(/^Speech API key/).fill('synthetic-speech-private');
+  await page.getByRole('button', { name: 'Save connections', exact: true }).click();
+  await expect(page.getByText(/^Connections saved/)).toBeVisible();
+  await page.reload(); await openSettingsSections(page);
+  for (const name of ['Text','Transcription','Speech']) await expect(page.getByLabel(new RegExp(`^${name} API key`))).toHaveValue('');
+  const view = await (await page.request.get('/api/me/provider')).json();
   expect(view).toMatchObject({ stt_provider: 'openai', tts_provider: 'openai', tts_api_key_configured: true });
   expect(JSON.stringify(view)).not.toContain('-private');
-  const { assistants } = await (await page.request.get('/api/me/bootstrap')).json();
-  const id = assistants[0].id;
-  // Optional discovery failure must not discard successfully loaded provider settings.
   await page.route('**/api/me/provider/catalog', route => route.fulfill({ status: 503, json: { error: 'Synthetic catalog outage' } }));
-  await page.goto(`/assistants/${id}`);
+  await page.reload(); await openSettingsSections(page);
   await expect(page.getByText(/live Kataleptic catalog is temporarily unavailable/)).toBeVisible();
-  await page.getByLabel('Conversation engine', { exact: true }).selectOption('pipeline');
-  await page.getByLabel('Default language', { exact: true }).selectOption('de');
-  await page.getByLabel('Speech voice', { exact: true }).selectOption('coral');
-  await page.getByLabel('Language model', { exact: true }).selectOption('gpt-4o-mini');
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await expect(page.getByText('Assistant saved.', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
-  await page.reload();
-  await openSettingsSections(page);
-  await expect(page.getByLabel('Conversation engine', { exact: true })).toHaveValue('pipeline');
-  await expectCatalog(page, 'Speech voice', 'coral');
-  await expectCatalog(page, 'Default language', 'de');
-  await fillCatalog(page, 'Language model', 'future-custom-model');
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await expect(page.getByText('Assistant saved.', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
-  await page.reload();
-  await openSettingsSections(page);
-  await expectCatalog(page, 'Language model', 'future-custom-model');
+  await page.getByRole('combobox', { name: 'Conversation engine', exact: true }).selectOption('pipeline');
+  await page.getByLabel('Language', { exact: true }).fill('de');
+  await expect(page.locator('#of-voices option[value="coral"]')).toHaveCount(1);
+  await page.getByLabel('Voice', { exact: true }).fill('coral');
+  await page.getByLabel(/^Text model override/).fill('gpt-4o-mini');
+  await page.getByRole('button', { name: 'Save connections', exact: true }).click();
+  await expect(page.getByText(/^Connections saved/)).toBeVisible();
+  await page.reload(); await openSettingsSections(page);
+  await expect(page.getByLabel('Voice', { exact: true })).toHaveValue('coral');
+  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('de');
+  await page.getByLabel(/^Text model override/).fill('future-custom-model');
+  await page.getByRole('button', { name: 'Save connections', exact: true }).click();
+  await expect(page.getByText(/^Connections saved/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toBeDisabled();
+  await page.reload(); await openSettingsSections(page);
+  await expect(page.getByLabel(/^Text model override/)).toHaveValue('future-custom-model');
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: test.info().outputPath('guided-pipeline-mobile.png'), fullPage: true });
-  await page.goto('/settings');
-  await openSettingsSections(page);
-  await expect(page.getByText('To remove the saved speech key, select Instance default or Browser speech, then save.')).toBeVisible();
-  await page.getByLabel('Speech synthesis provider', { exact: true }).selectOption('browser');
-  await page.getByRole('button', { name: 'Save provider settings', exact: true }).click();
-  await expect(page.getByText('Provider settings saved.', { exact: false })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Voice provider', exact: true }).selectOption('browser');
+  await page.getByRole('button', { name: 'Save connections', exact: true }).click();
+  await expect(page.getByText(/^Connections saved/)).toBeVisible();
   expect(await (await page.request.get('/api/me/provider')).json()).toMatchObject({ tts_provider: 'browser', tts_api_key_configured: false });
 });
 
 test('guided Kataleptic tiers show matching voices and preserve unknown saved values', async ({ page }) => {
-  // Isolated component data lets the UI inspect all families without paid calls.
-  await page.goto('/auth');
-  await page.getByLabel('Email').fill(`tiers-${Date.now()}@example.invalid`);
-  await page.getByLabel('Password', { exact: true }).fill('Synthetic-Presets-Password-1234');
-  await page.getByRole('button', { name: 'Create account', exact: true }).click();
-  await page.getByLabel('Business name', { exact: true }).fill('Tier workshop');
-  await page.getByLabel('What do you do?').fill('Synthetic configuration validation');
-  await page.getByRole('button', { name: 'Continue →' }).click();
-  await page.getByRole('button', { name: 'Continue →' }).click();
-  await page.getByRole('button', { name: /Create.*assistant|Save.*assistant|Open.*studio/i }).click();
-  await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
-  await expect(page).toHaveURL('/overview');
-  const { assistants } = await (await page.request.get('/api/me/bootstrap')).json();
+  await signup(page, 'tiers'); await createWorkspace(page, 'Tier workshop');
   const models = ['gpt-realtime-2', 'gpt-realtime-2.1', 'gpt-realtime-2.1-mini', 'gpt-live-1'];
   const distinctVoice = (model: string) => model === 'gpt-live-1' ? 'breeze' : `${model}-exclusive`;
   await page.route('**/api/me/provider/catalog', route => route.fulfill({ json: {
-    models: [], live: true, voices: { native: [{ id: 'wrong-shared-voice', label: 'wrong-shared-voice' }], azure: [], hdDefault: '',
-      realtime: Object.fromEntries(models.map(id => [id, [{ id: 'marin', label: 'marin' }, { id: distinctVoice(id), label: distinctVoice(id) }]])),
-      cataloguedModels: models,
-    },
+    models: [], live: true, voices: { native: [{ id: 'wrong-shared-voice', label: 'wrong-shared-voice' }], azure: [{id:'de-DE-SeraphinaMultilingualNeural',label:'Seraphina'}], hdDefault: '',
+      realtime: Object.fromEntries(models.map(id => [id, [{ id: 'marin', label: 'marin' }, { id: distinctVoice(id), label: distinctVoice(id) }]])), cataloguedModels: models },
   } }));
-  await page.goto(`/assistants/${assistants[0].id}`);
-  const engine = page.getByLabel('Conversation engine', { exact: true });
-  // Kataleptic retired its cascade tier; only HD and native tiers are offered.
-  await expect(engine.locator('option[value="kataleptic-realtime"]')).toHaveCount(0);
-  await expect(engine.locator('option[value="custom"]')).toHaveCount(0);
-  await engine.selectOption('kataleptic-realtime-hd');
-  await expectCatalog(page, 'Realtime voice', '');
-  await page.getByLabel('Realtime voice', { exact: true }).selectOption('de-DE-SeraphinaMultilingualNeural');
-  for (const model of ['gpt-realtime-2','gpt-realtime-2.1','gpt-realtime-2.1-mini','gpt-live-1']) {
-    await engine.selectOption(model);
-    await expect(page.getByText('Voice choices from this engine’s Kataleptic catalog.', { exact: true })).toBeVisible();
-    await expect(page.getByLabel('Realtime voice', { exact: true }).locator(`option[value="${distinctVoice(model)}"]`)).toHaveCount(1);
-    await expect(page.getByLabel('Realtime voice', { exact: true }).locator('option[value="wrong-shared-voice"]')).toHaveCount(0);
-    if (model.endsWith('mini')) await expect(page.getByLabel('About this engine')).toContainText('Lower cost');
-    await expect(page.getByLabel('Realtime voice', { exact: true })).toHaveValue('');
-    await expect(page.getByLabel('Custom realtime voice', { exact: true })).toHaveCount(0);
-    await page.getByLabel('Realtime voice', { exact: true }).selectOption('marin');
-    await fillCatalog(page, 'Realtime voice', 'old-family-custom-voice');
-    await expect(page.getByLabel('Speech voice', { exact: true })).toHaveCount(0);
-    await expect(page.getByLabel('Summary language model', { exact: true })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Configure call summaries in workspace settings →' })).toBeVisible();
+  await connections(page); await openSettingsSections(page);
+  await page.getByRole('combobox', { name:'Realtime provider',exact:true }).selectOption('kataleptic');
+  await page.getByLabel(/^Realtime API key/).fill('synthetic-kataleptic-key');
+  await page.getByRole('button', {name:'Save connections',exact:true}).click();
+  await expect(page.getByText(/^Connections saved/)).toBeVisible();
+  await page.getByRole('combobox', { name:'Conversation engine',exact:true }).selectOption('realtime');
+  const model = page.getByLabel('Realtime model', {exact:true});
+  const voice = page.getByLabel('Realtime voice', {exact:true});
+  await model.fill('kataleptic-realtime-hd');
+  await expect(page.locator('#of-realtime-voices option[value="de-DE-SeraphinaMultilingualNeural"]')).toHaveCount(1);
+  for (const id of models) {
+    await model.fill(id);
+    await expect(page.locator(`#of-realtime-voices option[value="${distinctVoice(id)}"]`)).toHaveCount(1);
+    await expect(page.locator('#of-realtime-voices option[value="wrong-shared-voice"]')).toHaveCount(0);
+    await voice.fill('old-family-custom-voice');
+    await expect(voice).toHaveValue('old-family-custom-voice');
   }
-  await fillCatalog(page, 'Realtime voice', 'future-voice');
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await expect(page.getByText('Assistant saved.', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
-  await page.reload();
-  await openSettingsSections(page);
-  await expectCatalog(page, 'Realtime voice', 'future-voice');
-  // If the gateway catalog is unavailable, only GPT-Live gets its expanded
-  // verified suggestions; native Realtime keeps its separate voice contract.
-  await page.route('**/api/me/provider/catalog', route => route.fulfill({ json: { models: [], live: false, voices: {} } }));
-  await page.reload();
-  const voice = page.getByLabel('Realtime voice', { exact: true });
-  for (const id of ['arbor', 'breeze', 'cove', 'ember', 'juniper', 'maple', 'sol', 'spruce', 'vale']) {
-    await expect(voice.locator(`option[value="${id}"]`)).toHaveCount(1);
-  }
-  await voice.selectOption('breeze');
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await expect(page.getByText('Assistant saved.', { exact: true })).toBeVisible();
-  await page.reload();
+  await voice.fill('future-voice');
+  await page.getByRole('button', {name:'Save connections',exact:true}).click();
+  await expect(page.getByRole('alert')).toContainText(/voice/i);
+  await voice.fill('marin');
+  await page.getByRole('button', {name:'Save connections',exact:true}).click();
+  await expect(page.getByText(/^Connections saved/)).toBeVisible();
+  await page.reload(); await openSettingsSections(page);
+  await expect(voice).toHaveValue('marin');
+  await page.route('**/api/me/provider/catalog', route => route.fulfill({ status:503,json:{error:'Synthetic catalog outage'} }));
+  await page.reload(); await openSettingsSections(page);
+  for (const id of ['arbor','breeze','cove','ember','juniper','maple','sol','spruce','vale']) await expect(page.locator(`#of-realtime-voices option[value="${id}"]`)).toHaveCount(1);
+  await voice.fill('breeze');
+  await page.getByRole('button', {name:'Save connections',exact:true}).click();
+  await expect(page.getByText(/^Connections saved/)).toBeVisible();
+  await page.reload(); await openSettingsSections(page);
   await expect(voice).toHaveValue('breeze');
-  await page.getByLabel('Conversation engine', { exact: true }).selectOption('gpt-realtime-2');
-  await expect(voice.locator('option[value="breeze"]')).toHaveCount(0);
-  await page.screenshot({ path: test.info().outputPath('guided-native-desktop.png'), fullPage: true });
+  await model.fill('gpt-realtime-2');
+  await expect(page.locator('#of-realtime-voices option[value="breeze"]')).toHaveCount(0);
+  await expect(voice).toHaveValue('breeze'); // Custom/saved values remain explicit until the owner repairs them.
 });

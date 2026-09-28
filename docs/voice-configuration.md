@@ -17,6 +17,8 @@ This table describes the integration and the provider's advertised technologies,
 checked against Kataleptic's public catalog and documentation on **2026-09-19**.
 Model availability, hosting commitments and voice quality must be verified for
 your account. It does not rank models by measured latency or call quality.
+For the later, read-only check of actual Azure deployment identities and its
+limits, see [Kataleptic model routing](kataleptic-routing.md).
 
 | Assistant choice | Technology behind the conversation | What you choose in OpenFon | Components managed by the voice provider |
 | --- | --- | --- | --- |
@@ -105,11 +107,17 @@ realtime and their own rollout/acceptance checks. Pipeline BYOK does not swap ou
 the internal STT or TTS of HD/native realtime models.
 
 Kataleptic retired its Standard cascade tier (`kataleptic-realtime`, Whisper →
-chat model → Piper), including a chat model ID used as a realtime model. Calls to
-`api.kataleptic.com` serve any saved selection of it on HD and drop Piper voice
-IDs. Migration 0024 clears selections made on an explicit `api.kataleptic.com`
-provider; on an instance whose defaults are Kataleptic,
-`scripts/retire-kataleptic-instance-defaults.sql` clears the inherited ones.
+chat model → Piper), including a chat model ID used as a realtime model. OpenFon
+now rejects unavailable models and retired explicit voices on that gateway;
+it does not silently substitute HD or a default voice. Unsupported explicit
+GPT-Live voices are also rejected. Choose a supported model and voice, or leave
+the voice blank to intentionally use the model default.
+
+Historically, migration 0024 cleared retired selections on an explicit
+`api.kataleptic.com` provider, and
+`scripts/retire-kataleptic-instance-defaults.sql` cleared inherited selections
+for instances using Kataleptic. Those historical migration files remain;
+the remake introduces no new migration or automatic rewrite of saved choices.
 
 ## Choosing by cost and voice style
 
@@ -240,16 +248,16 @@ for ten minutes within the open editor; leaving it discards the cache. Other
 voices are not eagerly fetched. Browser speech stays on the device and starts
 only when you press play.
 
-Voice names include **♀ female**, **♂ male**, or **◇ unspecified**. Labels follow
-published provider metadata. The built-in Azure labels come from Microsoft’s
+Voice names use **Female** or **Male** as plain text only when published provider
+metadata supplies that description. The built-in Azure labels come from Microsoft’s
 [voice catalog](https://learn.microsoft.com/azure/ai-services/speech-service/language-support?tabs=tts).
 Kataleptic’s current native catalog and OpenAI’s voice list publish no
-gender field, so those voices show unspecified. Custom IDs remain supported;
+gender field, so those voices have no gender label. Custom IDs remain supported;
 OpenFon does not infer gender from a name or another engine’s voice mapping.
 
 For catalogs without labels, vocal presentation needs a reviewed listening
 assessment. Automated acoustic labels can disagree even on control samples;
-uncertain voices remain unspecified rather than presenting those guesses as facts.
+uncertain voices remain unlabelled rather than presenting those guesses as facts.
 
 A saved explicit realtime voice is confirmed by the provider before the call
 starts speaking, including after a reconnect. That same realtime engine speaks

@@ -1,0 +1,50 @@
+[
+  {
+    "foreground": "ink",
+    "background": "white",
+    "ratio": 14.39,
+    "normalTextAA": true
+  },
+  {
+    "foreground": "ink",
+    "background": "paper",
+    "ratio": 13.18,
+    "normalTextAA": true
+  },
+  {
+    "foreground": "ink",
+    "background": "butter",
+    "ratio": 11.68,
+    "normalTextAA": true
+  },
+  {
+    "foreground": "white",
+    "background": "blue",
+    "ratio": 6.47,
+    "normalTextAA": true
+  },
+  {
+    "foreground": "butter",
+    "background": "blue",
+    "ratio": 5.25,
+    "normalTextAA": true
+  },
+  {
+    "foreground": "muted",
+    "background": "white",
+    "ratio": 5.03,
+    "normalTextAA": true
+  },
+  {
+    "foreground": "muted",
+    "background": "paper",
+    "ratio": 4.61,
+    "normalTextAA": true
+  },
+  {
+    "foreground": "blue",
+    "background": "white",
+    "ratio": 6.47,
+    "normalTextAA": true
+  }
+]

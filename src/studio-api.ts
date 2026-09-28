@@ -2,6 +2,7 @@ import { generateVoicePreview, PREVIEW_TEXT } from './voice-preview';
 import { defaultGatewayModel, KATALEPTIC_REALTIME_URL, resolveRealtime } from './realtime-providers';
 import { registerSummaryApi } from './summary-settings';
 import { providerCatalog } from './provider-catalog';
+import { katalepticRoute } from './backend-registry';
 import { checkedPresetWriteSql, checkedPresetWrite, checkedPresetSourceSql, checkedPresetSource } from './preset-write-snapshot';
 import { CHECKED_ASSISTANT_SNAPSHOT_SQL, checkedAssistantSnapshot } from './assistant-write-snapshot';
 import { PRESET_RECONCILIATION_SQL, PRESET_CHANGED_SQL, assertPresetWriteBudget, PRESET_LIST_COLUMNS, PRESET_ROW_BYTES } from './preset-budgets';
@@ -1822,7 +1823,13 @@ export function registerStudioApi(app: StudioApp): void {
     const provider = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
       .bind(workspace.id)
       .first<ProviderSettings>();
+    let realtimeRoute = null;
+    try {
+      const config = resolveRealtime(c.env, provider as AgentSettings | null);
+      if (config.provider === 'kataleptic') realtimeRoute = katalepticRoute(config.baseUrl, config.model);
+    } catch { /* Invalid saved configurations remain editable, without evidence claims. */ }
     return c.json({
+      realtimeRoute,
       baseUrl: provider?.llm_base_url || c.env.DEFAULT_LLM_BASE_URL,
       usesInstanceDefault: !provider?.llm_base_url || sameLlmEndpoint(provider.llm_base_url, c.env.DEFAULT_LLM_BASE_URL),
       apiKeyConfigured: providerConfigured(c.env, provider),

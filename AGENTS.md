@@ -11,3 +11,7 @@
 
 - Keep current staging/production source, Worker version, migrations, flags and validation limits in `docs/launch/production-preflight.md`; label older observations as historical. Keep deployment status separate from provider and physical-call acceptance.
 - Before production rollout, record staging validation for the exact candidate. Any proposed staging bypass must be explicit in the rollout approval request; local workerd tests are not a staging deployment.
+
+- Branding: the chosen OpenFon logo is documented in `docs/brand/README.md`; use `docs/brand/lilita-f-variants/4-straighter-stem-tight-spacing.svg` (Lilita One, handset f variant 4, corrected f–o spacing) as the source of truth for branding work. Preserve its approved geometry and spacing. Older logo explorations and existing app assets are superseded design references.
+
+- Brand identity and language: use `docs/brand/identity/README.md`, `guidelines.md`, and `voice.md` for visual standards, messaging, English/German examples and asset provenance. The approved logo is fixed; the broader identity is version 1. Preserve accurate product claims; the current application adopts the selected identity book’s Lilita One headings and Nunito Sans reading text.

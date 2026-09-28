@@ -112,6 +112,9 @@ it('compatible keyless instance creation succeeds after missing-provider repair'
 });
 
 it.each(['accept', 'conflict'])('missing-primary/provider repair is outside the requested create batch (%s)', async outcome => {
+  // A missing provider inherits this compatible instance gateway. The test
+  // exercises repair/racing writes, not the public Kataleptic model catalog.
+  env.REALTIME_BASE_URL = 'wss://custom.example/realtime';
   db.exec("DELETE FROM provider_settings WHERE business_id='b1'; DELETE FROM assistants WHERE id='asst_b1'");
   const initialCount = count();
   const hold = holdCreate(); const pending = create();

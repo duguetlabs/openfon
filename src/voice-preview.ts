@@ -56,8 +56,12 @@ export function realtimePreview(config: RealtimeConfig, voice: string, text: str
           if (msg.type === 'error') throw failed();
           if (msg.type === 'session.updated' && !requested) {
             // Ignore a provider's initial/default session acknowledgment.
-            const session = msg.session as { instructions?: string } | undefined;
+            const session = msg.session as { instructions?: string; audio?: { output?: { voice?: unknown } } } | undefined;
             if (session?.instructions !== instructions) return;
+            // A successful preview of the provider's default voice is not a
+            // preview of the selected voice. Require its acknowledgment before
+            // requesting any paid generation or returning sample audio.
+            if (voice && session.audio?.output?.voice !== voice) throw failed();
             requested = true;
             ws.send(JSON.stringify({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: instructions }] } }));
             ws.send(JSON.stringify({ type: 'response.create' }));

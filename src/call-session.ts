@@ -1097,11 +1097,7 @@ export class CallSession implements DurableObject {
 
   private resolveRealtimeConfig(): RealtimeConfig {
     const config = this.realtimeConfig = resolveRealtime(this.env, this.settings);
-    if (config.retiredModel) console.log(`call ${this.callId}: retired realtime model ${config.retiredModel} served on ${config.model}`);
-    if (this.settings?.realtime_voice && !liveRealtimeVoice(config, this.settings.realtime_voice)) {
-      // A voice chosen for the retired cascade means nothing now: let the tier manage it.
-      this.settings = { ...this.settings, realtime_voice: '' };
-    }
+    if (this.settings?.realtime_voice) liveRealtimeVoice(config, this.settings.realtime_voice);
     return config;
   }
 

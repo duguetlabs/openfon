@@ -72,7 +72,8 @@ it('rejects a retained incompatible voice without requiring provider credentials
 });
 
 it.each(['custom', 'kataleptic', 'instance', 'pipeline'])('keeps %s activation semantics and foreign-workspace privacy', async selection => {
-  draft('draft', 'custom-retained-model', 'custom-voice', selection === 'pipeline' ? 'pipeline' : 'realtime');
+  const publicGateway = selection === 'kataleptic' || selection === 'instance';
+  draft('draft', publicGateway ? 'gpt-realtime-2.1-mini' : 'custom-retained-model', publicGateway ? 'marin' : 'custom-voice', selection === 'pipeline' ? 'pipeline' : 'realtime');
   db.database.prepare("UPDATE provider_settings SET realtime_provider=? WHERE business_id='b1'").run(selection === 'pipeline' ? 'openai' : selection);
   const before = snapshot();
   expect((await request('/api/me/assistants/candidate/activate', {}, 's2', 'POST')).status).toBe(404);
@@ -175,6 +176,7 @@ function holdActivation() {
 }
 
 it.each(['existing custom', 'missing'])('rejects activation when %s provider changes after compatibility check', async initial => {
+  env.REALTIME_BASE_URL = 'wss://custom.example/realtime';
   draft();
   if (initial === 'missing') db.exec("DELETE FROM provider_settings WHERE business_id='b1'");
   else db.exec("UPDATE provider_settings SET realtime_provider='custom',realtime_base_url='wss://custom.example/realtime',realtime_api_key='synthetic-custom' WHERE business_id='b1'");

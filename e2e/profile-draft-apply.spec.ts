@@ -1,43 +1,61 @@
+import { signup, createWorkspace, connections } from './cleanroom-helpers';
 import { test, expect, openSettingsSections } from './fixtures';
 
-test('profile Apply preserves independent business drafts without duplicate voice controls', async ({ page }) => {
-  await page.goto('/auth');
-  await page.getByLabel('Email').fill(`profile-draft-${Date.now()}@example.invalid`);
-  await page.getByLabel('Password', { exact: true }).fill('Synthetic-Presets-Password-1234');
-  await page.getByRole('button', { name: 'Create account', exact: true }).click();
-  await page.getByLabel('Business name', { exact: true }).fill('Profile baseline workshop');
-  await page.getByLabel('What do you do?').fill('Synthetic profile draft validation');
-  await page.getByRole('button', { name: 'Continue →' }).click();
-  await page.getByRole('button', { name: 'Continue →' }).click();
-  await page.getByRole('button', { name: /Create.*assistant|Save.*assistant|Open.*studio/i }).click();
-  await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
-  const business = await (await page.request.get('/api/me/business')).json();
-  const created = await page.request.post(`/api/me/business/${business.id}/profiles`, { data: {
-    name: 'German pipeline', engine: 'pipeline', language: 'de', voice: '', llm_model: '',
-  } });
-  expect(created.ok()).toBe(true);
+test('applying a voice setup preserves an independent summary draft without duplicate voice controls', async ({
+  page,
+}) => {
+  await signup(page, 'profile-draft');
+  const { assistant } = await createWorkspace(page, 'Profile baseline workshop');
+  const created = await page.request.post('/api/me/engine-presets', {
+    data: {
+      name: 'German pipeline',
+      engine: 'pipeline',
+      language: 'de',
+      voice: '',
+      llm_model: '',
+    },
+  });
+  expect(created.status()).toBe(201);
   let applies = 0;
-  page.on('request', request => { if (request.method() === 'POST' && /\/profiles\/[^/]+\/apply$/.test(request.url())) applies++; });
-  await page.goto('/settings');
-  await openSettingsSections(page);
-  const apply = page.getByRole('button', { name: 'Apply', exact: true });
-  await expect(apply).toBeEnabled();
-  // Voice edits live only in Assistants. Applying a saved setup must not consume
-  // or persist the independent business draft still being edited here.
-  await expect(page.getByRole('combobox', { name: 'Language', exact: true })).toHaveCount(0);
-  await page.getByLabel('Name', { exact: true }).fill('Unsaved business');
-  await apply.click();
-  await expect(page.getByLabel('Current primary assistant setup')).toContainText(' · de · ');
-  await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Unsaved business');
-  expect(applies).toBe(1);
-  const applied = await (await page.request.get('/api/me/business')).json();
-  expect(applied.agent.language).toBe('de'); expect(applied.name).toBe('Profile baseline workshop');
   let assistantWrites = 0;
-  page.on('request', request => { if (request.method() === 'PUT' && request.url().endsWith('/agent')) assistantWrites++; });
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
-  await page.reload(); await openSettingsSections(page);
-  await expect(page.getByLabel('Current primary assistant setup')).toContainText(' · de · ');
-  await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Unsaved business');
+  page.on('request', (request) => {
+    if (
+      request.method() === 'POST' &&
+      /\/engine-presets\/[^/]+\/apply$/.test(new URL(request.url()).pathname)
+    )
+      applies++;
+    if (
+      request.method() === 'PUT' &&
+      new URL(request.url()).pathname === `/api/me/assistants/${assistant.id}`
+    )
+      assistantWrites++;
+  });
+  await connections(page);
+  await openSettingsSections(page);
+  const apply = page.getByRole('button', { name: 'Use setup', exact: true });
+  const summary = page.getByLabel('Conversation summaries', { exact: true });
+  await expect(apply).toBeEnabled();
+  // Business now has its own screen. Summary settings are the independent draft
+  // that shares this screen; applying a setup must neither consume nor save it.
+  await expect(page.getByLabel('Language', { exact: true })).toHaveCount(1);
+  await expect(page.getByLabel(/^Text model override/)).toHaveCount(1);
+  await summary.getByLabel('Summary connection').selectOption('workspace');
+  await summary.getByLabel(/^Model/).fill('unsaved-summary-model');
+  await apply.click();
+  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('de');
+  await expect(summary.getByLabel(/^Model/)).toHaveValue('unsaved-summary-model');
+  expect(applies).toBe(1);
+  expect((await (await page.request.get(`/api/me/assistants/${assistant.id}`)).json()).language).toBe('de');
+  expect((await (await page.request.get('/api/me/business')).json()).name).toBe('Profile baseline workshop');
+  expect((await (await page.request.get('/api/me/call-summaries')).json()).model).not.toBe(
+    'unsaved-summary-model',
+  );
+  await summary.getByRole('button', { name: 'Save summary settings', exact: true }).click();
+  await expect(summary.getByRole('status')).toContainText('Summary settings saved.');
+  await page.reload();
+  await openSettingsSections(page);
+  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('de');
+  await expect(summary.getByLabel(/^Model/)).toHaveValue('unsaved-summary-model');
   expect(assistantWrites).toBe(0);
+  expect(applies).toBe(1);
 });

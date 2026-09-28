@@ -1,0 +1,5 @@
+.of-account .of-business-form { margin-top:24px; }
+.of-account .of-business-form > h2 { margin:0 0 12px; }
+.of-account .of-business-form > p { margin:0 0 24px; color:var(--of-muted); }
+.of-account fieldset { border:0; padding:0; margin:0; min-width:0; }
+.of-account .of-button { max-width:100%; white-space:normal; }

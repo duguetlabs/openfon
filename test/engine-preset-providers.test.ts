@@ -108,3 +108,23 @@ it('keeps custom realtime models and voices usable with a custom provider', asyn
   await request('/api/me/provider', { realtime_provider: 'custom', realtime_base_url: 'wss://custom.example/realtime', realtime_api_key: 'custom-key' });
   expect((await applyPreset(preset.id)).status).toBe(200);
 });
+
+it.each([false, true])('rejects retired Kataleptic preset voices before writes and accepts explicit repair (legacy=%s)', async legacy => {
+  const preset = await createPreset({ realtime_voice: 'de_DE-thorsten-medium' }, legacy);
+  const tables = ['assistants', 'agent_settings', 'provider_settings'];
+  const before = tables.map(table => db.database.prepare(`SELECT * FROM ${table}`).all());
+  const result = await applyPreset(preset.id, legacy);
+  expect(result.status).toBe(400);
+  expect(await result.text()).toContain('voice is retired');
+  tables.forEach((table, i) => expect(db.database.prepare(`SELECT * FROM ${table}`).all()).toEqual(before[i]));
+  expect((await request(`/api/me/engine-presets/${preset.id}`, { realtime_voice: '' })).status).toBe(200);
+  expect((await applyPreset(preset.id, legacy)).status).toBe(200);
+});
+
+it('preserves custom gateway voice namespaces when applying a preset', async () => {
+  const preset = await createPreset({ realtime_voice: 'de_DE-thorsten-medium' });
+  env.REALTIME_BASE_URL = 'wss://custom-gateway.example/v1/realtime';
+  expect((await applyPreset(preset.id)).status).toBe(200);
+  expect(db.database.prepare('SELECT realtime_voice FROM assistants WHERE id=?').get('asst_b1'))
+    .toEqual({ realtime_voice: 'de_DE-thorsten-medium' });
+});

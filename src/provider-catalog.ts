@@ -1,7 +1,8 @@
 import { fetchProviderJson } from './provider-response';
 import { OPENAI_REALTIME_VOICES } from './provider-settings';
 import { RETIRED_KATALEPTIC_CHAT_MODELS } from './providers';
-import { GPT_LIVE_MODEL, GPT_LIVE_VOICES, isGptLiveModel } from './realtime-providers';
+import { GPT_LIVE_MODEL, GPT_LIVE_VOICES } from './realtime-providers';
+import { BACKENDS, KATALEPTIC_ROUTING, knownKatalepticConversationModel } from './backend-registry';
 
 type Option = { id: string; label: string };
 type Model = Option & { kind: 'text' | 'transcription' | 'realtime' };
@@ -15,7 +16,7 @@ const fallbackModels: Model[] = [
 // them they would still be offered here, and every call to them fails.
 const RETIRED = new Set(['kataleptic-realtime', 'piper-tts', 'whisper-large-v3-turbo', 'whisper-large-v3-turbo-stream',
   'parakeet-tdt-0-6b-stream', 'nomic-embed', ...RETIRED_KATALEPTIC_CHAT_MODELS]);
-const fallback = () => ({ models: fallbackModels, live: false, voices: {
+const fallback = () => ({ models: fallbackModels, live: false, backends: BACKENDS, routing: KATALEPTIC_ROUTING, voices: {
   native: options(OPENAI_REALTIME_VOICES),
   realtime: Object.fromEntries(['gpt-realtime-2', 'gpt-realtime-2.1', 'gpt-realtime-2.1-mini', GPT_LIVE_MODEL]
     .map(id => [id, options(id === GPT_LIVE_MODEL ? GPT_LIVE_VOICES : OPENAI_REALTIME_VOICES)])),
@@ -48,7 +49,12 @@ export function providerCatalog(): Promise<Catalog> {
         if (!validId(m.id) || m.id.includes('/') || seen.has(m.id) || RETIRED.has(m.id)) continue;
         const inputs = m.architecture?.input_modalities, outputs = m.architecture?.output_modalities;
         if (!Array.isArray(inputs) || !Array.isArray(outputs)) continue;
-        const kind = m.id.includes('realtime') || isGptLiveModel(m.id) ? 'realtime' : inputs.includes('audio') && outputs.includes('text') && !m.id.endsWith('-stream')
+        // A name containing "realtime" is not a capability: the gateway also
+        // lists transcription-only WebSocket models on this catalog. Only
+        // implemented speech-to-speech adapters may become conversation choices.
+        const streamingStt = ['gpt-live-transcribe', 'gpt-realtime-whisper'].includes(m.id) || m.id.endsWith('-stream');
+        if (streamingStt) continue;
+        const kind = inputs.includes('audio') && outputs.includes('audio') && knownKatalepticConversationModel(m.id) ? 'realtime' : inputs.includes('audio') && outputs.includes('text') && !outputs.includes('audio') && !streamingStt
           ? 'transcription' : inputs.includes('text') && outputs.includes('text') && !outputs.includes('audio') ? 'text' : null;
         if (!kind) continue;
         seen.add(m.id); parsed.push({ id: m.id, label: typeof m.name === 'string' && m.name.length <= 256 ? m.name : m.id, kind });

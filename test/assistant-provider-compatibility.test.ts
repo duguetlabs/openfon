@@ -78,6 +78,8 @@ it.each(writers)('%s saves compatible direct drafts without live keys', async wr
 it.each(writers)('%s preserves custom and gateway draft namespaces', async writer => {
   for (const provider of ['custom', 'kataleptic', 'instance']) {
     selectProvider(provider);
+    db.exec("UPDATE provider_settings SET realtime_base_url='wss://custom-gateway.example/realtime' WHERE business_id='b1'");
+    env.REALTIME_BASE_URL = 'wss://custom-gateway.example/realtime';
     const res = await save(writer, { engine: 'realtime', realtime_model: 'custom-model', realtime_voice: 'custom-voice' });
     expect(res.status).toBe(writer === 'studio-create' ? 201 : 200);
   }
@@ -99,4 +101,52 @@ it.each(['legacy', 'studio-update'] as Writer[])('%s validates effective retaine
   expect((await save(writer, { realtime_model: 'gpt-realtime' })).status).toBe(400);
   expect(snapshot()).toEqual(before);
   expect((await save(writer, { realtime_model: 'gpt-realtime', realtime_voice: 'marin' })).status).toBe(200);
+});
+
+it.each(writers)('%s rejects unavailable canonical Kataleptic models and unsupported GPT-Live voices before writes', async writer => {
+  for (const fields of [
+    { realtime_model: 'kataleptic-realtime' },
+    { realtime_model: 'gpt-realtime-whisper' },
+    { realtime_model: 'gpt-live-1', realtime_voice: 'future-voice' },
+  ]) {
+    const before = snapshot();
+    const res = await save(writer, { engine: 'realtime', ...fields });
+    expect(res.status).toBe(400);
+    expect(snapshot()).toEqual(before);
+  }
+});
+
+it('scopes provider-view identity evidence to the exact public Kataleptic endpoint', async () => {
+  env.REALTIME_MODEL = 'gpt-realtime-2.1-mini';
+  const canonical = await request('/api/me/provider');
+  expect((await canonical.json() as { realtimeRoute: unknown }).realtimeRoute).toMatchObject({
+    requestedModel: 'gpt-realtime-2.1-mini', upstreamModel: 'gpt-realtime-2.1-mini', liveSessionVerified: false,
+  });
+  for (const endpoint of ['wss://other.example/realtime', 'wss://api.kataleptic.com/v1/realtime?route=other']) {
+    env.REALTIME_BASE_URL = endpoint;
+    const response = await request('/api/me/provider');
+    expect((await response.json() as { realtimeRoute: unknown }).realtimeRoute).toBeNull();
+  }
+  env.REALTIME_BASE_URL = 'wss://api.kataleptic.com/v1/realtime';
+  env.REALTIME_PROVIDER = 'custom';
+  const custom = await request('/api/me/provider');
+  expect((await custom.json() as { realtimeRoute: unknown }).realtimeRoute).toBeNull();
+});
+
+it('allows the Connections provider-first GPT-Live to OpenAI migration', async () => {
+  expect((await request('/api/me/assistants/asst_b1', {
+    engine: 'realtime', realtime_model: 'gpt-live-1', realtime_voice: 'marin',
+  })).status).toBe(200);
+  const switched = await request('/api/me/provider', {
+    realtime_provider: 'openai', realtime_base_url: 'wss://api.openai.com/v1/realtime',
+    realtime_api_key: 'synthetic-direct-key',
+  });
+  expect(switched.status).toBe(200);
+  const refreshed = await request('/api/me/assistants/asst_b1');
+  expect(await refreshed.json()).toMatchObject({ realtime_model: '', realtime_voice: 'marin' });
+  expect((await request('/api/me/assistants/asst_b1', {
+    engine: 'realtime', realtime_model: 'gpt-realtime', realtime_voice: 'cedar',
+  })).status).toBe(200);
+  expect(await (await request('/api/me/assistants/asst_b1')).json())
+    .toMatchObject({ engine: 'realtime', realtime_model: 'gpt-realtime', realtime_voice: 'cedar' });
 });
