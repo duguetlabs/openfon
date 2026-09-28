@@ -200,6 +200,8 @@ export function Connections({
     Object.keys(patch).length > 0 ||
       Object.keys(voice).length > 0 ||
       !!summaryKey ||
+      !!presetName.trim() ||
+      recipe !== null ||
       JSON.stringify(summary) !== JSON.stringify(savedSummary),
   );
   async function load(recovery = false) {
@@ -236,7 +238,8 @@ export function Connections({
     setPatch((p) => {
       const next = { ...p, [key]: val };
       if (val === (provider as unknown as Record<string, unknown>)?.[key] ||
-          (!val && ['apiKey','realtime_api_key','stt_api_key','tts_api_key'].includes(key))) delete next[key];
+          (!val && ['apiKey','realtime_api_key','stt_api_key','tts_api_key'].includes(key)) ||
+          (val === false && ['clearApiKey','realtime_clear_api_key','stt_clear_api_key','tts_clear_api_key'].includes(key))) delete next[key];
       return next;
     });
   function catalogApplies(kind: 'text' | 'transcription' | 'realtime') {

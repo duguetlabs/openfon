@@ -214,3 +214,23 @@ test('business refresh after an acknowledged save preserves concurrent fields an
   await expect(page.getByLabel('Contact phone', { exact: true })).toHaveValue('+43 555 999');
   await expect(page.getByRole('textbox', { name: 'What you do', exact: true })).toHaveValue('Newer unsaved description');
 });
+
+
+test('combined receptionist and knowledge drafts require only one navigation confirmation', async ({ page }) => {
+  await signup(page, 'combined-drafts'); await createWorkspace(page);
+  await page.getByLabel('Their first words').fill('Keep my receptionist draft.');
+  await page.getByRole('button', { name: /What they know/ }).click();
+  await page.getByRole('button', { name: 'Add business information', exact: true }).click();
+  await page.getByLabel('What might a customer ask?', { exact: true }).fill('Keep my knowledge draft?');
+  let dialogs = 0, accept = false;
+  page.on('dialog', async dialog => { dialogs++; if (accept) await dialog.accept(); else await dialog.dismiss(); });
+  await page.getByRole('banner').getByRole('button', { name: 'Messages', exact: true }).click();
+  expect(dialogs).toBe(1);
+  await expect(page).toHaveURL(/\/overview$/);
+  await expect(page.getByLabel('What might a customer ask?', { exact: true })).toHaveValue('Keep my knowledge draft?');
+  await expect(page.getByLabel('Their first words')).toHaveValue('Keep my receptionist draft.');
+  accept = true;
+  await page.getByRole('banner').getByRole('button', { name: 'Messages', exact: true }).click();
+  expect(dialogs).toBe(2);
+  await expect(page).toHaveURL(/\/conversations$/);
+});

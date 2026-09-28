@@ -93,18 +93,13 @@ export function Empty({
 }
 
 export function canLeave() {
-  return window.dispatchEvent(new Event("openfon:leave", { cancelable: true }));
+  const clean = window.dispatchEvent(new Event("openfon:leave", { cancelable: true }));
+  return clean || window.confirm("You have unsaved changes. Discard them and leave this page?");
 }
 export function useDirtyGuard(dirty: boolean) {
   useEffect(() => {
     const guard = (e: Event) => {
-      if (
-        dirty &&
-        !window.confirm(
-          "You have unsaved changes. Discard them and leave this page?",
-        )
-      )
-        e.preventDefault();
+      if (dirty) e.preventDefault();
     };
     const unload = (e: BeforeUnloadEvent) => {
       if (dirty) {

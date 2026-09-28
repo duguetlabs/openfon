@@ -857,8 +857,12 @@ test('confirmed history navigation between receptionists resets the previous con
   await page.getByLabel('Language', { exact: true }).fill('de');
   let held: Route | undefined;
   let holdNext = true;
-  await page.route(`**/api/me/assistants/${other.id}`, route => {
-    if (route.request().method() === 'GET' && holdNext) { holdNext = false; held = route; return; }
+  await page.route(`**/api/me/assistants/${other.id}`, (route) => {
+    if (route.request().method() === 'GET' && holdNext) {
+      holdNext = false;
+      held = route;
+      return;
+    }
     return route.continue();
   });
   page.once('dialog', (dialog) => dialog.accept());
@@ -868,7 +872,8 @@ test('confirmed history navigation between receptionists resets the previous con
   await expect(page.getByRole('heading', { name: 'Your connections', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Start browser conversation', exact: true })).toHaveCount(0);
-  const response = held!; held = undefined;
+  const response = held!;
+  held = undefined;
   await response.fulfill({ status: 503, json: { error: 'Target temporarily unavailable' } });
   await expect(page.getByRole('alert').filter({ hasText: 'Target temporarily unavailable' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Receptionist unavailable', exact: true })).toBeVisible();
@@ -905,7 +910,7 @@ for (const path of ['/call/%E0%A4', '/widget/%E0%A4']) {
     });
     // The HTTP server escapes malformed percent bytes before serving the app.
     // Install the raw history URL before React mounts to exercise its decoder.
-    await page.addInitScript(malformedPath => history.replaceState(history.state, '', malformedPath), path);
+    await page.addInitScript((malformedPath) => history.replaceState(history.state, '', malformedPath), path);
     await page.goto('/call/malformed-test-link');
     expect(await page.evaluate(() => location.pathname)).toBe(path);
     await expect(page.getByRole('alert')).toContainText(/invalid|unavailable/i);
@@ -916,3 +921,118 @@ for (const path of ['/call/%E0%A4', '/widget/%E0%A4']) {
     expect(privateReads).toBe(0);
   });
 }
+
+async function prepareDelayedHistory(page: Page) {
+  const { assistant: primary } = await signup(page);
+  const created = await page.request.post('/api/me/assistants', {
+    data: {
+      name: 'Delayed history target',
+      persona: 'Warm and clear',
+      greeting: 'Hello from the delayed target.',
+      engine: 'pipeline',
+      language: 'fr',
+    },
+  });
+  expect(created.status()).toBe(201);
+  const other = await created.json();
+  await page.reload();
+  await page.getByLabel('Receptionist', { exact: true }).selectOption(other.id);
+  await connections(page);
+  await page.getByRole('button', { name: 'Back to your desk', exact: true }).click();
+  await page.getByLabel('Receptionist', { exact: true }).selectOption(primary.id);
+  await connections(page);
+  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');
+  return { primary, other };
+}
+
+for (const { leave, failLate } of [
+  { leave: 'forward', failLate: false },
+  { leave: 'home', failLate: false },
+  { leave: 'forward', failLate: true },
+] as const) {
+  test(`a pending historical receptionist load cannot override newer ${leave} navigation (late failure=${failLate})`, async ({
+    page,
+  }) => {
+    const { primary, other } = await prepareDelayedHistory(page);
+    let held: Route | undefined;
+    let response: import('@playwright/test').APIResponse | undefined;
+    let holdNext = true;
+    await page.route(`**/api/me/assistants/${other.id}`, async (route) => {
+      if (route.request().method() === 'GET' && holdNext) {
+        holdNext = false;
+        response = await route.fetch();
+        held = route;
+        return;
+      }
+      return route.continue();
+    });
+    try {
+      await page.evaluate(() => history.go(-2));
+      await expect.poll(() => !!held).toBe(true);
+      await expect(page).toHaveURL(new RegExp(`assistant=${other.id}`));
+      await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toHaveCount(0);
+      if (leave === 'forward') await page.evaluate(() => history.go(2));
+      else await page.getByRole('button', { name: 'OpenFon home', exact: true }).click();
+      await expect(page).not.toHaveURL(new RegExp(other.id));
+      if (leave === 'forward') await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');
+      else await expect(page.getByLabel('Receptionist', { exact: true })).toHaveValue(primary.id);
+      const lateResponse = page.waitForResponse(
+        (request) => new URL(request.url()).pathname === `/api/me/assistants/${other.id}`,
+      );
+      const route = held!;
+      held = undefined;
+      await route.fulfill(
+        failLate ? { status: 503, json: { error: 'Obsolete target failure' } } : { response: response! },
+      );
+      await (await lateResponse).finished();
+      // Wait for every late response continuation and render, including any
+      // wrongly started follow-up read, before checking the selected target.
+      await page.waitForLoadState('networkidle');
+      await expect(page).not.toHaveURL(new RegExp(other.id));
+      await expect(page.getByRole('alert')).toHaveCount(0);
+      if (leave === 'forward') {
+        await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');
+        await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toBeDisabled();
+      } else await expect(page.getByLabel('Receptionist', { exact: true })).toHaveValue(primary.id);
+    } finally {
+      if (held) await held.abort();
+    }
+  });
+}
+
+test('the newer visit to the same receptionist wins when an earlier visit finishes last', async ({
+  page,
+}) => {
+  const { other } = await prepareDelayedHistory(page);
+  const held: { route: Route; response: import('@playwright/test').APIResponse; released: boolean }[] = [];
+  await page.route(`**/api/me/assistants/${other.id}`, async (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch();
+    held.push({ route, response, released: false });
+  });
+  try {
+    await page.evaluate(() => history.go(-2));
+    await expect.poll(() => held.length).toBe(1);
+    await page.evaluate(() => history.go(2));
+    await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');
+    expect(
+      (await page.request.put(`/api/me/assistants/${other.id}`, { data: { language: 'es' } })).ok(),
+    ).toBe(true);
+    await page.evaluate(() => history.go(-2));
+    await expect.poll(() => held.length).toBe(2);
+    held[1].released = true;
+    await held[1].route.fulfill({ response: held[1].response });
+    await expect(page.getByLabel('Language', { exact: true })).toHaveValue('es');
+    const lateResponse = page.waitForResponse((response) => response.request() === held[0].route.request());
+    held[0].released = true;
+    await held[0].route.fulfill({ response: held[0].response });
+    await (await lateResponse).finished();
+    await page.waitForLoadState('networkidle');
+    await expect(page).toHaveURL(new RegExp(`assistant=${other.id}`));
+    await expect(page.getByLabel('Language', { exact: true })).toHaveValue('es');
+    await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toBeDisabled();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+  } finally {
+    for (const entry of held) if (!entry.released) await entry.route.abort();
+  }
+});

@@ -21,6 +21,8 @@ export async function openSettingsSections(page: import('@playwright/test').Page
     await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toBeVisible();
   }
   if (await page.locator('.of-brand-connections').count()) {
+    // The screen shell mounts before provider data and its disclosures arrive.
+    await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toBeVisible();
     for (const disclosure of await page.locator('.of-brand-connections details').all()) {
       if (await disclosure.getAttribute('open') === null) await disclosure.locator('summary').first().click();
     }

@@ -794,6 +794,7 @@ export default function OpenFon() {
   type ReceptionSnapshot = { boot: Bootstrap; assistant: Assistant | null; calls: Call[]; missingTarget: string | null };
   const [session] = useState(() => new SessionCoordinator<ReceptionSnapshot>(browserLogoutIntentStorage));
   const loadGeneration = useRef(0);
+  const loadPending = useRef(false);
   const releaseUnauthorized = useRef<(() => void) | null>(null);
   const callsGeneration = useRef(0);
   const publicMatch = location.pathname.match(
@@ -839,7 +840,7 @@ export default function OpenFon() {
   function clearSession() {
     releaseUnauthorized.current?.();
     releaseUnauthorized.current = null;
-    ++loadGeneration.current;
+    ++loadGeneration.current; loadPending.current = false;
     ++callsGeneration.current;
     setAuth(false); setBoot(null); setAssistant(null); setCalls([]);
     setMenu(false); setScreen('desk'); setError(''); setLoading(false); setMissingTarget(null); setReplacement('');
@@ -871,13 +872,12 @@ export default function OpenFon() {
     releaseUnauthorized.current?.();
     releaseUnauthorized.current = auth ? onPrivateUnauthorized(() => { session.invalidate(); clearSession(); }) : null;
     const gen = ++loadGeneration.current;
-    setLoading(true);
+    loadPending.current = true; setLoading(true);
     setError('');
     await session.refresh(async () => {
       const b = await api.bootstrap();
       if (gen !== loadGeneration.current) throw new Error('Session changed.');
-      const pathAssistant = new URLSearchParams(location.search).get("assistant") || location.pathname.match(/^\/assistants\/([^/]+)/)?.[1];
-      const key = selected || pathAssistant || assistant?.id || b.assistants[0]?.id;
+      const key = requested || assistant?.id || b.assistants[0]?.id;
       let unavailable: string | null = null;
       let a: Assistant | null = null;
       if (b.workspace && key) {
@@ -897,7 +897,7 @@ export default function OpenFon() {
       setMissingTarget(snapshot.missingTarget); setReplacement(""); setDeletedTarget(false);
       releaseUnauthorized.current?.();
       releaseUnauthorized.current = onPrivateUnauthorized(() => { session.invalidate(); clearSession(); });
-      setAuth(true); setRecovery(null); setLoading(false);
+      setAuth(true); setRecovery(null); loadPending.current = false; setLoading(false);
       if (/^\/(?:login|signup|auth|onboarding)?\/?$/.test(location.pathname)) {
         history.replaceState({ ...history.state, openfonIndex: historyIndex.current }, "", "/overview");
       }
@@ -916,7 +916,7 @@ export default function OpenFon() {
         setError(errorText(e));
         if (requested && requested !== assistant?.id) { setAssistant(null); setMissingTarget(requested); setReplacement(""); }
       }
-      setLoading(false);
+      loadPending.current = false; setLoading(false);
     }, showRecovery);
   }
   useEffect(() => {
@@ -937,7 +937,7 @@ export default function OpenFon() {
       historyIndex.current = targetIndex;
       setScreen(screenFromPath()); setCallId(callFromLocation()); setConversationQuery(location.search); setMenu(false);
       const targetAssistant = new URLSearchParams(location.search).get("assistant") || location.pathname.match(/^\/assistants\/([^/]+)/)?.[1] || boot?.assistants[0]?.id;
-      if (targetAssistant && targetAssistant !== assistant?.id) void load(targetAssistant);
+      if (targetAssistant && (targetAssistant !== assistant?.id || loadPending.current)) void load(targetAssistant);
       window.scrollTo({ top: 0, behavior: "instant" });
     };
     window.addEventListener("popstate", restore);
@@ -945,6 +945,9 @@ export default function OpenFon() {
   }, [assistant?.id, boot?.account.id]);
   function navigate(next: string, saved = false, selectedCall?: string, query?: Record<string, string>) {
     if (!saved && next !== screen && !canLeave()) return false;
+    if (loadPending.current) {
+      ++loadGeneration.current; session.invalidate(); loadPending.current = false; setLoading(false);
+    }
     const url = new URL(screenPaths[next] || "/overview", location.origin);
     if (assistant && assistant.id !== boot?.assistants[0]?.id) url.searchParams.set("assistant", assistant.id);
     if (next === "conversations" && screen === "conversations") {
