@@ -318,6 +318,8 @@ function Desk({
   const [assistantRefreshPending, setAssistantRefreshPending] = useState(false);
   const mutation = useRef(false);
   const previousAssistant = useRef(assistant);
+  const editRevisions = useRef<Partial<Record<keyof AssistantFields, number>>>({});
+  const pendingRevisions = useRef<Partial<Record<keyof AssistantFields, number>> | null>(null);
   const fields: (keyof AssistantFields)[] = [
     "name",
     "greeting",
@@ -331,6 +333,11 @@ function Desk({
     "realtime_voice",
     "llm_model",
   ];
+  function editDraft(next: Assistant) {
+    for (const key of fields) if (next[key] !== draft[key])
+      editRevisions.current[key] = (editRevisions.current[key] ?? 0) + 1;
+    setDraft(next);
+  }
   useLayoutEffect(() => {
     const previous = previousAssistant.current;
     previousAssistant.current = assistant;
@@ -338,8 +345,12 @@ function Desk({
     setDraft(current => {
       if (previous.id !== assistant.id) return assistant;
       const next = { ...assistant };
-      for (const key of fields) if (current[key] !== previous[key])
-        (next as unknown as Record<string, unknown>)[key] = current[key];
+      for (const key of fields) {
+        const editedAfterSubmit = pendingRevisions.current !== null &&
+          (editRevisions.current[key] ?? 0) !== (pendingRevisions.current[key] ?? 0);
+        if (current[key] !== previous[key] || editedAfterSubmit)
+          (next as unknown as Record<string, unknown>)[key] = current[key];
+      }
       return next;
     });
   }, [assistant]);
@@ -357,6 +368,8 @@ function Desk({
   async function save() {
     if (mutation.current || assistantRefreshPending || !dirty) return;
     mutation.current = true; setBusy(true);
+    const submittedRevisions = { ...editRevisions.current };
+    pendingRevisions.current = submittedRevisions;
     setError("");
     try {
       const patch: Partial<AssistantFields> = {};
@@ -370,7 +383,7 @@ function Desk({
       setDraft((current) => {
         const next = { ...saved };
         for (const key of fields) {
-          if (current[key] !== draft[key])
+          if ((editRevisions.current[key] ?? 0) !== (submittedRevisions[key] ?? 0))
             (next as unknown as Record<string, unknown>)[key] = current[key];
         }
         return next;
@@ -379,6 +392,7 @@ function Desk({
     } catch (e) {
       setError(errorText(e));
     } finally {
+      pendingRevisions.current = null;
       mutation.current = false; setBusy(false);
     }
   }
@@ -446,7 +460,7 @@ function Desk({
                 <input
                   required
                   value={draft.name}
-                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                  onChange={(e) => editDraft({ ...draft, name: e.target.value })}
                 />
               </Field>
               <Field
@@ -457,7 +471,7 @@ function Desk({
                   rows={3}
                   value={draft.greeting}
                   onChange={(e) =>
-                    setDraft({ ...draft, greeting: e.target.value })
+                    editDraft({ ...draft, greeting: e.target.value })
                   }
                   placeholder={`Hello, thanks for calling ${workspace.name}. How can I help?`}
                 />
@@ -467,12 +481,12 @@ function Desk({
                   rows={3}
                   value={draft.persona}
                   onChange={(e) =>
-                    setDraft({ ...draft, persona: e.target.value })
+                    editDraft({ ...draft, persona: e.target.value })
                   }
                   placeholder="Warm, clear and helpful. Keep answers brief."
                 />
               </Field>
-              <VoiceChoices draft={draft} onChange={setDraft} />
+              <VoiceChoices draft={draft} onChange={editDraft} />
             </div>,
           )}
           {job(
@@ -496,7 +510,7 @@ function Desk({
                   type="checkbox"
                   checked={!!draft.take_messages}
                   onChange={(e) =>
-                    setDraft({
+                    editDraft({
                       ...draft,
                       take_messages: e.target.checked ? 1 : 0,
                     })
@@ -517,12 +531,12 @@ function Desk({
                   rows={5}
                   value={draft.custom_instructions}
                   onChange={(e) =>
-                    setDraft({ ...draft, custom_instructions: e.target.value })
+                    editDraft({ ...draft, custom_instructions: e.target.value })
                   }
                   placeholder="For urgent questions, ask the caller to…"
                 />
               </Field>
-              <PromptExamples current={draft.custom_instructions} onUse={value => setDraft({ ...draft, custom_instructions: value })} />
+              <PromptExamples current={draft.custom_instructions} onUse={value => editDraft({ ...draft, custom_instructions: value })} />
               <p className="of-help">
                 Messages are recorded for you to follow up. Your receptionist
                 cannot promise an appointment or a completed callback.
