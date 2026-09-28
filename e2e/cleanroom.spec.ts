@@ -223,6 +223,74 @@ for (const language of ['de', 'de-DE']) {
   });
 }
 
+test('browser samples select native voices by locale and preserve the provider voice across speech modes', async ({ page }) => {
+  await page.addInitScript(() => {
+    const samples: { text: string; lang: string; voice: string }[] = [];
+    const voices = [{ name: 'Austrian native', lang: 'de-AT' }, { name: 'German native', lang: 'de-DE' }];
+    Object.defineProperty(window, '__nativeVoiceTest', { value: { samples, voices } });
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', { value: class {
+      text: string;
+      lang = '';
+      voice: { name: string; lang: string } | null = null;
+      onend: (() => void) | null = null;
+      constructor(text: string) { this.text = text; }
+    } });
+    Object.defineProperty(window, 'speechSynthesis', { value: {
+      cancel() {}, getVoices: () => voices,
+      speak(utterance: { text: string; lang: string; voice: { name: string } | null; onend?: () => void }) {
+        samples.push({ text: utterance.text, lang: utterance.lang, voice: utterance.voice?.name || '' });
+        queueMicrotask(() => utterance.onend?.());
+      },
+    } });
+  });
+  const { id } = await seed(page);
+  expect((await page.request.put(`/api/me/assistants/${id}`, {
+    data: { language: 'de-DE', voice: 'saved-provider-voice' },
+  })).ok()).toBe(true);
+  let mode: 'browser' | 'openai' = 'browser';
+  await page.route('**/api/me/provider', async route => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch();
+    await route.fulfill({ json: { ...await response.json(), effective_tts_provider: mode } });
+  });
+  const writes: string[] = [];
+  page.on('request', request => { if (request.method() !== 'GET' && request.url().includes('/api/')) writes.push(request.url()); });
+  await page.reload();
+  await page.getByRole('button', { name: /Who answers/ }).click();
+  const voice = page.getByRole('combobox', { name: 'Voice', exact: true });
+  await expect(voice).toBeDisabled();
+  await expect(voice).toHaveValue('saved-provider-voice');
+  await expect(voice.locator('option')).toHaveText(['Browser default (language-based)']);
+  await page.getByRole('button', { name: 'Listen to a sample', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __nativeVoiceTest: { samples: unknown[] } }).__nativeVoiceTest.samples)).toEqual([
+    { text: PREVIEW_TEXT.de, lang: 'de-DE', voice: 'German native' },
+  ]);
+  await page.evaluate(() => (window as unknown as { __nativeVoiceTest: { voices: unknown[] } }).__nativeVoiceTest.voices.pop());
+  await page.getByRole('button', { name: 'Listen to a sample', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __nativeVoiceTest: { samples: unknown[] } }).__nativeVoiceTest.samples)).toEqual([
+    { text: PREVIEW_TEXT.de, lang: 'de-DE', voice: 'German native' },
+    { text: PREVIEW_TEXT.de, lang: 'de-DE', voice: 'Austrian native' },
+  ]);
+  mode = 'openai';
+  await page.reload();
+  await page.getByRole('button', { name: /Who answers/ }).click();
+  await expect(page.getByRole('button', { name: 'Listen to a sample', exact: true })).toBeEnabled();
+  await expect(voice).toBeEnabled();
+  await expect(voice).toHaveValue('saved-provider-voice');
+  await expect(voice.locator('option:checked')).toHaveText('saved-provider-voice');
+  mode = 'browser';
+  await page.reload();
+  await page.getByRole('button', { name: /Who answers/ }).click();
+  await expect(voice).toBeDisabled();
+  await expect(voice).toHaveValue('saved-provider-voice');
+  await expect(voice.locator('option:checked')).toHaveText('Browser default (language-based)');
+  await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toHaveCount(0);
+  expect(writes).toEqual([]);
+  expect(await (await page.request.get(`/api/me/assistants/${id}`)).json()).toMatchObject({
+    language: 'de-DE', voice: 'saved-provider-voice',
+  });
+});
+
 test('a save acknowledgement preserves edits typed while the request was in flight', async ({ page }) => {
   const { id } = await seed(page);
   await page.getByRole('button', { name: /Who answers/ }).click();

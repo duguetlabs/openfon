@@ -95,15 +95,14 @@ export function VoiceChoices({
             "This browser cannot play a voice sample. Try a browser rehearsal instead.",
           );
         speechSynthesis.cancel();
+        const language = draft.language.toLowerCase();
         const speech = new SpeechSynthesisUtterance(
-          PREVIEW_TEXT[draft.language.toLowerCase().split("-")[0]] || PREVIEW_TEXT.en,
+          PREVIEW_TEXT[language.split("-")[0]] || PREVIEW_TEXT.en,
         );
         speech.lang = draft.language;
-        const local = speechSynthesis
-          .getVoices()
-          .find((v) =>
-            v.lang.toLowerCase().startsWith(draft.language.toLowerCase()),
-          );
+        const voices = speechSynthesis.getVoices();
+        const local = voices.find(v => v.lang.toLowerCase() === language)
+          ?? voices.find(v => v.lang.toLowerCase().split("-")[0] === language.split("-")[0]);
         if (local) speech.voice = local;
         speech.onend = () => {
           if (!controller.signal.aborted) {
@@ -180,6 +179,7 @@ export function VoiceChoices({
         <Field label="Voice">
           <select
             value={selected}
+            disabled={browserVoice}
             onChange={(e) =>
               onChange({
                 ...draft,
@@ -187,17 +187,17 @@ export function VoiceChoices({
               })
             }
           >
-            <option value="">
-              {browserVoice ? "Browser default" : "Provider default"}
-            </option>
-            {selected && !choices.some((v) => v.id === selected) && (
-              <option value={selected}>{selected}</option>
-            )}
-            {choices.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.label}
-              </option>
-            ))}
+            {browserVoice ? <option value={selected}>Browser default (language-based)</option> : <>
+              <option value="">Provider default</option>
+              {selected && !choices.some((v) => v.id === selected) && (
+                <option value={selected}>{selected}</option>
+              )}
+              {choices.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.label}
+                </option>
+              ))}
+            </>}
           </select>
         </Field>
       </div>
@@ -220,7 +220,7 @@ export function VoiceChoices({
           if (localPreview.current) { window.speechSynthesis?.cancel(); localPreview.current = false; }
           setBusy(false);
         }}>Stop sample</Button>}
-        <small>A short preview of these voice choices.</small>
+        <small>{browserVoice ? "Your browser chooses an installed voice for the selected language." : "A short preview of these voice choices."}</small>
       </div>
       {sample && (
         <figure className="of-sample-result">

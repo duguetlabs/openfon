@@ -125,7 +125,10 @@ for (const failAgain of [false, true]) {
       return route.continue();
     });
     await page.getByRole('button', { name: 'Use setup', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Retry setup refresh', exact: true })).toBeVisible();
+    // The retry button appears as soon as apply is acknowledged, before its
+    // initial display read finishes. Hold only the later explicit retry.
+    await expect(page.getByRole('alert')).toContainText('Initial setup list failure');
+    await expect(page.getByRole('button', { name: 'Retry setup refresh', exact: true })).toBeEnabled();
     page.on('request', (r) => {
       if (r.method() === 'PUT' && r.url().endsWith('/api/me/provider')) writes++;
     });
