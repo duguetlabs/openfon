@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { signup, createWorkspace, workspaceMenu, connections } from './cleanroom-helpers';
+import { signup, createWorkspace, workspaceMenu, connections, whoAnswers } from './cleanroom-helpers';
 import type { Page } from '@playwright/test';
 
 async function business(page: Page) {
@@ -233,4 +233,78 @@ test('combined receptionist and knowledge drafts require only one navigation con
   await page.getByRole('banner').getByRole('button', { name: 'Messages', exact: true }).click();
   expect(dialogs).toBe(2);
   await expect(page).toHaveURL(/\/conversations$/);
+});
+
+for (const refreshParent of [false, true]) {
+  test(`editing a greeting preserves newer external receptionist fields (parent refresh=${refreshParent})`, async ({ page }) => {
+    await signup(page, 'desk-peer-edits');
+    const { assistant } = await createWorkspace(page);
+    const path = `/api/me/assistants/${assistant.id}`;
+    expect((await page.request.put(path, { data: {
+      name: 'Ada', persona: 'Warm and clear', greeting: 'Original greeting.', engine: 'pipeline',
+      language: 'en', voice: 'alloy', llm_model: 'gpt-4o-mini', custom_instructions: 'Original instructions.'
+    } })).ok()).toBe(true);
+    await page.reload();
+    await whoAnswers(page);
+    if (refreshParent) await page.getByLabel('Their first words').fill('Keep my newer greeting.');
+    const peer = { language: 'fr', voice: 'coral', llm_model: 'gpt-4.1-mini', custom_instructions: 'Instructions saved by another tab.' };
+    expect((await page.request.put(path, { data: peer })).ok()).toBe(true);
+    if (refreshParent) {
+      await page.getByRole('button', { name: /What they know/ }).click();
+      const refreshed = page.waitForResponse(response => response.request().method() === 'GET' && new URL(response.url()).pathname === path);
+      await page.getByRole('button', { name: 'Remove from receptionist', exact: true }).click();
+      await (await refreshed).finished();
+      await whoAnswers(page);
+      await expect(page.getByLabel('Their first words')).toHaveValue('Keep my newer greeting.');
+      await expect(page.getByRole('combobox', { name: 'Language', exact: true })).toHaveValue('fr');
+      await expect(page.getByRole('combobox', { name: 'Voice', exact: true })).toHaveValue('coral');
+    } else await page.getByLabel('Their first words').fill('Keep my newer greeting.');
+    const submitted: unknown[] = [];
+    page.on('request', request => { if (request.method() === 'PUT' && new URL(request.url()).pathname === path) submitted.push(request.postDataJSON()); });
+    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await expect(page.getByText('Saved. Your next conversation will use this brief.', { exact: true })).toBeVisible();
+    expect(submitted).toEqual([{ greeting: 'Keep my newer greeting.' }]);
+    expect(await (await page.request.get(path)).json()).toMatchObject({ ...peer, greeting: 'Keep my newer greeting.' });
+    await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toHaveCount(0);
+  });
+}
+
+test('restoring the original greeting during a pending save remains an unsaved draft', async ({ page }) => {
+  await signup(page, 'desk-original-draft');
+  const { assistant } = await createWorkspace(page);
+  const path = `/api/me/assistants/${assistant.id}`;
+  expect((await page.request.put(path, { data: {
+    name: 'Ada', persona: 'Warm and clear', greeting: 'Original greeting.', engine: 'pipeline'
+  } })).ok()).toBe(true);
+  await page.reload();
+  await whoAnswers(page);
+  let releaseSave!: () => void;
+  const acknowledgement = new Promise<void>(resolve => { releaseSave = resolve; });
+  const submitted: unknown[] = [];
+  let savedOnServer = false;
+  await page.route(`**${path}`, async route => {
+    if (route.request().method() !== 'PUT') return route.continue();
+    submitted.push(route.request().postDataJSON());
+    const response = await route.fetch();
+    if (submitted.length === 1) {
+      savedOnServer = true;
+      await acknowledgement;
+    }
+    await route.fulfill({ response });
+  });
+  const greeting = page.getByLabel('Their first words');
+  const save = page.getByRole('button', { name: 'Save changes', exact: true });
+  await greeting.fill('Submitted greeting.');
+  await save.click();
+  await expect.poll(() => savedOnServer).toBe(true);
+  await greeting.fill('Original greeting.');
+  releaseSave();
+  await expect(page.getByText('Saved. Your next conversation will use this brief.', { exact: true })).toBeVisible();
+  await expect(greeting).toHaveValue('Original greeting.');
+  await expect(save).toBeEnabled();
+  expect(await (await page.request.get(path)).json()).toMatchObject({ greeting: 'Submitted greeting.' });
+  await save.click();
+  await expect(save).toHaveCount(0);
+  expect(submitted).toEqual([{ greeting: 'Submitted greeting.' }, { greeting: 'Original greeting.' }]);
+  expect(await (await page.request.get(path)).json()).toMatchObject({ greeting: 'Original greeting.' });
 });

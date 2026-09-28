@@ -5,7 +5,7 @@
  * FIRST VIEWPORT: Spacious reception introduction above an editable brief and clear test sheet.
  * FORM: Owner-selected identity adaptation; provider/runtime and saved-state behavior preserved.
  */
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useLayoutEffect, useState, useRef } from "react";
 import { api, ApiError, callbackMessage, onPrivateUnauthorized } from "../cleanroom-runtime";
 import type {
   Assistant,
@@ -317,9 +317,7 @@ function Desk({
   const [notice, setNotice] = useState("");
   const [assistantRefreshPending, setAssistantRefreshPending] = useState(false);
   const mutation = useRef(false);
-  useEffect(() => {
-    setDraft(assistant);
-  }, [assistant.id]);
+  const previousAssistant = useRef(assistant);
   const fields: (keyof AssistantFields)[] = [
     "name",
     "greeting",
@@ -333,6 +331,18 @@ function Desk({
     "realtime_voice",
     "llm_model",
   ];
+  useLayoutEffect(() => {
+    const previous = previousAssistant.current;
+    previousAssistant.current = assistant;
+    if (previous === assistant) return;
+    setDraft(current => {
+      if (previous.id !== assistant.id) return assistant;
+      const next = { ...assistant };
+      for (const key of fields) if (current[key] !== previous[key])
+        (next as unknown as Record<string, unknown>)[key] = current[key];
+      return next;
+    });
+  }, [assistant]);
   const dirty = fields.some((k) => draft[k] !== assistant[k]);
   useEffect(() => {
     const prevent = (e: BeforeUnloadEvent) => {
@@ -345,14 +355,17 @@ function Desk({
     return () => window.removeEventListener("beforeunload", prevent);
   }, [dirty]);
   async function save() {
-    if (mutation.current || assistantRefreshPending) return;
+    if (mutation.current || assistantRefreshPending || !dirty) return;
     mutation.current = true; setBusy(true);
     setError("");
     try {
       const patch: Partial<AssistantFields> = {};
-      for (const key of fields)
+      for (const key of fields) if (draft[key] !== assistant[key])
         (patch as Record<string, unknown>)[key] = draft[key];
       const saved = await api.saveAssistant(assistant.id, patch);
+      // The acknowledgment reconciles against the submitted draft below. Avoid
+      // reconciling it again against the older baseline in the layout effect.
+      previousAssistant.current = saved;
       setAssistant(saved);
       setDraft((current) => {
         const next = { ...saved };
@@ -373,11 +386,6 @@ function Desk({
     try {
       const saved = await api.assistant(assistant.id);
       setAssistant(saved);
-      setDraft(current => {
-        const next = { ...saved };
-        for (const key of fields) if (current[key] !== assistant[key]) (next as unknown as Record<string, unknown>)[key] = current[key];
-        return next;
-      });
       setAssistantRefreshPending(false); setError("");
     } catch (e) {
       setAssistantRefreshPending(true);
