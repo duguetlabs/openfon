@@ -188,32 +188,40 @@ test('saved text connection checks and reusable voice setups use the current con
   await expect(page.getByText('Applied “Everyday conversation” to this receptionist.')).toBeVisible();
 });
 
-test('voice sampling previews a local draft without saving or reserving a conversation', async ({ page }) => {
-  await page.addInitScript(() => {
-    const samples: { text: string; lang: string }[] = [];
-    Object.defineProperty(window, '__cleanroomSamples', { value: samples });
-    Object.defineProperty(window, 'speechSynthesis', { value: {
-      cancel() {}, getVoices: () => [],
-      speak(utterance: SpeechSynthesisUtterance) {
-        samples.push({ text: utterance.text, lang: utterance.lang });
-        queueMicrotask(() => utterance.onend?.(new Event('end') as SpeechSynthesisEvent));
-      },
-    } });
+for (const language of ['de', 'de-DE']) {
+  test(`voice sampling previews a local draft without saving or reserving a conversation (${language})`, async ({ page }) => {
+    await page.addInitScript(() => {
+      const samples: { text: string; lang: string }[] = [];
+      Object.defineProperty(window, '__cleanroomSamples', { value: samples });
+      Object.defineProperty(window, 'speechSynthesis', { value: {
+        cancel() {}, getVoices: () => [],
+        speak(utterance: SpeechSynthesisUtterance) {
+          samples.push({ text: utterance.text, lang: utterance.lang });
+          queueMicrotask(() => utterance.onend?.(new Event('end') as SpeechSynthesisEvent));
+        },
+      } });
+    });
+    const { id } = await seed(page);
+    if (language === 'de-DE') {
+      expect((await page.request.put(`/api/me/assistants/${id}`, { data: { language } })).ok()).toBe(true);
+      await page.reload();
+    }
+    const writes: string[] = [];
+    page.on('request', request => { if (request.method() !== 'GET' && request.url().includes('/api/')) writes.push(request.url()); });
+    await page.getByRole('button', { name: /Who answers/ }).click();
+    await page.getByLabel('Their first words').fill('A sample from my unsaved greeting.');
+    const picker = page.getByRole('combobox', { name: 'Language', exact: true });
+    if (language === 'de') await picker.selectOption(language);
+    await expect(picker).toHaveValue(language);
+    await page.getByRole('button', { name: 'Listen to a sample' }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __cleanroomSamples: unknown[] }).__cleanroomSamples)).toEqual([{ text: PREVIEW_TEXT.de, lang: language }]);
+    expect(writes).toEqual([]);
+    const persisted = await (await page.request.get(`/api/me/assistants/${id}`)).json();
+    expect(persisted.language).toBe(language === 'de-DE' ? language : 'en');
+    expect(persisted.greeting).not.toContain('unsaved');
+    await expect(page.getByRole('button', { name: 'Start browser conversation' })).toBeDisabled();
   });
-  const { id } = await seed(page);
-  const writes: string[] = [];
-  page.on('request', request => { if (request.method() !== 'GET' && request.url().includes('/api/')) writes.push(request.url()); });
-  await page.getByRole('button', { name: /Who answers/ }).click();
-  await page.getByLabel('Their first words').fill('A sample from my unsaved greeting.');
-  await page.getByRole('combobox', { name: 'Language', exact: true }).selectOption('de');
-  await page.getByRole('button', { name: 'Listen to a sample' }).click();
-  await expect.poll(() => page.evaluate(() => (window as unknown as { __cleanroomSamples: unknown[] }).__cleanroomSamples)).toEqual([{ text: PREVIEW_TEXT.de, lang: 'de' }]);
-  expect(writes).toEqual([]);
-  const persisted = await (await page.request.get(`/api/me/assistants/${id}`)).json();
-  expect(persisted.language).toBe('en');
-  expect(persisted.greeting).not.toContain('unsaved');
-  await expect(page.getByRole('button', { name: 'Start browser conversation' })).toBeDisabled();
-});
+}
 
 test('a save acknowledgement preserves edits typed while the request was in flight', async ({ page }) => {
   const { id } = await seed(page);

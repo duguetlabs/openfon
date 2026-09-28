@@ -96,7 +96,7 @@ export function VoiceChoices({
           );
         speechSynthesis.cancel();
         const speech = new SpeechSynthesisUtterance(
-          PREVIEW_TEXT[draft.language] || PREVIEW_TEXT.en,
+          PREVIEW_TEXT[draft.language.toLowerCase().split("-")[0]] || PREVIEW_TEXT.en,
         );
         speech.lang = draft.language;
         const local = speechSynthesis
