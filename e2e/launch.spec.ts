@@ -39,6 +39,16 @@ async function dismiss(page: Page, action: () => Promise<unknown>) {
   await (await pending).dismiss();
   await changing;
 }
+async function selectCommittedReceptionist(page: Page, id: string, primary = false) {
+  const picker = page.getByLabel('Receptionist', { exact: true });
+  await picker.selectOption(id);
+  // Selection is asynchronous. The URL changes only after the target snapshot
+  // commits; opening another screen during the loader cancels that selection.
+  await expect(page).toHaveURL(url => url.pathname === '/overview' &&
+    url.searchParams.get('assistant') === (primary ? null : id));
+  await expect(picker).toBeEnabled();
+  await expect(picker).toHaveValue(id);
+}
 
 test('public story examples, navigation and mobile layout remain usable', async ({ page }) => {
   const errors: string[] = [];
@@ -879,11 +889,11 @@ test('confirmed history navigation between receptionists resets the previous con
   expect(created.status()).toBe(201);
   const other = await created.json();
   await page.reload();
-  await page.getByLabel('Receptionist', { exact: true }).selectOption(other.id);
+  await selectCommittedReceptionist(page, other.id);
   await connections(page);
   await expect(page.getByLabel('Language', { exact: true })).toHaveValue('fr');
   await page.getByRole('button', { name: 'Back to your desk', exact: true }).click();
-  await page.getByLabel('Receptionist', { exact: true }).selectOption(primary.id);
+  await selectCommittedReceptionist(page, primary.id, true);
   await connections(page);
   await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');
   const writes: string[] = [];
@@ -973,10 +983,11 @@ async function prepareDelayedHistory(page: Page) {
   expect(created.status()).toBe(201);
   const other = await created.json();
   await page.reload();
-  await page.getByLabel('Receptionist', { exact: true }).selectOption(other.id);
+  await selectCommittedReceptionist(page, other.id);
   await connections(page);
+  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('fr');
   await page.getByRole('button', { name: 'Back to your desk', exact: true }).click();
-  await page.getByLabel('Receptionist', { exact: true }).selectOption(primary.id);
+  await selectCommittedReceptionist(page, primary.id, true);
   await connections(page);
   await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');
   return { primary, other };
