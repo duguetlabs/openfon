@@ -5,6 +5,9 @@
 The browser application is live at **https://openfon.ai** through Cloudflare.
 This launch and production deployment were explicitly authorized. Telephone
 carrier activation remains separate and disabled. Dates use Europe/Vienna.
+Cloudflare records the production deployment at `2026-09-29T23:40:46Z`, which
+is **2026-09-30 01:40:46 CEST**. GitHub's UTC date is therefore the previous day;
+the local verification date above is not a future deployment claim.
 
 | Item | Production | Staging |
 | --- | --- | --- |
