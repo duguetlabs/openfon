@@ -1,14 +1,15 @@
 # Release checklist
 
-This release is not approval to deploy production or claim live telephone readiness.
+The browser application is launched at https://openfon.ai. Production deployment
+was explicitly authorized; this is not live telephone/carrier acceptance.
 
 Current production/staging versions, migrations and configuration differences are
-recorded in [production preflight](production-preflight.md#current-deployment-state--verified-2026-09-26).
+recorded in [production preflight](production-preflight.md#current-deployment-state--verified-2026-09-30).
 
 ## Code release
 
-- [ ] Pass required CI on the final commit.
-- [ ] Resolve real review findings and obtain the required PR-Agent security and major-issue clearance before merging.
+- [x] Pass required CI on the final commit (`debd746`, run `36646025773`).
+- [x] Resolve real review findings and obtain required PR-Agent security/major-issue and local Codex clearance before merging PR #40.
 
 ## External acceptance still required
 
@@ -19,7 +20,7 @@ recorded in [production preflight](production-preflight.md#current-deployment-st
 - [ ] Kataleptic model retirement: migration 0024 and the new defaults are deployed. The September 23 rollout recorded the instance-default cleanup and zero retired selections; do not blindly repeat that data rewrite. Complete the remaining production English/German demo-call acceptance and recheck provider selections before the October 23 cutover. Local provider tests do not establish that production-call acceptance.
 - [ ] GPT-Live (`gpt-live-1`): gateway and optional OpenFon consumer deployed on 2026-09-26. Local full-application tests through real Kataleptic passed greeting, answers, caller-farewell closure, saved turns and summary; a separate forced delegation probe passed `end_call`. Complete actual browser/microphone and interruption acceptance, then a separately authorized telephone call covering the same behavior. Synthetic caller/playback with local storage does not establish those gates; see [realtime providers](../realtime-providers.md#gpt-live-gpt-live-1).
 - [ ] Complete a consented SIP/PSTN pilot with the chosen carrier, number and spending explicitly authorized. Telnyx setup still requires the authorized account login; the existing support appeal must not be duplicated. See [pilot evaluation](pilot-evaluation.md).
-- [ ] Before a separately approved production deployment, confirm operator/hostname/provider configuration, take a fresh backup, verify rollback/recovery, and explicitly enable only accepted routes. See [production preflight](production-preflight.md).
+- [x] For the explicitly authorized 2026-09-30 rollout, confirm hostname/provider configuration, take fresh backups, verify local restore integrity, record Worker rollback targets, and preserve disabled carrier routes. Repeat these controls before future production rollouts. See [production preflight](production-preflight.md).
 
 ## Existing evidence and limits
 
@@ -175,3 +176,93 @@ recover historical audio, prove physical speaker playback, or reproduce a model
 response deterministically. Browser-generated speech has text/events only.
 Quiet and restaurant-noise tests with the actual smart-glasses microphone remain
 physical acceptance items; hands-free interruption settings are unchanged.
+
+### Brand Identity rollout — 2026-09-28
+
+Both environments now serve the reviewed Brand Identity release from PR #39. Fresh backups, source/version and exact asset checks are recorded in
+[production preflight](production-preflight.md). Provider defaults, separate
+staging storage, debug flags, disabled carriers and schedules are preserved.
+No remote migration or paid inference/carrier call was performed. Staging's
+retired saved cascade preset remains stored and now requires an explicit
+supported replacement before it can be applied; active configurations passed
+the compatibility preflight. Physical audio and provider/call acceptance items
+above remain open.
+
+### Baseline audio acceptance — 2026-09-30
+
+The baseline checks below used reviewed application source `d6f3d3f`.
+They exposed the Pipeline closing defect described below; they are not a claim
+that every tested call behaved correctly.
+
+- All 30 Native model/voice combinations (three models, ten voices), 19 GPT-Live
+  voices and ten language-specific HD voices returned nonempty audio after the
+  requested voice was acknowledged. The first matrix had two GPT-Live preview
+  timeouts; each passed its single unchanged-source follow-up. Those failures
+  remain evidence of intermittent preview availability, not a proven root cause
+  or an automatic retry policy.
+- Independent transcription checked the generated samples in their requested
+  languages. A first Sol sample's transcript omitted “Guten”; a second sample
+  included it. Rate-limit and timeout failures from the transcription service
+  were retained separately from successful paced/alternate-model follow-ups.
+  These checks establish speech content and language, not perceived gender,
+  accent quality or equivalence to voices in the ChatGPT application.
+- Local full-application workerd/D1 calls through real Kataleptic completed in
+  English and German for HD, Native 2, Native 2.1, Mini and GPT-Live, with audio,
+  spoken farewells, saved turns and summaries. Independent transcription of
+  delivered audio also contained the farewells. The first Native 2 harness
+  omitted control receipts; its failures were retained and the corrected harness
+  matches the browser client. Initial fixtures had empty canonical hours that
+  conflicted with instructions; those runs establish audio/closure only. Later
+  Native 2 and deployed checks use explicit matching business hours.
+- Fresh local validation passed 2,013 tests in 83 files and both TypeScript
+  projects. Eight actual Chrome/workerd checks cover guided provider settings,
+  saved voice selection, previews, debug controls, six consecutive calls and
+  recovery from a deliberately suspended AudioContext.
+- Fresh staging checks on version `e5d61eba-3c57-4092-8992-6f751844a0ca`
+  passed HD and GPT-Live in both languages, and English Pipeline, including
+  canonical hours, farewell delivery and completed records. German Pipeline
+  prematurely closed after asking whether more help was needed. The initial
+  harness counted record completion as a pass; transcript review disproved
+  that conversational acceptance on both staging and production. Staging Pipeline uses
+  browser speech: the API probe validates transcription/text/closure, not browser
+  synthesis. One English Pipeline final-record fetch hit a connection timeout;
+  its isolated follow-up passed. Synthetic accounts were deleted normally.
+
+All caller inputs and playback acknowledgements in the provider probes were
+synthetic. Private audio and original failures are retained outside Git.
+Restaurant conversations on the smart glasses, acoustic echo cancellation,
+physical audibility, arbitrary BYOK services and SIP/PSTN remain separate
+acceptance items. Hands-free interruption policy is unchanged.
+
+### Pipeline closing correction
+
+A German Pipeline response answered a business-hours question, asked whether
+more help was needed, and appended `END_CALL`. The call closed before the caller
+could reply. The server now ignores that marker when the response contains a
+question mark, keeping the line open for another caller turn. This applies to
+all Pipeline text models and leaves realtime interruption behavior unchanged.
+It is deliberately conservative for quoted/rhetorical questions; see
+[closing policy](../call-closing.md). It is not general semantic verification of
+when a conversation should end.
+
+Three original regressions failed; the corrected call-session/closing suite
+passed all 223 tests, including subsequent normal goodbye and playback
+acknowledgement. PR #40's genuine PR-Agent security/major-issue and local Codex
+reviews passed. The remote harness now explicitly rejects an ending after the
+initial question and requires both caller turns to be saved.
+
+The exact merged correction `debd746` passed final German and English Pipeline
+calls on staging version `20bdd7b2-6fd8-4981-aedb-b69ec1ac81c8`, then reached
+production version `4788a875-29ee-4bc4-8e92-43948c3b4543`. All four merged-source
+CI jobs passed. Final calls through `openfon.ai` passed HD, GPT-Live and Azure
+Pipeline in both languages, with the call remaining open after the question,
+the caller's later goodbye, audio and saved completed records. Pipeline MP3
+output was decoded to pace the simulated playback acknowledgement.
+
+An earlier fixed-candidate English staging attempt failed after transcription
+and before a reply; its original events remain retained and one isolated
+follow-up passed. The underlying provider/network cause is unproven. The
+final merged-source pair and all six domain calls passed without retries.
+This does not promise zero provider failures or replace physical-device tests.
+The initial hotspot DNS cache and precise launch checks are recorded in
+[production preflight](production-preflight.md).

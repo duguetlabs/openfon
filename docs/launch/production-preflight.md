@@ -1,44 +1,182 @@
 # Production preflight
 
-## Current deployment state — verified 2026-09-26
+## Current deployment state — verified 2026-09-30
 
-Cloudflare deployment, binding and D1 migration readbacks establish the following
-state. Production release identity was checked against the deployed build during
-rollout; staging reports its source in `OPENFON_RELEASE_SHA`.
+The browser application is live at **https://openfon.ai** through Cloudflare.
+This launch and production deployment were explicitly authorized. Telephone
+carrier activation remains separate and disabled. Dates use Europe/Vienna.
 
 | Item | Production | Staging |
 | --- | --- | --- |
 | Worker | `openfon` | `openfon-staging` |
-| Source | `7b4f6042d5354a1e9c5634cbd16417a04e0f78a4` | `e3188fe9be665d2caeb8418fd6a518cb25c8a50a` |
-| Version at 100% | `3e9e542a-1646-431e-8dae-99be37b733c8` | `4b04184e-1de2-4eda-940e-17579b3a1c4e` |
-| Deployed | 2026-09-26 | 2026-09-21 |
+| Application source | `debd746557e4037c9e12bcf623783c5da8965f04` | `debd746557e4037c9e12bcf623783c5da8965f04` |
+| Version at 100% | `4788a875-29ee-4bc4-8e92-43948c3b4543` | `20bdd7b2-6fd8-4981-aedb-b69ec1ac81c8` |
 | D1 migrations | 0001–0024 | 0001–0023 |
 | Test-call debug recording | Disabled | Enabled |
-| Realtime default | `kataleptic-realtime-hd` | `llama-3.3-70b` |
-| Transcription default | `gpt-transcribe` | `whisper-large-v3-turbo` |
+| Realtime / transcription defaults | HD / `gpt-transcribe` | HD / `gpt-transcribe` |
+| Pipeline speech | Azure | Browser |
+| Telnyx / Asterisk | Disabled | Disabled |
+| Scheduled cleanup | Every five minutes | Disabled |
+
+### Verification and rollback
+
+- PR #40 fixes a Pipeline response that asked a question and nevertheless
+  requested immediate hangup. Both genuine PR-Agent security/major-issue and
+  independent local Codex reviews cleared the candidate. All PR CI jobs and
+  merged-commit CI `36646025773` passed. Local validation passed 2,016 tests,
+  both TypeScript projects and build. The merged tree equals the reviewed tree.
+- Exact merged source was deployed to staging first. Actual German and English
+  Pipeline calls passed the corrected assertions: the initial answer leaves the
+  call open, both caller turns are saved, and closing follows the goodbye.
+  Earlier baseline/failed probes retain their original attribution in
+  [readiness](readiness.md).
+- Fresh pre-rollout backups of both D1 databases restored locally with integrity
+  `ok` and zero foreign-key violations. Active calls were zero before each
+  deployment. No remote D1 or Durable Object migration was applied. Staging's
+  historical data-only 0024 remains unapplied; saved provider choices were not
+  rewritten.
+- Cloudflare readback confirms source/version and unchanged database bindings,
+  Durable Object namespaces, secret names, provider defaults, debug/carrier
+  flags, schedules and observability. Rollback to the pre-release Worker uses
+  production `6276cdac-3c6d-4b9e-96e5-6cba3cf5d8b1` or staging
+  `88453f1c-9d34-4099-a568-c8100efc94c8` (source `d6f3d3f`). No database
+  restore is needed for this code-only rollback.
+- `openfon.ai` is bound to the production Worker. Authoritative DNS and public
+  resolvers return its Cloudflare addresses. TLS validates for the hostname;
+  HTTP redirects to HTTPS. Seven built HTML/JS/CSS/font/robots/sitemap assets
+  match the deployed bytes. Canonical, social-image and sitemap URLs use
+  `https://openfon.ai`; the GitHub `OPENFON_PUBLIC_URL` variable matches.
+- Health and sign-in return 200; signed-out account requests return 401; both
+  disabled carrier routes return 503. Six real-provider calls through the new
+  hostname passed: HD, GPT-Live and Azure Pipeline in English and German, with
+  configured voices, canonical hours, a later caller goodbye, audio and completed
+  records. Pipeline playback acknowledgements were paced by decoded MP3 duration.
+  Synthetic accounts were deleted through the normal account API.
+- The operator's hotspot resolver initially retained the pre-registration
+  NXDOMAIN result. Domain probes used the independently verified public DNS
+  address while retaining hostname/TLS verification. This establishes public
+  deployment and API/WebSocket acceptance; native browser inspection through
+  that stale resolver remained pending at the time of the launch record.
+
+Private backups, audio, original failures and verification records are retained
+outside Git under `~/.local/share/openfon-audits/2026-09-30-launch/`. These probes
+use synthetic caller audio and software playback acknowledgements. Physical
+smart-glasses/restaurant noise, acoustic echo, perceived voice identity,
+arbitrary BYOK providers and SIP/PSTN acceptance remain separate.
+
+## Historical rollout — 2026-09-28
+
+Both environments now serve the reviewed Brand Identity release from PR #39.
+The user explicitly authorized this staged-then-production deployment. Dates below use Europe/Vienna.
+
+| Item | Production | Staging |
+| --- | --- | --- |
+| Worker | `openfon` | `openfon-staging` |
+| Source | `d6f3d3f7f5b128909f7d29d61f2926efb90e2d7c` | `d6f3d3f7f5b128909f7d29d61f2926efb90e2d7c` |
+| Version at 100% | `6276cdac-3c6d-4b9e-96e5-6cba3cf5d8b1` | `88453f1c-9d34-4099-a568-c8100efc94c8` |
+| Deployed | 2026-09-28 | 2026-09-28 |
+| D1 migrations | 0001–0024 | 0001–0023 |
+| Test-call debug recording | Disabled | Enabled |
+| Realtime default | `kataleptic-realtime-hd` | `kataleptic-realtime-hd` |
+| Transcription default | `gpt-transcribe` | `gpt-transcribe` |
 | Pipeline speech default | Azure | Browser |
 | Telnyx / Asterisk | Both disabled | Both disabled |
+| Scheduled cleanup | Every five minutes | Disabled |
 
-Staging source is an ancestor of production source: production includes every
-staged code change plus model-retirement compatibility and GPT-Live. Component
-speech BYOK (0022) and independent call summaries (0023) are deployed in both
-environments. Debug recording is enabled only in staging; its implementation
-is present in production. The databases and Durable Objects remain separate.
-Staging retains old Kataleptic model defaults and lacks migration 0024; refresh
-and validate it before using it to approve another release.
+### Release verification and rollback
 
-The GPT-Live release went directly to production after explicit authorization,
-reviews, automated checks and backups; it was **not deployed to staging first**.
-No remote migration was needed during that rollout because production already
-had 0024. Local workerd/D1 probes through real production Kataleptic verified
-greeting, answers, closure, transcripts and summary. Production health and
-release assets were checked separately. These are not staging, physical-audio,
-real-browser GPT-Live or telephone acceptance. See [readiness](readiness.md).
+- Exact merged-source CI `36364626590` passed. PR #39's reviewed tree matches
+  the merged tree; genuine PR-Agent security/major-issue clearance and local
+  Codex clearance passed. Final local validation includes 2013 unit tests,
+  both TypeScript projects, build, 169 browser tests, synthetic runtime checks,
+  migration rehearsal, scoring and realtime checks.
+- Fresh staging and production D1 exports were captured with restricted logs,
+  restored locally, and passed integrity `ok` with zero foreign-key violations.
+  Active calls were zero immediately before each deployed environment's update.
+- No remote migration or configuration cleanup was run. This release needs no
+  new schema or Durable Object migration. Staging's pending 0024 is data-only
+  and was deliberately not applied: its old rewrite would clear valid GPT-Live
+  selections as well as retired values.
+- Fresh aggregate checks found no incompatible active/default configuration and
+  no production candidates. Staging retains one retired Kataleptic cascade
+  preset and its matching legacy profile. Applying that saved preset now gives
+  the intended explicit compatibility error; the stored rows were preserved.
+  The prior release's silent runtime-retirement fallback is no longer current.
+- Staging and production: root, sign-in and health returned 200; signed-out account
+  returned 401; disabled Telnyx and Asterisk ingress returned 503. Exact built
+  HTML, JS, CSS and both brand fonts matched the public response bytes.
+- Cloudflare readback confirms the release SHA and version, unchanged D1/DO
+  bindings and secret names, provider defaults, debug/carrier flags, schedules,
+  compatibility settings and observability. No provider or carrier call was made.
+- Native in-app browser inspection passed on staging: the signed-in reception
+  desk renders the approved identity, inset selector, brief, voices, messages,
+  rehearsal and staging-only debug disclosure. Production welcome and sign-in
+  also passed native visual inspection; both environments had no browser console
+  errors. No credentials, account writes or calls were used.
+- Rollback targets immediately before this rollout: production
+  `0cafc4f0-5b51-42b3-82a2-f9f9e5e8dc0c`, staging
+  `adc67113-4005-416f-9413-af81a0d10e63`, both source `804e6f4a522808c71c9dfa7ec1035f9e32e2e001`.
+  There are no database changes to reverse for a Worker rollback.
 
-For the next release, record the exact staging candidate and acceptance result,
-then production version, migration changes and rollback reference. If staging
-is to be skipped, identify that exception explicitly in the production approval
-request; ordinary rollout authorization does not document an unstated exception.
+Restricted backups and credential-free rollout/configuration verification
+records are retained outside Git in
+`~/.local/share/openfon-releases/2026-09-28-d6f3d3f/`.
+Deployment verification does not establish new live-provider, physical-audio,
+interruption or PSTN acceptance; those remain in [readiness](readiness.md).
+
+## Historical rollout — 2026-09-27
+
+At that rollout, both environments served reviewed source `804e6f4a522808c71c9dfa7ec1035f9e32e2e001`
+(UI redesign #37 and verified GPT-Live voices #38). The exact candidate was
+validated on staging before production deployment. Dates below use Europe/Vienna.
+
+| Item | Production | Staging |
+| --- | --- | --- |
+| Worker | `openfon` | `openfon-staging` |
+| Source | `804e6f4a522808c71c9dfa7ec1035f9e32e2e001` | `804e6f4a522808c71c9dfa7ec1035f9e32e2e001` |
+| Version at 100% | `0cafc4f0-5b51-42b3-82a2-f9f9e5e8dc0c` | `adc67113-4005-416f-9413-af81a0d10e63` |
+| Deployed | 2026-09-27 | 2026-09-27 |
+| D1 migrations | 0001–0024 | 0001–0023 |
+| Test-call debug recording | Disabled | Enabled |
+| Realtime default | `kataleptic-realtime-hd` | `kataleptic-realtime-hd` |
+| Transcription default | `gpt-transcribe` | `gpt-transcribe` |
+| Pipeline speech default | Azure | Browser |
+| Telnyx / Asterisk | Both disabled | Both disabled |
+| Scheduled cleanup | Every five minutes | Disabled |
+
+### Release verification and rollback
+
+- Exact-source main CI `36276229997` passed; #38's final PR CI
+  `36275931429` and both genuine reviews passed. Local final validation:
+  1939 tests, both TypeScript projects and build; two targeted Chrome/workerd
+  picker tests passed. #37 also passed its review and CI gates before merge.
+- Fresh exports of both databases restored locally with integrity `ok` and zero
+  foreign-key violations. No remote migrations or data-cleanup SQL were run.
+  Staging's pending 0024 changes stored model selections only; it adds no schema
+  needed by this release. Runtime model-retirement compatibility remains active.
+- Staging then production: root/sign-in/health returned 200; signed-out account
+  returned 401; POST to the disabled Telnyx webhook returned 503. An initial
+  GET probe used the wrong method and returned 404; the POST check passed.
+- Public JS and CSS bytes matched the reviewed local build in both environments.
+  Cloudflare readback confirmed source/version, unchanged D1 bindings, Durable
+  Object namespaces, secret names, debug flags and disabled carriers. Production
+  retained its cleanup schedule; staging retains no schedule.
+- Native Chrome inspection confirmed the production landing page renders the
+  cleaner layout and Dr. Gruber example. Staging landing/sign-in rendered; exact
+  assets were verified after deployment. These are deployment checks, not new
+  authenticated voice, microphone, interruption or PSTN acceptance.
+- Prior production version: `3e9e542a-1646-431e-8dae-99be37b733c8`.
+  Prior staging version: `4b04184e-1de2-4eda-940e-17579b3a1c4e`.
+  No database changes need reversal for a Worker rollback. Restore the prior
+  staging defaults too if rolling that environment back to its older code.
+
+Restricted backups and credential-free deployment/configuration verification
+records are retained outside Git in
+`~/.local/share/openfon-releases/2026-09-27-804e6f4/`.
+The environments still have separate databases and Durable Objects. Component
+BYOK and independent summaries are in both; debug recording remains staging-only.
+The earlier GPT-Live rollout skipped staging, but this release did not.
+Outstanding provider/physical-call acceptance stays in [readiness](readiness.md).
 
 ## Historical preflight evidence — 2026-09-12
 
