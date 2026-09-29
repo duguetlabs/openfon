@@ -354,6 +354,34 @@ it('pipeline uses the saved speech key, announces server audio, and cancels spee
 
 describe('pipeline closing guard', () => {
   it.each([
+    'Die Bäckerei schließt heute um 17:00 Uhr. Kann ich Ihnen sonst noch helfen? Auf Wiederhören. <END_CALL>',
+    'We close at five. Would you like help with anything else? <END_CALL>',
+    'Anything else？ <END_CALL>',
+  ])('keeps a question open despite an end marker: %s', async first => {
+    vi.useFakeTimers();
+    const { session } = newSession('pipeline');
+    let requests = 0;
+    globalThis.fetch = vi.fn(async () => ({ ok: true, status: 200,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      body: jsonStream({ choices: [{ message: { content: ++requests === 1 ? first : 'Goodbye. <END_CALL>' } }] }),
+    })) as unknown as typeof fetch;
+    await session.fetch(upgradeRequest());
+    const caller = serverSockets[0]; caller.receive({ type: 'start' }); await flush(100);
+    caller.receive({ type: 'text', text: 'What time do you close?' }); await flush(150);
+    expect(caller.countOf('ending')).toBe(0);
+    expect(caller.countOf('ended')).toBe(0);
+    expect(caller.closed).toBeNull();
+    expect(requests).toBe(1);
+    expect(caller.messages().find(m => m.type === 'agent_text')?.text).not.toContain('END_CALL');
+    caller.receive({ type: 'text', text: 'That is all. Goodbye.' }); await flush(150);
+    expect(caller.countOf('ending')).toBe(1);
+    expect(requests).toBe(2);
+    caller.receive({ type: 'playback_complete', id: caller.messages().find(m => m.type === 'ending')!.id });
+    await flush(100);
+    expect(caller.countOf('ended')).toBe(1);
+  });
+
+  it.each([
     { first: 'Your message is saved. <END_CALL>', second: 'Hasta luego.', expected: 'Your message is saved. Hasta luego.', calls: 2 },
     { first: 'Auf Wiederhören. <END_CALL>', second: '', expected: 'Auf Wiederhören.', calls: 1 },
     { first: '<END_CALL>', second: '', expected: undefined, calls: 2 },
