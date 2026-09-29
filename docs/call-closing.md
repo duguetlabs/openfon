@@ -7,6 +7,13 @@ the last caller message, with tools disabled. An empty, failed or unrecognized r
 not retried. Pipeline calls follow the same policy and preserve any useful reply
 before appending the farewell. The assistant's business prompt stays unchanged.
 
+Pipeline ignores a model's `END_CALL` marker when its reply contains a question
+mark (`?` or `？`). A reply such as “Can I help with anything else?” must leave
+the line open for the caller, even if the model also adds a sign-off. This
+conservative rule also keeps quoted or rhetorical questions open; it does not
+classify the caller's intent or prevent manual hangup. A later reply without a
+question can still request normal closing.
+
 Once generation finishes, the server drains its paced audio queue and sends an
 `ending` marker with a fresh ID. The browser returns matching `playback_complete`
 after its AudioBuffer nodes, HTMLAudio or local speech utterances finish; errors

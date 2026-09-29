@@ -1983,8 +1983,12 @@ export class CallSession implements DurableObject {
     const llm = resolveLlm(this.env, this.settings);
     const raw = (await chatComplete(llm, this.history, { maxTokens: 200, temperature: 0.6 })).trim();
     if (this.ended) return;
-    const wantsEnd = /<?END_CALL>?/i.test(raw);
     let reply = raw.replace(/\s*<?END_CALL>?\s*/gi, ' ').trim();
+    // A question still invites a caller reply. Some text models append their
+    // end marker to "Can I help with anything else?"; keep the line open even
+    // if that same response also contains a sign-off. This is conservative for
+    // quoted/rhetorical questions too; the caller can still end the call.
+    const wantsEnd = /<?END_CALL>?/i.test(raw) && !/[?？]/u.test(reply);
     if (wantsEnd) {
       this.startClosing('pipeline');
       this.generationDeadline();
