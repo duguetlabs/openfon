@@ -9,10 +9,11 @@ const options = (ids: readonly string[]): Option[] => ids.map(id => ({ id, label
 const directRealtime = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse', 'marin', 'cedar'];
 const legacySpeech = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
 const modernSpeech = [...legacySpeech, 'ash', 'ballad', 'coral', 'sage', 'verse', 'marin', 'cedar'];
-type VoiceProvider = Pick<Provider, 'effective_realtime_provider' | 'effective_realtime_model' | 'effective_tts_provider' | 'tts_model'>;
+type VoiceProvider = Pick<Provider, 'managed_browser_voice' | 'effective_realtime_provider' | 'effective_realtime_model' | 'effective_tts_provider' | 'tts_model'>;
 
 /** Suggestions are scoped to the transport and model; custom providers keep their own namespaces. */
 export function voiceChoicesFor(assistant: Pick<AssistantFields, 'engine' | 'realtime_model'>, provider: VoiceProvider, catalog: ProviderCatalog | null): Option[] {
+  if (provider.managed_browser_voice) return options(GPT_LIVE_VOICES);
   if (assistant.engine === 'realtime') {
     const model = assistant.realtime_model || provider.effective_realtime_model;
     if (provider.effective_realtime_provider === 'openai') return options(directRealtime);

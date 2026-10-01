@@ -266,3 +266,20 @@ final merged-source pair and all six domain calls passed without retries.
 This does not promise zero provider failures or replace physical-device tests.
 The initial hotspot DNS cache and precise launch checks are recorded in
 [production preflight](production-preflight.md).
+
+## LiveKit migration candidate (2026-10-02, not deployed)
+
+The isolated `codex/released-web-livekit` candidate is based on the released Web source `debd746` via its docs-only successor `0005732`. It preserves the released layout, brand assets, auth and business interfaces. See [the worker setup](../../voice-agent/README.md).
+
+Acceptance still required on the final candidate:
+
+- Actual SFU + Node agent + local workerd/D1 call: incoming audio, audible answer, caller and assistant partial/final UI updates and matching persisted rows.
+- Genuine gateway echo for the selected voice and explicit `gpt-5.4-mini` delegation, with no alternate speech path; voice-sample/call parity.
+- Polite goodbye and playout completion; cancellation during connect, agent loss, callback outage, account deletion and room cleanup under actual runtimes.
+- Repeated calls, reconnect, noisy/background conversation, interruption and physical playback quality. Synthetic active-speaker tests do not establish acoustic quality.
+- Existing summary/message extraction after final transcript drain; no partial-only action evidence.
+- Current-commit review/CI and authorized exact-candidate staging before any production rollout or remote migration.
+
+Historical prototype playback (749 chunks/67.69 s) belongs to the separate prototype and does not close these candidate gates. No new real-provider audio acceptance or LiveKit debug audio recording is claimed.
+
+Candidate local checks: root 2,037 tests/86 files pass; Worker/browser typechecks and both production builds pass; separate agent 7 tests pass. Native local LiveKit room/dispatch, signed microphone publication and synthetic audio receipt passed (20 frames/4,800 samples), with container removal and process exit verified. All 25 migrations applied to isolated local D1. Native in-app landing/sign-in preview verified at loopback; no authenticated browser call or Kataleptic call was run. The released CSS artifact remains `index-BjYU9dVy.css`.

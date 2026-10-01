@@ -1,3 +1,4 @@
+import {updateTranscript,type TranscriptRevision} from '../transcript-state';
 import { useEffect, useRef, useState } from "react";
 import { RehearsalController } from "../cleanroom-runtime";
 import type { Assistant } from "../cleanroom-runtime";
@@ -24,7 +25,7 @@ export function Rehearsal({
   const [detail, setDetail] = useState("");
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [hasMic, setHasMic] = useState(true);
-  const [turns, setTurns] = useState<{ role: string; text: string }[]>([]);
+  const [turns, setTurns] = useState<({ role: string; text: string } & TranscriptRevision)[]>([]);
   const [text, setText] = useState("");
   const [speaker, setSpeaker] = useState("none");
   const [level, setLevel] = useState(0);
@@ -53,6 +54,7 @@ export function Rehearsal({
       if (event.type === 'debug') setDebugRecording(event.recording);
       if (event.type === "status") {
         setStatus(event.status);
+        if(event.status!=="live"){setSpeaker("none");setLevel(0);}
         if (event.status === "error")
           setDetail(event.detail || "Connection failed.");
         if (event.status === "live") setHasMic(controller.hasMic);
@@ -61,13 +63,10 @@ export function Rehearsal({
       if (event.type === "speaking") setSpeaker(event.who);
       if (event.type === "level") setLevel(event.value);
       if (event.type === "transcript" || event.type === "agent_text")
-        setTurns((v) => [
-          ...v,
-          {
+        setTurns((v) => updateTranscript(v, {
             role: event.type === "transcript" ? "You" : assistant.name,
-            text: event.text,
-          },
-        ]);
+            text: event.text,eventId:event.eventId,revision:event.revision,final:event.final,
+          }));
     }, onEnded);
     call.current = controller;
     void controller.start(assistant.id, { dirty, slug }).catch((error) => {

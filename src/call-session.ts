@@ -1,3 +1,5 @@
+import {parseMediaTranscript,persistMediaTranscript} from './livekit-transcripts';
+import { livekitEnabled, livekitConfig, secureEqual, createLivekitRoom, deleteLivekitRoom, type LivekitSession } from './livekit';
 import { loadSummaryLlm } from './summary-settings';
 import { RealtimeClosingGuard } from './call-closing';
 import { normalizeCallerPhone } from './contact';
@@ -212,6 +214,7 @@ function turnDetectionFor(model: string): TurnDetection {
 }
 
 export class CallSession implements DurableObject {
+  private livekit: LivekitSession | null = null;
   private debug: CallDebug | null = null;
   private ws: WebSocket | null = null;
   private callId = '';
@@ -247,6 +250,7 @@ export class CallSession implements DurableObject {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname.startsWith('/livekit/')) return this.state.blockConcurrencyWhile(()=>this.livekitRequest(request));
     if (url.pathname.startsWith('/debug')) return debugResponse(this.state, request, this.debug);
     const callId = url.searchParams.get('call') ?? '';
     if (request.headers.get('Upgrade') !== 'websocket' || !callId) {
@@ -425,7 +429,7 @@ export class CallSession implements DurableObject {
     const budget = await this.env.DB.prepare('SELECT COALESCE(SUM(length(CAST(text AS BLOB))), 0) AS bytes FROM call_turns WHERE call_id = ?')
       .bind(this.callId).first<{ bytes: number }>();
     this.persistedTranscriptBytes = budget?.bytes ?? 0;
-    if (!this.debug && this.env.TEST_CALL_DEBUG === 'true' && (call as CallRow & { environment?: string }).environment === 'test' && call.channel === 'web') {
+    if (!this.debug && !livekitEnabled(this.env) && this.env.TEST_CALL_DEBUG === 'true' && (call as CallRow & { environment?: string }).environment === 'test' && call.channel === 'web') {
       this.debug = await CallDebug.start(this.state, this.callId);
       this.debug?.event('start', { release: this.env.OPENFON_RELEASE_SHA || 'development' });
     }
@@ -443,6 +447,8 @@ export class CallSession implements DurableObject {
     if (this.ended) return;
     this.lastActivity = Date.now(); // feeds the idle watchdog
     if (typeof ev.data !== 'string') {
+      if(this.livekit) return; // LiveKit owns audio; never open a second speech path.
+
       const audio = await toArrayBuffer(ev.data);
       if (this.closingTimeline || this.nativeGreeting) {
         this.debug?.audio('caller', audio, this.mode === 'realtime' ? 'pcm_s16le_24000' : this.pendingContentType, { forwarded: false });
@@ -496,6 +502,10 @@ export class CallSession implements DurableObject {
         await this.handleStart();
         break;
       case 'text':
+        if(this.livekit) {
+          if(typeof msg.text==='string'&&msg.text.trim())await this.queueLivekitText(msg.text.trim());
+          break;
+        }
         if (this.closingTimeline) break;
         if (msg.text?.trim()) {
           if (this.mode === 'realtime') this.sendCallerText(msg.text.trim());
@@ -515,6 +525,79 @@ export class CallSession implements DurableObject {
       default:
         if (msg.contentType) this.pendingContentType = msg.contentType;
     }
+  }
+
+  private async queueLivekitText(text:string):Promise<void> {
+    if(transcriptBytes(text)>MAX_TRANSCRIPT_FIELD_BYTES)throw new Error('Message is too long');
+    await this.state.blockConcurrencyWhile(async()=>{
+      const media=await this.state.storage.get<LivekitSession>('livekit');
+      if(!media||media.closing||media.finished||this.ended)return;
+      if((media.commands?.length??0)>=16 || (media.commands??[]).reduce((bytes,command)=>bytes+transcriptBytes(command.text),transcriptBytes(text))>32768)throw new Error('Too many pending messages');
+      const command={id:'typed_'+crypto.randomUUID(),text};
+      media.commands=[...(media.commands??[]),command];
+      await this.state.storage.put('livekit',media);
+    });
+  }
+
+  private async startLivekit(): Promise<void> {
+    livekitConfig(this.env);
+    const selected=this.settings!.engine==='realtime'?this.settings!.realtime_voice:this.settings!.voice;
+    const voice=gptLiveVoice(selected||'marin');
+    this.lang=this.settings!.language in SUPPORTED_LANGUAGES?this.settings!.language:'en';
+    const instructions=buildSystemPrompt(this.biz!,this.settings!,new Date(),this.knowledge);
+    const media:LivekitSession={callId:this.callId,room:'openfon-'+this.callId,caller:'caller-'+this.callId,callback:crypto.randomUUID()+crypto.randomUUID(),instructions,greeting:defaultGreeting(this.biz!,this.settings!),voice,language:this.lang};
+    // Persist before dispatch: the worker must have an admitted context before doing inference.
+    this.livekit=media;
+    await this.state.storage.put('livekit',media);
+    await this.armWatchdog();
+    if(this.ended)return;
+    const grant=await createLivekitRoom(this.env,media);
+    if(this.ended){await deleteLivekitRoom(this.env,media.room);return;}
+    this.mode='realtime';
+    this.history=[{role:'system',content:instructions}];
+    this.sendReady({mode:'livekit',ttsMode:'server',...grant});
+  }
+
+  private async livekitRequest(request:Request):Promise<Response> {
+    if(!livekitEnabled(this.env)||!this.env.LIVEKIT_AGENT_SERVICE_TOKEN||!secureEqual(request.headers.get('Authorization')||'','Bearer '+this.env.LIVEKIT_AGENT_SERVICE_TOKEN))return new Response(null,{status:404});
+    const url=new URL(request.url),id=url.searchParams.get('call');
+    const media=await this.state.storage.get<LivekitSession>('livekit');
+    if(!media||id!==media.callId)return new Response(null,{status:404});
+    this.callId=media.callId;this.livekit=media;
+    if(url.pathname!=='/livekit/context'&&url.pathname!=='/livekit/events')return new Response(null,{status:404});
+    let body:Record<string,unknown>;
+    try { body=await request.json() as Record<string,unknown>; if(!body||Array.isArray(body)||typeof body!=='object')throw new Error(); } catch {return new Response(null,{status:400});}
+    if(body.room!==media.room)return new Response(null,{status:403});
+    const active=await this.env.DB.prepare("SELECT 1 FROM calls WHERE id=? AND status='active' AND channel='web' AND connected_at IS NOT NULL").bind(media.callId).first();
+    if(url.pathname==='/livekit/context') {
+      if(!active||media.closing||this.ended)return new Response(null,{status:410});
+      if(typeof body.jobId!=='string'||body.jobId.length>128||!body.jobId)return new Response(null,{status:400});
+      if(media.jobId&&media.jobId!==body.jobId)return new Response(null,{status:409});
+      media.jobId=body.jobId;await this.state.storage.put('livekit',media);
+      return Response.json({callId:media.callId,room:media.room,caller:media.caller,callback:media.callback,instructions:media.instructions,greeting:media.greeting,voice:media.voice,language:media.language,commands:media.commands??[]});
+    }
+    if(body.jobId!==media.jobId||!secureEqual(typeof body.callback==='string'?body.callback:'',media.callback))return new Response(null,{status:403});
+    if(body.type==='command_ack'){
+      if(!active||media.closing||media.finished)return new Response(null,{status:410});
+      if(typeof body.commandId!=='string')return new Response(null,{status:400});
+      media.commands=(media.commands??[]).filter(command=>command.id!==body.commandId);
+      await this.state.storage.put('livekit',media);return Response.json({ok:true});
+    }
+    if(body.type==='finished') {
+      if(media.finished)return Response.json({ok:true});
+      media.finished=true;media.failed=body.failed===true;await this.state.storage.put('livekit',media);
+      if(body.failed===true)this.failure='Call failed: the conversation service disconnected.';
+      this.state.waitUntil(this.finalize());
+      return Response.json({ok:true});
+    }
+    if(!active||media.finished||this.finalized)return new Response(null,{status:410});
+    try {
+      const transcript=parseMediaTranscript(body);
+      const changed=await persistMediaTranscript(this.env,media.callId,transcript);
+      this.lastActivity=Date.now();
+      if(changed)this.send({type:transcript.role==='caller'?'transcript':'agent_text',text:transcript.text,eventId:transcript.eventId,revision:transcript.revision,final:transcript.final});
+      return Response.json({ok:true});
+    } catch {return new Response(null,{status:409});}
   }
 
   private pendingContentType = 'audio/webm';
@@ -560,6 +643,10 @@ export class CallSession implements DurableObject {
     await this.state.storage.put('startedAt', Date.now());
     await this.loadCall();
     if (this.ended) return; // hung up while we were loading
+    if(livekitEnabled(this.env) && !this.requiresCarrierAudio) {
+      await this.startLivekit();
+      return;
+    }
     // Resolve the LLM config before saying hello: a rejected AI-provider setup
     // must fail at pickup with a message the owner can act on, not stall the
     // caller mid-conversation (realtime calls would only notice at summary time).
@@ -2291,7 +2378,7 @@ export class CallSession implements DurableObject {
     const { results } = await this.env.DB.prepare(`SELECT role, text FROM (
       SELECT id, role, text, length(CAST(text AS BLOB)) AS bytes,
         SUM(length(CAST(text AS BLOB))) OVER (ORDER BY id) AS total_bytes
-      FROM call_turns WHERE call_id = ?
+      FROM call_turns WHERE call_id = ? ${this.livekit ? 'AND source_final=1' : ''}
       ORDER BY id LIMIT ${CallSession.MAX_TURNS}
     ) WHERE bytes <= ${MAX_TRANSCRIPT_FIELD_BYTES} AND total_bytes <= ${MAX_CALL_TRANSCRIPT_BYTES} ORDER BY id`)
       .bind(this.callId)
@@ -2404,6 +2491,20 @@ export class CallSession implements DurableObject {
 
   private async runFinalize(): Promise<void> {
     this.ended = true;
+    const media=this.livekit || await this.state.storage.get<LivekitSession>('livekit');
+    if(media) {
+      media.closing=true;
+      await this.state.storage.transaction(async tx=>{const latest=await tx.get<LivekitSession>('livekit');if(latest)await tx.put('livekit',{...latest,closing:true});});
+      // Retry an uncertain room deletion through the existing watchdog. Do not mark clean completion.
+      await deleteLivekitRoom(this.env,media.room);
+      const until=Date.now()+20000;
+      while(Date.now()<until && !(await this.state.storage.get<LivekitSession>('livekit'))?.finished)
+        await new Promise(resolve=>setTimeout(resolve,100));
+      const finished=await this.state.storage.get<LivekitSession>('livekit');
+      if(!finished?.finished||finished.failed)this.failure='Call failed: the conversation could not be saved completely.';
+      // Callback transactions are authoritative, including final buffers flushed on disconnect.
+      this.history=[];
+    }
     if (this.closingTimeline && !this.closingLogged) {
       this.closingLogged = true;
       this.closingTimeline.endedAt = Date.now();

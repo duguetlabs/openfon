@@ -1,3 +1,5 @@
+import {readLivekitBody} from './livekit-body';
+import { livekitEnabled, secureEqual } from './livekit';
 import { checkedPresetWriteSql, checkedPresetWrite, checkedPresetSourceSql, checkedPresetSource } from './preset-write-snapshot';
 import { CHECKED_ASSISTANT_SNAPSHOT_SQL, checkedAssistantSnapshot } from './assistant-write-snapshot';
 import { assertPresetWriteBudget, PRESET_LIST_COLUMNS } from './preset-budgets';
@@ -748,7 +750,7 @@ app.get('/api/me/business/:id/calls', async (c) => {
   return c.json(results);
 });
 
-app.get('/api/me/debug-config', c => c.json({ testCalls: c.env.TEST_CALL_DEBUG === 'true', retentionDays: 7 }));
+app.get('/api/me/debug-config', c => c.json({ testCalls: c.env.TEST_CALL_DEBUG === 'true' && !livekitEnabled(c.env), retentionDays: 7 }));
 for (const path of ['/api/me/calls/:callId/debug', '/api/me/calls/:callId/debug/download']) {
   app.on(['GET', 'DELETE'], path, async c => {
     const owned = await c.env.DB.prepare(`SELECT calls.id FROM calls JOIN businesses ON businesses.id=calls.business_id
@@ -1417,6 +1419,17 @@ app.get('/ws/call/:callId', async (c) => {
   }
   if (res.status === 426) await releaseSlot();
   return res;
+});
+
+// This control surface uses a distinct operator service credential, never user cookies.
+app.post('/api/internal/livekit/calls/:callId/:operation', async c => {
+  if (!livekitEnabled(c.env) || !c.env.LIVEKIT_AGENT_SERVICE_TOKEN || !secureEqual(c.req.header('Authorization') || '', 'Bearer '+(c.env.LIVEKIT_AGENT_SERVICE_TOKEN || ''))) return c.json({error:'Not found'},404);
+  const callId=c.req.param('callId'),operation=c.req.param('operation');
+  if(!/^[a-zA-Z0-9_-]{1,100}$/.test(callId)||!['context','events'].includes(operation))return c.json({error:'Not found'},404);
+  let raw:string;
+  try {raw=await readLivekitBody(c.req.raw);}catch{return c.json({error:'Invalid request'},400);}
+  const stub=c.env.CALL_SESSION.get(c.env.CALL_SESSION.idFromName(callId));
+  return stub.fetch(new Request('https://session/livekit/'+operation+'?call='+encodeURIComponent(callId),{method:'POST',headers:{'Content-Type':'application/json','Authorization':c.req.header('Authorization')!},body:raw}));
 });
 
 app.get('/api/health', (c) => c.json({ ok: true, service: 'openfon' }));

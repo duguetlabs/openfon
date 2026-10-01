@@ -56,6 +56,7 @@ export interface CallFilters {
 export interface Option { id: string; label: string }
 export interface TextPreset extends Option { baseUrl: string; model: string }
 export interface Provider {
+  managed_browser_voice?:boolean;
   baseUrl: string; model: string; usesInstanceDefault: boolean; apiKeyConfigured: boolean; workspaceApiKeyConfigured: boolean;
   presets: TextPreset[]; instance_text_preset: string; instance_text_model: string;
   realtime_provider: 'instance' | 'kataleptic' | 'openai' | 'custom'; realtime_base_url: string; realtime_api_key_configured: boolean;
