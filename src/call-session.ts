@@ -545,7 +545,7 @@ export class CallSession implements DurableObject {
     const voice=gptLiveVoice(selected||'marin');
     this.lang=this.settings!.language in SUPPORTED_LANGUAGES?this.settings!.language:'en';
     const instructions=buildSystemPrompt(this.biz!,this.settings!,new Date(),this.knowledge);
-    const media:LivekitSession={callId:this.callId,room:'openfon-'+this.callId,caller:'caller-'+this.callId,callback:crypto.randomUUID()+crypto.randomUUID(),instructions,greeting:defaultGreeting(this.biz!,this.settings!),voice,language:this.lang};
+    const media:LivekitSession={callId:this.callId,room:'openfon-'+this.callId,caller:'caller-'+this.callId,callback:crypto.randomUUID()+crypto.randomUUID(),instructions,greeting:defaultGreeting(this.biz!,this.settings!),voice,language:this.lang,startupDeadline:Date.now()+CallSession.START_CEILING_MS};
     // Persist before dispatch: the worker must have an admitted context before doing inference.
     this.livekit=media;
     await this.state.storage.put('livekit',media);
@@ -570,13 +570,18 @@ export class CallSession implements DurableObject {
     if(body.room!==media.room)return new Response(null,{status:403});
     const active=await this.env.DB.prepare("SELECT 1 FROM calls WHERE id=? AND status='active' AND channel='web' AND connected_at IS NOT NULL").bind(media.callId).first();
     if(url.pathname==='/livekit/context') {
-      if(!active||media.closing||this.ended)return new Response(null,{status:410});
+      if(!active||media.closing||this.ended||(!media.ready&&media.startupDeadline!==undefined&&Date.now()>=media.startupDeadline))return new Response(null,{status:410});
       if(typeof body.jobId!=='string'||body.jobId.length>128||!body.jobId)return new Response(null,{status:400});
       if(media.jobId&&media.jobId!==body.jobId)return new Response(null,{status:409});
       media.jobId=body.jobId;await this.state.storage.put('livekit',media);
       return Response.json({callId:media.callId,room:media.room,caller:media.caller,callback:media.callback,instructions:media.instructions,greeting:media.greeting,voice:media.voice,language:media.language,commands:media.commands??[]});
     }
     if(body.jobId!==media.jobId||!secureEqual(typeof body.callback==='string'?body.callback:'',media.callback))return new Response(null,{status:403});
+    if(body.type==='ready') {
+      if(!active||media.closing||media.finished||this.ended||(!media.ready&&media.startupDeadline!==undefined&&Date.now()>=media.startupDeadline))return new Response(null,{status:410});
+      media.ready=true;await this.state.storage.put('livekit',media);
+      return Response.json({ok:true});
+    }
     if(body.type==='command_ack'){
       if(!active||media.closing||media.finished)return new Response(null,{status:410});
       if(typeof body.commandId!=='string')return new Response(null,{status:400});
@@ -2226,6 +2231,13 @@ export class CallSession implements DurableObject {
     if (!callId) return; // nothing to reconcile
     this.callId = callId;
     const now = Date.now();
+    const media = await this.state.storage.get<LivekitSession>('livekit');
+    const mediaStartup = media && !media.ready ? media.startupDeadline : undefined;
+    if(mediaStartup !== undefined && now >= mediaStartup) {
+      this.failure ??= 'Call failed: the conversation service did not finish connecting. Please try again.';
+      this.send({type:'error',message:this.failure});
+      return this.finalizeFromAlarm(now);
+    }
 
     // Checked before the idle logic and never refreshed by inbound traffic:
     // pings keep an established call alive, but must not extend the grace
@@ -2279,7 +2291,7 @@ export class CallSession implements DurableObject {
     }
     await this.commit(
       this.state.storage.put('lastActivity', activity),
-      this.state.storage.setAlarm(now + CallSession.WATCHDOG_TICK_MS)
+      this.state.storage.setAlarm(Math.min(now + CallSession.WATCHDOG_TICK_MS, mediaStartup ?? Infinity))
     );
   }
 
@@ -2508,7 +2520,7 @@ export class CallSession implements DurableObject {
         await new Promise(resolve=>setTimeout(resolve,100));
       const finished=await this.state.storage.get<LivekitSession>('livekit');
       if(!finished?.finished||finished.failed) {
-        this.failure='Call failed: the conversation could not be saved completely.';
+        this.failure??='Call failed: the conversation could not be saved completely.';
         await this.rememberEnding(); // Persist a later failure without changing the end time.
       }
       // Callback transactions are authoritative, including final buffers flushed on disconnect.

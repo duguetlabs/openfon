@@ -119,3 +119,35 @@ it('persists a drain failure discovered after the frozen ending',async()=>{
  expect(put.mock.calls.some(([key,value]:any[])=>key==='ending'&&value.failure?.includes('could not be saved completely'))).toBe(true);
  expect(db.database.prepare('SELECT status FROM calls').get()).toEqual({status:'failed'});
 });
+
+it('bounds agent startup independently of caller pings and survives object reconstruction',async()=>{
+ vi.useFakeTimers();const now=Date.now();
+ data.set('callId','call');data.set('lastActivity',now);data.set('hardDeadline',now+1800000);
+ data.set('livekit',{...data.get('livekit'),startupDeadline:now+90000});
+ const alarm=vi.spyOn((session as any).state.storage,'setAlarm');
+ vi.setSystemTime(now+60000);data.set('lastActivity',Date.now());await session.alarm();
+ expect(alarm).toHaveBeenLastCalledWith(now+90000);
+ vi.setSystemTime(now+90000);data.set('lastActivity',Date.now());
+ vi.stubGlobal('fetch',vi.fn(async()=>{data.set('livekit',{...data.get('livekit'),finished:true});return Response.json({});}));
+ await session.alarm();
+ expect(db.database.prepare('SELECT status,summary FROM calls').get()).toEqual({status:'failed',summary:expect.stringContaining('did not finish connecting')});
+});
+it('only the admitted worker can acknowledge readiness before the startup deadline',async()=>{
+ vi.useFakeTimers();const now=Date.now();data.set('callId','call');data.set('lastActivity',now);
+ data.set('livekit',{...data.get('livekit'),startupDeadline:now+90000});
+ await request('context');
+ expect((await request('events',{type:'ready',callback:'wrong'})).status).toBe(403);
+ expect(data.get('livekit').ready).toBeUndefined();
+ expect((await request('events',{type:'ready',callback:'scoped-capability'})).status).toBe(200);
+ vi.setSystemTime(now+90001);data.set('lastActivity',Date.now());await session.alarm();
+ expect(db.database.prepare('SELECT status FROM calls').get()).toEqual({status:'active'});
+ expect((await request('context')).status).toBe(200);
+});
+it('rejects delayed startup context and readiness without reviving the call',async()=>{
+ vi.useFakeTimers();const now=Date.now();
+ data.set('livekit',{...data.get('livekit'),startupDeadline:now+90000});await request('context');
+ vi.setSystemTime(now+90000);
+ expect((await request('context')).status).toBe(410);
+ expect((await request('events',{type:'ready',callback:'scoped-capability'})).status).toBe(410);
+ expect(data.get('livekit').ready).toBeUndefined();
+});

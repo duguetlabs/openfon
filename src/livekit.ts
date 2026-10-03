@@ -5,6 +5,7 @@ export interface LivekitSession {
   instructions: string; greeting: string; voice: string; language: string;
   commands?:Array<{id:string;text:string}>;
   jobId?: string; closing?: boolean; finished?: boolean; failed?: boolean;
+  startupDeadline?: number; ready?: boolean;
 }
 export function livekitEnabled(env: Env): boolean { return env.WEB_VOICE_TRANSPORT === 'livekit'; }
 export function secureEqual(a: string, b: string): boolean {
