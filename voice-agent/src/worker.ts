@@ -1,5 +1,5 @@
 import {defineAgent, voice, llm, AutoSubscribe, type JobContext} from '@livekit/agents';
-import {submitTypedInput} from './typed-input.js';
+import {PendingTypedInput,submitTypedInput} from './typed-input.js';
 import {realtime} from '@livekit/agents-plugin-openai';
 import {RoomEvent, TrackSource, type RemoteTrackPublication} from '@livekit/rtc-node';
 import {createCallerAudioSubscription} from './caller-audio.js';
@@ -20,6 +20,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   let latestSpeech:voice.SpeechHandle|undefined;
   let providerSession:ClockedGPTLiveSession|undefined;
   const toolClosure=new ToolClosure();
+  const pendingTyped=new PendingTypedInput();
   let stopping: Promise<void> | undefined;
   let failed = false;
   let stopped = false;
@@ -35,6 +36,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     failed ||= failure;
     if (stopping) return stopping;
     stopped = true;
+    pendingTyped.close();
     diagnostic(failure?'failure_stop':'normal_stop');
     stopping = (async () => {
       clearTimeout(monitoring); clearTimeout(deadline);
@@ -67,11 +69,14 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   ctx.addShutdownCallback(async () => { await stop(); });
   const farewell=new FarewellPair(stillCurrent=>{
     diagnostic('paired_farewell');
-    void finishCurrentFarewell(async()=>{
+    void (async()=>{
+      if(!await pendingTyped.waitUntilIdle()||stopped||!stillCurrent())return;
+      await finishCurrentFarewell(async()=>{
         const speech=latestSpeech;
         if(!speech)throw Error('Farewell playout unavailable');
         await within(speech.waitForPlayout(),15000);
-      },()=>!stopped&&stillCurrent(),()=>stopSafely(false,true),()=>stopSafely(true));
+      },()=>!stopped&&pendingTyped.idle&&stillCurrent(),()=>stopSafely(false,true),()=>stopSafely(true));
+    })();
   });
   class CheckedModel extends realtime.GPTLiveModel {
     override session(): realtime.GPTLiveSession {
@@ -123,12 +128,12 @@ export default defineAgent({entry: async (ctx: JobContext) => {
       if(ticket){
         diagnostic('end_call_requested');
         setTimeout(()=>{void (async()=>{
-          if(stopped||!toolClosure.current(ticket))return;
           try{
+            if(!await pendingTyped.waitUntilIdle()||stopped||!toolClosure.current(ticket))return;
             // A control acknowledgement is not a spoken goodbye. Request and drain actual speech.
             await within(session!.generateReply({instructions:'The conversation is complete. Say one brief polite goodbye in the caller’s language, without questions, new business facts or tools.'}).waitForPlayout(),15000);
-            if(!stopped&&toolClosure.current(ticket))await stop(false,true);
-          }catch{if(toolClosure.current(ticket))stopSafely(true);}
+            if(!stopped&&pendingTyped.idle&&toolClosure.current(ticket))await stop(false,true);
+          }catch{if(!stopped&&pendingTyped.idle&&toolClosure.current(ticket))stopSafely(true);}
           finally{toolClosure.release(ticket);}
         })();},0);
       }
@@ -141,6 +146,9 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     if (stopped) return;
     try {
       const current=await control.context();
+      // Reserve the entire received batch before an acknowledgement can yield
+      // to an older SDK goodbye. SDK callbacks may arrive during each await.
+      for(const command of current.commands??[]){if(!sentCommands.has(command.id))pendingTyped.admit(command.id);}
       for(const command of current.commands??[]){
         if(stopped)break;
         // New admitted text cancels a pending goodbye before its fallible acknowledgement.
@@ -152,7 +160,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
         sentCommands.add(command.id);
         // SDK ConversationItemAdded is the sole persisted identity for typed input.
         // It appends the command when its own queued generation is authorized.
-        if(!stopped)submitTypedInput(session!,command);
+        if(!stopped)pendingTyped.track(command.id,submitTypedInput(session!,command),()=>stopSafely(true));
       }
     } catch (error) { stopSafely(!(error instanceof AdmissionError && [404,410].includes(error.status))); return; }
     if (!stopped) monitoring = setTimeout(() => void monitor(), 2000);
