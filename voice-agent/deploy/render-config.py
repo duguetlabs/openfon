@@ -14,7 +14,7 @@ parser.add_argument('--environment', required=True, choices=['staging', 'product
 parser.add_argument('--credentials', type=Path, required=True)
 parser.add_argument('--agent-image', required=True)
 parser.add_argument('--root', type=Path, default=Path('/opt/openfon-voice'))
-parser.add_argument('--cert-name', default='openfon-voice')
+parser.add_argument('--cert-name', choices=['openfon-voice'], default='openfon-voice')
 args = parser.parse_args()
 if not re.fullmatch(r'(?:[a-z0-9./:_-]+@sha256:[a-f0-9]{64}|sha256:[a-f0-9]{64})', args.agent_image):
     parser.error('Agent image must use an immutable sha256 identifier')

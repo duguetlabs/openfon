@@ -28,7 +28,7 @@ function wav(data){const b=Buffer.alloc(44+data.length);b.write('RIFF');b.writeU
 let timer;const hardDeadline=new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Overall 150s deadline')),150000);});
 async function smoke(){
  for(const port of [18879,18880,18881,18882]){const net=await import('node:net');await new Promise((resolve,reject)=>{const s=net.createServer();s.once('error',()=>reject(Error('Port occupied '+port)));s.listen(port,'127.0.0.1',()=>s.close(resolve));});}
- const key=execFileSync('/Users/cristian/.local/bin/qsecret',['kataleptic - beast','credential'],{encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();if(!key)throw Error('Vault key unavailable');
+ const key=execFileSync('dsecret',['kataleptic - openfon api key','credential'],{encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();if(!key)throw Error('Vault key unavailable');
  container=execFileSync(docker,['run','-d','--rm','--pull=never','--label',label+'='+run,'-p','127.0.0.1:18881:18881','-p','127.0.0.1:18882:18882','-p','127.0.0.1:18883:18883/udp','-e','LIVEKIT_CONFIG',image],{env:{...process.env,LIVEKIT_CONFIG:JSON.stringify(config)},encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();
  if(!/^[0-9a-f]{64}$/.test(container))throw Error('Owned container missing');
  await wait(async()=>{try{return(await fetch('http://127.0.0.1:18881/',{signal:AbortSignal.timeout(250)})).ok;}catch{return false;}},'SFU');
