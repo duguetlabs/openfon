@@ -19,7 +19,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   const context = await control.context();
   const telemetry=new VoiceDiagnostics(context.callId,record=>console.info(JSON.stringify(record)));
   telemetry.phase('startup');
-  const diagnosticTimer=setInterval(()=>telemetry.snapshot(),10000);
+  let diagnosticTimer:ReturnType<typeof setInterval>|undefined;
   let session: voice.AgentSession | undefined;
   let latestSpeech:voice.SpeechHandle|undefined;
   let providerSession:ClockedGPTLiveSession|undefined;
@@ -177,6 +177,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     if (!stopped) monitoring = setTimeout(() => void monitor(), 2000);
   };
   try {
+    diagnosticTimer=setInterval(()=>telemetry.snapshot(),10000);
     await ctx.connect(undefined, AutoSubscribe.SUBSCRIBE_NONE);
     if (stopped) { await ctx.room.disconnect(); return; }
     await control.context();
