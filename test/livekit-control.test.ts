@@ -151,3 +151,13 @@ it('rejects delayed startup context and readiness without reviving the call',asy
  expect((await request('events',{type:'ready',callback:'scoped-capability'})).status).toBe(410);
  expect(data.get('livekit').ready).toBeUndefined();
 });
+
+it('late failed completion preserves a durable startup diagnosis after reconstruction',async()=>{
+ await request('context');
+ const failure='Call failed: the conversation service did not finish connecting. Please try again.';
+ data.set('ending',{endedAt:Date.now()-1000,failure});
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({})));
+ expect((await request('events',{type:'finished',callback:'scoped-capability',failed:true})).status).toBe(200);
+ await Promise.all(pending);
+ expect(db.database.prepare('SELECT status,summary FROM calls').get()).toEqual({status:'failed',summary:failure});
+});

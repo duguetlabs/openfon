@@ -591,7 +591,7 @@ export class CallSession implements DurableObject {
     if(body.type==='finished') {
       if(media.finished)return Response.json({ok:true});
       media.finished=true;media.failed=body.failed===true;await this.state.storage.put('livekit',media);
-      if(body.failed===true)this.failure='Call failed: the conversation service disconnected.';
+      if(body.failed===true)this.failure??=(await this.state.storage.get<{failure:string|null}>('ending'))?.failure??'Call failed: the conversation service disconnected.';
       this.state.waitUntil(this.finalize());
       return Response.json({ok:true});
     }
