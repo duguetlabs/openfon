@@ -8,8 +8,8 @@ recorded in [production preflight](production-preflight.md).
 
 ## Code release
 
-- [x] Pass required CI on the final commit (`debd746`, run `36646025773`).
-- [x] Resolve real review findings and obtain required PR-Agent security/major-issue and local Codex clearance before merging PR #40.
+- [x] Pass required CI on the final commit (`ab0dcd5`, run `37111794546`).
+- [x] Resolve real review findings and obtain required PR-Agent security/major-issue and local Codex clearance before merging PR #42.
 
 ## External acceptance still required
 
@@ -267,23 +267,27 @@ This does not promise zero provider failures or replace physical-device tests.
 The initial hotspot DNS cache and precise launch checks are recorded in
 [production preflight](production-preflight.md).
 
-## LiveKit migration candidate (2026-10-03, application not deployed)
+## LiveKit production release (2026-10-03)
 
-PR #42 preserves the released layout, brand assets, auth and business interfaces. Cloudflare retains application/state authority; separate Azure LiveKit and Node services carry browser audio to Kataleptic. See [worker setup](../../voice-agent/README.md) and [Azure operations](../../voice-agent/deploy/README.md).
+PR #42 is merged and deployed to staging and production. It preserves the released layout, brand assets, authentication and business interfaces. Cloudflare retains application/state authority; separate Azure LiveKit and Node services carry browser audio to Kataleptic. See [current versions and rollback](production-preflight.md#current-livekit-deployment--2026-10-03), [worker setup](../../voice-agent/README.md) and [Azure operations](../../voice-agent/deploy/README.md).
 
-Verified evidence:
+### Verified evidence
 
-- A composed local Worker/Durable Object/D1 + native LiveKit + Node + real Kataleptic call produced incoming/outgoing PCM, 91 partial revisions, seven final transcript turns, a persisted summary and callback details. Paired farewell waited for SDK playout before normal close and final flush. The synthetic English caller used marin; this is not physical microphone, all-voice or Azure application acceptance.
-- Azure staging and production SFUs/idle agents are healthy. Native direct RTC and forced TURN/TLS443 returned nonzero audio. The native in-app browser also selected a TLS relay and received 41,827 audio bytes/176 packets with staging TURN UDP temporarily disabled, then restored. These transport-only checks made no inference calls.
-- The native WebRTC library rejected the earlier ISRG certificate chain. The final official ZeroSSL USERTrust/Sectigo chain passed native and browser TLS verification; verification was never disabled. Certificate renewal is configured, with documented single-VM restart limitations.
-- Round-one candidate checks passed 2,039 root tests/86 files, both root TypeScript checks/build and nine Node tests/build. Reviews identified real no-microphone input-clock, tool-closing interruption, cleanup-duration/retry and rollback-drain defects. Corrections require a new reviewed commit and staging acceptance; round one is not release clearance.
-- Both remote database backups restored locally with integrity `ok` and zero foreign-key violations. Additive 0025 preserved all old-column fingerprints. Only staging 0025 is applied; staging's historical data-only 0024 deliberately remains unapplied. Production remains through 0024.
+- Reviewed `ccf62ba` and merged `ab0dcd5` have identical trees. Genuine PR-Agent security/major-issue clearance, independent local Codex review, exact PR CI and merged CI passed. Final local validation: 2,061 root tests/86 files, both root TypeScript projects/build and 34 Node tests/build. Earlier review rounds exposed real defects in startup timing/readiness, typed input ownership, goodbye completion and cleanup; those rounds are historical, not final clearance.
+- The final staged typed-only call passed through actual Kataleptic and Azure on reviewed runtime source: 44 seconds, one unchanged caller row, three assistant rows, 36 partial updates/four finals, 981,600 output samples with peak 13,743, persisted summary/callback details and spoken goodbye followed by automatic closure. Readiness waited for actual nonzero speech and took 25.2 seconds. The disposable account was deleted and both environments returned to zero rooms/jobs.
+- Earlier staged English/marin and German/cedar calls and previews produced actual provider audio and saved summaries/callback details. These were on earlier candidates; the earlier typed-call assertion missed duplicate rows later exposed by stronger checks. Preserve that attribution rather than treating every original exit-zero result as final typed acceptance.
+- The first production typed-only smoke on `ab0dcd5` **failed** its expected-row assertion. It completed in 25 seconds with one primary caller row unchanged, two assistant rows, correct callback extraction, 537,120 output samples (peak 16,652), 45 partial updates/three finals, spoken goodbye and clean closure. All final events match saved rows. The harness attempted an extra timed follow-up but did not record its admission; it therefore cannot prove a lost admitted message. Original failure manifest SHA256: `2990a9c3bb2fbe0234ba3a7bad69280dda536555bf2b86992b8a69d474a4e07c`. Production transport diagnostics recorded first speech at 2.14 seconds and normal flush/finish. The account was deleted; both Azure environments had zero rooms/jobs, health 200 and no restarts.
+- Native direct RTC and forced TURN/TLS443 returned nonzero audio. The native in-app browser selected a TLS relay using server-advertised ICE and received 41,827 audio bytes/176 packets with staging TURN UDP temporarily disabled, then restored. These transport checks made no inference calls. The final official ZeroSSL chain passed native and browser TLS verification; certificate verification was never disabled.
+- Fresh database backups restored with integrity `ok` and zero foreign-key violations. Additive 0025 is applied to both environments and preserves old columns/configurations. Staging's historical data-only 0024 remains deliberately unapplied. Production is through 0025. See preflight for the preserved initial Wrangler failure and independently verified API application.
+- Public production root, sign-in and health return 200; signed-out account access returns 401. Source/version, binding, flag and built-index readback passed; native in-app landing/sign-in inspection passed.
 
-Remaining acceptance:
+- Corrected production typed-only smoke on the same deployed `ab0dcd5` passed: one initial request, no fallback, 25-second completed call, one unchanged caller row/three assistant rows, 43 partial updates/four finals, 528,720 output samples (peak 14,748), saved summary/callback details, goodbye and automatic closure. Client readiness took 4.47 seconds. The corrected harness waits up to 45 seconds and retains strict exact-once/content validation; it does not change deployed code. The disposable account was deleted. This new result does not relabel the original failure.
 
-- Exact-candidate staging voice-preview/call parity for marin/English and cedar/German, final transcripts, summary/action extraction and automatic goodbye. The no-microphone typed fallback also needs actual provider validation.
-- Current-commit reviews/CI and staging verification before production deployment, followed by production smoke and source/version readback.
-- Physical playback, microphone denial in the actual browser, repeated calls, reconnect and restaurant-noise/interruption quality. Synthetic transport and caller audio do not establish these experience claims.
-- iOS signed upload and TestFlight processing/install verification. Simulator/unsigned archives do not establish device signing or physical audio.
+### Remaining acceptance and limitations
 
-Debug audio recording is not implemented for the new LiveKit transport; existing transcript persistence remains. Historical prototype evidence and earlier transport failures retain their original attribution. Carrier acceptance remains separate and disabled.
+- Variable startup latency remains unresolved: staged readiness observations range from 2.7 to 25.2 seconds. [Issue #43](https://github.com/duguetlabs/openfon/issues/43) tracks the accepted-session/provider greeting delay. A successful call does not establish consistent responsiveness.
+- Physical microphone/playback, actual permission denial, repeated device calls, reconnect and restaurant-background interruption quality remain unverified on this release. Native software-received PCM is actual provider output, but does not prove physical audibility or subjective voice identity.
+- iOS main `c5519d6` is merged with 31 tests, simulator build, exact CI and reviews passed. Signed archive, upload, TestFlight processing/install and device audio remain blocked on Apple authentication while the Mac is locked.
+- Carrier acceptance remains separate; Telnyx and Asterisk ingress stay disabled. Anonymous public-link calling and arbitrary custom providers are not covered by the owner test-call probes.
+
+Debug audio recording is not implemented for the new LiveKit transport; transcript persistence remains. The historical composed local 91-partial/seven-final call used a different credential source from the personal product credential used for these Azure tests. Earlier greeting-silence and farewell failures remain retained with their original outcomes. No synthetic check establishes all-model, all-voice, physical microphone or PSTN acceptance.
