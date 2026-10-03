@@ -6,6 +6,8 @@ import {TranscriptBridge} from './transcript-bridge.js';
 import {within} from './deadline.js';
 import {ControlClient, AdmissionError} from './control.js';
 import {observeGeneration} from './stream-transcripts.js';
+import {ClockedGPTLiveSession} from './clocked-session.js';
+import {ToolClosure} from './tool-closure.js';
 import {FarewellPair} from './farewell.js';
 import {acceptedEcho, modelOptions} from './config.js';
 
@@ -15,7 +17,8 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   const context = await control.context();
   let session: voice.AgentSession | undefined;
   let latestSpeech:voice.SpeechHandle|undefined;
-  let providerSession:realtime.GPTLiveSession|undefined;
+  let providerSession:ClockedGPTLiveSession|undefined;
+  const toolClosure=new ToolClosure();
   let stopping: Promise<void> | undefined;
   let failed = false;
   let stopped = false;
@@ -34,6 +37,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     diagnostic(failure?'failure_stop':'normal_stop');
     stopping = (async () => {
       clearTimeout(monitoring); clearTimeout(deadline);
+      providerSession?.stopInputClock();
       const subscriptionsStopped=callerAudio.stop();
       if(!subscriptionsStopped)diagnostic('unsubscribe_already_closed');
       ctx.room.off(RoomEvent.TrackPublished, callerAudio.subscribe);
@@ -73,15 +77,18 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   });
   class CheckedModel extends realtime.GPTLiveModel {
     override session(): realtime.GPTLiveSession {
-      const duplex = super.session();
+      const duplex = new ClockedGPTLiveSession(this,()=>stopSafely(true));
       providerSession=duplex;
       duplex.on('input_audio_transcription_completed', event => {
-        if(event.itemId)farewell.record('caller',event.itemId,event.transcript,event.isFinal);
+        if(event.itemId){toolClosure.observe(event.itemId,event.transcript,event.isFinal);farewell.record('caller',event.itemId,event.transcript,event.isFinal);}
         if (event.itemId) void transcripts.record({id: event.itemId, role: 'caller', text: event.transcript, final: event.isFinal, createdAt: event.turnStartedAt}).catch(() => stopSafely(true));
       });
       duplex.on('error', () => stopSafely(true));
       duplex.on('openai_server_event_received', event => {
-        if (event.type === 'session.started' && !acceptedEcho(event.session, context.voice)) stopSafely(true);
+        if(event.type==='session.started'){
+          if(!acceptedEcho(event.session,context.voice))stopSafely(true);
+          else if(!stopped)duplex.startInputClock();
+        }
         if (event.type === 'error') stopSafely(true);
         if (event.type === 'session.closed' && !stopped) stopSafely(true);
       });
@@ -106,24 +113,25 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   session.on(voice.AgentSessionEventTypes.ConversationItemAdded, event => {
     const item = event.item;
     if (item.type !== 'message' || !['user', 'assistant'].includes(item.role) || !item.textContent) return;
+    if(item.role==='user')toolClosure.observe(item.id,item.textContent,true);
     farewell.record(item.role==='user'?'caller':'assistant',item.id,item.textContent,true);
     void transcripts.record({id: item.id, role: item.role === 'user' ? 'caller' : 'assistant', text: item.textContent, final: true, createdAt: item.createdAt}).catch(() => stopSafely(true));
   });
-  let closingRequested=false;
   const endCall = llm.tool({name: 'end_call', description: 'End a completed conversation by scheduling a brief spoken goodbye, then disconnecting after it plays.',
     parameters: {type: 'object', properties: {}, additionalProperties: false},
     execute: async () => {
       // Return from the function before draining the activity that owns this function.
-      if(!closingRequested){
-        closingRequested=true;
+      const ticket=toolClosure.begin();
+      if(ticket){
         diagnostic('end_call_requested');
         setTimeout(()=>{void (async()=>{
-          if(stopped)return;
+          if(stopped||!toolClosure.current(ticket))return;
           try{
             // A control acknowledgement is not a spoken goodbye. Request and drain actual speech.
             await within(session!.generateReply({instructions:'The conversation is complete. Say one brief polite goodbye in the caller’s language, without questions, new business facts or tools.'}).waitForPlayout(),15000);
-            if(!stopped)await stop(false,true);
-          }catch{stopSafely(true);}
+            if(!stopped&&toolClosure.current(ticket))await stop(false,true);
+          }catch{if(toolClosure.current(ticket))stopSafely(true);}
+          finally{toolClosure.release(ticket);}
         })();},0);
       }
       return 'Closure is scheduled after a brief spoken goodbye. Do not request another tool or start a new conversation.';
@@ -136,12 +144,14 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     try {
       const current=await control.context();
       for(const command of current.commands??[]){
-        if(stopped||closingRequested)break;
+        if(stopped)break;
+        // New admitted text cancels a pending goodbye before its fallible acknowledgement.
+        toolClosure.observe(command.id,command.text,true);
+        farewell.record('caller',command.id,command.text,true);
         // Admit once before generation. Ambiguous delivery ends the call, never replays inference.
         await control.post('events',{callback:context.callback,type:'command_ack',commandId:command.id});
         if(stopped||sentCommands.has(command.id))continue;
         sentCommands.add(command.id);
-        farewell.record('caller',command.id,command.text,true);
         await transcripts.record({id:command.id,role:'caller',text:command.text,final:true});
         if(!stopped)session!.generateReply({userInput:new llm.ChatMessage({id:command.id,role:'user',content:[command.text]})});
       }
