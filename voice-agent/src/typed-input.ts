@@ -1,4 +1,5 @@
 import type {voice} from '@livekit/agents';
+import {successfulPlayout,type PlaybackHandle} from './playout.js';
 
 /** Let the SDK associate a queued reply with its own user item. The command ID
  * governs delivery; ConversationItemAdded supplies the single transcript ID. */
@@ -17,8 +18,8 @@ export class PendingTypedInput {
   private closed=false;
   get idle():boolean{return !this.closed&&this.pending.size===0;}
   admit(id:string):void{if(!this.closed)this.pending.add(id);}
-  track(id:string,handle:Pick<voice.SpeechHandle,'waitForPlayout'>,fail:()=>void):void{
-    void handle.waitForPlayout().then(()=>this.release(id),()=>{
+  track(id:string,handle:PlaybackHandle,fail:()=>void):void{
+    void successfulPlayout(handle).then(()=>this.release(id),()=>{
       if(!this.closed)fail();
       this.release(id);
     });

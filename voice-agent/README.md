@@ -52,6 +52,8 @@ Typed messages use the same admitted agent, including microphone-denied sessions
 
 A successful end-call request schedules a brief spoken goodbye and waits for SDK playout before shutdown. This is server-side playout evidence, not proof that a physical speaker was audible. Failure/cancellation stops input and closes the provider; shutdown drains transcript callbacks before completion. Deadlines limit waiting but do not claim cancellation of an unresolved promise. The job is shut down after cleanup. Missing transcript completion is recorded as failure rather than clean success.
 
+The worker acknowledges readiness only after the provider accepts the checked configuration and an actual nonzero audio frame passes through the SDK message output. Tool-only generations, empty streams and silent frames do not qualify. Until then, the existing 90-second application startup deadline remains active and the worker continues polling for cancellation or admission loss. Provider acknowledgement itself uses a bounded 15-second wait. The initial greeting request's stored SDK failure is recorded without suppressing later autonomous speech; explicit typed replies and goodbye completion inspect stored SDK errors rather than assuming a resolved playout promise means success. Legitimate interruption is cancellation. Idle input follows scheduled 100 ms slots without replaying missed frames or producing catch-up bursts.
+
 Existing debug **audio recording is not implemented for this transport**. The debug-config response disables that promise for LiveKit calls; transcripts are still persisted. Do not advertise audio-replay debugging until separately implemented and tested.
 
 ## Validation boundaries

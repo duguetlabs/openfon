@@ -7,6 +7,8 @@ import {PendingTypedInput,submitTypedInput} from '../src/typed-input.js';
 import {TranscriptBridge, type ProviderTranscript} from '../src/transcript-bridge.js';
 import {FarewellPair} from '../src/farewell.js';
 import {ToolClosure} from '../src/tool-closure.js';
+import {speechOutcome,successfulPlayout} from '../src/playout.js';
+import {finishCurrentFarewell} from '../src/farewell.js';
 
 class QueuedModel extends llm.DuplexModel {
   active!:QueuedSession;
@@ -21,12 +23,14 @@ class QueuedSession extends llm.DuplexSession {
   tools=llm.ToolContext.empty();
   history=llm.ChatContext.empty();
   asks:Array<{id:string;text:string}>=[];
+  failReply=false;
   async _updateInstructions(){}
   async _appendItems(items:llm.ChatItem[]){this.history.insert(items);}
   async _updateTools(tools:llm.ToolContext){this.tools=tools;}
   _updateOptions(){}
   pushAudio(){}
   _generateReply(){
+    if(this.failReply)throw new Error('Synthetic generation failed');
     const item=this.history.items.at(-1);
     this.asks.push({id:item?.id??'',text:item?.type==='message'?item.textContent:''});
   }
@@ -151,4 +155,37 @@ test('shutdown releases pending typed-close waits without closing a conversation
   const pending=new PendingTypedInput();pending.admit('waiting');
   const waiting=pending.waitUntilIdle();pending.close();
   assert.equal(await waiting,false);assert.equal(pending.idle,false);
+});
+
+test('real SDK task failure resolves playout but cannot authorize successful typed or farewell completion',async()=>{
+ initializeLogger({pretty:false,level:'fatal'});
+ const model=new QueuedModel();const session=new voice.AgentSession({llm:model,vad:null,aecWarmupDuration:null});
+ await session.start({agent:new voice.Agent({instructions:'Synthetic failure'})});
+ try{
+  model.active.failReply=true;
+  const handle=submitTypedInput(session,{id:'failed',text:'Goodbye'});
+  await handle.waitForPlayout();
+  assert.ok(handle.exception());assert.equal(handle.interrupted,false);
+  assert.equal(await speechOutcome(handle),'failed');await assert.rejects(successfulPlayout(handle),/playback failed/);
+  const pending=new PendingTypedInput();let failures=0;pending.admit('failed');pending.track('failed',handle,()=>{failures++;});
+  await pending.waitUntilIdle();assert.equal(failures,1);
+  let closed=0;
+  await finishCurrentFarewell(()=>successfulPlayout(handle),()=>true,()=>{closed++;},()=>{failures++;});
+  assert.equal(closed,0);assert.equal(failures,2);
+ }finally{await session.close();await model.close();}
+});
+
+test('genuinely interrupted SDK handle is cancellation, not failed or completed goodbye',async()=>{
+ initializeLogger({pretty:false,level:'fatal'});
+ const model=new QueuedModel();const session=new voice.AgentSession({llm:model,vad:null,aecWarmupDuration:null});
+ await session.start({agent:new voice.Agent({instructions:'Synthetic interruption'})});
+ try{
+  const handle=submitTypedInput(session,{id:'interrupted',text:'Goodbye'});
+  await waitFor(()=>model.active.asks.length===1,'interruptible reply');
+  handle.interrupt(true);
+  assert.equal(await speechOutcome(handle),'interrupted');assert.equal(await successfulPlayout(handle),false);
+  let closed=0,failed=0;
+  await finishCurrentFarewell(()=>successfulPlayout(handle),()=>true,()=>{closed++;},()=>{failed++;});
+  assert.equal(closed,0);assert.equal(failed,0);
+ }finally{await session.close();await model.close();}
 });

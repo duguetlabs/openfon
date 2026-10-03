@@ -1,4 +1,4 @@
-const PHASES=['startup','session_starting','agent_session_started','session_started','readiness_ack','greeting_queued','speech_created','reply_authorized','generation_created'] as const;
+const PHASES=['startup','session_starting','agent_session_started','session_started','first_speech','readiness_ack','greeting_queued','greeting_request_completed','greeting_request_interrupted','greeting_request_failed','speech_created','reply_authorized','generation_created'] as const;
 const EVENTS=['session.start','session.started','session.output_audio.delta','session.input_transcript.delta','session.output_transcript.delta','session.delegation.created','response.event','session.closed','error','session.commentary.append','session.commentary.appended','session.input_audio.append','idle_frame_forwarded'] as const;
 /** Fixed names and saturating counts only. Never serialize provider payloads. */
 export class VoiceDiagnostics {

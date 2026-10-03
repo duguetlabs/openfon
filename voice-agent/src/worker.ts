@@ -12,6 +12,8 @@ import {ToolClosure} from './tool-closure.js';
 import {FarewellPair,finishCurrentFarewell} from './farewell.js';
 import {acceptedEcho, modelOptions} from './config.js';
 import {VoiceDiagnostics} from './diagnostics.js';
+import {ProviderReadiness} from './provider-readiness.js';
+import {speechOutcome,successfulPlayout} from './playout.js';
 
 export default defineAgent({entry: async (ctx: JobContext) => {
   const metadata = JSON.parse(ctx.job.metadata || '{}') as {callId?: string};
@@ -25,6 +27,8 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   let providerSession:ClockedGPTLiveSession|undefined;
   const toolClosure=new ToolClosure();
   const pendingTyped=new PendingTypedInput();
+  const providerReady=new ProviderReadiness();
+  const firstSpeech=new ProviderReadiness();
   let stopping: Promise<void> | undefined;
   let failed = false;
   let stopped = false;
@@ -41,6 +45,8 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     if (stopping) return stopping;
     stopped = true;
     pendingTyped.close();
+    providerReady.close();
+    firstSpeech.close();
     clearInterval(diagnosticTimer);
     diagnostic(failure?'failure_stop':'normal_stop');
     stopping = (async () => {
@@ -80,7 +86,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
       await finishCurrentFarewell(async()=>{
         const speech=latestSpeech;
         if(!speech)throw Error('Farewell playout unavailable');
-        await within(speech.waitForPlayout(),15000);
+        return await within(successfulPlayout(speech),15000);
       },()=>!stopped&&pendingTyped.idle&&stillCurrent(),()=>stopSafely(false,true),()=>stopSafely(true));
     })();
   });
@@ -100,7 +106,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
         telemetry.count(event.type);
         if(event.type==='session.started'){
           if(!acceptedEcho(event.session,context.voice))stopSafely(true);
-          else if(!stopped){telemetry.phase('session_started');duplex.startInputClock();}
+          else if(!stopped){telemetry.phase('session_started');providerReady.accept();duplex.startInputClock();}
         }
         if (event.type === 'error') stopSafely(true);
         if (event.type === 'session.closed' && !stopped) stopSafely(true);
@@ -116,7 +122,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
       adapted.on('generation_created',()=>telemetry.phase('generation_created'));
       adapted.on('generation_created',event=>observeGeneration(event,(id,text)=>{
         void transcripts.record({id,role:'assistant',text,final:false}).catch(()=>stopSafely(true));
-      }));
+      },()=>{if(!stopped&&firstSpeech.accept())telemetry.phase('first_speech');}));
       return adapted;
     }
   }
@@ -142,8 +148,8 @@ export default defineAgent({entry: async (ctx: JobContext) => {
           try{
             if(!await pendingTyped.waitUntilIdle()||stopped||!toolClosure.current(ticket))return;
             // A control acknowledgement is not a spoken goodbye. Request and drain actual speech.
-            await within(session!.generateReply({instructions:'The conversation is complete. Say one brief polite goodbye in the caller’s language, without questions, new business facts or tools.'}).waitForPlayout(),15000);
-            if(!stopped&&pendingTyped.idle&&toolClosure.current(ticket))await stop(false,true);
+            const played=await within(successfulPlayout(session!.generateReply({instructions:'The conversation is complete. Say one brief polite goodbye in the caller’s language, without questions, new business facts or tools.'})),15000);
+            if(played&&!stopped&&pendingTyped.idle&&toolClosure.current(ticket))await stop(false,true);
           }catch{if(!stopped&&pendingTyped.idle&&toolClosure.current(ticket))stopSafely(true);}
           finally{toolClosure.release(ticket);}
         })();},0);
@@ -194,11 +200,15 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     await within(session.start({agent, room: ctx.room, record: false, inputOptions: {closeOnDisconnect: false, deleteRoomOnClose: false, textEnabled: false, participantIdentity: context.caller}}),15000);
     telemetry.phase('agent_session_started');
     if (stopped) { await session.close(); return; }
+    if(!await providerReady.wait(15000)||stopped)return;
+    monitoring = setTimeout(() => void monitor(), 2000);
+    const greeting=session.generateReply({instructions: `Greet the caller now with: ${context.greeting}`});
+    telemetry.phase('greeting_queued');
+    void speechOutcome(greeting).then(outcome=>telemetry.phase(`greeting_request_${outcome}`));
+    // Keep the Durable Object's existing 90s startup deadline armed. The
+    // monitor observes its expiry/account loss; stop releases this latch.
+    if(!await firstSpeech.wait()||stopped)return;
     await control.post('events',{callback:context.callback,type:'ready'});
     telemetry.phase('readiness_ack');
-    if(stopped)return;
-    monitoring = setTimeout(() => void monitor(), 2000);
-    session.generateReply({instructions: `Greet the caller now with: ${context.greeting}`});
-    telemetry.phase('greeting_queued');
-  } catch { await stop(true); }
+  } catch { await stop(!stopped); }
 }});

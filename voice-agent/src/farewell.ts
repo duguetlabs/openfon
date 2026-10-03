@@ -4,12 +4,12 @@ const FAREWELL_RE = /(?<!\p{L})(good\s?bye|bye\s?bye|bye now|bye|see you|that('|
 export const isFarewell=(text:string)=>FAREWELL_RE.test(text);
 /** A superseded goodbye owns neither a successful close nor a timeout failure. */
 export async function finishCurrentFarewell(
-  playout:()=>Promise<void>,
+  playout:()=>Promise<void|boolean>,
   current:()=>boolean,
   complete:()=>void,
   fail:()=>void,
 ):Promise<void>{
-  try{await playout();}
+  try{if(await playout()===false)return;}
   catch{if(current())fail();return;}
   if(current())complete();
 }

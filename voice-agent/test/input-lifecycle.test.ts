@@ -4,6 +4,33 @@ import {IdleInputClock} from '../src/input-clock.js';
 import {ToolClosure} from '../src/tool-closure.js';
 import {FarewellPair,finishCurrentFarewell} from '../src/farewell.js';
 import {within} from '../src/deadline.js';
+import {ProviderReadiness} from '../src/provider-readiness.js';
+
+test('idle clock follows scheduled time despite early callbacks without catch-up bursts',()=>{
+  let now=0;let frames=0;
+  const clock=new IdleInputClock(()=>{frames++;},()=>({samplesPerChannel:2400}),()=>assert.fail(),()=>now);
+  clock.start();
+  for(const tick of [99.9,199.8,299.7,399.6,499.5,599.4,699.3,799.2,899.1,999]){now=tick;clock.tick();}
+  assert.equal(frames,10,'nearly one second supplies one second of PCM, not half');
+  now=10000;clock.tick();clock.tick();assert.equal(frames,11,'late scheduling never bursts');
+  now=10099;clock.tick();assert.equal(frames,11);
+  now=10100;clock.tick();assert.equal(frames,12);
+  clock.stop();
+});
+
+test('provider readiness requires accepted echo and remains bounded on silence/shutdown',async()=>{
+  const ready=new ProviderReadiness();let completed=false;
+  const wait=ready.wait(100).then(()=>{completed=true;});
+  await Promise.resolve();assert.equal(completed,false);
+  ready.accept();await wait;assert.equal(completed,true);
+  const early=new ProviderReadiness();early.accept();await early.wait(5);
+  for(const milliseconds of [5,undefined]){
+    const canceled=new ProviderReadiness();const waiting=canceled.wait(milliseconds);
+    canceled.close();assert.equal(await waiting,false,'normal stop is cancellation, not an exception');
+    assert.equal(canceled.accept(),false,'late startup cannot acknowledge a stopped call');
+  }
+  await assert.rejects(new ProviderReadiness().wait(5));
+});
 
 test('renewed caller invalidates paired-farewell timeout and permits a later goodbye',async()=>{
   const outcomes:string[]=[];const pending:Promise<void>[]=[];

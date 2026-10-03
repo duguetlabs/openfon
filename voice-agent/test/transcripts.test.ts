@@ -9,7 +9,32 @@ import {createCallerAudioSubscription} from '../src/caller-audio.js';
 import {FarewellPair,isFarewell} from '../src/farewell.js';
 import {isFarewell as releasedFarewell} from '../../src/providers.js';
 import {within} from '../src/deadline.js';
+import {AudioFrame} from '@livekit/rtc-node';
+import {ProviderReadiness} from '../src/provider-readiness.js';
 const stream=<T>(...items:T[])=>new ReadableStream<T>({start(controller){items.forEach(item=>controller.enqueue(item));controller.close();}});
+test('first speech requires actual nonzero audio and passes every frame unchanged',async()=>{
+ const readiness=new ProviderReadiness();let acknowledgements=0;
+ const ready=readiness.wait().then(()=>{acknowledgements++;});
+ const silent=new AudioFrame(new Int16Array(240),24000,1,240);
+ const voiced=new AudioFrame(new Int16Array(240).fill(19),24000,1,240);
+ for(const frames of [[],[silent],[voiced,voiced]]){
+  const message:llm.MessageGeneration={messageId:'test',textStream:stream('text'),audioStream:stream(...frames)};
+  const event:llm.GenerationCreatedEvent={messageStream:stream(message),functionStream:stream(),userInitiated:false};
+  let observations=0;
+  observeGeneration(event,()=>{},()=>{observations++;readiness.accept();});
+  const observed=(await event.messageStream.getReader().read()).value!;
+  const output=[];for await(const frame of observed.audioStream)output.push(frame);
+  assert.deepEqual(output,frames);for(let i=0;i<frames.length;i++)assert.equal(output[i],frames[i]);
+  assert.equal(observations,frames.includes(voiced)?1:0);
+  if(!frames.includes(voiced))assert.equal(acknowledgements,0);
+ }
+ await ready;assert.equal(acknowledgements,1);
+ const toolOnly:llm.GenerationCreatedEvent={messageStream:stream(),functionStream:stream(new llm.FunctionCall({callId:'tool',name:'synthetic',args:'{}'})),userInitiated:false};
+ let heard=false;observeGeneration(toolOnly,()=>{},()=>{heard=true;});
+ for await(const _ of toolOnly.messageStream){}
+ assert.equal(heard,false);
+ const stopped=new ProviderReadiness();stopped.close();assert.equal(stopped.accept(),false);assert.equal(await stopped.wait(),false);
+});
 test('caller partial revisions and SDK final reconcile to one identity; duplicate final ignored',async()=>{
  const saved:ProviderTranscript[]=[];const anchors:string[]=[];
  const bridge=new TranscriptBridge(async item=>{saved.push(item);},async id=>{anchors.push(id);});

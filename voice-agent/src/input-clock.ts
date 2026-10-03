@@ -2,13 +2,14 @@
  * Fill genuine input gaps at wall-clock pace; never replay or resubmit mic frames. */
 export class IdleInputClock<T extends {samplesPerChannel:number}> {
   private lastReal=-Infinity;
-  private lastSilence=-Infinity;
+  private nextSilence=0;
   private timer:ReturnType<typeof setInterval>|undefined;
   private closed=false;
   constructor(private send:(frame:T)=>void,private silence:()=>T,private onError:()=>void,
     private now:()=>number=()=>performance.now(),private onIdleFrame:()=>void=()=>{}){}
   start():void {
     if(this.closed||this.timer!==undefined)return;
+    this.nextSilence=this.now();
     this.timer=setInterval(()=>this.tick(),100);
     this.tick();
   }
@@ -20,8 +21,10 @@ export class IdleInputClock<T extends {samplesPerChannel:number}> {
   tick():void {
     if(this.closed||this.timer===undefined)return;
     const now=this.now();
-    if(now-this.lastReal<200||now-this.lastSilence<100)return;
-    this.lastSilence=now;
+    if(now-this.lastReal<200||now<this.nextSilence)return;
+    // Advance the scheduled timeline, not the slightly jittery callback time.
+    // Skip missed slots in one step; never send catch-up bursts.
+    this.nextSilence+=(Math.floor((now-this.nextSilence)/100)+1)*100;
     if(this.deliver(this.silence()))this.onIdleFrame();
   }
   private deliver(frame:T):boolean {
