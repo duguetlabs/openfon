@@ -1,13 +1,12 @@
 import {fakeCtx} from './fake-d1';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {readFileSync} from 'node:fs';
 import {SqliteD1,applyMigrations} from './sqlite-d1';
 import {CallSession} from '../src/call-session';
 import app from '../src/index';
 import type {Env} from '../src/types';
 let db:SqliteD1;let env:Env;let session:CallSession;let data:Map<string,any>;let pending:Promise<unknown>[];
 beforeEach(()=>{
- db=new SqliteD1();applyMigrations(db);db.exec(readFileSync(new URL('../migrations/0025_livekit_call_events.sql',import.meta.url),'utf8'));
+ db=new SqliteD1();applyMigrations(db);
  db.exec("INSERT INTO users(id,email,password_hash) VALUES('owner','owner@example.invalid','fixture');INSERT INTO businesses(id,user_id,slug,name) VALUES('biz','owner','biz','Business');INSERT INTO agent_settings(business_id) VALUES('biz');INSERT INTO calls(id,business_id,connected_at) VALUES('call','biz',CURRENT_TIMESTAMP);");
  data=new Map([['livekit',{room:'room',callId:'call',caller:'caller',callback:'scoped-capability',voice:'marin',instructions:'Facts',greeting:'Hello',language:'en'}]]);pending=[];
  let lock=Promise.resolve();
@@ -160,4 +159,17 @@ it('late failed completion preserves a durable startup diagnosis after reconstru
  expect((await request('events',{type:'finished',callback:'scoped-capability',failed:true})).status).toBe(200);
  await Promise.all(pending);
  expect(db.database.prepare('SELECT status,summary FROM calls').get()).toEqual({status:'failed',summary:failure});
+});
+
+it.each([false,true])('validates the selected summary route before dispatch (independent=%s)',async independent=>{
+ env.DEFAULT_LLM_BASE_URL='https://default.example/v1';env.DEFAULT_LLM_MODEL='default';
+ const state=session as any;state.callId='call';
+ vi.spyOn(state,'loadCall').mockImplementation(async()=>{state.biz={id:'biz'};state.settings={llm_base_url:'https://custom.example/v1',llm_api_key:'',llm_model:'unused'};});
+ const dispatch=vi.spyOn(state,'startLivekit').mockResolvedValue(undefined);
+ const finish=vi.spyOn(state,'finalize').mockResolvedValue(undefined);
+ if(independent)db.exec("INSERT INTO summary_settings(business_id,mode,base_url,api_key,model,revision) VALUES('biz','custom','https://summary.example/v1','fixture','summary-model','fixture')");
+ await state.handleStart();
+ expect(dispatch).toHaveBeenCalledTimes(independent?1:0);
+ expect(finish).toHaveBeenCalledTimes(independent?0:1);
+ if(!independent)expect(state.failure).toContain('Check summary settings');
 });

@@ -5,9 +5,12 @@ export class LivekitMedia {
   private room=new Room({adaptiveStream:true,dynacast:true});
   private closed=false;
   private active=false;
+  private agentPresent=false;
   private levelTimer:ReturnType<typeof setInterval>|undefined;
   private elements=new Set<HTMLMediaElement>();
   constructor(private status:(value:'connecting'|'live'|'ended')=>void,private blocked:(value:boolean)=>void,private speaking:(who:'caller'|'agent'|'none')=>void,private level:(value:number)=>void) {
+    this.room.on(RoomEvent.ParticipantConnected,participant=>{if(!this.closed&&participant.isAgent){this.agentPresent=true;if(this.active)this.status('live');}});
+    this.room.on(RoomEvent.ParticipantDisconnected,participant=>{if(!this.closed&&participant.isAgent){this.close();this.status('ended');}});
     this.room.on(RoomEvent.TrackSubscribed,(track)=>{
       if(this.closed||track.kind!==Track.Kind.Audio)return;
       const audio=track.attach(); audio.style.display='none';document.body.append(audio);this.elements.add(audio);
@@ -15,7 +18,7 @@ export class LivekitMedia {
     this.room.on(RoomEvent.TrackUnsubscribed,track=>{for(const element of track.detach()){element.remove();this.elements.delete(element);}});
     this.room.on(RoomEvent.AudioPlaybackStatusChanged,()=>{if(!this.closed)this.blocked(!this.room.canPlaybackAudio);});
     this.room.on(RoomEvent.Reconnecting,()=>{if(!this.closed){this.active=false;this.speaking('none');this.level(0);this.status('connecting');}});
-    this.room.on(RoomEvent.Reconnected,()=>{if(!this.closed){this.active=true;this.status('live');}});
+    this.room.on(RoomEvent.Reconnected,()=>{if(!this.closed){this.active=true;this.status(this.agentPresent?'live':'connecting');}});
     this.room.on(RoomEvent.ActiveSpeakersChanged,speakers=>{if(!this.closed&&this.active)this.speaking(speakers.some(p=>p.isLocal)?'caller':speakers.length?'agent':'none');});
     this.room.on(RoomEvent.Disconnected,()=>{if(!this.closed){this.close();this.status('ended');}});
   }
@@ -30,9 +33,10 @@ export class LivekitMedia {
     if(this.closed){await this.room.disconnect();return;}
     if(track)await this.room.localParticipant.publishTrack(track,{source:Track.Source.Microphone});
     if(this.closed){track?.stop();await this.room.disconnect();return;}
+    this.agentPresent=[...this.room.remoteParticipants.values()].some(participant=>participant.isAgent);
     this.active=true;
     this.levelTimer=setInterval(()=>{if(!this.closed&&this.active)this.level(Math.max(this.room.localParticipant.audioLevel,...this.room.activeSpeakers.map(p=>p.audioLevel)));},100);
-    this.status('live');
+    this.status(this.agentPresent?'live':'connecting');
   }
   resume(){if(this.closed)return;void this.room.startAudio().catch(()=>{if(!this.closed)this.blocked(true);});}
   close(){

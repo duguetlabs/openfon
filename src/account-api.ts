@@ -20,7 +20,7 @@ const EXPORT_COLUMNS: Record<string, string[]> = {
   knowledge_collections: ['id', 'business_id', 'name', 'description', 'is_default', 'created_at', 'updated_at'],
   knowledge_items: ['id', 'business_id', 'collection_id', 'kind', 'status', 'title', 'question', 'answer', 'content', 'source_call_id', 'source_turn_id', 'created_at', 'updated_at', 'activated_at'],
   calls: ['id', 'business_id', 'channel', 'caller_id', 'status', 'started_at', 'ended_at', 'duration_s', 'summary', 'intent', 'message_json', 'connected_at', 'assistant_id', 'environment', 'direction', 'outcome', 'unanswered_json', 'failure_code', 'failure_message'],
-  call_turns: ['id', 'call_id', 'role', 'text', 'ts'],
+  call_turns: ['id', 'call_id', 'role', 'text', 'ts', 'source_id', 'source_revision', 'source_final'],
   assistant_knowledge_collections: ['assistant_id', 'collection_id', 'attached_at'],
 };
 const EXPORT_BYTE_LIMIT = 4 * 1024 * 1024;

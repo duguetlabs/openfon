@@ -1,5 +1,4 @@
 import {afterEach,beforeEach,describe,it,expect,vi} from 'vitest';
-import {readFileSync} from 'node:fs';
 import {SqliteD1,applyMigrations} from './sqlite-d1';
 import {parseMediaTranscript,persistMediaTranscript,type MediaTranscript} from '../src/livekit-transcripts';
 import {createLivekitRoom,livekitJwt,type LivekitSession} from '../src/livekit';
@@ -10,7 +9,7 @@ let db:SqliteD1;let env:Env;
 beforeEach(()=>{
  db=new SqliteD1();applyMigrations(db);
  db.exec("INSERT INTO users(id,email,password_hash) VALUES('owner','owner@example.invalid','fixture'),('other','other@example.invalid','fixture'); INSERT INTO businesses(id,user_id,slug,name) VALUES('business','owner','business','Business'),('other','other','other','Other'); INSERT INTO calls(id,business_id,connected_at) VALUES('call','business',CURRENT_TIMESTAMP),('other-call','other',CURRENT_TIMESTAMP); INSERT INTO call_turns(call_id,role,text) VALUES('call','caller','Historical turn');");
- db.exec(readFileSync(new URL('../migrations/0025_livekit_call_events.sql',import.meta.url),'utf8'));
+
  env={DB:db,LIVEKIT_URL:'ws://127.0.0.1:7880',LIVEKIT_API_KEY:'synthetic-key',LIVEKIT_API_SECRET:'synthetic-secret',LIVEKIT_AGENT_SERVICE_TOKEN:'synthetic-control'} as unknown as Env;
 });
 afterEach(()=>{vi.unstubAllGlobals();vi.useRealTimers();db.close();});

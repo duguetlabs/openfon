@@ -2,8 +2,9 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 const fake=vi.hoisted(()=>({rooms:[] as any[],connect:()=>Promise.resolve(),publish:()=>Promise.resolve()}));
 vi.mock('livekit-client',()=>({
  Track:{Kind:{Audio:'audio'},Source:{Microphone:'microphone'}},
- RoomEvent:Object.fromEntries(['TrackSubscribed','TrackUnsubscribed','AudioPlaybackStatusChanged','Reconnecting','Reconnected','ActiveSpeakersChanged','Disconnected'].map(x=>[x,x])),
+ RoomEvent:Object.fromEntries(['TrackSubscribed','TrackUnsubscribed','AudioPlaybackStatusChanged','Reconnecting','Reconnected','ActiveSpeakersChanged','Disconnected','ParticipantConnected','ParticipantDisconnected'].map(x=>[x,x])),
  Room:class {
+  remoteParticipants=new Map([['agent',{isAgent:true}]]);
   handlers=new Map<string,Function>();activeSpeakers:any[]=[];canPlaybackAudio=true;
   disconnect=vi.fn(async()=>{});startAudio=vi.fn(async()=>{});
   localParticipant={audioLevel:0.4,publishTrack:vi.fn(()=>fake.publish())};
@@ -40,4 +41,16 @@ it('removes attached audio and rejects stale subscription events after close',as
 it('retains a text-only room when microphone permission is unavailable',async()=>{
  const x=setup();await x.media.connect('ws://127.0.0.1:7880','fixture',null);
  expect(x.room.localParticipant.publishTrack).not.toHaveBeenCalled();expect(x.status).toHaveBeenLastCalledWith('live');x.media.close();
+});
+
+it('stays connecting while dispatch is pending and ends on permanent agent departure',async()=>{
+ const x=setup();x.room.remoteParticipants.clear();
+ await x.media.connect('ws://127.0.0.1:7880','fixture',null);
+ expect(x.status).toHaveBeenLastCalledWith('connecting');
+ x.room.emit('ParticipantConnected',{isAgent:false});expect(x.status).not.toHaveBeenCalledWith('live');
+ x.room.emit('ParticipantConnected',{isAgent:true});expect(x.status).toHaveBeenLastCalledWith('live');
+ x.room.emit('ParticipantDisconnected',{isAgent:false});expect(x.status).not.toHaveBeenCalledWith('ended');
+ x.room.emit('ParticipantDisconnected',{isAgent:true});expect(x.status).toHaveBeenLastCalledWith('ended');
+ expect(x.room.disconnect).toHaveBeenCalledOnce();expect(vi.getTimerCount()).toBe(0);
+ x.room.emit('Reconnected');x.room.emit('ParticipantConnected',{isAgent:true});expect(x.status).toHaveBeenLastCalledWith('ended');
 });

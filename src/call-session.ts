@@ -649,6 +649,16 @@ export class CallSession implements DurableObject {
     await this.loadCall();
     if (this.ended) return; // hung up while we were loading
     if(livekitEnabled(this.env) && !this.requiresCarrierAudio) {
+      // Validate the selected summary route, not an unused conversation text route.
+      try { await loadSummaryLlm(this.env,this.biz!.id,this.settings); }
+      catch(error) {
+        if(!(error instanceof LlmConfigError))throw error;
+        this.failure='Call failed: call notes are not configured correctly. Check summary settings and try again.';
+        console.error(`call ${this.callId}: summary configuration rejected`);
+        this.sendError('This assistant is not available right now. Please try again later.');
+        await this.finalize();return;
+      }
+      if(this.ended)return;
       await this.startLivekit();
       return;
     }
