@@ -6,7 +6,7 @@ export class IdleInputClock<T extends {samplesPerChannel:number}> {
   private timer:ReturnType<typeof setInterval>|undefined;
   private closed=false;
   constructor(private send:(frame:T)=>void,private silence:()=>T,private onError:()=>void,
-    private now:()=>number=()=>performance.now()){}
+    private now:()=>number=()=>performance.now(),private onIdleFrame:()=>void=()=>{}){}
   start():void {
     if(this.closed||this.timer!==undefined)return;
     this.timer=setInterval(()=>this.tick(),100);
@@ -22,10 +22,10 @@ export class IdleInputClock<T extends {samplesPerChannel:number}> {
     const now=this.now();
     if(now-this.lastReal<200||now-this.lastSilence<100)return;
     this.lastSilence=now;
-    this.deliver(this.silence());
+    if(this.deliver(this.silence()))this.onIdleFrame();
   }
-  private deliver(frame:T):void {
-    try{this.send(frame);}catch{this.stop();this.onError();}
+  private deliver(frame:T):boolean {
+    try{this.send(frame);return true;}catch{this.stop();this.onError();return false;}
   }
   stop():void {
     this.closed=true;

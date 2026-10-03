@@ -7,16 +7,13 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import WebSocket from 'ws';
 import { Room, RoomEvent, AudioSource, AudioFrame, AudioStream, LocalAudioTrack, TrackPublishOptions, TrackSource, dispose } from '@livekit/rtc-node';
+import {smokeTarget,safeControlEvent} from './smoke-evidence.mjs';
 
-const ORIGIN = 'https://openfon-staging.duguetlabs.workers.dev';
-const SIGNALING = 'wss://voice-staging.openfon.ai';
-if (!process.argv.includes('--stage-ready') || !process.argv.includes('--allow-paid')) {
-  throw Error('Requires explicit --stage-ready --allow-paid; do not run before deployment approval.');
-}
-const directory = await mkdtemp(resolve(tmpdir(), 'openfon-staging-voice-'));
+const {environment,origin:ORIGIN,signaling:SIGNALING}=smokeTarget(process.argv);
+const directory = await mkdtemp(resolve(tmpdir(), `openfon-${environment}-voice-`));
 await chmod(directory, 0o700);
 const run = randomUUID();
-const email = `openfon-staging-${run}@example.invalid`;
+const email = `openfon-${environment}-${run}@example.invalid`;
 const password = randomBytes(32).toString('base64url');
 let cookie = '', accountId, businessId, cancelled = false, current;
 const proofs = [], diagnostics = [];
@@ -146,7 +143,7 @@ async function runCase(spec) {
   const input = spec.noMicrophone?Buffer.from(spec.input):await speechFixture(label + '-input', spec.osVoice, spec.input);
   const followup = spec.noMicrophone?Buffer.from(spec.followup):await speechFixture(label + '-followup', spec.osVoice, spec.followup);
   const reservation = await json('/api/me/assistants/' + assistant.id + '/test-calls', 'POST');
-  const state = current = { label, callId: reservation.callId, pcm: [], events: [], peak: 0, samples: 0, silence: false, disposed: false };
+  const state = current = { label, callId: reservation.callId, pcm: [], events: [], controlEvents:[], startedAt:Date.now(), peak: 0, samples: 0, silence: false, disposed: false };
   mark('call-reserved', { label, callId: state.callId });
   try {
     state.socket = new WebSocket(ORIGIN.replace(/^http/, 'ws') + '/ws/call/' + state.callId, { headers: { Origin: ORIGIN, Cookie: cookie } });
@@ -155,6 +152,8 @@ async function runCase(spec) {
     state.socket.on('message', bytes => {
       try {
         const message = JSON.parse(String(bytes));
+        const controlEvent=safeControlEvent(message,Date.now()-state.startedAt);
+        if(controlEvent&&state.controlEvents.length<1000)state.controlEvents.push(controlEvent);
         if (message.type === 'ready') grant = message;
         // Exclude ready tokens and all server objects except known transcript fields.
         state.events.push({ type: message.type, text: message.text, eventId: message.eventId, revision: message.revision, final: message.final });
@@ -214,6 +213,7 @@ async function runCase(spec) {
     const finalEvents=state.events.filter(event=>event.final===true&&['transcript','agent_text'].includes(event.type));
     if(!finalEvents.length||finalEvents.some(event=>!state.call.turns.some(turn=>turn.role===(event.type==='transcript'?'caller':'agent')&&turn.text===event.text)))throw Error('Final transcript events do not match persisted call');
     const proof = { label, inputMode:spec.noMicrophone?'typed-no-microphone':'synthetic-microphone', assistantId: assistant.id, call: state.call, usedFollowup, automaticClosure: true,
+      controlEvents:state.controlEvents,
       savedVoice: saved.realtime_voice, savedLanguage: saved.language, previewSha256: preview.length?hash(preview):null, previewBytes: preview.length, previewPeak,
       inputSha256: hash(input), followupSha256: hash(followup), outputSamples: state.samples, outputPeak: state.peak,
       partialEvents: state.events.filter(event => event.final === false).length, finalEvents: state.events.filter(event => event.final === true).length,
@@ -224,8 +224,10 @@ async function runCase(spec) {
     mark('call-pass', { label, callId: state.callId, partialEvents: proof.partialEvents, finalEvents: proof.finalEvents, automaticClosure: true });
   } catch(error) {
     // Preserve known conversation fields before normal owned-account cleanup.
+    let failureRead='ok';
+    try{state.call=safeCall(await json('/api/me/calls/'+state.callId));}catch{failureRead='unavailable';}
     await writeFile(resolve(directory,label+'-failure.json'),JSON.stringify({
-      label,callId:state.callId,failure:error.message,call:state.call,
+      label,callId:state.callId,failure:error.message,call:state.call,failureRead,controlEvents:state.controlEvents,
       outputSamples:state.samples,outputPeak:state.peak,
       events:state.events.filter(event=>['transcript','agent_text','ended'].includes(event.type)),
     },null,2),{mode:0o600});
@@ -238,7 +240,7 @@ try {
   if (!cookie) await json('/api/auth/login', 'POST', { email, password });
   if (!cookie) throw Error('No owned session');
   const business = await json('/api/me/business', 'POST', {
-    name: 'OpenFon synthetic staging ' + run.slice(0, 8), description: 'Isolated acceptance workspace. No real customers or appointments.',
+    name: 'OpenFon synthetic '+environment+' ' + run.slice(0, 8), description: 'Isolated acceptance workspace. No real customers or appointments.',
     timezone: 'Europe/Berlin', hours_json: JSON.stringify(['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map(day => ({ day, open: '08:00', close: '18:00', closed: false }))),
   });
   businessId = business.id;
@@ -258,7 +260,7 @@ finally {
   }
   cancelled = true;
   await dispose();
-  await writeFile(resolve(directory, 'summary.json'), JSON.stringify({ run, origin: ORIGIN, signaling: SIGNALING, accountId, businessId, deleted,
+  await writeFile(resolve(directory, 'summary.json'), JSON.stringify({ run, environment, origin: ORIGIN, signaling: SIGNALING, accountId, businessId, deleted,
     failure, casesPassed: proofs.length, diagnostics, limits: ['Native RTC with synthetic speech; not physical microphone or subjective voice-identity validation', 'Own test-call APIs; no anonymous public-link or carrier call', 'Two selected voices only; no all-voice acceptance'] }, null, 2), { mode: 0o600 });
   mark('finished', { evidence: directory, casesPassed: proofs.length, deleted, failed: Boolean(failure) || !deleted });
 }

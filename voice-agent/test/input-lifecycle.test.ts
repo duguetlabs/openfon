@@ -91,13 +91,20 @@ test('installed GPT-Live SDK receives real zero PCM without mic and each real PC
   }
   // Never release SDK configuration: close releases it only after setting the closing flag.
   const model=new realtime.GPTLiveModel({apiKey:'synthetic',baseURL:'http://127.0.0.1:1/v1'});
-  const session=new CaptureSession(model,()=>assert.fail('unexpected SDK error'));
+  let idleFrames=0,authorizedReplies=0;
+  const session=new CaptureSession(model,()=>assert.fail('unexpected SDK error'),{
+    idleFrame:()=>idleFrames++,replyAuthorized:()=>authorizedReplies++,
+  });
   try{
     session.startInputClock();
+    assert.equal(idleFrames,1);
+    session._generateReply('Synthetic greeting');
+    assert.equal(authorizedReplies,1);
     assert.equal(events.length,1);assert.equal(events[0]!.type,'session.input_audio.append');
     const zero=Buffer.from(events[0]!.audio as string,'base64');assert.equal(zero.length,4800);assert.equal(zero.some(value=>value!==0),false);
     session.pushAudio(new AudioFrame(new Int16Array(2400).fill(17),24000,1,2400));
     assert.equal(events.length,2);const real=Buffer.from(events[1]!.audio as string,'base64');assert.equal(real.length,4800);assert.equal(real.readInt16LE(0),17);
+    assert.equal(idleFrames,1,'genuine microphone frames are not counted as idle');
   }finally{await session.close();await model.close();}
   await new Promise(resolve=>setTimeout(resolve,120));assert.equal(events.length,2);
 });

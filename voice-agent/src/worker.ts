@@ -11,11 +11,15 @@ import {ClockedGPTLiveSession} from './clocked-session.js';
 import {ToolClosure} from './tool-closure.js';
 import {FarewellPair,finishCurrentFarewell} from './farewell.js';
 import {acceptedEcho, modelOptions} from './config.js';
+import {VoiceDiagnostics} from './diagnostics.js';
 
 export default defineAgent({entry: async (ctx: JobContext) => {
   const metadata = JSON.parse(ctx.job.metadata || '{}') as {callId?: string};
   const control = new ControlClient(process.env.OPENFON_API_URL!, process.env.OPENFON_AGENT_SERVICE_TOKEN!, metadata.callId || '', ctx.job.room?.name || ctx.room.name || '', ctx.job.id);
   const context = await control.context();
+  const telemetry=new VoiceDiagnostics(context.callId,record=>console.info(JSON.stringify(record)));
+  telemetry.phase('startup');
+  const diagnosticTimer=setInterval(()=>telemetry.snapshot(),10000);
   let session: voice.AgentSession | undefined;
   let latestSpeech:voice.SpeechHandle|undefined;
   let providerSession:ClockedGPTLiveSession|undefined;
@@ -37,6 +41,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     if (stopping) return stopping;
     stopped = true;
     pendingTyped.close();
+    clearInterval(diagnosticTimer);
     diagnostic(failure?'failure_stop':'normal_stop');
     stopping = (async () => {
       clearTimeout(monitoring); clearTimeout(deadline);
@@ -60,6 +65,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
       try { await control.post('events', {callback: context.callback, type: 'finished', failed}); diagnostic('finished_acknowledged'); }
       catch(error){diagnostic(error instanceof AdmissionError?'finished_rejected':'finished_unavailable');throw error;}
       finally {
+        telemetry.snapshot(true);
         try{await within(ctx.room.disconnect(),2000);}finally{ctx.shutdown('call completed');}
       }
     })();
@@ -80,17 +86,21 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   });
   class CheckedModel extends realtime.GPTLiveModel {
     override session(): realtime.GPTLiveSession {
-      const duplex = new ClockedGPTLiveSession(this,()=>stopSafely(true));
+      const duplex = new ClockedGPTLiveSession(this,()=>stopSafely(true),{
+        idleFrame:()=>telemetry.count('idle_frame_forwarded'),replyAuthorized:()=>telemetry.phase('reply_authorized'),
+      });
       providerSession=duplex;
       duplex.on('input_audio_transcription_completed', event => {
         if(event.itemId){toolClosure.observe(event.itemId,event.transcript,event.isFinal);farewell.record('caller',event.itemId,event.transcript,event.isFinal);}
         if (event.itemId) void transcripts.record({id: event.itemId, role: 'caller', text: event.transcript, final: event.isFinal, createdAt: event.turnStartedAt}).catch(() => stopSafely(true));
       });
       duplex.on('error', () => stopSafely(true));
+      duplex.on('openai_client_event_queued',event=>telemetry.count(event.type));
       duplex.on('openai_server_event_received', event => {
+        telemetry.count(event.type);
         if(event.type==='session.started'){
           if(!acceptedEcho(event.session,context.voice))stopSafely(true);
-          else if(!stopped)duplex.startInputClock();
+          else if(!stopped){telemetry.phase('session_started');duplex.startInputClock();}
         }
         if (event.type === 'error') stopSafely(true);
         if (event.type === 'session.closed' && !stopped) stopSafely(true);
@@ -103,6 +113,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   class TranscriptAdapter extends llm.DuplexRealtimeAdapter {
     override session() {
       const adapted=super.session();
+      adapted.on('generation_created',()=>telemetry.phase('generation_created'));
       adapted.on('generation_created',event=>observeGeneration(event,(id,text)=>{
         void transcripts.record({id,role:'assistant',text,final:false}).catch(()=>stopSafely(true));
       }));
@@ -110,7 +121,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     }
   }
   session = new voice.AgentSession({llm: new TranscriptAdapter(model)});
-  session.on(voice.AgentSessionEventTypes.SpeechCreated,event=>{latestSpeech=event.speechHandle;});
+  session.on(voice.AgentSessionEventTypes.SpeechCreated,event=>{telemetry.phase('speech_created');latestSpeech=event.speechHandle;});
   session.on(voice.AgentSessionEventTypes.Error, () => stopSafely(true));
   session.on(voice.AgentSessionEventTypes.Close, () => { if (!stopped) stopSafely(true); });
   session.on(voice.AgentSessionEventTypes.ConversationItemAdded, event => {
@@ -178,11 +189,15 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     deadline = setTimeout(() => stopSafely(), 30*60*1000);
     await within(ctx.waitForParticipant(context.caller),15000);
     if(stopped)return;
+    telemetry.phase('session_starting');
     await within(session.start({agent, room: ctx.room, record: false, inputOptions: {closeOnDisconnect: false, deleteRoomOnClose: false, textEnabled: false, participantIdentity: context.caller}}),15000);
+    telemetry.phase('agent_session_started');
     if (stopped) { await session.close(); return; }
     await control.post('events',{callback:context.callback,type:'ready'});
+    telemetry.phase('readiness_ack');
     if(stopped)return;
     monitoring = setTimeout(() => void monitor(), 2000);
     session.generateReply({instructions: `Greet the caller now with: ${context.greeting}`});
+    telemetry.phase('greeting_queued');
   } catch { await stop(true); }
 }});
