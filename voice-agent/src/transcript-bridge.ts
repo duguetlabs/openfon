@@ -8,6 +8,9 @@ export class TranscriptBridge {
   constructor(private persist:(item:ProviderTranscript)=>Promise<void>,private finalCaller:(id:string)=>Promise<void>,private limit=1000){}
   record(item:{id:string;role:'caller'|'assistant';text:string;final:boolean;createdAt?:number}):Promise<void>{
     if(this.failure)return Promise.reject(new Error('Transcript persistence unavailable'));
+    // Providers may stream spacing before the first word. Keep the accumulator
+    // unchanged, but do not send an empty semantic transcript to the application.
+    if(item.text.length<=30000&&!item.text.trim())return Promise.resolve();
     if(this.pending>=256)return Promise.reject(new Error('Transcript queue capacity exhausted'));
     this.pending++;
     const work=this.tail.then(async()=>{

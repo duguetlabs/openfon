@@ -173,6 +173,8 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     if(stopped)return;
     await within(session.start({agent, room: ctx.room, record: false, inputOptions: {closeOnDisconnect: false, deleteRoomOnClose: false, textEnabled: false, participantIdentity: context.caller}}),15000);
     if (stopped) { await session.close(); return; }
+    await control.post('events',{callback:context.callback,type:'ready'});
+    if(stopped)return;
     monitoring = setTimeout(() => void monitor(), 2000);
     session.generateReply({instructions: `Greet the caller now with: ${context.greeting}`});
   } catch { await stop(true); }

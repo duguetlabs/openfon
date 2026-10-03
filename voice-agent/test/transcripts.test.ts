@@ -79,3 +79,20 @@ test('paired farewell keeps released vocabulary, waits for three final messages 
  pair.record('caller','more','Actually, what time do you open?',true);pair.record('assistant','question','Anything else before goodbye?',true);assert.equal(closings.length,1);
  pair.record('caller','thanks','Thank you',true);pair.record('assistant','ordinary','Goodbye',true);assert.equal(closings.length,1);
 });
+
+
+test('whitespace-only partials are skipped without trimming the SDK accumulator',async()=>{
+ const saved:ProviderTranscript[]=[];
+ const bridge=new TranscriptBridge(async item=>{assert.ok(item.text.trim(),'application refuses trim-empty transcripts');saved.push(item);},async()=>{});
+ const writes:Promise<void>[]=[];
+ const event:llm.GenerationCreatedEvent={messageStream:stream({messageId:'spaced',textStream:stream(' ','\t','Hello'),audioStream:stream()}),functionStream:stream(),userInitiated:false};
+ observeGeneration(event,(id,text)=>writes.push(bridge.record({id,role:'assistant',text,final:false})));
+ const message=(await event.messageStream.getReader().read()).value!;
+ const chunks=[];for await(const chunk of message.textStream)chunks.push(chunk);
+ await Promise.all(writes);
+ await bridge.record({id:'spaced',role:'assistant',text:' \tHello',final:true});await bridge.flush();
+ assert.deepEqual(chunks,[' ','\t','Hello']);
+ assert.deepEqual(saved.map(item=>[item.text,item.revision,item.final]),[[' \tHello',0,false],[' \tHello',1,true]]);
+ const overflow=new TranscriptBridge(async()=>{},async()=>{});
+ await assert.rejects(overflow.record({id:'large',role:'caller',text:' '.repeat(30001),final:false}),/capacity/);
+});

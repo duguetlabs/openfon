@@ -69,3 +69,16 @@ test('installed GPT-Live SDK receives real zero PCM without mic and each real PC
   }finally{await session.close();await model.close();}
   await new Promise(resolve=>setTimeout(resolve,120));assert.equal(events.length,2);
 });
+
+
+test('readiness acknowledgement uses authenticated call scope and rejects admission loss',async()=>{
+ const {ControlClient,AdmissionError}=await import('../src/control.js');
+ const fetchBefore=globalThis.fetch;const requests:Array<{url:string;body:Record<string,unknown>}> = [];
+ globalThis.fetch=async(url,init)=>{requests.push({url:String(url),body:JSON.parse(String(init?.body))});return new Response('{}',{status:requests.length===1?200:410});};
+ try{
+  const control=new ControlClient('http://127.0.0.1:1','fixture-service','call','room','job');
+  await control.post('events',{callback:'fixture-capability',type:'ready'});
+  assert.deepEqual(requests[0],{url:'http://127.0.0.1:1/api/internal/livekit/calls/call/events',body:{callback:'fixture-capability',type:'ready',room:'room',jobId:'job'}});
+  await assert.rejects(control.post('events',{callback:'fixture-capability',type:'ready'}),error=>error instanceof AdmissionError&&error.status===410);
+ }finally{globalThis.fetch=fetchBefore;}
+});
