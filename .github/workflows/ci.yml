@@ -38,7 +38,25 @@ jobs:
           node scripts/asterisk-smoke.mjs
           node scripts/realtime-smoke.mjs
           node scripts/realtime-smoke.mjs --gateway
-      - run: python3 -O scripts/migration-rehearsal.py . --through 24
+      - run: python3 -O scripts/migration-rehearsal.py . --through 25
+
+  voice-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+          cache: npm
+          cache-dependency-path: voice-agent/package-lock.json
+      - run: npm --prefix voice-agent ci
+      - run: npm --prefix voice-agent test
+      - run: npm --prefix voice-agent run typecheck
+      - run: npm --prefix voice-agent run build
+      - name: Build and check the Linux voice runtime
+        run: |
+          docker build --tag openfon-voice-agent:ci voice-agent
+          docker run --rm --entrypoint node openfon-voice-agent:ci --input-type=module -e 'await import("@livekit/agents"); const rtc = await import("@livekit/rtc-node"); const source = new rtc.AudioSource(24000, 1); await source.close(); await rtc.dispose();'
 
   # The benchmark scoring code is Python and computes the numbers in
   # docs/research/. A wrong normaliser or a slot matcher that fails closed would
@@ -117,7 +135,7 @@ jobs:
   # works, but grants more and still fails if the token can see more than one
   # account.)
   deploy:
-    needs: [check, bench-scoring, bench-realtime, browser]
+    needs: [check, voice-agent, bench-scoring, bench-realtime, browser]
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deploy_production == true
     runs-on: ubuntu-latest
     steps:

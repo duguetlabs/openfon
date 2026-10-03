@@ -1,4 +1,10 @@
 export interface Env {
+  /** Operator rollout only; no customer-selected transport. */
+  WEB_VOICE_TRANSPORT?: 'livekit';
+  LIVEKIT_URL?: string;
+  LIVEKIT_API_KEY?: string;
+  LIVEKIT_API_SECRET?: string;
+  LIVEKIT_AGENT_SERVICE_TOKEN?: string;
   DB: D1Database;
   /** Enable private, seven-day debug capture for owner test calls only. */
   TEST_CALL_DEBUG?: string;

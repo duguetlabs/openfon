@@ -1,3 +1,5 @@
+import {livekitEnabled} from './livekit';
+import {managedBrowserSettings} from './livekit-settings';
 import { generateVoicePreview, PREVIEW_TEXT } from './voice-preview';
 import { defaultGatewayModel, KATALEPTIC_REALTIME_URL, resolveRealtime } from './realtime-providers';
 import { registerSummaryApi } from './summary-settings';
@@ -1857,6 +1859,7 @@ export function registerStudioApi(app: StudioApp): void {
       effective_text_model: provider?.llm_model || c.env.DEFAULT_LLM_MODEL,
       effective_stt_model: !provider?.stt_provider || provider.stt_provider === 'instance' ? c.env.DEFAULT_STT_MODEL : provider.stt_model,
       effective_realtime_provider: !provider?.realtime_provider || provider.realtime_provider === 'instance' ? c.env.REALTIME_PROVIDER || 'kataleptic' : provider.realtime_provider,
+      managed_browser_voice: livekitEnabled(c.env),
       effective_realtime_model: !provider?.realtime_provider || provider.realtime_provider === 'instance' ? c.env.REALTIME_MODEL : provider.realtime_provider === 'kataleptic' ? defaultGatewayModel(provider.realtime_base_url || KATALEPTIC_REALTIME_URL) : 'gpt-realtime',
       updatedAt: provider?.updated_at ?? null,
     });
@@ -1988,7 +1991,10 @@ export function registerStudioApi(app: StudioApp): void {
     // come exclusively from the owned workspace, never from a preview request.
     const draft = { ...assistant };
     for (const key of fields) draft[key] = body[key] as string;
-    const settings = { ...provider, ...settingsForProvider(draft, provider) };
+    let settings = { ...provider, ...settingsForProvider(draft, provider) };
+    if(livekitEnabled(c.env)){
+      try{settings=managedBrowserSettings(c.env,settings);}catch{return c.json({error:'This voice is unavailable for browser calls. Choose another voice or contact support.'},400);}
+    }
     try {
       if (settings.engine === 'realtime') resolveRealtime(c.env, settings);
       else if (speechConfig(c.env, settings).provider === 'browser') {

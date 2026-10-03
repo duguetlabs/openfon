@@ -1,3 +1,4 @@
+import {updateTranscript,type TranscriptRevision} from '../transcript-state';
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { VoiceCall, type VoiceEvent } from '../voice';
@@ -5,7 +6,7 @@ import { Logo } from '../ui';
 
 type Phase = 'idle' | 'connecting' | 'live' | 'ended' | 'error';
 
-interface CaptionLine {
+interface CaptionLine extends TranscriptRevision {
   who: 'caller' | 'agent';
   text: string;
 }
@@ -62,11 +63,11 @@ export default function Widget() {
         break;
       case 'transcript':
         setThinking(true);
-        setLines((l) => [...l, { who: 'caller', text: ev.text }]);
+        setLines((l) => updateTranscript(l, { who: 'caller', text: ev.text,eventId:ev.eventId,revision:ev.revision,final:ev.final }));
         break;
       case 'agent_text':
         setThinking(false);
-        setLines((l) => [...l, { who: 'agent', text: ev.text }]);
+        setLines((l) => updateTranscript(l, { who: 'agent', text: ev.text,eventId:ev.eventId,revision:ev.revision,final:ev.final }));
         break;
       case 'thinking':
         setThinking(true);

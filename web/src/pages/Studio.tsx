@@ -1,3 +1,4 @@
+import {updateTranscript} from '../transcript-state';
 import { PromptExamples } from '../PromptExamples';
 import { AssistantVoiceSettings } from '../VoiceSettings';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
@@ -213,7 +214,7 @@ export function TestStudio() {
     const [callId, setCallId] = useState('');
     const [lines, setLines] = useState<{
         who: string;
-        text: string;
+        text: string;eventId?:string;revision?:number;final?:boolean;
     }[]>([]);
     const [text, setText] = useState('');
     const [hasMic, setHasMic] = useState(true);
@@ -254,8 +255,8 @@ export function TestStudio() {
             }
             setPhase(e.status);
         } if (e.type === 'transcript')
-            setLines(l => [...l, { who: 'You', text: e.text }]); if (e.type === 'agent_text')
-            setLines(l => [...l, { who: 'Assistant', text: e.text }]); });
+            setLines(l => updateTranscript(l, { who: 'You', text: e.text,eventId:e.eventId,revision:e.revision,final:e.final })); if (e.type === 'agent_text')
+            setLines(l => updateTranscript(l, { who: 'Assistant', text: e.text,eventId:e.eventId,revision:e.revision,final:e.final })); });
         voice.prepareAudio();
         const reserved = await api.startTestCall(id);
         if (run !== attempt.current) {

@@ -1,4 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+const livekitFake=vi.hoisted(()=>({instances:[] as any[]}));
+vi.mock('../web/src/livekit-media',()=>({LivekitMedia:class {
+  ready=false;connected=false;
+  constructor(private status:(value:string)=>void){livekitFake.instances.push(this);}
+  markAgentReady(){this.ready=true;if(this.connected)this.status('live');}
+  async connect(){this.connected=true;this.status(this.ready?'live':'connecting');}
+  close(){} resume(){}
+}}));
 import { VoiceCall } from '../web/src/voice';
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
@@ -398,4 +406,22 @@ it('retries a blocked Pipeline player in place without reporting false playback 
   player.onended!();
   expect(socket.send).toHaveBeenCalledWith(JSON.stringify({ type: 'playback_complete', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }));
   expect(revoke).toHaveBeenCalledOnce(); voice.hangup();
+});
+
+
+describe('LiveKit session readiness over the control socket',()=>{
+ it.each([true,false])('waits for session readiness with callback before media import: %s',async early=>{
+  livekitFake.instances=[];const {socket}=prepareConnection();
+  const call=new VoiceCall();const listener=vi.fn();call.on(listener);await call.connect('test');
+  const send=(body:unknown)=>socket.onmessage!({data:JSON.stringify(body)});
+  send({type:'ready',mode:'livekit',serverUrl:'wss://voice.example',participantToken:'fixture'});
+  if(early)send({type:'agent_ready'});
+  await vi.waitFor(()=>expect(livekitFake.instances).toHaveLength(1));
+  if(!early){
+   expect(listener).not.toHaveBeenCalledWith({type:'status',status:'live'});
+   send({type:'agent_ready'});
+  }
+  expect(listener).toHaveBeenCalledWith({type:'status',status:'live'});
+  call.hangup();
+ });
 });

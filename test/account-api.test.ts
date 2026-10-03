@@ -27,6 +27,7 @@ beforeEach(async ({ task }) => {
     applyMigrations(db, 1, 15);
     // Retain pre-credential-barrier rows while using the current export schema.
     applyMigrations(db, 22, 23);
+    applyMigrations(db, 25, 25);
   }
   else applyMigrations(db);
   env = { ...fakeEnv(), DB: db as unknown as D1Database };
@@ -380,7 +381,7 @@ describe('account self service', () => {
     db.database.prepare('INSERT INTO knowledge_collections (id,business_id,name) VALUES (?,?,?)').run('large', 'biz-owner', 'Large notes');
     const insert = db.database.prepare('INSERT INTO knowledge_items (id,business_id,collection_id,kind,content) VALUES (?,?,?, ?,?)');
     for (let i = 0; i < 5; i++) insert.run(`large-${i}`, 'biz-owner', 'large', 'note', 'x'.repeat(1024 * 1024));
-    applyMigrations(db, 13, 13); applyMigrations(db, 22, 23);
+    applyMigrations(db, 13, 13); applyMigrations(db, 22, 23); applyMigrations(db, 25, 25);
     db.database.function('json_object', { varargs: true }, () => { throw new Error('Rejected exports must not construct JSON'); });
     const response = await call('/api/me/account/export');
     expect(response.status).toBe(413);
@@ -635,4 +636,16 @@ describe('account self service', () => {
     expect((await call('/api/me/account/export')).status).toBe(401);
     expect(rotated.headers.get('set-cookie')).toContain('ofs=');
   });
+});
+
+it('exports confirmed and provisional transcript identity without crossing accounts',async()=>{
+ db.exec("INSERT INTO calls(id,business_id) VALUES('mine','biz-owner'),('theirs','biz-other'); INSERT INTO call_turns(call_id,role,text,source_id,source_revision,source_final) VALUES('mine','caller','Unfinished','sdk-partial',2,0),('mine','agent','Confirmed','sdk-final',3,1),('theirs','caller','Private','other',0,1); INSERT INTO call_turns(call_id,role,text) VALUES('mine','caller','Historical');");
+ const response=await call('/api/me/account/export');expect(response.status).toBe(200);
+ const turns=(await response.json() as any).data.call_turns;
+ expect(turns).toHaveLength(3);
+ expect(turns).toEqual(expect.arrayContaining([
+  expect.objectContaining({text:'Unfinished',source_id:'sdk-partial',source_revision:2,source_final:0}),
+  expect.objectContaining({text:'Confirmed',source_id:'sdk-final',source_revision:3,source_final:1}),
+  expect.objectContaining({text:'Historical',source_id:null,source_revision:0,source_final:1})
+ ]));
 });

@@ -1,3 +1,5 @@
+import type {TranscriptRevision} from './transcript-state';
+import type { LivekitMedia } from './livekit-media';
 // Browser voice-call client. Captures mic audio, detects utterances with a
 // simple RMS voice-activity detector, ships each utterance to the CallSession
 // Durable Object over WebSocket, and plays the agent's reply (server MP3 or
@@ -8,8 +10,8 @@ export type VoiceEvent =
   | { type: 'engine'; label: string }
   | { type: 'debug'; recording: boolean }
   | { type: 'audio'; blocked: boolean }
-  | { type: 'transcript'; text: string }
-  | { type: 'agent_text'; text: string }
+  | ({ type: 'transcript'; text: string } & TranscriptRevision)
+  | ({ type: 'agent_text'; text: string } & TranscriptRevision)
   | { type: 'thinking' }
   | { type: 'speaking'; who: 'caller' | 'agent' | 'none' }
   | { type: 'level'; value: number };
@@ -33,6 +35,8 @@ function downsampleToPcm16(input: Float32Array, fromRate: number, toRate: number
 }
 
 export class VoiceCall {
+  private livekit: LivekitMedia | null = null;
+  private livekitAgentReady = false;
   private debugRecording = false;
   private debugGap = false;
   private debugStarted = performance.now();
@@ -100,6 +104,7 @@ export class VoiceCall {
   /** Call synchronously from the Start/Enable audio click, before network awaits. */
   prepareAudio(): void {
     if (this.ended) return;
+    if(this.livekit){this.livekit.resume();return;}
     const attempt = ++this.audioAttempt;
     const report = (blocked: boolean) => { if (attempt === this.audioAttempt) this.reportAudio(blocked); };
     try {
@@ -205,7 +210,7 @@ export class VoiceCall {
         const msg = JSON.parse(ev.data) as {
           type: string;
           audioReceipts?: unknown;
-          debugRecording?: boolean;
+          debugRecording?: boolean;eventId?:string;revision?:number;final?:boolean;
           id?: unknown;
           bytes?: unknown;
           text?: string;
@@ -214,6 +219,8 @@ export class VoiceCall {
           language?: string;
           message?: string;
           mode?: string;
+          serverUrl?: string;
+          participantToken?: string;
           who?: 'caller' | 'agent' | 'none';
           engine?: string;
         };
@@ -237,7 +244,26 @@ export class VoiceCall {
             this.lastPcmBytes = null;
             ws.send(JSON.stringify({ type: 'audio_received', id: msg.id }));
             break;
+          case 'agent_ready':
+            this.livekitAgentReady=true;
+            this.livekit?.markAgentReady();
+            break;
           case 'ready':
+            if(msg.mode==='livekit') {
+              this.mode='realtime';this.ttsMode='server';
+              this.emit({type:'debug',recording:false});
+              if(typeof msg.serverUrl!=='string'||typeof msg.participantToken!=='string')throw new Error('Invalid call admission');
+              const url=msg.serverUrl,token=msg.participantToken;
+              void import('./livekit-media').then(async({LivekitMedia})=>{
+                if(this.ended)return;
+                if(this.livekit)throw new Error('Duplicate media admission');
+                const media=new LivekitMedia(status=>{if(status==='ended')this.hangup();else if(!this.ended)this.emit({type:'status',status});},blocked=>this.reportAudio(blocked),who=>{if(!this.ended)this.emit({type:'speaking',who});},value=>{if(!this.ended)this.emit({type:'level',value});});
+                this.livekit=media;
+                if(this.livekitAgentReady)media.markAgentReady();
+                await media.connect(url,token,this.stream);
+              }).catch(()=>{if(!this.ended){this.emit({type:'status',status:'error',detail:'The call could not connect. Check microphone access and try again.'});this.hangup();}});
+              break;
+            }
             this.debugRecording = msg.debugRecording === true;
             this.emit({ type: 'debug', recording: this.debugRecording });
             this.trace('capture', this.stream ? 'microphone' : 'text_only');
@@ -275,14 +301,14 @@ export class VoiceCall {
             if (msg.who) this.emit({ type: 'speaking', who: msg.who });
             break;
           case 'transcript':
-            this.emit({ type: 'transcript', text: msg.text ?? '' });
+            this.emit({ type: 'transcript', text: msg.text ?? '',eventId:msg.eventId,revision:msg.revision,final:msg.final });
             break;
           case 'thinking':
             this.emit({ type: 'thinking' });
             break;
           case 'agent_text':
             if (this.endingId && this.mode === 'pipeline') throw new Error('speech_after_playback_barrier');
-            this.emit({ type: 'agent_text', text: msg.text ?? '' });
+            this.emit({ type: 'agent_text', text: msg.text ?? '',eventId:msg.eventId,revision:msg.revision,final:msg.final });
             if (msg.language) this.speechLanguage = msg.language;
             // Realtime transcripts describe audio already streamed by the provider.
             if (this.mode === 'pipeline' && this.ttsMode === 'browser' && msg.text) this.speakLocally(msg.text);
@@ -590,6 +616,7 @@ export class VoiceCall {
     if (this.ended) return;
     this.trace('teardown', status);
     this.ended = true;
+    this.livekit?.close();this.livekit=null;
     if (this.completionTimer !== undefined) clearTimeout(this.completionTimer);
     if (this.vadTimer) clearInterval(this.vadTimer);
     if (this.pingTimer) clearInterval(this.pingTimer);
@@ -623,6 +650,8 @@ export class VoiceCall {
     } catch {
       /* noop */
     }
+    this.emit({type:'speaking',who:'none'});
+    this.emit({type:'level',value:0});
     this.emit({ type: 'status', status });
   }
 }

@@ -1,0 +1,26 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+packages:
+  - docker.io
+  - docker-compose-v2
+  - nginx
+  - libnginx-mod-stream
+  - certbot
+  - unattended-upgrades
+write_files:
+  - path: /etc/sysctl.d/60-openfon-voice.conf
+    permissions: '0644'
+    content: |
+      net.core.rmem_max=7500000
+      net.core.wmem_max=7500000
+  - path: /etc/docker/daemon.json
+    permissions: '0644'
+    content: |
+      {"log-driver":"local","log-opts":{"max-size":"10m","max-file":"3"},"live-restore":true}
+runcmd:
+  - [sysctl, --system]
+  - [systemctl, enable, --now, docker]
+  - [systemctl, enable, --now, nginx]
+  - [install, -d, -m, '0700', /opt/openfon-voice]
+  - [install, -d, -m, '0755', /var/www/acme]

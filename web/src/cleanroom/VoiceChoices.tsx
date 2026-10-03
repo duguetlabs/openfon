@@ -77,7 +77,7 @@ export function VoiceChoices({
   ]);
   const realtime = draft.engine === "realtime";
   const browserVoice =
-    !realtime && provider?.effective_tts_provider === "browser";
+    !provider?.managed_browser_voice && !realtime && provider?.effective_tts_provider === "browser";
   const selected = realtime ? draft.realtime_voice : draft.voice;
   const choices =
     provider ? voiceChoicesFor(draft, provider, catalog) : [];
