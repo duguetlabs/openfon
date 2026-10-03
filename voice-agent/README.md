@@ -26,6 +26,14 @@ Then run `npm --prefix voice-agent start`. It registers as `openfon-released-web
 
 Inference is pinned to genuine `realtime.GPTLiveModel`, `gpt-live-1`, mono PCM 24 kHz and delegated `gpt-5.4-mini` with `maxOutputTokens: 512`. Voice/persona instructions belong to `voice.Agent`. Model, voice, format and delegated-model acknowledgements are checked. No alternative model or speech fallback is used. Wire debug logging must stay disabled.
 
+## Self-hosted infrastructure
+
+LiveKit Cloud is optional. A self-hosted LiveKit server carries audio; the Node worker coordinates the call and connects to Kataleptic for inference. Neither service requires an inference GPU. The existing Cloudflare application, D1 database and Durable Objects remain the account, transcript and call-lifecycle authority.
+
+The worker has a separate container build: `docker build -t openfon-voice-agent voice-agent` from the repository root. Its build context allowlist excludes credentials, local state and recordings. The runtime uses a non-root user and a digest-pinned Node image. Supply the operator settings listed above only at runtime. The image does not include a LiveKit server, TLS termination or a TURN relay.
+
+The proposed Azure deployment is a dedicated Linux VM in Europe running the self-hosted LiveKit service and worker, with secure signaling, WebRTC media connectivity and TURN fallback. Ordinary HTTP-only hosting is insufficient. Keep staging and production credentials, rooms and callback origins separate. VM size, region, cost, network configuration and resource creation remain pending selection of the billing subscription and budget. No Azure deployment, high-availability guarantee or Azure audio acceptance is established by the container build.
+
 ## Migration and existing choices
 
 Apply additive migration `0025_livekit_call_events.sql` **before** enabling the flag. It adds transcript source ID, revision and finality; historical rows remain final and unchanged. No assistant, account, credential, engine choice or public link is rewritten. Remote migration and deployment are separate approval gates.
