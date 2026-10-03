@@ -1,5 +1,5 @@
 /** Explicit staging acceptance through normal account APIs. No remote D1 access.
- * Two synthetic test calls and two selected-voice previews; credentials stay in memory. */
+ * Two synthetic audio calls, one microphone-denied typed call, and two selected-voice previews; credentials stay in memory. */
 import { execFileSync } from 'node:child_process';
 import { randomBytes, randomUUID, createHash } from 'node:crypto';
 import { mkdtemp, readFile, writeFile, chmod } from 'node:fs/promises';
@@ -120,8 +120,9 @@ const cases = [
     input: 'Guten Tag. Mein Name ist Alex Test. Bitte bitten Sie den Zahnarzt, mich morgen wegen Zahnschmerzen zurückzurufen. Meine Telefonnummer lautet null eins zwei drei vier fünf sechs sieben acht neun. Vielen Dank. Auf Wiederhören.',
     followup: 'Ja, das ist richtig. Das ist alles. Vielen Dank und auf Wiederhören.' },
 ];
+cases.push({...cases[0],noMicrophone:true});
 async function runCase(spec) {
-  const label = spec.language + '-' + spec.voice;
+  const label = spec.language + '-' + spec.voice + (spec.noMicrophone?'-typed':'');
   const assistant = await json('/api/me/assistants', 'POST', {
     name: 'Synthetic ' + label, persona: 'Friendly and concise dental receptionist', greeting: spec.greeting,
     language: spec.language, engine: 'realtime', realtime_model: 'gpt-live-1', realtime_voice: spec.voice, voice: '',
@@ -129,17 +130,20 @@ async function runCase(spec) {
   });
   const saved = await json('/api/me/assistants/' + assistant.id);
   if (saved.realtime_voice !== spec.voice || saved.language !== spec.language) throw Error('Saved voice/language mismatch');
-  const preview = Buffer.from(await (await request('/api/me/assistants/' + assistant.id + '/voice-preview', 'POST', {
+  let preview=Buffer.alloc(0),previewPeak=0;
+  if(!spec.noMicrophone){
+  preview = Buffer.from(await (await request('/api/me/assistants/' + assistant.id + '/voice-preview', 'POST', {
     engine: saved.engine, language: saved.language, voice: saved.voice,
     realtime_model: saved.realtime_model, realtime_voice: saved.realtime_voice,
   }, 45000)).arrayBuffer());
   if (preview.length < 1000 || preview.toString('ascii', 0, 4) !== 'RIFF') throw Error('Invalid voice preview');
   await writeFile(resolve(directory, label + '-preview.wav'), preview, { mode: 0o600 });
   const previewPcm=execFileSync('/opt/homebrew/bin/ffmpeg',['-v','error','-i',resolve(directory,label+'-preview.wav'),'-ar','24000','-ac','1','-f','s16le','pipe:1'],{stdio:['ignore','pipe','ignore'],timeout:10000,maxBuffer:4*1024*1024});
-  let previewPeak=0;for(let i=0;i+1<previewPcm.length;i+=2)previewPeak=Math.max(previewPeak,Math.abs(previewPcm.readInt16LE(i)));
+  for(let i=0;i+1<previewPcm.length;i+=2)previewPeak=Math.max(previewPeak,Math.abs(previewPcm.readInt16LE(i)));
   if(previewPeak<=100)throw Error('Selected voice preview contains no audible signal');
-  const input = await speechFixture(label + '-input', spec.osVoice, spec.input);
-  const followup = await speechFixture(label + '-followup', spec.osVoice, spec.followup);
+  }
+  const input = spec.noMicrophone?Buffer.from(spec.input):await speechFixture(label + '-input', spec.osVoice, spec.input);
+  const followup = spec.noMicrophone?Buffer.from(spec.followup):await speechFixture(label + '-followup', spec.osVoice, spec.followup);
   const reservation = await json('/api/me/assistants/' + assistant.id + '/test-calls', 'POST');
   const state = current = { label, callId: reservation.callId, pcm: [], events: [], peak: 0, samples: 0, silence: false, disposed: false };
   mark('call-reserved', { label, callId: state.callId });
@@ -176,18 +180,23 @@ async function runCase(spec) {
       })();
     });
     await bounded(state.room.connect(grant.serverUrl, grant.participantToken), 30000, 'media connection');
+    if(!spec.noMicrophone){
     state.source = new AudioSource(24000, 1);
     const options = new TrackPublishOptions(); options.source = TrackSource.SOURCE_MICROPHONE;
     await bounded(state.room.localParticipant.publishTrack(LocalAudioTrack.createAudioTrack('Synthetic test microphone', state.source), options), 15000, 'microphone publication');
+    }
     await wait(() => state.peak > 100, 'greeting audio', 30000);
     await delay(5000);
-    await sendSpeech(state, input);
+    if(spec.noMicrophone)state.socket.send(JSON.stringify({type:'text',text:spec.input}));
+    else await sendSpeech(state, input);
     const callPath = '/api/me/calls/' + state.callId;
     const completed = async () => { state.call = safeCall(await json(callPath)); return state.call.status !== 'active'; };
     let usedFollowup = false;
     try { await wait(completed, 'initial farewell', 16000); }
     catch {
-      usedFollowup = true; await sendSpeech(state, followup);
+      usedFollowup = true;
+      if(spec.noMicrophone)state.socket.send(JSON.stringify({type:'text',text:spec.followup}));
+      else await sendSpeech(state, followup);
       await wait(completed, 'farewell after confirmation', 30000);
     }
     if (state.call.status !== 'completed' || !state.call.summary || !state.call.message_json ||
@@ -198,8 +207,8 @@ async function runCase(spec) {
     if(!String(extracted.caller_name).toLowerCase().includes('alex')||String(extracted.caller_phone).replace(/[^0-9]/g,'')!=='0123456789'||!extracted.message)throw Error('Synthetic caller details were not accurately extracted');
     const finalEvents=state.events.filter(event=>event.final===true&&['transcript','agent_text'].includes(event.type));
     if(!finalEvents.length||finalEvents.some(event=>!state.call.turns.some(turn=>turn.role===(event.type==='transcript'?'caller':'agent')&&turn.text===event.text)))throw Error('Final transcript events do not match persisted call');
-    const proof = { label, assistantId: assistant.id, call: state.call, usedFollowup, automaticClosure: true,
-      savedVoice: saved.realtime_voice, savedLanguage: saved.language, previewSha256: hash(preview), previewBytes: preview.length, previewPeak,
+    const proof = { label, inputMode:spec.noMicrophone?'typed-no-microphone':'synthetic-microphone', assistantId: assistant.id, call: state.call, usedFollowup, automaticClosure: true,
+      savedVoice: saved.realtime_voice, savedLanguage: saved.language, previewSha256: preview.length?hash(preview):null, previewBytes: preview.length, previewPeak,
       inputSha256: hash(input), followupSha256: hash(followup), outputSamples: state.samples, outputPeak: state.peak,
       partialEvents: state.events.filter(event => event.final === false).length, finalEvents: state.events.filter(event => event.final === true).length,
       events: state.events.filter(event => ['transcript', 'agent_text', 'ended'].includes(event.type)),
