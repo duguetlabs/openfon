@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import WebSocket from 'ws';
 import { Room, RoomEvent, AudioSource, AudioFrame, AudioStream, LocalAudioTrack, TrackPublishOptions, TrackSource, dispose } from '@livekit/rtc-node';
-import {smokeTarget,safeControlEvent} from './smoke-evidence.mjs';
+import {smokeTarget,safeControlEvent,completeTypedSmoke,assertTypedTranscript} from './smoke-evidence.mjs';
 
 const {environment,origin:ORIGIN,signaling:SIGNALING}=smokeTarget(process.argv);
 const directory = await mkdtemp(resolve(tmpdir(), `openfon-${environment}-voice-`));
@@ -187,17 +187,20 @@ async function runCase(spec) {
     }
     await wait(() => state.peak > 100, 'greeting audio', 30000);
     await delay(5000);
-    if(spec.noMicrophone)state.socket.send(JSON.stringify({type:'text',text:spec.input}));
-    else await sendSpeech(state, input);
     const callPath = '/api/me/calls/' + state.callId;
     const completed = async () => { state.call = safeCall(await json(callPath)); return state.call.status !== 'active'; };
     let usedFollowup = false;
-    try { await wait(completed, 'initial farewell', 16000); }
-    catch {
-      usedFollowup = true;
-      if(spec.noMicrophone)state.socket.send(JSON.stringify({type:'text',text:spec.followup}));
-      else await sendSpeech(state, followup);
-      await wait(completed, 'farewell after confirmation', 30000);
+    if(spec.noMicrophone){
+      await completeTypedSmoke(spec.input,text=>state.socket.send(JSON.stringify({type:'text',text})),
+        milliseconds=>wait(completed,'typed farewell',milliseconds));
+    }else{
+      await sendSpeech(state,input);
+      try { await wait(completed, 'initial farewell', 16000); }
+      catch {
+        usedFollowup = true;
+        await sendSpeech(state, followup);
+        await wait(completed, 'farewell after confirmation', 30000);
+      }
     }
     if (state.call.status !== 'completed' || !state.call.summary || !state.call.message_json ||
         !state.call.turns.some(turn => turn.role === 'caller') || !state.call.turns.some(turn => turn.role === 'agent')) {
@@ -206,9 +209,7 @@ async function runCase(spec) {
     const extracted=JSON.parse(state.call.message_json);
     if(!String(extracted.caller_name).toLowerCase().includes('alex')||String(extracted.caller_phone).replace(/[^0-9]/g,'')!=='0123456789'||!extracted.message)throw Error('Synthetic caller details were not accurately extracted');
     if(spec.noMicrophone){
-      const typedTurns=state.call.turns.filter(turn=>turn.role==='caller');
-      const expected=[spec.input,...(usedFollowup?[spec.followup]:[])];
-      if(typedTurns.length!==expected.length||typedTurns.some((turn,index)=>turn.text!==expected[index]))throw Error('Typed commands were not persisted exactly once in order');
+      assertTypedTranscript(state.call.turns,[spec.input]);
     }
     const finalEvents=state.events.filter(event=>event.final===true&&['transcript','agent_text'].includes(event.type));
     if(!finalEvents.length||finalEvents.some(event=>!state.call.turns.some(turn=>turn.role===(event.type==='transcript'?'caller':'agent')&&turn.text===event.text)))throw Error('Final transcript events do not match persisted call');
