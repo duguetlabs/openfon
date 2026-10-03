@@ -121,6 +121,7 @@ const cases = [
     followup: 'Ja, das ist richtig. Das ist alles. Vielen Dank und auf Wiederhören.' },
 ];
 cases.push({...cases[0],noMicrophone:true});
+const selectedCases=process.argv.includes('--typed-only')?cases.filter(spec=>spec.noMicrophone):cases;
 async function runCase(spec) {
   const label = spec.language + '-' + spec.voice + (spec.noMicrophone?'-typed':'');
   const assistant = await json('/api/me/assistants', 'POST', {
@@ -205,6 +206,11 @@ async function runCase(spec) {
     }
     const extracted=JSON.parse(state.call.message_json);
     if(!String(extracted.caller_name).toLowerCase().includes('alex')||String(extracted.caller_phone).replace(/[^0-9]/g,'')!=='0123456789'||!extracted.message)throw Error('Synthetic caller details were not accurately extracted');
+    if(spec.noMicrophone){
+      const typedTurns=state.call.turns.filter(turn=>turn.role==='caller');
+      const expected=[spec.input,...(usedFollowup?[spec.followup]:[])];
+      if(typedTurns.length!==expected.length||typedTurns.some((turn,index)=>turn.text!==expected[index]))throw Error('Typed commands were not persisted exactly once in order');
+    }
     const finalEvents=state.events.filter(event=>event.final===true&&['transcript','agent_text'].includes(event.type));
     if(!finalEvents.length||finalEvents.some(event=>!state.call.turns.some(turn=>turn.role===(event.type==='transcript'?'caller':'agent')&&turn.text===event.text)))throw Error('Final transcript events do not match persisted call');
     const proof = { label, inputMode:spec.noMicrophone?'typed-no-microphone':'synthetic-microphone', assistantId: assistant.id, call: state.call, usedFollowup, automaticClosure: true,
@@ -225,10 +231,10 @@ try {
   if (!cookie) throw Error('No owned session');
   const business = await json('/api/me/business', 'POST', {
     name: 'OpenFon synthetic staging ' + run.slice(0, 8), description: 'Isolated acceptance workspace. No real customers or appointments.',
-    timezone: 'Europe/Berlin', hours_json: JSON.stringify(Array.from({ length: 7 }, (_, day) => ({ day, open: '08:00', close: '18:00', closed: false }))),
+    timezone: 'Europe/Berlin', hours_json: JSON.stringify(['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map(day => ({ day, open: '08:00', close: '18:00', closed: false }))),
   });
   businessId = business.id;
-  for (const spec of cases) await runCase(spec);
+  for (const spec of selectedCases) await runCase(spec);
 } catch (error) { failure = error.message; mark('failure', { message: failure }); }
 finally {
   try{await stopCall(current);}catch(error){mark('media-cleanup-unconfirmed',{message:error.message});}

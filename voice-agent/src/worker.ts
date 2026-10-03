@@ -1,4 +1,5 @@
 import {defineAgent, voice, llm, AutoSubscribe, type JobContext} from '@livekit/agents';
+import {appendTypedInput} from './typed-input.js';
 import {realtime} from '@livekit/agents-plugin-openai';
 import {RoomEvent, TrackSource, type RemoteTrackPublication} from '@livekit/rtc-node';
 import {createCallerAudioSubscription} from './caller-audio.js';
@@ -18,6 +19,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   let session: voice.AgentSession | undefined;
   let latestSpeech:voice.SpeechHandle|undefined;
   let providerSession:ClockedGPTLiveSession|undefined;
+  let realtimeSession:llm.RealtimeSession|undefined;
   const toolClosure=new ToolClosure();
   let stopping: Promise<void> | undefined;
   let failed = false;
@@ -100,6 +102,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   class TranscriptAdapter extends llm.DuplexRealtimeAdapter {
     override session() {
       const adapted=super.session();
+      realtimeSession=adapted;
       adapted.on('generation_created',event=>observeGeneration(event,(id,text)=>{
         void transcripts.record({id,role:'assistant',text,final:false}).catch(()=>stopSafely(true));
       }));
@@ -153,7 +156,11 @@ export default defineAgent({entry: async (ctx: JobContext) => {
         if(stopped||sentCommands.has(command.id))continue;
         sentCommands.add(command.id);
         await transcripts.record({id:command.id,role:'caller',text:command.text,final:true});
-        if(!stopped)session!.generateReply({userInput:new llm.ChatMessage({id:command.id,role:'user',content:[command.text]})});
+        if(!stopped){
+          if(!realtimeSession)throw new Error('Typed conversation unavailable');
+          await appendTypedInput(agent,realtimeSession.chatCtx,command);
+          if(!stopped)session!.generateReply();
+        }
       }
     } catch (error) { stopSafely(!(error instanceof AdmissionError && [404,410].includes(error.status))); return; }
     if (!stopped) monitoring = setTimeout(() => void monitor(), 2000);
