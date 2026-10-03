@@ -5,7 +5,7 @@ export function modelOptions(context: CallContext, apiKey: string) {
   if (!apiKey || !voices.has(context.voice)) throw new Error('Incompatible call configuration');
   return {model: INFERENCE.model, baseURL: INFERENCE.baseURL, apiKey, voice: context.voice,
     responsesOptions: {model: INFERENCE.delegationModel, maxOutputTokens: INFERENCE.maxOutputTokens,
-      instructions: `Use only the admitted business facts and instructions below. Do not claim a booking is confirmed. Call end_call only after the live receptionist has said a polite goodbye and the conversation is complete. Otherwise answer briefly.\n\n${context.instructions}`},
+      instructions: `Use only the admitted business facts and instructions below. Do not claim a booking is confirmed. When the caller clearly ends the conversation and no request needs clarification, call end_call. This tool schedules a brief spoken goodbye and waits for it to play before disconnecting; do not wait for an earlier goodbye or merely return goodbye text. Otherwise answer briefly.\n\n${context.instructions}`},
   };
 }
 export function acceptedEcho(value: unknown, voice: string): boolean {

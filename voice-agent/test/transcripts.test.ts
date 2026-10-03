@@ -6,6 +6,8 @@ import {TranscriptBridge,type ProviderTranscript} from '../src/transcript-bridge
 import {observeGeneration} from '../src/stream-transcripts.js';
 import {modelOptions,acceptedEcho} from '../src/config.js';
 import {createCallerAudioSubscription} from '../src/caller-audio.js';
+import {FarewellPair,isFarewell} from '../src/farewell.js';
+import {isFarewell as releasedFarewell} from '../../src/providers.js';
 import {within} from '../src/deadline.js';
 const stream=<T>(...items:T[])=>new ReadableStream<T>({start(controller){items.forEach(item=>controller.enqueue(item));controller.close();}});
 test('caller partial revisions and SDK final reconcile to one identity; duplicate final ignored',async()=>{
@@ -36,6 +38,13 @@ test('caller subscription excludes other participants and non-microphone tracks;
  helper.subscribe(mic,{identity:'other'});helper.subscribe({...mic,source:1},{identity:'trusted'});assert.equal(changes.length,0);
  helper.subscribe(mic,{identity:'trusted'});helper.subscribe(mic,{identity:'trusted'});helper.stop();helper.subscribe({...mic},{identity:'trusted'});assert.deepEqual(changes,[true,false]);
 });
+test('disposed native subscriptions cannot prevent the rest of call shutdown',()=>{
+ let secondClosed=false;const helper=createCallerAudioSubscription('trusted',2,()=>{});
+ helper.subscribe({source:2,setSubscribed:(v:boolean)=>{if(!v)throw Error('disposed native handle');}},{identity:'trusted'});
+ helper.subscribe({source:2,setSubscribed:(v:boolean)=>{if(!v)secondClosed=true;}},{identity:'trusted'});
+ assert.equal(helper.stop(),false);assert.equal(secondClosed,true);assert.equal(helper.stop(),true);
+ let late=false;helper.subscribe({source:2,setSubscribed:()=>{late=true;}},{identity:'trusted'});assert.equal(late,false);
+});
 test('managed routing uses exact duplex/delegation and rejects unsupported voice',()=>{
  const context={voice:'marin',instructions:'Business facts'} as Parameters<typeof modelOptions>[0];
  const options=modelOptions(context,'synthetic');assert.equal(options.model,'gpt-live-1');assert.equal(options.responsesOptions.model,'gpt-5.4-mini');assert.equal(options.responsesOptions.maxOutputTokens,512);
@@ -58,4 +67,15 @@ test('application token verifies with the installed LiveKit SDK and matches micr
  const reference=new AccessToken('fixture-key','fixture-secret',{identity:'caller'});reference.addGrant(grant);
  const referenceClaims=await new TokenVerifier('fixture-key','fixture-secret').verify(await reference.toJwt());
  assert.deepEqual(verified.video,referenceClaims.video);assert.equal(verified.sub,'caller');
+});
+
+test('paired farewell keeps released vocabulary, waits for three final messages and cancels renewed input',()=>{
+ const samples=['Goodbye','bye bye','Auf Wiederhören','Tschüss','au revoir','adiós','arrivederci','tot ziens','hej då','до свидания','hello','thank you','Thanks, anything else?','buy'];
+ for(const text of samples)assert.equal(isFarewell(text),releasedFarewell(text));
+ const closings:Array<()=>boolean>=[];const pair=new FarewellPair(current=>closings.push(current));
+ pair.record('assistant','greeting','Hello',true);pair.record('caller','request','Please call me back. Goodbye',true);assert.equal(closings.length,0);
+ pair.record('assistant','reply','I will pass your message on. Goodbye',true);assert.equal(closings.length,1);assert.equal(closings[0]!(),true);
+ pair.record('caller','more','Actually',false);assert.equal(closings[0]!(),false);
+ pair.record('caller','more','Actually, what time do you open?',true);pair.record('assistant','question','Anything else before goodbye?',true);assert.equal(closings.length,1);
+ pair.record('caller','thanks','Thank you',true);pair.record('assistant','ordinary','Goodbye',true);assert.equal(closings.length,1);
 });

@@ -6,6 +6,7 @@ import {TranscriptBridge} from './transcript-bridge.js';
 import {within} from './deadline.js';
 import {ControlClient, AdmissionError} from './control.js';
 import {observeGeneration} from './stream-transcripts.js';
+import {FarewellPair} from './farewell.js';
 import {acceptedEcho, modelOptions} from './config.js';
 
 export default defineAgent({entry: async (ctx: JobContext) => {
@@ -13,6 +14,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   const control = new ControlClient(process.env.OPENFON_API_URL!, process.env.OPENFON_AGENT_SERVICE_TOKEN!, metadata.callId || '', ctx.job.room?.name || ctx.room.name || '', ctx.job.id);
   const context = await control.context();
   let session: voice.AgentSession | undefined;
+  let latestSpeech:voice.SpeechHandle|undefined;
   let providerSession:realtime.GPTLiveSession|undefined;
   let stopping: Promise<void> | undefined;
   let failed = false;
@@ -24,26 +26,32 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     await control.post('events', {callback: context.callback, type: 'transcript', eventId: item.sourceItemId,
       revision: item.revision, final: item.final, role: item.role === 'caller' ? 'caller' : 'agent', text: item.text});
   }, async () => {}, 200);
+  const diagnostic=(phase:string)=>console.info(JSON.stringify({event:'openfon_voice_lifecycle',phase}));
   const stop = (failure = false, drain = false): Promise<void> => {
     failed ||= failure;
     if (stopping) return stopping;
     stopped = true;
+    diagnostic(failure?'failure_stop':'normal_stop');
     stopping = (async () => {
       clearTimeout(monitoring); clearTimeout(deadline);
-      callerAudio.stop();
+      const subscriptionsStopped=callerAudio.stop();
+      if(!subscriptionsStopped)diagnostic('unsubscribe_already_closed');
       ctx.room.off(RoomEvent.TrackPublished, callerAudio.subscribe);
-      session?.input.setAudioEnabled(false);
+      try{session?.input.setAudioEnabled(false);}catch{if(ctx.room.isConnected)failed=true;diagnostic('input_already_closed');}
       try {
         // Drain allows an already-spoken goodbye to finish. Transport/error shutdown interrupts.
         session?.shutdown({drain});
         await within(session?.close()??Promise.resolve(),6000);
+        diagnostic('session_closed');
       } catch {
         failed = true;
-        session?.output.setAudioEnabled(false);
+        diagnostic('session_close_deadline');
+        try{session?.output.setAudioEnabled(false);}catch{/* native output may already be closed */}
         void providerSession?.close().catch(()=>{});
       }
-      try { await within(transcripts.flush(),7000); } catch { failed = true; }
-      try { await control.post('events', {callback: context.callback, type: 'finished', failed}); }
+      try { await within(transcripts.flush(),7000); diagnostic('transcripts_flushed'); } catch { failed = true; diagnostic('transcripts_failed'); }
+      try { await control.post('events', {callback: context.callback, type: 'finished', failed}); diagnostic('finished_acknowledged'); }
+      catch(error){diagnostic(error instanceof AdmissionError?'finished_rejected':'finished_unavailable');throw error;}
       finally {
         try{await within(ctx.room.disconnect(),2000);}finally{ctx.shutdown('call completed');}
       }
@@ -52,11 +60,23 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   };
   const stopSafely = (failure = false, drain = false) => { void stop(failure, drain).catch(() => { console.error('Call shutdown did not confirm persistence'); }); };
   ctx.addShutdownCallback(async () => { await stop(); });
+  const farewell=new FarewellPair(stillCurrent=>{
+    diagnostic('paired_farewell');
+    void(async()=>{
+      try{
+        const speech=latestSpeech;
+        if(!speech)throw Error('Farewell playout unavailable');
+        if(speech)await within(speech.waitForPlayout(),15000);
+        if(!stopped&&stillCurrent())await stop(false,true);
+      }catch{stopSafely(true);}
+    })();
+  });
   class CheckedModel extends realtime.GPTLiveModel {
     override session(): realtime.GPTLiveSession {
       const duplex = super.session();
       providerSession=duplex;
       duplex.on('input_audio_transcription_completed', event => {
+        if(event.itemId)farewell.record('caller',event.itemId,event.transcript,event.isFinal);
         if (event.itemId) void transcripts.record({id: event.itemId, role: 'caller', text: event.transcript, final: event.isFinal, createdAt: event.turnStartedAt}).catch(() => stopSafely(true));
       });
       duplex.on('error', () => stopSafely(true));
@@ -80,20 +100,23 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     }
   }
   session = new voice.AgentSession({llm: new TranscriptAdapter(model)});
+  session.on(voice.AgentSessionEventTypes.SpeechCreated,event=>{latestSpeech=event.speechHandle;});
   session.on(voice.AgentSessionEventTypes.Error, () => stopSafely(true));
   session.on(voice.AgentSessionEventTypes.Close, () => { if (!stopped) stopSafely(true); });
   session.on(voice.AgentSessionEventTypes.ConversationItemAdded, event => {
     const item = event.item;
     if (item.type !== 'message' || !['user', 'assistant'].includes(item.role) || !item.textContent) return;
+    farewell.record(item.role==='user'?'caller':'assistant',item.id,item.textContent,true);
     void transcripts.record({id: item.id, role: item.role === 'user' ? 'caller' : 'assistant', text: item.textContent, final: true, createdAt: item.createdAt}).catch(() => stopSafely(true));
   });
   let closingRequested=false;
-  const endCall = llm.tool({name: 'end_call', description: 'End a completed conversation only after saying a polite goodbye.',
+  const endCall = llm.tool({name: 'end_call', description: 'End a completed conversation by scheduling a brief spoken goodbye, then disconnecting after it plays.',
     parameters: {type: 'object', properties: {}, additionalProperties: false},
     execute: async () => {
       // Return from the function before draining the activity that owns this function.
       if(!closingRequested){
         closingRequested=true;
+        diagnostic('end_call_requested');
         setTimeout(()=>{void (async()=>{
           if(stopped)return;
           try{
@@ -103,10 +126,10 @@ export default defineAgent({entry: async (ctx: JobContext) => {
           }catch{stopSafely(true);}
         })();},0);
       }
-      return 'Say a brief polite goodbye; closure will follow audio completion.';
+      return 'Closure is scheduled after a brief spoken goodbye. Do not request another tool or start a new conversation.';
     },
   });
-  const agent = new voice.Agent({instructions: `${context.instructions}\n\nSpeak ${context.language}. Start by greeting the caller: ${context.greeting}\nWhen the conversation is finished, say a polite goodbye before delegating end_call. Never announce internal technology.`, tools: new llm.ToolContext([endCall])});
+  const agent = new voice.Agent({instructions: `${context.instructions}\n\nSpeak ${context.language}. Start by greeting the caller: ${context.greeting}\nWhen the caller clearly ends the conversation, delegate end_call. It schedules a brief polite goodbye before disconnecting. Do not simply say goodbye and leave the call open. Never announce internal technology.`, tools: new llm.ToolContext([endCall])});
   const sentCommands=new Set<string>();
   const monitor = async () => {
     if (stopped) return;
@@ -118,6 +141,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
         await control.post('events',{callback:context.callback,type:'command_ack',commandId:command.id});
         if(stopped||sentCommands.has(command.id))continue;
         sentCommands.add(command.id);
+        farewell.record('caller',command.id,command.text,true);
         await transcripts.record({id:command.id,role:'caller',text:command.text,final:true});
         if(!stopped)session!.generateReply({userInput:new llm.ChatMessage({id:command.id,role:'user',content:[command.text]})});
       }

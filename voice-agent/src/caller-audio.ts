@@ -7,6 +7,12 @@ export function createCallerAudioSubscription<T extends {source?:number;setSubsc
       if(!active||participant.identity!==callerIdentity||publication.source!==microphoneSource||subscriptions.has(publication))return;
       subscriptions.add(publication);publication.setSubscribed(true);onSubscribed();
     },
-    stop:()=>{active=false;for(const publication of subscriptions)publication.setSubscribed(false);subscriptions.clear();},
+    stop:()=>{
+      active=false;let confirmed=true;
+      // Room disconnection can dispose native publication handles first. Still
+      // clear every handle and let the caller finish persistence and shutdown.
+      for(const publication of subscriptions){try{publication.setSubscribed(false);}catch{confirmed=false;}}
+      subscriptions.clear();return confirmed;
+    },
   };
 }
