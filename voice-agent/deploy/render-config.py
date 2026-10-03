@@ -43,6 +43,9 @@ config = {
     'port': port,
     'bind_addresses': ['0.0.0.0'],
     'rtc': {'tcp_port': tcp, 'udp_port': udp, 'use_external_ip': True},
+    # tls_port is the internal TLS listener behind nginx SNI passthrough.
+    # Pinned LiveKit 1.13.7 advertises turns:<domain>:443 whenever TLSPort > 0:
+    # https://github.com/livekit/livekit/blob/8d11efdfcd4220092b6ac7b8a21af28526da5a6b/pkg/service/roommanager.go#L1069
     'turn': {'enabled': True, 'proxy_protocol': True, 'proxy_protocol_trusted_cidrs': ['127.0.0.1/32'], 'domain': turn, 'tls_port': turn_tls, 'udp_port': turn_udp,
              'cert_file': f'/etc/letsencrypt/live/{args.cert_name}/fullchain.pem',
              'key_file': f'/etc/letsencrypt/live/{args.cert_name}/privkey.pem'},
