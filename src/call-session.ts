@@ -570,15 +570,17 @@ export class CallSession implements DurableObject {
     if(body.room!==media.room)return new Response(null,{status:403});
     const active=await this.env.DB.prepare("SELECT 1 FROM calls WHERE id=? AND status='active' AND channel='web' AND connected_at IS NOT NULL").bind(media.callId).first();
     if(url.pathname==='/livekit/context') {
-      if(!active||media.closing||this.ended||(!media.ready&&media.startupDeadline!==undefined&&Date.now()>=media.startupDeadline))return new Response(null,{status:410});
+      if(!active||media.closing||this.ended)return new Response(null,{status:410});
       if(typeof body.jobId!=='string'||body.jobId.length>128||!body.jobId)return new Response(null,{status:400});
       if(media.jobId&&media.jobId!==body.jobId)return new Response(null,{status:409});
+      if(await this.expireLivekitStartup(media))return new Response(null,{status:410});
       media.jobId=body.jobId;await this.state.storage.put('livekit',media);
       return Response.json({callId:media.callId,room:media.room,caller:media.caller,callback:media.callback,instructions:media.instructions,greeting:media.greeting,voice:media.voice,language:media.language,commands:media.commands??[]});
     }
     if(body.jobId!==media.jobId||!secureEqual(typeof body.callback==='string'?body.callback:'',media.callback))return new Response(null,{status:403});
     if(body.type==='ready') {
-      if(!active||media.closing||media.finished||this.ended||(!media.ready&&media.startupDeadline!==undefined&&Date.now()>=media.startupDeadline))return new Response(null,{status:410});
+      if(!active||media.closing||media.finished||this.ended)return new Response(null,{status:410});
+      if(await this.expireLivekitStartup(media))return new Response(null,{status:410});
       media.ready=true;await this.state.storage.put('livekit',media);
       this.send({type:'agent_ready'});
       return Response.json({ok:true});
@@ -604,6 +606,19 @@ export class CallSession implements DurableObject {
       if(changed)this.send({type:transcript.role==='caller'?'transcript':'agent_text',text:transcript.text,eventId:transcript.eventId,revision:transcript.revision,final:transcript.final});
       return Response.json({ok:true});
     } catch {return new Response(null,{status:409});}
+  }
+
+  /** A poll can observe expiry before the alarm. Freeze the same diagnosis
+   * before returning 410, so a normal worker flush cannot label silence complete. */
+  private async expireLivekitStartup(media:LivekitSession):Promise<boolean> {
+    if(media.ready||media.startupDeadline===undefined||Date.now()<media.startupDeadline)return false;
+    this.failure ??= (await this.state.storage.get<{failure:string|null}>('ending'))?.failure
+      ?? 'Call failed: the conversation service did not finish connecting. Please try again.';
+    await this.rememberEnding();
+    media.closing=true;await this.state.storage.put('livekit',media);
+    this.send({type:'error',message:this.failure});
+    await this.state.storage.setAlarm(Date.now());
+    return true;
   }
 
   private pendingContentType = 'audio/webm';

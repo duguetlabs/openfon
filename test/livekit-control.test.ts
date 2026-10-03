@@ -175,3 +175,24 @@ it.each([false,true])('validates the selected summary route before dispatch (ind
  expect(finish).toHaveBeenCalledTimes(independent?0:1);
  if(!independent)expect(state.failure).toContain('Check summary settings');
 });
+
+it.each(['context','ready'])('expired %s freezes failure before a normal worker finish and eviction',async operation=>{
+ vi.useFakeTimers();const now=Date.now();
+ data.set('livekit',{...data.get('livekit'),startupDeadline:now+90000});await request('context');
+ vi.setSystemTime(now+90000);
+ const response=operation==='context'?await request('context'):await request('events',{type:'ready',callback:'scoped-capability'});
+ expect(response.status).toBe(410);
+ expect(data.get('ending')).toEqual({endedAt:now+90000,failure:expect.stringContaining('did not finish connecting')});
+ expect(data.get('livekit').closing).toBe(true);
+ session=new CallSession((session as any).state,env);
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({})));
+ expect((await request('events',{type:'finished',callback:'scoped-capability',failed:false})).status).toBe(200);
+ await Promise.all(pending);
+ expect(db.database.prepare('SELECT status,summary FROM calls').get()).toEqual({status:'failed',summary:expect.stringContaining('did not finish connecting')});
+});
+it('normal closing before startup expiry is not reclassified by a later poll',async()=>{
+ vi.useFakeTimers();const now=Date.now();data.set('livekit',{...data.get('livekit'),startupDeadline:now+90000});await request('context');
+ data.set('livekit',{...data.get('livekit'),closing:true});data.set('ending',{endedAt:now+1000,failure:null});
+ vi.setSystemTime(now+90000);expect((await request('context')).status).toBe(410);
+ expect(data.get('ending')).toEqual({endedAt:now+1000,failure:null});
+});
