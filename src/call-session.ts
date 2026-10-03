@@ -580,6 +580,7 @@ export class CallSession implements DurableObject {
     if(body.type==='ready') {
       if(!active||media.closing||media.finished||this.ended||(!media.ready&&media.startupDeadline!==undefined&&Date.now()>=media.startupDeadline))return new Response(null,{status:410});
       media.ready=true;await this.state.storage.put('livekit',media);
+      this.send({type:'agent_ready'});
       return Response.json({ok:true});
     }
     if(body.type==='command_ack'){

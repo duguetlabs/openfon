@@ -36,6 +36,7 @@ function downsampleToPcm16(input: Float32Array, fromRate: number, toRate: number
 
 export class VoiceCall {
   private livekit: LivekitMedia | null = null;
+  private livekitAgentReady = false;
   private debugRecording = false;
   private debugGap = false;
   private debugStarted = performance.now();
@@ -243,6 +244,10 @@ export class VoiceCall {
             this.lastPcmBytes = null;
             ws.send(JSON.stringify({ type: 'audio_received', id: msg.id }));
             break;
+          case 'agent_ready':
+            this.livekitAgentReady=true;
+            this.livekit?.markAgentReady();
+            break;
           case 'ready':
             if(msg.mode==='livekit') {
               this.mode='realtime';this.ttsMode='server';
@@ -254,6 +259,7 @@ export class VoiceCall {
                 if(this.livekit)throw new Error('Duplicate media admission');
                 const media=new LivekitMedia(status=>{if(status==='ended')this.hangup();else if(!this.ended)this.emit({type:'status',status});},blocked=>this.reportAudio(blocked),who=>{if(!this.ended)this.emit({type:'speaking',who});},value=>{if(!this.ended)this.emit({type:'level',value});});
                 this.livekit=media;
+                if(this.livekitAgentReady)media.markAgentReady();
                 await media.connect(url,token,this.stream);
               }).catch(()=>{if(!this.ended){this.emit({type:'status',status:'error',detail:'The call could not connect. Check microphone access and try again.'});this.hangup();}});
               break;

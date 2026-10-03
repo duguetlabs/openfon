@@ -135,9 +135,11 @@ it('only the admitted worker can acknowledge readiness before the startup deadli
  vi.useFakeTimers();const now=Date.now();data.set('callId','call');data.set('lastActivity',now);
  data.set('livekit',{...data.get('livekit'),startupDeadline:now+90000});
  await request('context');
+ const send=vi.spyOn(session as any,'send');
  expect((await request('events',{type:'ready',callback:'wrong'})).status).toBe(403);
- expect(data.get('livekit').ready).toBeUndefined();
+ expect(data.get('livekit').ready).toBeUndefined();expect(send).not.toHaveBeenCalled();
  expect((await request('events',{type:'ready',callback:'scoped-capability'})).status).toBe(200);
+ expect(send).toHaveBeenCalledWith({type:'agent_ready'});
  vi.setSystemTime(now+90001);data.set('lastActivity',Date.now());await session.alarm();
  expect(db.database.prepare('SELECT status FROM calls').get()).toEqual({status:'active'});
  expect((await request('context')).status).toBe(200);

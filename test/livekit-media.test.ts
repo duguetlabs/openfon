@@ -40,7 +40,8 @@ it('removes attached audio and rejects stale subscription events after close',as
 });
 it('retains a text-only room when microphone permission is unavailable',async()=>{
  const x=setup();await x.media.connect('ws://127.0.0.1:7880','fixture',null);
- expect(x.room.localParticipant.publishTrack).not.toHaveBeenCalled();expect(x.status).toHaveBeenLastCalledWith('live');x.media.close();
+ expect(x.room.localParticipant.publishTrack).not.toHaveBeenCalled();expect(x.status).toHaveBeenLastCalledWith('connecting');
+ x.media.markAgentReady();expect(x.status).toHaveBeenLastCalledWith('live');x.media.close();
 });
 
 it('stays connecting while dispatch is pending and ends on permanent agent departure',async()=>{
@@ -48,9 +49,23 @@ it('stays connecting while dispatch is pending and ends on permanent agent depar
  await x.media.connect('ws://127.0.0.1:7880','fixture',null);
  expect(x.status).toHaveBeenLastCalledWith('connecting');
  x.room.emit('ParticipantConnected',{isAgent:false});expect(x.status).not.toHaveBeenCalledWith('live');
- x.room.emit('ParticipantConnected',{isAgent:true});expect(x.status).toHaveBeenLastCalledWith('live');
+ x.room.emit('ParticipantConnected',{isAgent:true});expect(x.status).toHaveBeenLastCalledWith('connecting');
+ x.media.markAgentReady();expect(x.status).toHaveBeenLastCalledWith('live');
  x.room.emit('ParticipantDisconnected',{isAgent:false});expect(x.status).not.toHaveBeenCalledWith('ended');
  x.room.emit('ParticipantDisconnected',{isAgent:true});expect(x.status).toHaveBeenLastCalledWith('ended');
  expect(x.room.disconnect).toHaveBeenCalledOnce();expect(vi.getTimerCount()).toBe(0);
  x.room.emit('Reconnected');x.room.emit('ParticipantConnected',{isAgent:true});expect(x.status).toHaveBeenLastCalledWith('ended');
+});
+
+it('retains readiness received before media connection without announcing live early',async()=>{
+ const x=setup();x.media.markAgentReady();expect(x.status).not.toHaveBeenCalled();
+ await x.media.connect('ws://127.0.0.1:7880','fixture',null);
+ expect(x.status).toHaveBeenLastCalledWith('live');
+ x.media.close();x.media.markAgentReady();expect(x.status).toHaveBeenCalledTimes(1);
+});
+it('does not announce live during reconnect before worker readiness',async()=>{
+ const x=setup();await x.media.connect('ws://127.0.0.1:7880','fixture',null);
+ x.room.emit('Reconnecting');x.room.emit('Reconnected');expect(x.status).not.toHaveBeenCalledWith('live');
+ x.room.emit('Reconnecting');x.media.markAgentReady();expect(x.status).not.toHaveBeenCalledWith('live');
+ x.room.emit('Reconnected');expect(x.status).toHaveBeenLastCalledWith('live');x.media.close();
 });
