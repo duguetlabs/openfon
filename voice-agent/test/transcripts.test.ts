@@ -57,6 +57,49 @@ test('persistence failure remains visible at flush and cannot produce final evid
  const bridge=new TranscriptBridge(async()=>{throw new Error('unavailable');},async()=>{assert.fail('must not authorize final');});
  await assert.rejects(bridge.record({id:'x',role:'caller',text:'callback',final:true}));await assert.rejects(bridge.flush());
 });
+test('slow persistence coalesces consecutive unsent partials while freezing active payload and preserving final',async()=>{
+ const saved:ProviderTranscript[]=[];let release!:()=>void;let started!:()=>void;
+ const held=new Promise<void>(resolve=>{release=resolve;});const active=new Promise<void>(resolve=>{started=resolve;});
+ const bridge=new TranscriptBridge(async item=>{saved.push(item);if(saved.length===1){started();await held;}},async()=>{});
+ const first=bridge.record({id:'a',role:'caller',text:'first',final:false});await active;
+ const pending:Promise<void>[]=[];
+ for(let i=0;i<300;i++)pending.push(bridge.record({id:'a',role:'caller',text:'latest '+i,final:false}));
+ assert.equal(new Set(pending).size,1,'unsent replacements share one completion promise');
+ assert.equal(saved[0]!.text,'first','an in-flight payload remains immutable');
+ const final=bridge.record({id:'a',role:'caller',text:'final full text',final:true});
+ assert.notEqual(final,pending[0]);release();await Promise.all([first,...pending,final]);await bridge.flush();
+ assert.deepEqual(saved.map(x=>[x.text,x.revision,x.final]),[['first',0,false],['latest 299',1,false],['final full text',2,true]]);
+});
+test('other items and finals are coalescing barriers and preserve write order',async()=>{
+ const saved:ProviderTranscript[]=[];let release!:()=>void;let started!:()=>void;
+ const held=new Promise<void>(resolve=>{release=resolve;});const active=new Promise<void>(resolve=>{started=resolve;});
+ const bridge=new TranscriptBridge(async item=>{saved.push(item);if(saved.length===1){started();await held;}},async()=>{});
+ const writes=[bridge.record({id:'a',role:'caller',text:'first',final:false})];await active;
+ writes.push(bridge.record({id:'a',role:'caller',text:'before other',final:false}));
+ writes.push(bridge.record({id:'b',role:'assistant',text:'other final',final:true}));
+ writes.push(bridge.record({id:'a',role:'caller',text:'after other',final:false}));
+ writes.push(bridge.record({id:'a',role:'caller',text:'final',final:true}));
+ writes.push(bridge.record({id:'a',role:'caller',text:'ignored after final',final:false}));
+ release();await Promise.all(writes);await bridge.flush();
+ assert.deepEqual(saved.map(x=>x.text),['first','before other','other final','after other','final']);
+});
+test('invalid unsent updates cannot be overwritten by a valid replacement',async()=>{
+ for(const invalid of [{role:'caller',text:'x'.repeat(30001)},{role:'invalid',text:'bad role'}]){
+  const bridge=new TranscriptBridge(async()=>{},async()=>{});
+  const rejected=bridge.record({id:'a',final:false,...invalid} as any);
+  const replacement=bridge.record({id:'a',role:'caller',text:'valid',final:false});
+  assert.notEqual(rejected,replacement);
+  const outcomes=await Promise.allSettled([rejected,replacement]);
+  assert.equal(outcomes[0]!.status,'rejected');await assert.rejects(bridge.flush());
+ }
+});
+test('distinct queued work still obeys the bounded capacity',async()=>{
+ let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});
+ const bridge=new TranscriptBridge(async()=>{await held;},async()=>{});
+ const writes=[];for(let i=0;i<256;i++)writes.push(bridge.record({id:'item_'+i,role:'caller',text:'text',final:false}));
+ await assert.rejects(bridge.record({id:'overflow',role:'caller',text:'text',final:false}),/queue capacity/);
+ release();await Promise.all(writes);await bridge.flush();
+});
 test('caller subscription excludes other participants and non-microphone tracks; stops late subscriptions',()=>{
  const changes:boolean[]=[];const mic={source:2,setSubscribed:(v:boolean)=>changes.push(v)};
  const helper=createCallerAudioSubscription('trusted',2,()=>{});
