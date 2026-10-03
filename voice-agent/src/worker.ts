@@ -9,7 +9,7 @@ import {ControlClient, AdmissionError} from './control.js';
 import {observeGeneration} from './stream-transcripts.js';
 import {ClockedGPTLiveSession} from './clocked-session.js';
 import {ToolClosure} from './tool-closure.js';
-import {FarewellPair} from './farewell.js';
+import {FarewellPair,finishCurrentFarewell} from './farewell.js';
 import {acceptedEcho, modelOptions} from './config.js';
 
 export default defineAgent({entry: async (ctx: JobContext) => {
@@ -67,14 +67,11 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   ctx.addShutdownCallback(async () => { await stop(); });
   const farewell=new FarewellPair(stillCurrent=>{
     diagnostic('paired_farewell');
-    void(async()=>{
-      try{
+    void finishCurrentFarewell(async()=>{
         const speech=latestSpeech;
         if(!speech)throw Error('Farewell playout unavailable');
-        if(speech)await within(speech.waitForPlayout(),15000);
-        if(!stopped&&stillCurrent())await stop(false,true);
-      }catch{stopSafely(true);}
-    })();
+        await within(speech.waitForPlayout(),15000);
+      },()=>!stopped&&stillCurrent(),()=>stopSafely(false,true),()=>stopSafely(true));
   });
   class CheckedModel extends realtime.GPTLiveModel {
     override session(): realtime.GPTLiveSession {

@@ -2,6 +2,38 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {IdleInputClock} from '../src/input-clock.js';
 import {ToolClosure} from '../src/tool-closure.js';
+import {FarewellPair,finishCurrentFarewell} from '../src/farewell.js';
+import {within} from '../src/deadline.js';
+
+test('renewed caller invalidates paired-farewell timeout and permits a later goodbye',async()=>{
+  const outcomes:string[]=[];const pending:Promise<void>[]=[];
+  let timeout=true;
+  const pair=new FarewellPair(current=>{
+    pending.push(finishCurrentFarewell(
+      ()=>timeout?within(new Promise<void>(()=>{}),5):Promise.resolve(),
+      current,()=>{outcomes.push('completed');},()=>{outcomes.push('failed');}));
+  });
+  pair.record('assistant','greeting','Hello',true);
+  pair.record('caller','first','Goodbye',true);
+  pair.record('assistant','first-reply','Goodbye',true);
+  pair.record('caller','renewed','Actually, please wait',false);
+  await Promise.all(pending);
+  assert.deepEqual(outcomes,[],'expired old playout cannot fail the resumed call');
+  timeout=false;
+  pair.record('caller','last','Goodbye',true);
+  pair.record('assistant','last-reply','Goodbye',true);
+  await Promise.all(pending);
+  assert.deepEqual(outcomes,['completed']);
+});
+
+test('current paired-farewell timeout fails; canceled success cannot close',async()=>{
+  const outcomes:string[]=[];
+  await finishCurrentFarewell(()=>within(new Promise<void>(()=>{}),5),()=>true,
+    ()=>{outcomes.push('completed');},()=>{outcomes.push('failed');});
+  await finishCurrentFarewell(()=>Promise.resolve(),()=>false,
+    ()=>{outcomes.push('completed');},()=>{outcomes.push('failed');});
+  assert.deepEqual(outcomes,['failed']);
+});
 
 test('microphone-denied session gets paced silent input; active microphone frames are forwarded once',()=>{
   let now=0;const sent:Array<{samplesPerChannel:number;kind:string}>=[];

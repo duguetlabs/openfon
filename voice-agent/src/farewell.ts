@@ -2,6 +2,17 @@
  * Kept in the independent agent image; cross-application parity is regression-tested. */
 const FAREWELL_RE = /(?<!\p{L})(good\s?bye|bye\s?bye|bye now|bye|see you|that('|’)s all|auf wiederh(ö|oe?)ren|auf wiedersehen|tsch(ü|ue?)ss|au revoir|bonne journ(é|e)e|adi(ó|o)s|hasta luego|arrivederci|buona giornata|tot ziens|doei|hej d(å|a)|vi ses|farvel|n(ä|a)kemiin|heippa|до свидания|всего доброго)(?!\p{L})/iu;
 export const isFarewell=(text:string)=>FAREWELL_RE.test(text);
+/** A superseded goodbye owns neither a successful close nor a timeout failure. */
+export async function finishCurrentFarewell(
+  playout:()=>Promise<void>,
+  current:()=>boolean,
+  complete:()=>void,
+  fail:()=>void,
+):Promise<void>{
+  try{await playout();}
+  catch{if(current())fail();return;}
+  if(current())complete();
+}
 /** Delegation is nondeterministic. Require a real exchange and paired final words,
  * then let SDK playout finish. Renewed caller input invalidates any pending close. */
 export class FarewellPair {
