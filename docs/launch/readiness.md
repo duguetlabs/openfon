@@ -4,7 +4,7 @@ The browser application is launched at https://openfon.ai. Production deployment
 was explicitly authorized; this is not live telephone/carrier acceptance.
 
 Current production/staging versions, migrations and configuration differences are
-recorded in [production preflight](production-preflight.md#current-deployment-state--verified-2026-09-30).
+recorded in [production preflight](production-preflight.md).
 
 ## Code release
 
@@ -267,19 +267,23 @@ This does not promise zero provider failures or replace physical-device tests.
 The initial hotspot DNS cache and precise launch checks are recorded in
 [production preflight](production-preflight.md).
 
-## LiveKit migration candidate (2026-10-02, not deployed)
+## LiveKit migration candidate (2026-10-03, application not deployed)
 
-The isolated `codex/released-web-livekit` candidate is based on the released Web source `debd746` via its docs-only successor `0005732`. It preserves the released layout, brand assets, auth and business interfaces. See [the worker setup](../../voice-agent/README.md).
+PR #42 preserves the released layout, brand assets, auth and business interfaces. Cloudflare retains application/state authority; separate Azure LiveKit and Node services carry browser audio to Kataleptic. See [worker setup](../../voice-agent/README.md) and [Azure operations](../../voice-agent/deploy/README.md).
 
-Acceptance still required on the final candidate:
+Verified evidence:
 
-- Actual SFU + Node agent + local workerd/D1 call: incoming audio, audible answer, caller and assistant partial/final UI updates and matching persisted rows.
-- Genuine gateway echo for the selected voice and explicit `gpt-5.4-mini` delegation, with no alternate speech path; voice-sample/call parity.
-- Polite goodbye and playout completion; cancellation during connect, agent loss, callback outage, account deletion and room cleanup under actual runtimes.
-- Repeated calls, reconnect, noisy/background conversation, interruption and physical playback quality. Synthetic active-speaker tests do not establish acoustic quality.
-- Existing summary/message extraction after final transcript drain; no partial-only action evidence.
-- Current-commit review/CI and authorized exact-candidate staging before any production rollout or remote migration.
+- A composed local Worker/Durable Object/D1 + native LiveKit + Node + real Kataleptic call produced incoming/outgoing PCM, 91 partial revisions, seven final transcript turns, a persisted summary and callback details. Paired farewell waited for SDK playout before normal close and final flush. The synthetic English caller used marin; this is not physical microphone, all-voice or Azure application acceptance.
+- Azure staging and production SFUs/idle agents are healthy. Native direct RTC and forced TURN/TLS443 returned nonzero audio. The native in-app browser also selected a TLS relay and received 41,827 audio bytes/176 packets with staging TURN UDP temporarily disabled, then restored. These transport-only checks made no inference calls.
+- The native WebRTC library rejected the earlier ISRG certificate chain. The final official ZeroSSL USERTrust/Sectigo chain passed native and browser TLS verification; verification was never disabled. Certificate renewal is configured, with documented single-VM restart limitations.
+- Round-one candidate checks passed 2,039 root tests/86 files, both root TypeScript checks/build and nine Node tests/build. Reviews identified real no-microphone input-clock, tool-closing interruption, cleanup-duration/retry and rollback-drain defects. Corrections require a new reviewed commit and staging acceptance; round one is not release clearance.
+- Both remote database backups restored locally with integrity `ok` and zero foreign-key violations. Additive 0025 preserved all old-column fingerprints. Only staging 0025 is applied; staging's historical data-only 0024 deliberately remains unapplied. Production remains through 0024.
 
-Historical prototype playback (749 chunks/67.69 s) belongs to the separate prototype and does not close these candidate gates. No new real-provider audio acceptance or LiveKit debug audio recording is claimed.
+Remaining acceptance:
 
-Candidate local checks: root 2,037 tests/86 files pass; Worker/browser typechecks and both production builds pass; separate agent 7 tests pass. Native local LiveKit room/dispatch, signed microphone publication and synthetic audio receipt passed (20 frames/4,800 samples), with container removal and process exit verified. All 25 migrations applied to isolated local D1. Native in-app landing/sign-in preview verified at loopback; no authenticated browser call or Kataleptic call was run. The released CSS artifact remains `index-BjYU9dVy.css`.
+- Exact-candidate staging voice-preview/call parity for marin/English and cedar/German, final transcripts, summary/action extraction and automatic goodbye. The no-microphone typed fallback also needs actual provider validation.
+- Current-commit reviews/CI and staging verification before production deployment, followed by production smoke and source/version readback.
+- Physical playback, microphone denial in the actual browser, repeated calls, reconnect and restaurant-noise/interruption quality. Synthetic transport and caller audio do not establish these experience claims.
+- iOS signed upload and TestFlight processing/install verification. Simulator/unsigned archives do not establish device signing or physical audio.
+
+Debug audio recording is not implemented for the new LiveKit transport; existing transcript persistence remains. Historical prototype evidence and earlier transport failures retain their original attribution. Carrier acceptance remains separate and disabled.

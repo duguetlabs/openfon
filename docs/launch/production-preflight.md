@@ -1,6 +1,16 @@
 # Production preflight
 
-## Current deployment state — verified 2026-09-30
+## LiveKit rollout preparation — 2026-10-03
+
+The application source/version below is still deployed in both environments. Azure now has separate staging/production LiveKit and Node services; provisioning and synthetic transport checks are complete, but the new application has not been deployed or accepted there.
+
+Fresh restricted backups of both D1 databases restored with integrity `ok` and zero foreign-key violations. Staging now has **0001–0023 plus additive 0025**; migration 0024 remains deliberately unapplied because it rewrites saved model choices. Production remains **0001–0024**. Apply only 0025 for this rollout; do not use a blanket migration command. Old columns and saved assistant choices were preserved. Matching staging callback secrets are provisioned, while the application rollout flag is not yet deployed.
+
+Staging and production use independent SFU/callback credentials and fixed callback origins. Keep those credentials and transcript columns during a rollback so admitted calls can finish their authenticated flush. Gate new LiveKit calls with the deployment flag, then drain before stopping the corresponding agent/SFU. Do not roll back to code without callback support while calls are still active.
+
+Current review and provider-validation limits are in [readiness](readiness.md#livekit-migration-candidate-2026-10-03-application-not-deployed). This section is preparation evidence, not production acceptance. Existing carriers remain disabled. Deployment authority was explicitly granted by the user; exact staging and review gates remain required.
+
+## Application deployment state — verified 2026-09-30
 
 The browser application is live at **https://openfon.ai** through Cloudflare.
 This launch and production deployment were explicitly authorized. Telephone
