@@ -1,5 +1,5 @@
 import {defineAgent, voice, llm, AutoSubscribe, type JobContext} from '@livekit/agents';
-import {appendTypedInput} from './typed-input.js';
+import {submitTypedInput} from './typed-input.js';
 import {realtime} from '@livekit/agents-plugin-openai';
 import {RoomEvent, TrackSource, type RemoteTrackPublication} from '@livekit/rtc-node';
 import {createCallerAudioSubscription} from './caller-audio.js';
@@ -19,7 +19,6 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   let session: voice.AgentSession | undefined;
   let latestSpeech:voice.SpeechHandle|undefined;
   let providerSession:ClockedGPTLiveSession|undefined;
-  let realtimeSession:llm.RealtimeSession|undefined;
   const toolClosure=new ToolClosure();
   let stopping: Promise<void> | undefined;
   let failed = false;
@@ -31,7 +30,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     await control.post('events', {callback: context.callback, type: 'transcript', eventId: item.sourceItemId,
       revision: item.revision, final: item.final, role: item.role === 'caller' ? 'caller' : 'agent', text: item.text});
   }, async () => {}, 200);
-  const diagnostic=(phase:string)=>console.info(JSON.stringify({event:'openfon_voice_lifecycle',phase}));
+  const diagnostic=(phase:string)=>console.info(JSON.stringify({event:'openfon_voice_lifecycle',callId:context.callId,phase}));
   const stop = (failure = false, drain = false): Promise<void> => {
     failed ||= failure;
     if (stopping) return stopping;
@@ -102,7 +101,6 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   class TranscriptAdapter extends llm.DuplexRealtimeAdapter {
     override session() {
       const adapted=super.session();
-      realtimeSession=adapted;
       adapted.on('generation_created',event=>observeGeneration(event,(id,text)=>{
         void transcripts.record({id,role:'assistant',text,final:false}).catch(()=>stopSafely(true));
       }));
@@ -150,17 +148,14 @@ export default defineAgent({entry: async (ctx: JobContext) => {
         if(stopped)break;
         // New admitted text cancels a pending goodbye before its fallible acknowledgement.
         toolClosure.observe(command.id,command.text,true);
-        farewell.record('caller',command.id,command.text,true);
+        farewell.record('caller',command.id,command.text,false);
         // Admit once before generation. Ambiguous delivery ends the call, never replays inference.
         await control.post('events',{callback:context.callback,type:'command_ack',commandId:command.id});
         if(stopped||sentCommands.has(command.id))continue;
         sentCommands.add(command.id);
-        await transcripts.record({id:command.id,role:'caller',text:command.text,final:true});
-        if(!stopped){
-          if(!realtimeSession)throw new Error('Typed conversation unavailable');
-          await appendTypedInput(agent,realtimeSession.chatCtx,command);
-          if(!stopped)session!.generateReply();
-        }
+        // SDK ConversationItemAdded is the sole persisted identity for typed input.
+        // It appends the command when its own queued generation is authorized.
+        if(!stopped)submitTypedInput(session!,command);
       }
     } catch (error) { stopSafely(!(error instanceof AdmissionError && [404,410].includes(error.status))); return; }
     if (!stopped) monitoring = setTimeout(() => void monitor(), 2000);

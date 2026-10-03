@@ -1,55 +1,89 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {llm, initializeLogger} from '@livekit/agents';
-import {realtime} from '@livekit/agents-plugin-openai';
-import {appendTypedInput} from '../src/typed-input.js';
+import {llm, voice, initializeLogger} from '@livekit/agents';
+import {AudioFrame} from '@livekit/rtc-node';
+import {ReadableStream, type ReadableStreamDefaultController} from 'node:stream/web';
+import {submitTypedInput} from '../src/typed-input.js';
 import {TranscriptBridge, type ProviderTranscript} from '../src/transcript-bridge.js';
+import {FarewellPair} from '../src/farewell.js';
 
-test('installed GPT-Live adapter retains command IDs and repeats with separate IDs without a second user insertion',async()=>{
+class QueuedModel extends llm.DuplexModel {
+  active!:QueuedSession;
+  constructor(){super({userTranscription:true,autoToolReplyGeneration:true});}
+  session(){return this.active=new QueuedSession(this);}
+  audioGate(){return new llm.FixedGate(0.001,{minSilenceDuration:100});}
+  async close(){}
+}
+class QueuedSession extends llm.DuplexSession {
+  controller!:ReadableStreamDefaultController<llm.DuplexAudioFrame>;
+  audioStream=new ReadableStream<llm.DuplexAudioFrame>({start:controller=>{this.controller=controller;}});
+  tools=llm.ToolContext.empty();
+  history=llm.ChatContext.empty();
+  asks:Array<{id:string;text:string}>=[];
+  async _updateInstructions(){}
+  async _appendItems(items:llm.ChatItem[]){this.history.insert(items);}
+  async _updateTools(tools:llm.ToolContext){this.tools=tools;}
+  _updateOptions(){}
+  pushAudio(){}
+  _generateReply(){
+    const item=this.history.items.at(-1);
+    this.asks.push({id:item?.id??'',text:item?.type==='message'?item.textContent:''});
+  }
+  finishReply(){
+    this.emit('transcript_delta',{text:'Synthetic reply.'});
+    for(const level of [1000,1000,0,0,0])this.controller.enqueue({frame:new AudioFrame(new Int16Array(2400).fill(level),24000,1,2400)});
+  }
+  protected async closeConnection(){this.controller.close();}
+}
+async function waitFor(check:()=>boolean,label:string){
+  const deadline=Date.now()+3000;
+  while(!check()){if(Date.now()>deadline)throw Error('Timed out '+label);await new Promise(resolve=>setTimeout(resolve,10));}
+}
+
+test('real AgentSession queues typed inputs with one SDK transcript each and preserves repeated text',async()=>{
   initializeLogger({pretty:false,level:'error'});
-  const appended:llm.ChatItem[]=[];
-  const commentary:string[]=[];
-  class CaptureSession extends realtime.GPTLiveSession {
-    override async _appendItems(items:llm.ChatItem[]):Promise<void>{appended.push(...items);await super._appendItems(items);}
-    override appendCommentary(text:string):void{commentary.push(text);}
-  }
-  class CaptureModel extends realtime.GPTLiveModel {
-    override session(){return new CaptureSession(this);}
-  }
-  // Configuration never starts: closing releases the SDK only after it is stopped.
-  const model=new CaptureModel({apiKey:'synthetic',baseURL:'http://127.0.0.1:1/v1'});
-  const adapted=new llm.DuplexRealtimeAdapter(model).session();
-  const target={updateChatCtx:(context:llm.ChatContext)=>adapted.updateChatCtx(context)};
+  const model=new QueuedModel();
+  const session=new voice.AgentSession({llm:model,vad:null,aecWarmupDuration:null});
+  const agent=new voice.Agent({instructions:'Synthetic test'});
   const persisted:ProviderTranscript[]=[];
   const bridge=new TranscriptBridge(async item=>{persisted.push(item);},async()=>{});
+  session.on(voice.AgentSessionEventTypes.ConversationItemAdded,event=>{
+    if(event.item.type==='message'&&event.item.role==='user')void bridge.record({id:event.item.id,text:event.item.textContent,role:'caller',final:true});
+  });
+  await session.start({agent});
   try{
-    for(const id of ['typed_first','typed_repeat']){
-      const live=adapted.chatCtx.copy();
-      live.insert(new llm.ChatMessage({id:'speech_'+id,role:'assistant',content:['A live reply']}));
-      live.insert(new llm.FunctionCall({id:'tool_'+id,callId:'call_'+id,name:'synthetic',args:'{}'}));
-      await adapted.updateChatCtx(live);
-      const command={id,text:'Please call tomorrow.'};
-      await bridge.record({...command,role:'caller',final:true});
-      await appendTypedInput(target,adapted.chatCtx,command);
-      // Worker uses bare generateReply; the provider reads the just-appended item.
-      adapted.duplexSession._generateReply();
-      const item=adapted.chatCtx.getById(id)!;
-      assert.equal(item.type,'message');
-      if(item.type==='message')await bridge.record({id:item.id,text:item.textContent,role:'caller',final:true});
-    }
+    const first=submitTypedInput(session,{id:'command_1',text:'First request'});
+    await waitFor(()=>model.active.asks.length===1,'first scheduled ask');
+    const second=submitTypedInput(session,{id:'command_2',text:'Repeated request'});
+    const third=submitTypedInput(session,{id:'command_3',text:'Repeated request'});
+    await new Promise(resolve=>setTimeout(resolve,30));
+    assert.equal(model.active.asks.length,1,'later requests wait behind active speech');
+    model.active.finishReply();
+    await first.waitForPlayout();
+    await waitFor(()=>model.active.asks.length===2,'second scheduled ask');
+    model.active.finishReply();
+    await second.waitForPlayout();
+    await waitFor(()=>model.active.asks.length===3,'third scheduled ask');
+    model.active.finishReply();
+    await third.waitForPlayout();
     await bridge.flush();
-    assert.deepEqual(appended.map(item=>item.id),['speech_typed_first','tool_typed_first','typed_first','speech_typed_repeat','tool_typed_repeat','typed_repeat']);
-    assert.deepEqual(adapted.chatCtx.items.map(item=>item.id),appended.map(item=>item.id));
-    assert.deepEqual(persisted.map(item=>item.sourceItemId),['typed_first','typed_repeat']);
-    assert.equal(commentary.length,2);
-    for(const text of commentary)assert.ok(text.endsWith('Please call tomorrow.'));
-    await appendTypedInput(target,adapted.chatCtx,{id:'typed_first',text:'Please call tomorrow.'});
-    assert.equal(appended.length,6);
-    await assert.rejects(appendTypedInput(target,adapted.chatCtx,{id:'typed_first',text:'Changed'}),/identity changed/);
-  }finally{await adapted.close();await model.close();}
+    assert.deepEqual(model.active.asks.map(item=>item.text),['First request','Repeated request','Repeated request']);
+    assert.equal(new Set(model.active.asks.map(item=>item.id)).size,3);
+    assert.deepEqual(persisted.map(item=>item.sourceItemId),model.active.asks.map(item=>item.id));
+    assert.equal(persisted.length,3);
+  }finally{await session.close();await model.close();}
 });
 
-test('typed context failures propagate before reply generation',async()=>{
-  await assert.rejects(appendTypedInput({updateChatCtx:async()=>{throw Error('append failed');}},llm.ChatContext.empty(),
-    {id:'typed_failed',text:'Please call.'}),/append failed/);
+test('pending typed admission cancels goodbye without counting a second final caller turn',()=>{
+  let closes=0;let stillCurrent=()=>false;const pair=new FarewellPair(current=>{closes++;stillCurrent=current;});
+  pair.record('assistant','greeting','Hello',true);
+  pair.record('caller','command','Goodbye',false);
+  pair.record('assistant','early','Goodbye',true);
+  assert.equal(closes,0);
+  pair.record('caller','sdk-item','Goodbye',true);
+  pair.record('assistant','final','Goodbye',true);
+  assert.equal(closes,1);
+  assert.equal(stillCurrent(),true);
+  pair.record('caller','next-command','Please wait',false);
+  assert.equal(stillCurrent(),false);
 });

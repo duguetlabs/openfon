@@ -222,6 +222,14 @@ async function runCase(spec) {
     proofs.push(proof);
     await writeFile(resolve(directory, label + '-result.json'), JSON.stringify(proof, null, 2), { mode: 0o600 });
     mark('call-pass', { label, callId: state.callId, partialEvents: proof.partialEvents, finalEvents: proof.finalEvents, automaticClosure: true });
+  } catch(error) {
+    // Preserve known conversation fields before normal owned-account cleanup.
+    await writeFile(resolve(directory,label+'-failure.json'),JSON.stringify({
+      label,callId:state.callId,failure:error.message,call:state.call,
+      outputSamples:state.samples,outputPeak:state.peak,
+      events:state.events.filter(event=>['transcript','agent_text','ended'].includes(event.type)),
+    },null,2),{mode:0o600});
+    throw error;
   } finally { await stopCall(state); }
 }
 let failure = '', deleted = false;
