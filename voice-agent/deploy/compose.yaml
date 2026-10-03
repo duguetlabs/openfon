@@ -1,0 +1,31 @@
+# Run from /opt/openfon-voice/<environment>, with its root-readable .env.
+# LIVEKIT_IMAGE and AGENT_IMAGE must be digest or immutable content-hash pins.
+services:
+  livekit:
+    image: ${LIVEKIT_IMAGE:?pinned LiveKit image required}
+    command: ["--config", "/etc/livekit.yaml"]
+    network_mode: host
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    logging:
+      driver: local
+      options: {max-size: "10m", max-file: "3"}
+  agent:
+    image: ${AGENT_IMAGE:?pinned agent image required}
+    network_mode: host
+    restart: unless-stopped
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp:size=64m,mode=1777]
+    env_file: agent.env
+    depends_on: [livekit]
+    logging:
+      driver: local
+      options: {max-size: "10m", max-file: "3"}
