@@ -1,16 +1,42 @@
 # Production preflight
 
-## LiveKit rollout preparation — 2026-10-03
+## Current LiveKit deployment — 2026-10-03
 
-The application source/version below is still deployed in both environments. Azure now has separate staging/production LiveKit and Node services; provisioning and synthetic transport checks are complete, but the new application has not been deployed or accepted there.
+PR #42 is merged and deployed to staging and production. Cloudflare retains application and state authority; separate self-hosted Azure LiveKit and Node services carry audio to Kataleptic. The released interface, accounts, saved configurations and public links are preserved. This deployment does not include the separate editions/redesign prototype.
 
-Fresh restricted backups of both D1 databases restored with integrity `ok` and zero foreign-key violations. Staging now has **0001–0023 plus additive 0025**; migration 0024 remains deliberately unapplied because it rewrites saved model choices. Production remains **0001–0024**. Apply only 0025 for this rollout; do not use a blanket migration command. Old columns and saved assistant choices were preserved. Matching staging callback secrets are provisioned, while the application rollout flag is not yet deployed.
+| Item | Production | Staging |
+| --- | --- | --- |
+| Application source | `ab0dcd5a5893c4e823c16e5e1a453748f0813f91` | `ab0dcd5a5893c4e823c16e5e1a453748f0813f91` |
+| Worker version at 100% | `a2787074-d3e2-42c7-a862-19c30033bff2` | `5d8b2f2f-aa5b-466c-adaf-929bdc947bcf` |
+| Voice transport flag | `livekit` | `livekit` |
+| Signaling | `wss://voice.openfon.ai` | `wss://voice-staging.openfon.ai` |
+| D1 migrations | 0001–0025 | 0001–0023 plus 0025; no 0024 |
+| Scheduled cleanup | Every five minutes | Disabled |
+| Telnyx / Asterisk | Disabled | Disabled |
 
-Staging and production use independent SFU/callback credentials and fixed callback origins. Keep those credentials and transcript columns during a rollback so admitted calls can finish their authenticated flush. Gate new LiveKit calls with the deployment flag, then drain before stopping the corresponding agent/SFU. Do not roll back to code without callback support while calls are still active.
+Production deployed at `2026-10-03T09:12:32Z`. Cloudflare readback verified the source, Worker version, transport flag, fixed signaling URL, original database binding and exact built index bytes. Root, sign-in and health returned 200; signed-out account access returned 401. The native in-app browser verified the public landing and sign-in screens.
 
-Current review and provider-validation limits are in [readiness](readiness.md#livekit-migration-candidate-2026-10-03-application-not-deployed). This section is preparation evidence, not production acceptance. Existing carriers remain disabled. Deployment authority was explicitly granted by the user; exact staging and review gates remain required.
+Both Azure agents run image `sha256:dbdbde5cde5c5f9282fa4d45e6d20120440e3e3c4bfd7bd3b059e161eebdce4f`, built from reviewed `ccf62ba`. Its source tree is identical to merged `ab0dcd5`; the squash did not require rebuilding runtime code. Separate environment credentials, fixed callback origins and the pinned LiveKit service remain in place. Azure is a single VM; certificate renewal can restart the SFUs and interrupt calls. See [operations](../../voice-agent/deploy/README.md).
 
-## Application deployment state — verified 2026-09-30
+### Release and data preservation
+
+- Final PR CI `37111486710` and merged-source CI `37111794546` passed. Genuine PR-Agent reported no security concerns and no major issues; independent local Codex review was clear. Final local checks passed 2,061 root tests in 86 files, both TypeScript projects and build, plus 34 Node tests and build.
+- Exact reviewed runtime source passed a staged real-provider typed conversation: audio, one unchanged caller row, final transcripts, summary/callback extraction, goodbye and automatic closure. The merged tree is identical. Startup readiness took 25.2 seconds in that run; a preceding run took 2.7 seconds. These observations do not establish consistent latency; [issue #43](https://github.com/duguetlabs/openfon/issues/43) tracks this.
+- Fresh production backup restored with integrity `ok`, zero foreign-key violations and zero active calls. Local additive-0025 rehearsal preserved all old-column fingerprints across 20 tables. Backup SHA256: `04c194bf8b51e8b7128b9e83489f5ee3a9450a8fb05166dd35ccc04066795c0e`.
+- Only additive migration 0025 was applied. The initial Wrangler invocation failed with `fetch failed`; independent database reads confirmed it had applied neither columns nor marker. The same reviewed SQL then succeeded through the D1 query API. Three new columns, migration marker and zero foreign-key violations were verified. Original logs remain retained. Do not repeat this migration or blanket-apply staging's historical 0024: that migration rewrites saved model choices.
+- The first production typed-call probe completed with audio, saved primary input, summary/callback details and goodbye, but **failed** its strict expected-row assertion. It attempted a second input after a 16-second wait without recording admission. The saved primary input appears exactly once; this does not establish loss of admitted input. The original failure remains recorded in [readiness](readiness.md#livekit-production-release-2026-10-03). Both environments were healthy with zero rooms/jobs afterward.
+
+- A separate corrected production smoke passed against the unchanged deployed source: one initial typed command with no fallback, one unchanged caller row, three assistant rows, actual output PCM, saved summary/callback details, goodbye and automatic closure. Duration was 25 seconds and client readiness 4.47 seconds. The test account was deleted. This establishes bounded owner test-call acceptance, not physical microphone or all-voice acceptance. The original failing run remains retained.
+
+### Rollback and remaining limits
+
+Disable new LiveKit admission using `WEB_VOICE_TRANSPORT`, then drain before stopping the corresponding agent/SFU. Retain current callback-capable code, separate credentials and additive transcript columns so admitted calls can finish authenticated flush. Do not roll back to old code without callback support while calls remain active. Saved configurations and credentials must remain intact.
+
+Debug audio recording is not implemented for the new LiveKit transport; transcripts persist. Physical microphone/noise, subjective voice identity, all-voice and carrier acceptance remain separate. The native iOS source is merged and verified, but TestFlight signing/upload is blocked on the operator unlocking the Mac and completing Xcode Apple authentication. No installable build is claimed.
+
+Restricted backups, original failures, provider audio and deployment records are retained outside Git under `~/.local/share/openfon-audits/2026-10-03-livekit/`. Credentials are excluded from this document. Current acceptance details are in [readiness](readiness.md#livekit-production-release-2026-10-03).
+
+## Historical application deployment — 2026-09-30
 
 The browser application is live at **https://openfon.ai** through Cloudflare.
 This launch and production deployment were explicitly authorized. Telephone
