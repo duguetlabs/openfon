@@ -65,6 +65,15 @@ it('does not dispatch when room creation is refused',async()=>{
  const fetcher=vi.fn(async()=>new Response('',{status:503}));vi.stubGlobal('fetch',fetcher);
  await expect(createLivekitRoom(env,{room:'x'} as LivekitSession)).rejects.toThrow();expect(fetcher).toHaveBeenCalledTimes(1);
 });
+it('uses Worker-compatible manual redirects and refuses a redirected control operation',async()=>{
+ const fetcher=vi.fn(async(_url:string,init:RequestInit)=>{
+  expect(init.redirect).toBe('manual');
+  return new Response(null,{status:302,headers:{Location:'https://other.example/control'}});
+ });
+ vi.stubGlobal('fetch',fetcher);
+ await expect(createLivekitRoom(env,{room:'x'} as LivekitSession)).rejects.toThrow('Calling service operation failed');
+ expect(fetcher).toHaveBeenCalledTimes(1);
+});
 it('refuses insecure remote media configuration',async()=>{env.LIVEKIT_URL='ws://example.com';await expect(livekitJwt(env,'caller',{})).rejects.toThrow();});
 it('bounds a stalled callback body without waiting for cancellation settlement',async()=>{
  vi.useFakeTimers();const cancel=vi.fn(()=>new Promise<void>(()=>{}));

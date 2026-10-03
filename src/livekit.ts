@@ -29,7 +29,9 @@ export async function livekitJwt(env:Env,subject:string,video:Record<string,unkn
 export async function livekitRpc(env:Env,service:'RoomService'|'AgentDispatchService',method:string,body:Record<string,unknown>,room:string):Promise<void>{
  const cfg=livekitConfig(env);
  const token=await livekitJwt(env,'openfon-control',{roomCreate:true,roomAdmin:true,room});
- const response=await fetch(cfg.url.replace(/^ws/,'http')+'/twirp/livekit.'+service+'/'+method,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(8000)});
+ // Workers supports manual/follow, not redirect:error. Refuse redirects below
+ // so an operator bearer token is never forwarded to a different endpoint.
+ const response=await fetch(cfg.url.replace(/^ws/,'http')+'/twirp/livekit.'+service+'/'+method,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'manual',signal:AbortSignal.timeout(8000)});
  // A repeat cleanup of an absent room is already complete. Never print response bodies/tokens.
  if(!response.ok && !(method==='DeleteRoom'&&response.status===404))throw new Error('Calling service operation failed');
  await response.body?.cancel();

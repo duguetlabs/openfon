@@ -18,6 +18,24 @@ beforeEach(()=>{
 });
 afterEach(async()=>{await Promise.allSettled(pending);db.close();vi.unstubAllGlobals();});
 const request=(operation:string,body:Record<string,unknown>={},key='service-key',id='call')=>session.fetch(new Request(`https://session/livekit/${operation}?call=${id}`,{method:'POST',headers:{Authorization:'Bearer '+key},body:JSON.stringify({room:'room',jobId:'job',...body})}));
+it('alarm recovery excludes unfinished media transcripts from summary evidence after eviction',async()=>{
+ data.set('callId','call');
+ data.set('livekit',{...data.get('livekit'),finished:true});
+ db.exec("INSERT INTO call_turns(call_id,role,text,source_id,source_final) VALUES('call','caller','UNCONFIRMED booking','partial',0),('call','agent','How can I help?','greeting',1),('call','caller','Please call me tomorrow','request',1)");
+ env.DEFAULT_LLM_BASE_URL='https://summary.example/v1';env.DEFAULT_LLM_API_KEY='fixture';env.DEFAULT_LLM_MODEL='fixture-model';
+ const summaries:string[]=[];
+ vi.stubGlobal('fetch',vi.fn(async(url:string,init:RequestInit)=>{
+  if(String(url).includes('/chat/completions')) {
+   summaries.push(JSON.parse(init.body as string).messages[1].content);
+   return Response.json({choices:[{message:{content:JSON.stringify({summary:'Callback requested',intent:'message',message:'Call tomorrow'})}}]});
+  }
+  return Response.json({});
+ }));
+ await session.alarm();
+ expect(summaries).toEqual(['Agent: How can I help?\nCaller: Please call me tomorrow']);
+ expect(db.database.prepare('SELECT status FROM calls WHERE id=?').get('call')).toEqual({status:'completed'});
+ expect(db.database.prepare('SELECT text FROM call_turns WHERE source_id=?').get('partial')).toEqual({text:'UNCONFIRMED booking'});
+});
 it('pins one worker job and keeps admission scoped to call/room/operator credential',async()=>{
  expect((await request('context',{},'wrong')).status).toBe(404);
  expect((await request('context',{},'service-key','other')).status).toBe(404);

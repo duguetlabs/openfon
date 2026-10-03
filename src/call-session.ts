@@ -2493,6 +2493,9 @@ export class CallSession implements DurableObject {
     this.ended = true;
     const media=this.livekit || await this.state.storage.get<LivekitSession>('livekit');
     if(media) {
+      // An alarm may recreate this object. Restore transport identity before
+      // rehydrating history so unfinished transcript revisions stay excluded.
+      this.livekit=media;
       media.closing=true;
       await this.state.storage.transaction(async tx=>{const latest=await tx.get<LivekitSession>('livekit');if(latest)await tx.put('livekit',{...latest,closing:true});});
       // Retry an uncertain room deletion through the existing watchdog. Do not mark clean completion.
