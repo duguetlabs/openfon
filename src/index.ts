@@ -1423,7 +1423,8 @@ app.get('/ws/call/:callId', async (c) => {
 
 // This control surface uses a distinct operator service credential, never user cookies.
 app.post('/api/internal/livekit/calls/:callId/:operation', async c => {
-  if (!livekitEnabled(c.env) || !c.env.LIVEKIT_AGENT_SERVICE_TOKEN || !secureEqual(c.req.header('Authorization') || '', 'Bearer '+(c.env.LIVEKIT_AGENT_SERVICE_TOKEN || ''))) return c.json({error:'Not found'},404);
+  // The rollout flag gates new calls; admitted rooms must still flush during rollback.
+  if (!c.env.LIVEKIT_AGENT_SERVICE_TOKEN || !secureEqual(c.req.header('Authorization') || '', 'Bearer '+(c.env.LIVEKIT_AGENT_SERVICE_TOKEN || ''))) return c.json({error:'Not found'},404);
   const callId=c.req.param('callId'),operation=c.req.param('operation');
   if(!/^[a-zA-Z0-9_-]{1,100}$/.test(callId)||!['context','events'].includes(operation))return c.json({error:'Not found'},404);
   let raw:string;

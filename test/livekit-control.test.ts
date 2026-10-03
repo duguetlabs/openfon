@@ -16,7 +16,7 @@ beforeEach(()=>{
  env={DB:db,WEB_VOICE_TRANSPORT:'livekit',LIVEKIT_URL:'ws://127.0.0.1:7880',LIVEKIT_API_KEY:'fixture',LIVEKIT_API_SECRET:'fixture-secret',LIVEKIT_AGENT_SERVICE_TOKEN:'service-key'} as unknown as Env;
  session=new CallSession(state as unknown as DurableObjectState,env);
 });
-afterEach(async()=>{await Promise.allSettled(pending);db.close();vi.unstubAllGlobals();});
+afterEach(async()=>{await Promise.allSettled(pending);db.close();vi.unstubAllGlobals();vi.useRealTimers();});
 const request=(operation:string,body:Record<string,unknown>={},key='service-key',id='call')=>session.fetch(new Request(`https://session/livekit/${operation}?call=${id}`,{method:'POST',headers:{Authorization:'Bearer '+key},body:JSON.stringify({room:'room',jobId:'job',...body})}));
 it('alarm recovery excludes unfinished media transcripts from summary evidence after eviction',async()=>{
  data.set('callId','call');
@@ -70,4 +70,52 @@ it('public callback route requires operator authorization rather than a user coo
  expect(forward).not.toHaveBeenCalled();
  expect((await app.fetch(new Request(url,{method:'POST',headers:{Authorization:'Bearer service-key'},body:JSON.stringify({room:'room',jobId:'job'})}),env,fakeCtx)).status).toBe(200);
  expect(forward).toHaveBeenCalledTimes(1);
+});
+
+it('rollback preserves admitted context and authenticated final drain through the public route',async()=>{
+ await request('context');
+ env.WEB_VOICE_TRANSPORT=undefined;
+ env.CALL_SESSION={idFromName:(id:string)=>id,get:()=>({fetch:(req:Request)=>session.fetch(req)})} as any;
+ const post=(operation:string,body:Record<string,unknown>,key='service-key')=>app.fetch(new Request('https://example.test/api/internal/livekit/calls/call/'+operation,{method:'POST',headers:{Authorization:'Bearer '+key},body:JSON.stringify({room:'room',jobId:'job',callback:'scoped-capability',...body})}),env,fakeCtx);
+ expect((await post('context',{})).status).toBe(200);
+ expect((await post('context',{jobId:'replacement'})).status).toBe(409);
+ expect((await post('events',{},'wrong')).status).toBe(404);
+ data.set('livekit',{...data.get('livekit'),closing:true});
+ expect((await post('context',{})).status).toBe(410);
+ expect((await post('events',{type:'transcript',eventId:'final',revision:0,final:true,role:'caller',text:'Call me tomorrow'})).status).toBe(200);
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({})));
+ expect((await post('events',{type:'finished'})).status).toBe(200);
+ await Promise.all(pending);
+ expect(db.database.prepare('SELECT text,source_final FROM call_turns').all()).toEqual([{text:'Call me tomorrow',source_final:1}]);
+ expect(db.database.prepare('SELECT status FROM calls').get()).toEqual({status:'completed'});
+ data.delete('livekit');
+ expect((await post('context',{})).status).toBe(404);
+});
+it('freezes hangup before held room cleanup and preserves the original duration',async()=>{
+ vi.useFakeTimers();const ended=Math.floor(Date.now()/1000)*1000;vi.setSystemTime(ended);
+ data.set('callId','call');data.set('livekit',{...data.get('livekit'),finished:true});
+ db.database.prepare("UPDATE calls SET connected_at=?").run(new Date(ended-10000).toISOString().replace('T',' ').slice(0,19));
+ let release!:()=>void;let started!:()=>void;const entered=new Promise<void>(resolve=>started=resolve);
+ vi.stubGlobal('fetch',vi.fn(async()=>{started();await new Promise<void>(resolve=>release=resolve);return Response.json({});}));
+ const work=session.alarm();await entered;
+ expect(data.get('ending')).toEqual({endedAt:ended,failure:null});
+ vi.setSystemTime(ended+18000);release();await work;
+ expect(db.database.prepare('SELECT duration_s FROM calls').get()).toEqual({duration_s:10});
+});
+it('keeps a durable retry clock when room deletion fails',async()=>{
+ data.set('callId','call');
+ const alarm=vi.spyOn((session as any).state.storage,'setAlarm');
+ vi.stubGlobal('fetch',vi.fn(async()=>{throw new Error('temporary room service outage');}));
+ await expect(session.alarm()).resolves.toBeUndefined();
+ expect(data.get('ending').endedAt).toBeTypeOf('number');
+ expect(alarm).toHaveBeenCalled();
+ expect(db.database.prepare('SELECT status FROM calls').get()).toEqual({status:'active'});
+});
+it('persists a drain failure discovered after the frozen ending',async()=>{
+ data.set('callId','call');data.set('livekit',{...data.get('livekit'),finished:true,failed:true});
+ const put=vi.spyOn((session as any).state.storage,'put');
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({})));
+ await session.alarm();
+ expect(put.mock.calls.some(([key,value]:any[])=>key==='ending'&&value.failure?.includes('could not be saved completely'))).toBe(true);
+ expect(db.database.prepare('SELECT status FROM calls').get()).toEqual({status:'failed'});
 });

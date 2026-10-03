@@ -559,7 +559,7 @@ export class CallSession implements DurableObject {
   }
 
   private async livekitRequest(request:Request):Promise<Response> {
-    if(!livekitEnabled(this.env)||!this.env.LIVEKIT_AGENT_SERVICE_TOKEN||!secureEqual(request.headers.get('Authorization')||'','Bearer '+this.env.LIVEKIT_AGENT_SERVICE_TOKEN))return new Response(null,{status:404});
+    if(!this.env.LIVEKIT_AGENT_SERVICE_TOKEN||!secureEqual(request.headers.get('Authorization')||'','Bearer '+this.env.LIVEKIT_AGENT_SERVICE_TOKEN))return new Response(null,{status:404});
     const url=new URL(request.url),id=url.searchParams.get('call');
     const media=await this.state.storage.get<LivekitSession>('livekit');
     if(!media||id!==media.callId)return new Response(null,{status:404});
@@ -2436,6 +2436,7 @@ export class CallSession implements DurableObject {
     const stored = await this.state.storage.get<{ endedAt: number; failure: string | null }>('ending');
     if (stored) {
       this.failure ??= stored.failure;
+      if (this.failure !== stored.failure) await this.state.storage.put('ending', { ...stored, failure: this.failure });
       return stored.endedAt;
     }
     const ending = { endedAt: Date.now(), failure: this.failure };
@@ -2491,6 +2492,8 @@ export class CallSession implements DurableObject {
 
   private async runFinalize(): Promise<void> {
     this.ended = true;
+    // Freeze talk time and the retry clock before any fallible media cleanup.
+    const endedAt = await this.rememberEnding();
     const media=this.livekit || await this.state.storage.get<LivekitSession>('livekit');
     if(media) {
       // An alarm may recreate this object. Restore transport identity before
@@ -2504,7 +2507,10 @@ export class CallSession implements DurableObject {
       while(Date.now()<until && !(await this.state.storage.get<LivekitSession>('livekit'))?.finished)
         await new Promise(resolve=>setTimeout(resolve,100));
       const finished=await this.state.storage.get<LivekitSession>('livekit');
-      if(!finished?.finished||finished.failed)this.failure='Call failed: the conversation could not be saved completely.';
+      if(!finished?.finished||finished.failed) {
+        this.failure='Call failed: the conversation could not be saved completely.';
+        await this.rememberEnding(); // Persist a later failure without changing the end time.
+      }
       // Callback transactions are authoritative, including final buffers flushed on disconnect.
       this.history=[];
     }
@@ -2526,7 +2532,6 @@ export class CallSession implements DurableObject {
     } catch {
       /* already gone */
     }
-    const endedAt = await this.rememberEnding();
     let call = await this.env.DB.prepare('SELECT started_at, connected_at, business_id, assistant_id FROM calls WHERE id = ? AND status = ?')
       .bind(this.callId, 'active')
       .first<{ started_at: string; connected_at: string | null; business_id: string; assistant_id: string | null }>();
