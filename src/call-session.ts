@@ -2258,6 +2258,10 @@ export class CallSession implements DurableObject {
     this.callId = callId;
     const now = Date.now();
     const media = await this.state.storage.get<LivekitSession>('livekit');
+    const mediaEnding = media && await this.state.storage.get('ending');
+    // Cleanup retries preserve the frozen outcome, even when startup never
+    // reached readiness and the original startup deadline has since elapsed.
+    if(media && (media.closing || media.finished || mediaEnding))return this.finalizeFromAlarm(now);
     const mediaStartup = media && !media.ready ? media.startupDeadline : undefined;
     if(mediaStartup !== undefined && now >= mediaStartup) {
       this.failure ??= 'Call failed: the conversation service did not finish connecting. Please try again.';

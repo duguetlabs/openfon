@@ -196,3 +196,21 @@ it('normal closing before startup expiry is not reclassified by a later poll',as
  vi.setSystemTime(now+90000);expect((await request('context')).status).toBe(410);
  expect(data.get('ending')).toEqual({endedAt:now+1000,failure:null});
 });
+
+it.each([false,true])('startup deadline cannot reclassify normal cleanup (finished=%s)',async finished=>{
+ vi.useFakeTimers();const now=Date.now();data.set('callId','call');
+ data.set('livekit',{...data.get('livekit'),startupDeadline:now+90000,closing:true,finished});
+ data.set('ending',{endedAt:now+1000,failure:null});
+ vi.setSystemTime(now+90001);
+ vi.stubGlobal('fetch',vi.fn(async()=>{data.set('livekit',{...data.get('livekit'),finished:true});return Response.json({});}));
+ await session.alarm();
+ expect(db.database.prepare('SELECT status,summary FROM calls').get()).toEqual({status:'completed',summary:null});
+});
+it('frozen normal ending survives an alarm before the closing flag was saved',async()=>{
+ vi.useFakeTimers();const now=Date.now();data.set('callId','call');
+ data.set('livekit',{...data.get('livekit'),startupDeadline:now+90000});data.set('ending',{endedAt:now+1000,failure:null});
+ vi.setSystemTime(now+90001);
+ vi.stubGlobal('fetch',vi.fn(async()=>{data.set('livekit',{...data.get('livekit'),finished:true});return Response.json({});}));
+ await session.alarm();
+ expect(db.database.prepare('SELECT status,summary FROM calls').get()).toEqual({status:'completed',summary:null});
+});
