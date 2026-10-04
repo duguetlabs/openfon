@@ -1,4 +1,10 @@
 export interface Env {
+  /** Operator-controlled managed product; technical customer configuration is forbidden. */
+  OPENFON_MANAGED_WEB?: string;
+  AZURE_OPENAI_ENDPOINT?: string;
+  AZURE_OPENAI_API_KEY?: string;
+  AZURE_OPENAI_LIVE_DEPLOYMENT?: string;
+  AZURE_OPENAI_TEXT_DEPLOYMENT?: string;
   /** Operator rollout only; no customer-selected transport. */
   WEB_VOICE_TRANSPORT?: 'livekit';
   LIVEKIT_URL?: string;
@@ -47,6 +53,9 @@ export interface Env {
 }
 
 export interface Business {
+  contact_email?: string;
+  default_language?: string;
+  shared_instructions?: string;
   id: string;
   user_id: string;
   slug: string;
