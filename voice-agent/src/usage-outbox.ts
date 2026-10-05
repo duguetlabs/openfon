@@ -65,45 +65,69 @@ export class UsageOutbox {
   private async withLock<T>(fn: () => Promise<T>): Promise<T> {
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
     const lock = join(this.directory, 'writer.lock');
-    for (let attempt = 0; ; attempt++) {
-      try {
-        await mkdir(lock, { mode: 0o700 });
-        const owner = await open(join(lock, 'pid'), 'wx', 0o600);
-        try {
-          await owner.writeFile(String(process.pid));
-        } finally {
-          await owner.close();
-        }
-        break;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'EEXIST' || attempt >= 50)
-          throw Error('Usage journal unavailable');
-        // Recover a process crash, never steal a live writer's lock based on a lease timer.
-        try {
-          const pid = Number(await readFile(join(lock, 'pid'), 'utf8'));
-          try {
-            process.kill(pid, 0);
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code === 'ESRCH') {
-              await unlink(join(lock, 'pid'));
-              await rmdir(lock);
-            }
-          }
-        } catch {
-          try {
-            if (Date.now() - (await stat(lock)).mtimeMs > 30000) {
-              await rmdir(lock);
-            }
-          } catch {}
-        }
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
-    }
+    const identity = randomUUID();
+    const ownerName = `pid-${process.pid}-${identity}`;
+    const candidate = join(this.directory, `.writer-${identity}`);
+    let acquired = false;
+    await mkdir(candidate, { mode: 0o700 });
     try {
+      // Publish an initialized, nonempty directory atomically. Contenders can never
+      // mistake a slow writer's not-yet-created owner file for an abandoned lock.
+      const owner = await open(join(candidate, ownerName), 'wx', 0o600);
+      await owner.close();
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await rename(candidate, lock);
+          acquired = true;
+          break;
+        } catch (error) {
+          if (
+            !['EEXIST', 'ENOTEMPTY'].includes(
+              (error as NodeJS.ErrnoException).code || ''
+            ) ||
+            attempt >= 50
+          )
+            throw Error('Usage journal unavailable');
+          try {
+            const names = await readdir(lock);
+            const match =
+              names.length === 1 &&
+              /^pid-([1-9][0-9]*)-([a-f0-9-]{36})$/.exec(names[0]!);
+            if (match && Number.isSafeInteger(Number(match[1]))) {
+              try {
+                process.kill(Number(match[1]), 0);
+              } catch (error) {
+                if ((error as NodeJS.ErrnoException).code === 'ESRCH') {
+                  // Remove only the observed acquisition identity. A replacement
+                  // owns a different filename, even when it reuses the same PID.
+                  await unlink(join(lock, names[0]!));
+                  // A concurrent initialized replacement makes this fail nonempty.
+                  await rmdir(lock);
+                }
+              }
+            }
+            // Legacy fixed-name pid locks and unknown contents fail closed. Never
+            // steal by age, or erase a directory after an unverified PID read.
+          } catch {}
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+      }
       return await fn();
     } finally {
-      await unlink(join(lock, 'pid'));
-      await rmdir(lock);
+      const ownedDirectory = acquired ? lock : candidate;
+      await unlink(join(ownedDirectory, ownerName)).catch((error) => {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      });
+      await rmdir(ownedDirectory).catch((error) => {
+        // Once our unique owner is removed, another initialized lock may already
+        // occupy writer.lock. Never remove that replacement's contents.
+        if (
+          !['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(
+            (error as NodeJS.ErrnoException).code || ''
+          )
+        )
+          throw error;
+      });
     }
   }
   /** Before opening paid inference, fail closed if storage is unavailable or the bounded queue is full. */
