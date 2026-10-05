@@ -425,11 +425,51 @@ export async function reconcilePhoneOrder(
   if (!order) throw new BillingError("Number order not found.", 400);
   if (["released", "failed", "active"].includes(order.state))
     return { id, status: order.state };
-  if (!providerId(order.provider_order_id))
-    throw new BillingError(
-      "This number order needs support to reconcile. It will not be purchased again.",
-      409,
-    );
+  if (!providerId(order.provider_order_id)) {
+    // A lost POST response must be recovered by the durable customer reference,
+    // never by buying again. Reject incomplete or ambiguous filtered listings.
+    const query = new URLSearchParams({
+      "filter[customer_reference]": id,
+      "page[number]": "1",
+      "page[size]": "2",
+    });
+    const discovered = await phoneRequest(env, "/number_orders?" + query);
+    const candidate = discovered?.data?.[0];
+    if (
+      !Array.isArray(discovered?.data) ||
+      discovered.data.length !== 1 ||
+      discovered.meta?.total_results !== 1 ||
+      discovered.meta?.total_pages !== 1 ||
+      discovered.meta?.page_number !== 1 ||
+      !providerId(candidate?.id) ||
+      candidate.customer_reference !== id ||
+      candidate.connection_id !== order.connection_id ||
+      candidate.phone_numbers_count !== 1 ||
+      !Array.isArray(candidate.phone_numbers) ||
+      candidate.phone_numbers.length !== 1 ||
+      candidate.phone_numbers[0]?.phone_number !== order.phone_number
+    )
+      throw new BillingError(
+        "This number order needs support to reconcile. It will not be purchased again.",
+        409,
+      );
+    await env.DB.prepare(
+      "UPDATE commercial_phone_orders SET provider_order_id=?,state='review' WHERE id=? AND business_id=? AND provider_order_id IS NULL AND state IN ('pending','review')",
+    )
+      .bind(candidate.id, id, businessId)
+      .run();
+    const stored = await env.DB.prepare(
+      "SELECT provider_order_id FROM commercial_phone_orders WHERE id=? AND business_id=?",
+    )
+      .bind(id, businessId)
+      .first<{ provider_order_id: string | null }>();
+    if (stored?.provider_order_id !== candidate.id)
+      throw new BillingError(
+        "Number order identity changed. Please contact support.",
+        409,
+      );
+    order.provider_order_id = candidate.id;
+  }
   const remote = await phoneRequest(
     env,
     "/number_orders/" + order.provider_order_id,

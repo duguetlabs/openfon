@@ -101,7 +101,7 @@ it("keeps deletion pending when the phone intent wins and safely recovers owned 
     "fetch",
     vi.fn(async (url: string, init: RequestInit) => {
       const path = new URL(url).pathname;
-      if (path === "/v2/number_orders") {
+      if (path === "/v2/number_orders" && init.method === "POST") {
         await expect(
           prepareCommercialDeletion(env, "b", auth),
         ).rejects.toThrow();
@@ -112,6 +112,11 @@ it("keeps deletion pending when the phone intent wins and safely recovers owned 
         ).toEqual({ completed_at: null });
         return Response.json({ data: { id: "remoteorder" } });
       }
+      if (path === "/v2/number_orders")
+        return Response.json({
+          data: [],
+          meta: { total_results: 0, total_pages: 0, page_number: 1 },
+        });
       if (path === "/v2/number_orders/remoteorder")
         return Response.json({
           data: {
@@ -324,3 +329,101 @@ it("retains a non-expiring payment writer after an uncertain external mutation",
       .get(),
   ).toEqual({ completed_at: null });
 });
+it.each(["exact", "unrelated", "incomplete", "multiple", "missing"])(
+  "discovers an ambiguous rental only from a complete exact reference result: %s",
+  async (kind) => {
+    db.exec(
+      `INSERT INTO commercial_phone_orders(id,business_id,assistant_id,quote_id,phone_number,connection_id,created_at) VALUES('ambiguous','b','assistant','quote','+431234567','connection','2026-10-05');`,
+    );
+    let released = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        const u = new URL(url),
+          path = u.pathname;
+        expect(init.method).not.toBe("POST");
+        if (path === "/v2/number_orders") {
+          expect(u.searchParams.get("filter[customer_reference]")).toBe(
+            "ambiguous",
+          );
+          return Response.json({
+            data:
+              kind === "missing"
+                ? []
+                : [
+                    {
+                      id: "remoteorder",
+                      customer_reference:
+                        kind === "unrelated" ? "other" : "ambiguous",
+                      connection_id: "connection",
+                      phone_numbers_count: 1,
+                      phone_numbers: [{ phone_number: "+431234567" }],
+                    },
+                  ],
+            meta: {
+              total_results:
+                kind === "multiple" ? 2 : kind === "missing" ? 0 : 1,
+              total_pages: kind === "incomplete" ? 2 : 1,
+              page_number: 1,
+            },
+          });
+        }
+        if (path === "/v2/number_orders/remoteorder")
+          return Response.json({
+            data: {
+              id: "remoteorder",
+              customer_reference: "ambiguous",
+              status: "success",
+            },
+          });
+        if (path === "/v2/phone_numbers")
+          return Response.json({
+            data: [
+              {
+                id: "rental",
+                phone_number: "+431234567",
+                connection_id: "connection",
+                status: "active",
+              },
+            ],
+          });
+        expect(path).toBe("/v2/phone_numbers/rental");
+        if (init.method === "DELETE") {
+          released = true;
+          return new Response(null, { status: 204 });
+        }
+        return released
+          ? new Response(null, { status: 404 })
+          : Response.json({
+              data: { phone_number: "+431234567", connection_id: "connection" },
+            });
+      }),
+    );
+    if (kind === "exact") {
+      await prepareCommercialDeletion(env, "b", auth);
+      expect(released).toBe(true);
+      expect(
+        db.database
+          .prepare(
+            "SELECT state,provider_order_id,provider_number_id FROM commercial_phone_orders",
+          )
+          .get(),
+      ).toEqual({
+        state: "released",
+        provider_order_id: "remoteorder",
+        provider_number_id: "rental",
+      });
+    } else {
+      await expect(prepareCommercialDeletion(env, "b", auth)).rejects.toThrow();
+      expect(released).toBe(false);
+      expect(
+        db.database
+          .prepare("SELECT provider_order_id FROM commercial_phone_orders")
+          .get(),
+      ).toEqual({ provider_order_id: null });
+    }
+    expect(
+      db.database.prepare("SELECT count(*) n FROM telnyx_number_routes").get(),
+    ).toEqual({ n: 0 });
+  },
+);
