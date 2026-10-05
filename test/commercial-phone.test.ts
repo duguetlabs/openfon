@@ -7,6 +7,7 @@ import {
   releaseBusinessPhones,
   reconcilePhoneOrder,
   quotedMinor,
+  assignPhoneNumber,
 } from "../src/commercial-phone";
 import type { CommercialEnv } from "../src/commercial-dodo";
 let db: SqliteD1, env: CommercialEnv;
@@ -178,4 +179,20 @@ it("does not round or parse ambiguous carrier quotes", () => {
   expect(quotedMinor("0")).toBe(0);
   expect(() => quotedMinor("1.234")).toThrow();
   expect(() => quotedMinor("1e2")).toThrow();
+});
+
+it("distinguishes owned rental availability from actual answering enablement", async () => {
+  order();
+  db.exec(
+    "INSERT INTO telnyx_number_routes VALUES('connection','+431234567','b','asst',0)",
+  );
+  expect((await getPhoneView(env, "b")).numbers[0]).toMatchObject({
+    status: "active",
+    enabled: false,
+    assistantId: "asst",
+  });
+  db.exec("UPDATE telnyx_number_routes SET enabled=1");
+  expect((await getPhoneView(env, "b")).numbers[0].enabled).toBe(true);
+  await assignPhoneNumber(env, "b", "order", "asst", false);
+  expect((await getPhoneView(env, "b")).numbers[0].enabled).toBe(false);
 });

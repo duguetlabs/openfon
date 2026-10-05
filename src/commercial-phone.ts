@@ -69,12 +69,14 @@ export function quotedMinor(value: unknown): number {
 }
 export async function getPhoneView(env: CommercialEnv, businessId: string) {
   const { results } = await env.DB.prepare(
-    "SELECT id,phone_number AS number,assistant_id AS assistantId,state AS status FROM commercial_phone_orders WHERE business_id=? AND state<>'released' ORDER BY created_at",
+    `SELECT o.id,o.phone_number AS number,COALESCE(r.assistant_id,o.assistant_id) AS assistantId,o.state AS status,COALESCE(r.enabled,0) AS enabled
+    FROM commercial_phone_orders o LEFT JOIN telnyx_number_routes r ON r.connection_id=o.connection_id AND r.phone_number=o.phone_number AND r.business_id=o.business_id
+    WHERE o.business_id=? AND o.state<>'released' ORDER BY o.created_at`,
   )
     .bind(businessId)
     .all();
   return {
-    numbers: results,
+    numbers: results.map((row) => ({ ...row, enabled: row.enabled === 1 })),
     provisioningAvailable: phoneProvisioningReady(env),
     unavailableReason: phoneProvisioningReady(env)
       ? null
@@ -281,10 +283,10 @@ export async function assignPhoneNumber(
     .bind(id, businessId)
     .first<{ phone_number: string; connection_id: string }>();
   if (!order) throw new BillingError("This number is not active yet.", 409);
-  const result = await env.DB.prepare(
-    `UPDATE telnyx_number_routes SET assistant_id=?,enabled=? WHERE connection_id=? AND phone_number=? AND business_id=? AND EXISTS(SELECT 1 FROM assistants WHERE id=? AND business_id=?) AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=?)`,
-  )
-    .bind(
+  const statements = [
+    env.DB.prepare(
+      `UPDATE telnyx_number_routes SET assistant_id=?,enabled=? WHERE connection_id=? AND phone_number=? AND business_id=? AND EXISTS(SELECT 1 FROM assistants WHERE id=? AND business_id=?) AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=?)`,
+    ).bind(
       assistantId,
       enabled ? 1 : 0,
       order.connection_id,
@@ -293,15 +295,22 @@ export async function assignPhoneNumber(
       assistantId,
       businessId,
       businessId,
-    )
-    .run();
-  if (!result.meta.changes)
+    ),
+    env.DB.prepare(
+      "UPDATE commercial_phone_orders SET assistant_id=? WHERE id=? AND business_id=? AND EXISTS(SELECT 1 FROM telnyx_number_routes WHERE connection_id=? AND phone_number=? AND business_id=? AND assistant_id=?)",
+    ).bind(
+      assistantId,
+      id,
+      businessId,
+      order.connection_id,
+      order.phone_number,
+      businessId,
+      assistantId,
+    ),
+  ];
+  const result = await env.DB.batch(statements);
+  if (!result[0].meta.changes || !result[1].meta.changes)
     throw new BillingError("The number could not be updated.", 409);
-  await env.DB.prepare(
-    "UPDATE commercial_phone_orders SET assistant_id=? WHERE id=? AND business_id=?",
-  )
-    .bind(assistantId, id, businessId)
-    .run();
   return { saved: true };
 }
 /** Only confirmed, owned rentals can be released. Uncertainty retains their mappings. */
