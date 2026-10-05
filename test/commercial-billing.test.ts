@@ -474,7 +474,7 @@ it("respects cancellation cutoff while provider cancellation is unavailable", as
     db.database.prepare("SELECT state FROM commercial_cancellations").get(),
   ).toEqual({ state: "closing" });
 });
-it("reconciles hosted payment authorization and retries explicit sibling propagation", async () => {
+it("reconciles hosted authorization but retains uncertainty after a failed sibling write", async () => {
   await reconcileSubscription(env, "base", at);
   await reconcileSubscription(env, "usage", at);
   const methods: Record<string, string> = { base: "old", usage: "old" };
@@ -522,10 +522,13 @@ it("reconciles hosted payment authorization and retries explicit sibling propaga
     db.database.prepare("SELECT state FROM commercial_payment_updates").get(),
   ).toEqual({ state: "propagating" });
   failBase = false;
-  expect(await reconcilePaymentMethodUpdate(env, "b")).toEqual({
-    updated: true,
-  });
-  expect(methods).toEqual({ base: "newmethod", usage: "newmethod" });
+  vi.mocked(fetch).mockClear();
+  await expect(reconcilePaymentMethodUpdate(env, "b")).rejects.toThrow();
+  expect(fetch).not.toHaveBeenCalled();
+  expect(
+    db.database.prepare("SELECT state FROM commercial_payment_writers").get(),
+  ).toEqual({ state: "uncertain" });
+  expect(methods).toEqual({ base: "old", usage: "newmethod" });
 });
 it("rejects invoice identifiers outside the current workspace before provider fetch", async () => {
   await reconcileSubscription(env, "base", at);

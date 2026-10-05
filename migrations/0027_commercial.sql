@@ -192,3 +192,12 @@ CREATE TABLE commercial_payment_updates (
  state TEXT NOT NULL,
  created_at TEXT NOT NULL
 );
+
+-- Durable exclusion has no expiry: a slow or uncertain provider write must never
+-- overlap a replacement payment authorization. Uncertain writers require support.
+CREATE TABLE commercial_payment_writers (
+ business_id TEXT PRIMARY KEY REFERENCES businesses(id) ON DELETE CASCADE,
+ token TEXT NOT NULL,
+ state TEXT NOT NULL CHECK(state IN ('active','uncertain')),
+ created_at TEXT NOT NULL
+);

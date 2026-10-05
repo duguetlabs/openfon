@@ -7,6 +7,58 @@ import {
   type CommercialEnv,
 } from "./commercial-dodo";
 
+type PaymentWriter = { request: typeof dodoRequest };
+
+/** No expiry: a paused invocation must not outlive its exclusion and write later. */
+async function withPaymentWriter<T>(
+  env: CommercialEnv,
+  businessId: string,
+  run: (writer: PaymentWriter) => Promise<T>,
+): Promise<T> {
+  const token = crypto.randomUUID();
+  const claim = await env.DB.prepare(
+    `INSERT INTO commercial_payment_writers(business_id,token,state,created_at)
+    SELECT ?,?,'active',? WHERE EXISTS(SELECT 1 FROM commercial_accounts WHERE business_id=?)
+    AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=?)
+    ON CONFLICT(business_id) DO NOTHING`,
+  )
+    .bind(businessId, token, new Date().toISOString(), businessId, businessId)
+    .run();
+  if (!claim.meta.changes)
+    throw new BillingError(
+      "A payment update or account deletion is already in progress. Retry its status or contact support.",
+      409,
+    );
+  let wrote = false;
+  let completed = false;
+  try {
+    const result = await run({
+      request: async (...args: Parameters<typeof dodoRequest>) => {
+        if (args[2] && args[2] !== "GET") wrote = true;
+        return dodoRequest(...args);
+      },
+    });
+    completed = true;
+    return result;
+  } finally {
+    if (completed || !wrote) {
+      await env.DB.prepare(
+        "DELETE FROM commercial_payment_writers WHERE business_id=? AND token=?",
+      )
+        .bind(businessId, token)
+        .run();
+    } else {
+      // The request may have applied despite a timeout/error. Never admit another
+      // writer until an operator proves the invocation and remote action settled.
+      await env.DB.prepare(
+        "UPDATE commercial_payment_writers SET state='uncertain' WHERE business_id=? AND token=?",
+      )
+        .bind(businessId, token)
+        .run();
+    }
+  }
+}
+
 async function paymentAccount(env: CommercialEnv, businessId: string) {
   const account = await env.DB.prepare(
     "SELECT customer_id,provider_mode FROM commercial_accounts WHERE business_id=?",
@@ -33,6 +85,15 @@ export async function beginPaymentMethodUpdate(
   env: CommercialEnv,
   businessId: string,
 ) {
+  return withPaymentWriter(env, businessId, (writer) =>
+    beginPaymentMethodUpdateLocked(env, businessId, writer),
+  );
+}
+async function beginPaymentMethodUpdateLocked(
+  env: CommercialEnv,
+  businessId: string,
+  writer: PaymentWriter,
+) {
   const account = await paymentAccount(env, businessId);
   const existing = await env.DB.prepare(
     "SELECT state,payment_link FROM commercial_payment_updates WHERE business_id=? AND state<>'complete'",
@@ -53,7 +114,7 @@ export async function beginPaymentMethodUpdate(
     .first<{ subscription_id: string }>();
   if (!source)
     throw new BillingError("Subscription details need reconciliation.", 409);
-  const sub = await dodoRequest(
+  const sub = await writer.request(
     env,
     "/subscriptions/" + source.subscription_id,
   );
@@ -81,7 +142,7 @@ export async function beginPaymentMethodUpdate(
       "Another payment update is already in progress.",
       409,
     );
-  const response = await dodoRequest(
+  const response = await writer.request(
     env,
     "/subscriptions/" + source.subscription_id + "/update-payment-method",
     "POST",
@@ -104,6 +165,15 @@ export async function reconcilePaymentMethodUpdate(
   env: CommercialEnv,
   businessId: string,
 ) {
+  return withPaymentWriter(env, businessId, (writer) =>
+    reconcilePaymentMethodUpdateLocked(env, businessId, writer),
+  );
+}
+async function reconcilePaymentMethodUpdateLocked(
+  env: CommercialEnv,
+  businessId: string,
+  writer: PaymentWriter,
+) {
   const account = await paymentAccount(env, businessId),
     job = await env.DB.prepare(
       "SELECT * FROM commercial_payment_updates WHERE business_id=?",
@@ -117,7 +187,7 @@ export async function reconcilePaymentMethodUpdate(
       "This payment update needs support to reconcile.",
       409,
     );
-  const payment = await dodoRequest(env, "/payments/" + job.payment_id);
+  const payment = await writer.request(env, "/payments/" + job.payment_id);
   if (
     payment.customer?.customer_id !== account.customer_id ||
     payment.subscription_id !== job.source_subscription_id ||
@@ -128,7 +198,7 @@ export async function reconcilePaymentMethodUpdate(
       409,
     );
   if (payment.status !== "succeeded") return { updated: false, pending: true };
-  const source = await dodoRequest(
+  const source = await writer.request(
       env,
       "/subscriptions/" + job.source_subscription_id,
     ),
@@ -158,7 +228,7 @@ export async function reconcilePaymentMethodUpdate(
     .bind(businessId)
     .all<{ subscription_id: string; product_id: string }>();
   for (const part of parts) {
-    const current = await dodoRequest(
+    const current = await writer.request(
       env,
       "/subscriptions/" + part.subscription_id,
     );
@@ -171,13 +241,13 @@ export async function reconcilePaymentMethodUpdate(
         409,
       );
     if (current.payment_method_id !== method)
-      await dodoRequest(
+      await writer.request(
         env,
         "/subscriptions/" + part.subscription_id + "/update-payment-method",
         "POST",
         { type: "existing", payment_method_id: method },
       );
-    const confirmed = await dodoRequest(
+    const confirmed = await writer.request(
       env,
       "/subscriptions/" + part.subscription_id,
     );

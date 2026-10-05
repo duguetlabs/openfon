@@ -260,7 +260,10 @@ export async function createCheckout(
   const id = crypto.randomUUID();
   try {
     await env.DB.prepare(
-      "INSERT INTO commercial_checkout_intents(id,business_id,provider_mode,plan_id,cadence,product_id,usage_product_id,meter_id,event_name,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+      `INSERT INTO commercial_checkout_intents(id,business_id,provider_mode,plan_id,cadence,product_id,usage_product_id,meter_id,event_name,created_at)
+      SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM businesses WHERE id=?)
+      AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=?)
+      AND NOT EXISTS(SELECT 1 FROM commercial_accounts WHERE business_id=? AND subscription_id IS NOT NULL)`,
     )
       .bind(
         id,
@@ -273,11 +276,24 @@ export async function createCheckout(
         mapping.meter.id,
         mapping.meter.event,
         new Date().toISOString(),
+        business.id,
+        business.id,
+        business.id,
       )
       .run();
   } catch {
     throw new BillingError("A checkout is already being prepared.", 409);
   }
+  const reserved = await env.DB.prepare(
+    "SELECT id FROM commercial_checkout_intents WHERE id=? AND business_id=?",
+  )
+    .bind(id, business.id)
+    .first();
+  if (!reserved)
+    throw new BillingError(
+      "Your subscription or account changed. Refresh billing settings.",
+      409,
+    );
   // Ambiguous POST remains pending. Reconciliation must resolve it before retry.
   const checkout = await dodoRequest(env, "/checkouts", "POST", {
     product_cart: [...new Set([mapping.base, mapping.usage])].map(
@@ -710,6 +726,17 @@ export async function prepareCommercialDeletion(
     await finishBusinessDeletion(env, marker.business_id);
 }
 async function finishBusinessDeletion(env: CommercialEnv, businessId: string) {
+  if (
+    await env.DB.prepare(
+      "SELECT business_id FROM commercial_payment_writers WHERE business_id=?",
+    )
+      .bind(businessId)
+      .first()
+  )
+    throw new BillingError(
+      "A payment update must finish reconciliation before deletion. Please contact support.",
+      409,
+    );
   await reconcileBusinessCheckouts(env, businessId);
   await releaseBusinessPhones(env, businessId);
   const { results: parts } = await env.DB.prepare(

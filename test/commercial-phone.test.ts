@@ -143,9 +143,11 @@ it("keeps incomplete order in review and confirms assigned number before disable
       .get(),
   ).toEqual({ business_id: "b", assistant_id: "asst", enabled: 0 });
 });
-it("does not activate an order while deletion has reserved the account", async () => {
+it("persists verified cleanup identity without a route after deletion reserves the account", async () => {
   order("review");
-  db.exec("INSERT INTO commercial_deletion_jobs VALUES('b','2026-10-05',NULL)");
+  db.exec(
+    "INSERT INTO commercial_deletion_jobs VALUES('b','2026-10-05',NULL); UPDATE commercial_phone_orders SET provider_number_id=NULL",
+  );
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) =>
@@ -169,7 +171,15 @@ it("does not activate an order while deletion has reserved the account", async (
           }),
     ),
   );
-  await expect(reconcilePhoneOrder(env, "b", "order")).rejects.toThrow();
+  expect(await reconcilePhoneOrder(env, "b", "order")).toEqual({
+    id: "order",
+    status: "active",
+  });
+  expect(
+    db.database
+      .prepare("SELECT provider_number_id FROM commercial_phone_orders")
+      .get(),
+  ).toEqual({ provider_number_id: "number" });
   expect(
     db.database.prepare("SELECT count(*) n FROM telnyx_number_routes").get(),
   ).toEqual({ n: 0 });

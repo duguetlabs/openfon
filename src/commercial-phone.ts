@@ -228,19 +228,34 @@ export async function orderPhoneNumber(
   try {
     await env.DB.batch([
       env.DB.prepare(
-        "INSERT INTO commercial_phone_orders(id,business_id,assistant_id,quote_id,phone_number,connection_id,created_at) VALUES(?,?,?,?,?,?,?)",
+        `INSERT INTO commercial_phone_orders(id,business_id,assistant_id,quote_id,phone_number,connection_id,created_at)
+        SELECT ?,?,?,q.id,q.phone_number,?,? FROM commercial_phone_quotes q
+        WHERE q.id=? AND q.business_id=? AND q.used_at IS NULL AND julianday(q.expires_at)>julianday('now')
+        AND q.phone_number=? AND q.country=? AND q.currency=? AND q.setup_minor<=? AND q.monthly_minor<=?
+        AND EXISTS(SELECT 1 FROM assistants WHERE id=? AND business_id=?)
+        AND EXISTS(SELECT 1 FROM commercial_accounts WHERE business_id=? AND status='active')
+        AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=?)`,
       ).bind(
         id,
         businessId,
         assistantId,
-        quoteId,
-        quote.phone_number,
         env.TELNYX_CONNECTION_ID!,
         new Date().toISOString(),
+        quoteId,
+        businessId,
+        quote.phone_number,
+        env.TELNYX_PURCHASE_COUNTRY!,
+        env.TELNYX_PURCHASE_CURRENCY!,
+        Number(env.TELNYX_MAX_SETUP_MINOR),
+        Number(env.TELNYX_MAX_MONTHLY_MINOR),
+        assistantId,
+        businessId,
+        businessId,
+        businessId,
       ),
       env.DB.prepare(
-        "UPDATE commercial_phone_quotes SET used_at=? WHERE id=? AND used_at IS NULL",
-      ).bind(new Date().toISOString(), quoteId),
+        "UPDATE commercial_phone_quotes SET used_at=? WHERE id=? AND business_id=? AND used_at IS NULL AND EXISTS(SELECT 1 FROM commercial_phone_orders WHERE id=? AND business_id=? AND quote_id=commercial_phone_quotes.id)",
+      ).bind(new Date().toISOString(), quoteId, businessId, id, businessId),
     ]);
   } catch {
     throw new BillingError(
@@ -248,6 +263,16 @@ export async function orderPhoneNumber(
       409,
     );
   }
+  const reserved = await env.DB.prepare(
+    "SELECT id FROM commercial_phone_orders WHERE id=? AND business_id=?",
+  )
+    .bind(id, businessId)
+    .first();
+  if (!reserved)
+    throw new BillingError(
+      "This order changed or account deletion started. Refresh its status.",
+      409,
+    );
   // Never retry an ambiguous rental POST. The durable reference supports reconciliation.
   const response = await phoneRequest(env, "/number_orders", "POST", {
     phone_numbers: [{ phone_number: quote.phone_number }],
@@ -330,6 +355,17 @@ export async function releaseBusinessPhones(
       connection_id: string;
     }>();
   for (const order of orders) {
+    if (!providerId(order.provider_number_id)) {
+      // Read-only carrier reconciliation must remain usable after deletion reserves
+      // the account; it records cleanup identity without creating a usable route.
+      await reconcilePhoneOrder(env, businessId, order.id);
+      const refreshed = await env.DB.prepare(
+        "SELECT provider_number_id FROM commercial_phone_orders WHERE id=? AND business_id=?",
+      )
+        .bind(order.id, businessId)
+        .first<{ provider_number_id: string | null }>();
+      order.provider_number_id = refreshed?.provider_number_id ?? null;
+    }
     if (!providerId(order.provider_number_id) || !order.connection_id)
       throw new BillingError(
         "Your pending phone order needs reconciliation before deletion. Please contact support.",
@@ -434,9 +470,9 @@ export async function reconcilePhoneOrder(
       businessId,
     ),
     env.DB.prepare(
-      `UPDATE commercial_phone_orders SET provider_number_id=?,state='active' WHERE id=? AND business_id=?
-    AND EXISTS(SELECT 1 FROM telnyx_number_routes WHERE connection_id=? AND phone_number=? AND business_id=? AND assistant_id=?)
-    AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=?)`,
+      `UPDATE commercial_phone_orders SET provider_number_id=?,state='active' WHERE id=? AND business_id=? AND state IN ('pending','review')
+    AND (EXISTS(SELECT 1 FROM telnyx_number_routes WHERE connection_id=? AND phone_number=? AND business_id=? AND assistant_id=?)
+    OR EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=?))`,
     ).bind(
       matches[0].id,
       id,
