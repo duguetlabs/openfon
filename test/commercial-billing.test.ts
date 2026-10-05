@@ -711,3 +711,30 @@ it("closes expired coverage before recovering the next paid month", async () => 
       .get(),
   ).toEqual({ n: 2 });
 });
+it("retains delivered coverage when the cancellation scheduler confirms the stop later", async () => {
+  await reconcileSubscription(env, "base", at);
+  await reconcileSubscription(env, "usage", at);
+  const initial = Date.parse(at),
+    cutoff = new Date(initial + 60000).toISOString();
+  db.database
+    .prepare("INSERT INTO commercial_cancellations VALUES('b',?,'scheduled',?)")
+    .run(cutoff, at);
+  db.database
+    .prepare(
+      "INSERT INTO calls(id,business_id,status,connected_at,ended_at) VALUES('cutoff','b','completed',?,?)",
+    )
+    .run(at, cutoff);
+  db.database
+    .prepare("INSERT INTO commercial_call_usage VALUES(?,?,?,?,?,?)")
+    .run("cutoff", "b", initial, initial + 60000, 60000, cutoff);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) =>
+      Response.json(sub(url.split("/").pop(), { status: "cancelled" })),
+    ),
+  );
+  await maintainCommercialBilling(env, initial + 90000);
+  expect(
+    (await getBillingView(env, "b", initial + 120000)).usage.durationMs,
+  ).toBe(60000);
+});

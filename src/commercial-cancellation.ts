@@ -159,8 +159,8 @@ export async function finishDueCommercialCancellations(
           "UPDATE commercial_cancellations SET state='complete' WHERE business_id=?",
         ).bind(job.business_id),
         env.DB.prepare(
-          "UPDATE commercial_accounts SET status='canceled' WHERE business_id=?",
-        ).bind(job.business_id),
+          "UPDATE commercial_accounts SET status='canceled',coverage_checked_at=? WHERE business_id=?",
+        ).bind(new Date(now).toISOString(), job.business_id),
       ]);
       completed++;
     } catch {
