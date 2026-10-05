@@ -1,24 +1,53 @@
 # Production preflight
 
-## Managed business / direct Azure candidate — 2026-10-05
+## Current deployment — 2026-10-05
 
-The candidate on `codex/managed-business-launch` introduces the managed dashboard, actionable inbox, complete call logs, business and assistant settings, gated phone setup and billing. It routes managed inference directly to Azure; it is **not yet a verified deployment**. The released deployment below remains the last independently verified production source until this section records exact new Worker/runtime identities.
+The managed business application is merged and deployed to **staging**. Production continues to run the previous Kataleptic-backed release. Production's switch to direct Azure is held until a bounded actual provider/audio acceptance succeeds; staging health and synthetic tests do not establish that acceptance.
 
-Canonical production deployment is `npm run deploy`, which uses the fully materialized `wrangler.production.json` and `scripts/deploy-managed.mjs`. Installed Wrangler has no `extends` schema support; the parsed D1/DO/migration/asset bindings are checked against the shared application configuration. The guard pins managed/Azure routing and reads migration/secret-name prerequisites before upload; it never applies remote migrations. `npm run deploy:check` and `node scripts/deploy-managed.mjs --dry-run` do not deploy. Naked `wrangler deploy` uses the legacy/local configuration and is not the production release command.
+| Item | Production — unchanged | Staging — managed release |
+| --- | --- | --- |
+| Application source | `ab0dcd5a5893c4e823c16e5e1a453748f0813f91` | `24ab5b7b6297c429c1e0d7dd261060342b559579` |
+| Worker version at 100% | `a2787074-d3e2-42c7-a862-19c30033bff2` | `e313a2ad-27d3-4045-bbdc-75bf0c4c7a86` |
+| Managed edition | Not enabled | `OPENFON_MANAGED_WEB=true` |
+| Voice transport | LiveKit | LiveKit |
+| Inference | Prior Kataleptic routing | Direct Azure configuration |
+| Signaling | `wss://voice.openfon.ai` | `wss://voice-staging.openfon.ai` |
+| D1 migrations | 0001–0025 | 0001–0023, 0025–0027; no 0024 |
+| Schedule | Prior five-minute cleanup | Disabled |
+| Billing verification / new charging | Not enabled | Not enabled |
+| Telnyx / Asterisk / number purchases | Disabled | Disabled |
 
-Before rollout: obtain current-commit review/CI clearance, stage the exact source with `OPENFON_MANAGED_WEB=true`, configure the separate direct Azure voice, speech-preview and text-processing services, and validate that customer JSON/screens contain no routing configuration. Preserve existing assistants/credentials/public links; incompatible saved voices require an explicit new voice selection. New assistants store the default voice explicitly.
+Staging deployed at `2026-10-05T03:28:18Z`. Readback verified its exact source, version, managed/Azure bindings and separate signaling URL. Existing LiveKit and callback credential identities were preserved; the operator Azure key was provisioned only to staging. Historical saved routing and credentials remain stored. Previously blank voice fields retain their established effective Marin choice without a database rewrite; explicit incompatible voices still require a customer choice.
 
-Apply only additive migrations 0026 and 0027 after a restricted backup and restore/preservation rehearsal. Do not blanket-apply historical 0024 to staging. The managed schedule runs every minute for bounded cancellation reconciliation, retaining call cleanup. Atomic admission also refuses accounts whose paid cancellation term has ended, independent of schedule delivery.
+Staging Node runs OCI manifest `sha256:839aff34d31c8c8a6a09f63ad54643500f1005674d9f5c1e5dfa40c5791c1a08`, whose configuration digest is the original local image ID `sha256:8e609e13082616c40704f1b79b32ae430eaa6fdb6eb31f0868994305aa4a2748`. The saved archive's manifest/configuration hash chain, all nine filesystem layers and runtime configuration were verified across Docker implementations. Its `238c8fe` voice-agent source is unchanged in the deployed application tree. Post-start inspection confirmed health 200, zero restarts, matching credential identities, the staging callback, `LK_OPENAI_DEBUG=0`, and a writable persistent usage directory owned by UID 1000 with mode 0700. Production's previous `dbdbde5c…` image and original start time were unchanged.
 
-`COMMERCIAL_BILLING_VERIFIED` must remain unset until real invoice, meter and lifecycle acceptance passes. `COMMERCIAL_CHARGING_ENABLED` alone cannot enable checkout. Phone purchasing/activation requires the separate carrier verification and operator country/currency/budget settings; keep those gates off until actual carrier acceptance. A sandbox checkout is not proof of accurate recurring invoices or live charges. See [billing evidence](../commercial/billing-and-costs.md) and [managed product](../managed-web.md).
+### Release gates and staging validation
 
-Read-only production aggregation found one explicitly compatible active assistant and one active assistant with both saved voice fields blank. Exact released source already resolves the blank selection to Marin. The candidate preserves that known effective default on read/runtime, so no active public link requires a voice change in this aggregate. Stored values remain unchanged; nonempty incompatible voices still require an explicit compatible choice. This configuration check is not actual provider/audio acceptance.
+[PR45](https://github.com/duguetlabs/openfon/pull/45) and the [migration compatibility fix, PR46](https://github.com/duguetlabs/openfon/pull/46), are merged. Latest application checks passed 2,316 Worker tests across 101 files, 60 Node tests, both TypeScript projects, both builds and the migration/restore rehearsal. Genuine PR-Agent security/major clearance and local Codex clearance were obtained. PR CI `37258566059` and merged-source CI `37258837051` passed all five jobs; automatic production deployment was skipped.
 
-No physical microphone, real Azure audio, PSTN or paid deployment acceptance is inferred from unit tests or browser fixtures.
+The native in-app browser verified Home, the loaded actionable inbox and source-call links, historical Call logs and filters, all Settings sections, compatible voice labels/sample control, and monthly/annual plan displays. Annual prices showed €204/€696/€2,508 upfront excluding VAT. Checkout and phone purchasing remained unavailable. This used the existing account read-only: no saves, logout, preview, conversation or payment occurred.
 
-## Last verified released deployment — 2026-10-03
+The separate disposable-account HTTP smoke was **blocked before account creation** by Cloudflare HTTP 403/error 1010 for the Python client. No accounts were created or left for cleanup. No client impersonation or security-setting change was used. This leaves staged account-create/save/delete API acceptance unverified; local/CI coverage remains separate. Final reads found zero active calls and zero LiveKit rooms in both environments, healthy agents, and zero staging provider-usage observations. Actual Azure authentication, transport, nonzero audio, selected voice, transcript/summary/action persistence and graceful closure are still required before production routing changes. Physical microphone/noise and carrier acceptance remain separate.
 
-PR #42 is merged and deployed to staging and production. Cloudflare retains application and state authority; separate self-hosted Azure LiveKit and Node services carry audio to Kataleptic. The released interface, accounts, saved configurations and public links are preserved. This deployment does not include the separate editions/redesign prototype.
+### Migration procedure and preservation
+
+The ordinary remote `wrangler d1 migrations apply` path failed twice with SQLite “incomplete input”; each failure rolled back without new columns, objects or migration markers. PR46 corrects a local Wrangler splitter incompatibility around CASE/END punctuation, but that does **not** establish compatibility with the separate remote REST query parser. Preserve both failures as failures.
+
+The successful staging procedure used the supported transactional **file import** path: `wrangler d1 execute <staging-database> --remote --config <reviewed-staging-config> --file <restricted-reviewed-script>`. The script contained the exact reviewed bytes of migration 0026, its standard `INSERT INTO "d1_migrations" (name) values ('0026_business_actions.sql');`, then migration 0027 and its corresponding ledger insertion. It included no historical migrations or SQL semantic rewrites. Verify the target, pending markers, fresh backup and absence of active calls/rooms before any authorized use; never reapply this pair where its markers already exist. The file-import mechanism documents rollback to the original database on failure; verify actual state after any failure rather than assuming it.
+
+The fresh pre-import staging backup restored with integrity `ok` and zero foreign-key violations. Local combined-script rehearsal and the post-import export verified all original columns/rows across 20 tables, except exactly the two expected migration-ledger additions. Both action-projection triggers and the intended failed-booking descriptions were checked. Backup SHA256: `ec3715d5fb0c70177da04ce170052e439d2cdf012a65a21133b6353784b36918`; combined script: `6dacb1d1d906b37e8484fd63da8c3aa268b810e555a65e0f7ed077131ed8bab7`; post-import export: `31e11d05c59b903b7cd1b1d35705a6da197401c9bad7ddf876a5373fda052bd7`. Original logs, restricted backups and recoverable pre-update service configurations are retained outside Git. Migration 0024 was not applied to staging.
+
+### Production gate and rollback
+
+Canonical production deployment remains `npm run deploy`, using `wrangler.production.json` and `scripts/deploy-managed.mjs`. It verifies managed/Azure routing, unchanged state bindings, required migration markers and secret names; it never applies migrations. `npm run deploy:check` and the script's `--dry-run` do not deploy. Production still needs its own fresh backup, authorized migration procedure, paired Worker/Node update and actual acceptance evidence. Do not treat a naked `wrangler deploy` as the production release command.
+
+Restore a compatible Worker/Node/configuration pair after draining calls; retain all additive data and separate credentials. Old staging service configurations and images remain recoverable. The production managed schedule, when released, runs every minute for bounded commercial maintenance; the staging schedule remains disabled.
+
+Keep `COMMERCIAL_BILLING_VERIFIED`, new charging and phone purchase gates off until their separate invoice/meter/lifecycle and carrier acceptance passes. A sandbox card checkout does not prove accurate recurring usage invoices. See [billing evidence](../commercial/billing-and-costs.md) and [managed product](../managed-web.md). No physical microphone, real Azure audio or PSTN acceptance is inferred from this deployment.
+
+## Historical deployment evidence — 2026-10-03
+
+This section records the October 3 baseline. Its production identity remains current; its staging identity and then-current acceptance blockers are superseded by the current section above. PR #42 was merged and deployed to staging and production. Cloudflare retains application and state authority; separate self-hosted Azure LiveKit and Node services carry audio to Kataleptic. The released interface, accounts, saved configurations and public links are preserved. This deployment does not include the separate editions/redesign prototype.
 
 | Item | Production | Staging |
 | --- | --- | --- |
