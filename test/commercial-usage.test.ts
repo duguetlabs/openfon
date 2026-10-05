@@ -230,3 +230,111 @@ it("preserves provider nanoseconds and deduplicates the same snapshot observed l
     normalizeUsage(event({ metrics: { voiceSessionSeconds: "9999999999" } })),
   ).toThrow();
 });
+
+it.each(["job", "carrier_call"])(
+  "binds %s finality to the retained quantity through regressions, unknown and duplicate evidence",
+  async (jobId) => {
+    const scope = { ...context, jobId };
+    const put = async (
+      id: string,
+      seconds: string | undefined,
+      final: boolean,
+    ) =>
+      ingestProviderUsage(
+        env,
+        scope,
+        event({
+          eventId: id,
+          jobId,
+          final,
+          metrics:
+            seconds === undefined ? {} : { voiceSessionSeconds: seconds },
+        }),
+      );
+    const metric = () =>
+      db.database
+        .prepare("SELECT value,is_final FROM commercial_provider_metrics")
+        .get();
+    await put("interim5", "5", false);
+    await put("terminal2", "2", true);
+    expect(metric()).toEqual({ value: 5000000000, is_final: 0 });
+    await put("terminal5", "5", true);
+    expect(metric()).toEqual({ value: 5000000000, is_final: 1 });
+    await put("late2", "2", false);
+    await put("unknown", undefined, true);
+    expect(metric()).toEqual({ value: 5000000000, is_final: 1 });
+    await put("interim8", "8", false);
+    expect(metric()).toEqual({ value: 8000000000, is_final: 0 });
+    expect(await put("terminal5", "5", true)).toEqual({ duplicate: true });
+    expect(metric()).toEqual({ value: 8000000000, is_final: 0 });
+    await put("terminal8", "8", true);
+    expect(metric()).toEqual({ value: 8000000000, is_final: 1 });
+  },
+);
+it("higher interim metrics cannot inherit certification from an earlier lower terminal", async () => {
+  await ingestProviderUsage(
+    env,
+    context,
+    event({ final: true, metrics: { voiceSessionSeconds: "2" } }),
+  );
+  await ingestProviderUsage(
+    env,
+    context,
+    event({
+      eventId: "higher",
+      final: false,
+      metrics: { voiceSessionSeconds: "5" },
+    }),
+  );
+  expect(
+    db.database
+      .prepare("SELECT value,is_final FROM commercial_provider_metrics")
+      .get(),
+  ).toEqual({ value: 5000000000, is_final: 0 });
+});
+it("certifies token quantities independently and distinguishes unknown from observed zero", async () => {
+  await ingestProviderUsage(env, context, event({ metrics: {}, final: true }));
+  expect(
+    db.database
+      .prepare("SELECT count(*) n FROM commercial_provider_metrics")
+      .get(),
+  ).toEqual({ n: 0 });
+  await ingestProviderUsage(
+    env,
+    context,
+    event({
+      eventId: "zero",
+      metrics: { voiceSessionSeconds: "0" },
+      final: true,
+    }),
+  );
+  expect(
+    db.database
+      .prepare("SELECT value,is_final FROM commercial_provider_metrics")
+      .get(),
+  ).toEqual({ value: 0, is_final: 1 });
+  const reasoning = event({
+    eventId: "reasoning1",
+    source: "azure_reasoning",
+    providerResponseId: "response1",
+    metrics: { inputTokens: 10, outputTokens: 5 },
+    final: true,
+  });
+  await ingestProviderUsage(env, context, reasoning);
+  await ingestProviderUsage(env, context, {
+    ...reasoning,
+    eventId: "reasoning2",
+    metrics: { inputTokens: 12, outputTokens: 5 },
+    final: false,
+  });
+  expect(
+    db.database
+      .prepare(
+        "SELECT metric,value,is_final FROM commercial_provider_metrics WHERE source='azure_reasoning' ORDER BY metric",
+      )
+      .all(),
+  ).toEqual([
+    { metric: "inputTokens", value: 12, is_final: 0 },
+    { metric: "outputTokens", value: 5, is_final: 1 },
+  ]);
+});

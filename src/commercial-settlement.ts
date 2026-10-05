@@ -7,6 +7,44 @@ import {
 } from "./commercial-usage";
 import type { PlanId, BillingCadence } from "./commercial-types";
 
+type SettlementRecord = {
+  id: string;
+  business_id: string;
+  cycle_start: string;
+  cycle_end: string;
+  usage_ms: number;
+  overage_minor: number;
+  state: string;
+  provider_reference: string | null;
+  computed_hash: string;
+  created_at: string;
+};
+
+async function requireInvoiceReconciliation(
+  env: CommercialEnv,
+  old: SettlementRecord,
+  now: number,
+) {
+  const result = await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO commercial_usage_invoice_evidence(id,settlement_id,business_id,kind,snapshot_json,proof_json,recorded_at)
+      SELECT ?,id,business_id,'invoice_snapshot',json_object('id',id,'business_id',business_id,'cycle_start',cycle_start,'cycle_end',cycle_end,'usage_ms',usage_ms,'overage_minor',overage_minor,'state',state,'provider_reference',provider_reference,'computed_hash',computed_hash,'created_at',created_at),
+      '{"source":"previously_invoice_reconciled"}',?
+      FROM commercial_usage_exports WHERE id=? AND computed_hash=? AND state='invoice_reconciled'`,
+    ).bind(
+      crypto.randomUUID(),
+      new Date(now).toISOString(),
+      old.id,
+      old.computed_hash,
+    ),
+    env.DB.prepare(
+      "UPDATE commercial_usage_exports SET state='reconciliation_required' WHERE id=? AND computed_hash=? RETURNING id",
+    ).bind(old.id, old.computed_hash),
+  ]);
+  if (!result[1].results.length)
+    throw new BillingError("The settlement changed. Review it again.", 409);
+}
+
 /** Recompute an immutable billing interval, never the month an adjustment arrived. */
 export async function prepareUsageSettlement(
   env: CommercialEnv,
@@ -77,6 +115,11 @@ export async function prepareUsageSettlement(
       cents: total.overageMinor,
     }),
   );
+  const old = await env.DB.prepare(
+    "SELECT * FROM commercial_usage_exports WHERE business_id=? AND cycle_start=? AND cycle_end=?",
+  )
+    .bind(businessId, period.period_start, period.period_end)
+    .first<SettlementRecord>();
   const automatic = await env.DB.prepare(
     `SELECT COALESCE(MAX(overage_minor),0) maximum,
     COALESCE(MAX(CASE WHEN state IN ('sending','reconciliation_required') THEN 1 ELSE 0 END),0) uncertain
@@ -84,10 +127,33 @@ export async function prepareUsageSettlement(
   )
     .bind(businessId, period.period_start)
     .first<{ maximum: number; uncertain: number }>();
+  // An explicit verified credit may settle a lower amount than an immutable
+  // historical MAX event. Do not repeatedly reopen that same proven snapshot.
+  // Uncertain sends still require their own reconciliation.
+  const correctedInvoice =
+    old?.state === "invoice_reconciled" &&
+    old.computed_hash === hash &&
+    (await env.DB.prepare(
+      `SELECT id FROM commercial_usage_invoice_evidence
+      WHERE settlement_id=? AND kind='correction'
+      AND json_extract(snapshot_json,'$.computed_hash')=?
+      AND json_extract(snapshot_json,'$.usage_ms')=? AND json_extract(snapshot_json,'$.overage_minor')=?
+      AND json_extract(snapshot_json,'$.provider_reference')=? LIMIT 1`,
+    )
+      .bind(
+        old.id,
+        hash,
+        total.durationMs,
+        total.overageMinor,
+        old.provider_reference,
+      )
+      .first());
   if (
     automatic &&
-    (automatic.uncertain || automatic.maximum > total.overageMinor)
+    (automatic.uncertain ||
+      (automatic.maximum > total.overageMinor && !correctedInvoice))
   ) {
+    if (old) await requireInvoiceReconciliation(env, old, now);
     const conflict = await env.DB.prepare(
       `INSERT INTO commercial_usage_exports(id,business_id,cycle_start,cycle_end,usage_ms,overage_minor,state,computed_hash,created_at)
       VALUES(?,?,?,?,?,?,'reconciliation_required',?,?) ON CONFLICT(business_id,cycle_start,cycle_end)
@@ -109,33 +175,21 @@ export async function prepareUsageSettlement(
       state: "reconciliation_required",
       computedHash: hash,
       overageMinor: total.overageMinor,
+      usageMs: total.durationMs,
       previousOverageMinor: automatic.maximum,
     };
   }
-  const old = await env.DB.prepare(
-    "SELECT id,state,overage_minor,computed_hash FROM commercial_usage_exports WHERE business_id=? AND cycle_start=? AND cycle_end=?",
-  )
-    .bind(businessId, period.period_start, period.period_end)
-    .first<{
-      id: string;
-      state: string;
-      overage_minor: number;
-      computed_hash: string;
-    }>();
   if (old && old.computed_hash !== hash) {
     // A MAX meter cannot undo an earlier amount. Preserve the sent evidence and
     // require an explicit credit/debit reconciliation; never send a lower MAX.
-    if (["sending", "sent", "reconciliation_required"].includes(old.state)) {
-      await env.DB.prepare(
-        "UPDATE commercial_usage_exports SET state='reconciliation_required' WHERE id=?",
-      )
-        .bind(old.id)
-        .run();
+    if (!["review", "approved"].includes(old.state)) {
+      await requireInvoiceReconciliation(env, old, now);
       return {
         id: old.id,
         state: "reconciliation_required",
         computedHash: hash,
         overageMinor: total.overageMinor,
+        usageMs: total.durationMs,
         previousOverageMinor: old.overage_minor,
       };
     }
@@ -166,7 +220,127 @@ export async function prepareUsageSettlement(
     state: old?.computed_hash === hash ? old.state : "review",
     computedHash: hash,
     overageMinor: total.overageMinor,
+    usageMs: total.durationMs,
   };
+}
+
+/** Internal operator attestation AFTER external invoice/credit verification.
+ * No HTTP route, provider mutation, inferred credit, or automatic rebilling.
+ */
+export async function recordUsageInvoiceCorrection(
+  env: CommercialEnv,
+  id: string,
+  expectedHash: string,
+  proof: {
+    invoiceReference: string;
+    correctionReference: string;
+    verifiedBy: string;
+  },
+  now = Date.now(),
+) {
+  if (
+    !/^[a-f0-9]{64}$/.test(expectedHash) ||
+    !proof ||
+    ![
+      proof.invoiceReference,
+      proof.correctionReference,
+      proof.verifiedBy,
+    ].every((v) => typeof v === "string" && /^[A-Za-z0-9_.:-]{1,200}$/.test(v))
+  )
+    throw new BillingError(
+      "Explicit invoice correction evidence is required.",
+      400,
+    );
+  const proofJson = JSON.stringify({
+    invoiceReference: proof.invoiceReference,
+    correctionReference: proof.correctionReference,
+    verifiedBy: proof.verifiedBy,
+  });
+  const proofId = await usageHash(
+    JSON.stringify({ id, expectedHash, proof: proofJson }),
+  );
+  const existing = await env.DB.prepare(
+    "SELECT id FROM commercial_usage_invoice_evidence WHERE settlement_id=? AND correction_reference=?",
+  )
+    .bind(id, proof.correctionReference)
+    .first<{ id: string }>();
+  if (existing) {
+    if (existing.id !== proofId)
+      throw new BillingError(
+        "Correction evidence already belongs to a different snapshot.",
+        409,
+      );
+    return { recorded: true, duplicate: true, computedHash: expectedHash };
+  }
+  const before = await env.DB.prepare(
+    "SELECT * FROM commercial_usage_exports WHERE id=?",
+  )
+    .bind(id)
+    .first<SettlementRecord>();
+  if (!before) throw new BillingError("Settlement not found.", 409);
+  const candidate = await prepareUsageSettlement(
+    env,
+    before.business_id,
+    before.cycle_start,
+    now,
+  );
+  if (
+    candidate.computedHash !== expectedHash ||
+    candidate.state !== "reconciliation_required"
+  )
+    throw new BillingError(
+      "The correction changed. Review the current invoice evidence.",
+      409,
+    );
+  const snapshot = {
+    ...before,
+    usage_ms: candidate.usageMs,
+    overage_minor: candidate.overageMinor,
+    state: "invoice_reconciled",
+    provider_reference: proof.invoiceReference,
+    computed_hash: expectedHash,
+  };
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO commercial_usage_invoice_evidence(id,settlement_id,business_id,kind,snapshot_json,proof_json,correction_reference,recorded_at)
+      SELECT ?,id,business_id,'correction',?,?,?,? FROM commercial_usage_exports
+      WHERE id=? AND computed_hash=? AND state='reconciliation_required'
+      AND EXISTS(SELECT 1 FROM commercial_usage_invoice_evidence e WHERE e.settlement_id=commercial_usage_exports.id AND e.kind='invoice_snapshot')
+      ON CONFLICT(id) DO NOTHING`,
+    ).bind(
+      proofId,
+      JSON.stringify(snapshot),
+      proofJson,
+      proof.correctionReference,
+      new Date(now).toISOString(),
+      id,
+      before.computed_hash,
+    ),
+    env.DB.prepare(
+      `UPDATE commercial_usage_exports SET usage_ms=?,overage_minor=?,computed_hash=?,provider_reference=?,state='invoice_reconciled'
+      WHERE id=? AND computed_hash=? AND state='reconciliation_required' AND EXISTS(SELECT 1 FROM commercial_usage_invoice_evidence WHERE id=?)`,
+    ).bind(
+      candidate.usageMs,
+      candidate.overageMinor,
+      expectedHash,
+      proof.invoiceReference,
+      id,
+      before.computed_hash,
+      proofId,
+    ),
+  ]);
+  if (
+    !(await env.DB.prepare(
+      "SELECT id FROM commercial_usage_invoice_evidence WHERE id=?",
+    )
+      .bind(proofId)
+      .first())
+  )
+    throw new BillingError(
+      "The settlement changed before correction. Review it again.",
+      409,
+    );
+  return { recorded: true, duplicate: false, computedHash: expectedHash };
 }
 
 /** Operator-reviewed only until invoice reconciliation and small-charge acceptance pass. */

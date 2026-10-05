@@ -11,6 +11,7 @@ import {
   prepareUsageSettlement,
   approveUsageSettlement,
   publishUsageSettlement,
+  recordUsageInvoiceCorrection,
 } from "../src/commercial-settlement";
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, it, expect, vi } from "vitest";
@@ -403,6 +404,169 @@ it("requires explicit credit reconciliation after a lower correction to an expor
       .get(),
   ).toEqual({ overage_minor: 15, state: "reconciliation_required" });
 });
+it.each([
+  [-30000, false],
+  [30000, false],
+  [-30000, true],
+] as const)(
+  "retains original invoice evidence and requires correction for audited adjustment %s (prior MAX %s)",
+  async (delta, automatic) => {
+    const draft = await closedSettlement();
+    if (automatic) {
+      db.exec(
+        "INSERT INTO commercial_usage_streams(business_id,cycle_start,cycle_end,last_checked_at,last_usage_ms,last_overage_minor) VALUES('b','2026-10-05T00:08:12.128Z','2026-11-05T00:08:42.107Z','2026-10-06',60000,15)",
+      );
+      db.exec(
+        "INSERT INTO commercial_usage_snapshots VALUES('ingested','b','2026-10-05T00:08:12.128Z','2026-11-05T00:08:42.107Z','usage','customer','test','cents','2026-10-06T00:01:01Z',60000,15,'ingested','2026-10-06T00:01:01Z','2026-10-06T00:01:01Z')",
+      );
+    }
+    db.database
+      .prepare(
+        "UPDATE commercial_usage_exports SET state='invoice_reconciled',provider_reference='invoice_original' WHERE id=?",
+      )
+      .run(draft.id);
+    const original = db.database
+      .prepare("SELECT * FROM commercial_usage_exports WHERE id=?")
+      .get(draft.id);
+    db.database
+      .prepare(
+        "INSERT INTO commercial_usage_adjustments VALUES('audit','b','settled',?,'2026-10-05T00:08:12.128Z','2026-11-05T00:08:42.107Z','verified adjustment','2026-11-05T00:08:43Z','operator')",
+      )
+      .run(delta);
+    const changed = await prepareUsageSettlement(
+      env,
+      "b",
+      "2026-10-05T00:08:12.128Z",
+    );
+    expect(changed.state).toBe("reconciliation_required");
+    expect(changed.computedHash).not.toBe(draft.computedHash);
+    expect(changed.overageMinor).toBe(delta < 0 ? 8 : 23);
+    expect(
+      db.database
+        .prepare("SELECT * FROM commercial_usage_exports WHERE id=?")
+        .get(draft.id),
+    ).toEqual({ ...original, state: "reconciliation_required" });
+    expect(
+      await prepareUsageSettlement(env, "b", "2026-10-05T00:08:12.128Z"),
+    ).toEqual(changed);
+    await expect(
+      approveUsageSettlement(env, draft.id, changed.computedHash),
+    ).rejects.toThrow();
+    vi.mocked(fetch).mockClear();
+    await expect(
+      prepareCommercialDeletion(env, "b", {
+        userId: "u",
+        passwordHash: "x",
+        sessionToken: "session",
+      }),
+    ).rejects.toThrow("reconciliation");
+    expect(fetch).not.toHaveBeenCalled();
+    const preserved = db.database
+      .prepare(
+        "SELECT snapshot_json FROM commercial_usage_invoice_evidence WHERE kind='invoice_snapshot'",
+      )
+      .all();
+    expect(
+      preserved.map((row) => JSON.parse(row.snapshot_json as string)),
+    ).toEqual([original]);
+    const proof = {
+      invoiceReference: "invoice_corrected",
+      correctionReference: "synthetic_verified_credit_or_debit",
+      verifiedBy: "operator_fixture",
+    };
+    await expect(
+      recordUsageInvoiceCorrection(env, draft.id, "0".repeat(64), proof),
+    ).rejects.toThrow("changed");
+    expect(
+      await recordUsageInvoiceCorrection(
+        env,
+        draft.id,
+        changed.computedHash,
+        proof,
+      ),
+    ).toEqual({
+      recorded: true,
+      duplicate: false,
+      computedHash: changed.computedHash,
+    });
+    expect(
+      await recordUsageInvoiceCorrection(
+        env,
+        draft.id,
+        changed.computedHash,
+        proof,
+      ),
+    ).toEqual({
+      recorded: true,
+      duplicate: true,
+      computedHash: changed.computedHash,
+    });
+    await expect(
+      recordUsageInvoiceCorrection(env, draft.id, changed.computedHash, {
+        ...proof,
+        invoiceReference: "unrelated",
+      }),
+    ).rejects.toThrow("different snapshot");
+    expect(
+      db.database
+        .prepare(
+          "SELECT usage_ms,overage_minor,state,provider_reference FROM commercial_usage_exports WHERE id=?",
+        )
+        .get(draft.id),
+    ).toEqual({
+      usage_ms: 60000 + delta,
+      overage_minor: delta < 0 ? 8 : 23,
+      state: "invoice_reconciled",
+      provider_reference: "invoice_corrected",
+    });
+    expect(
+      db.database
+        .prepare("SELECT count(*) n FROM commercial_usage_invoice_evidence")
+        .get(),
+    ).toEqual({ n: 2 });
+    const confirmed = await prepareUsageSettlement(
+      env,
+      "b",
+      "2026-10-05T00:08:12.128Z",
+    );
+    expect(confirmed.state).toBe("invoice_reconciled");
+    expect(confirmed.computedHash).toBe(changed.computedHash);
+    if (automatic)
+      expect(
+        db.database
+          .prepare("SELECT overage_minor,state FROM commercial_usage_snapshots")
+          .get(),
+      ).toEqual({ overage_minor: 15, state: "ingested" });
+    expect(() =>
+      db.exec("UPDATE commercial_usage_invoice_evidence SET proof_json='{}'"),
+    ).toThrow("immutable");
+    expect(fetch).not.toHaveBeenCalled();
+    const canceled = new Set<string>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        const role = url.split("/").pop()!;
+        if (init.method === "PATCH") canceled.add(role);
+        return Response.json(
+          sub(role, { status: canceled.has(role) ? "cancelled" : "active" }),
+        );
+      }),
+    );
+    await prepareCommercialDeletion(env, "b", {
+      userId: "u",
+      passwordHash: "x",
+      sessionToken: "session",
+    });
+    expect([...canceled].sort()).toEqual(["base", "usage"]);
+    expect(
+      db.database
+        .prepare(
+          "SELECT completed_at FROM commercial_deletion_jobs WHERE business_id='b'",
+        )
+        .get()?.completed_at,
+    ).toBeTruthy();
+  },
+);
 it("does not shift late settled usage into a new invoice period", async () => {
   const draft = await closedSettlement();
   await expect(
@@ -422,6 +586,166 @@ it("does not shift late settled usage into a new invoice period", async () => {
     "another month",
   );
   expect(fetch).not.toHaveBeenCalled();
+});
+
+async function correctionCandidate() {
+  const draft = await closedSettlement();
+  db.database
+    .prepare(
+      "UPDATE commercial_usage_exports SET state='invoice_reconciled',provider_reference='invoice_original' WHERE id=?",
+    )
+    .run(draft.id);
+  db.exec(
+    "INSERT INTO commercial_usage_adjustments VALUES('audit','b','settled',-30000,'2026-10-05T00:08:12.128Z','2026-11-05T00:08:42.107Z','verified adjustment','2026-11-05T00:08:43Z','operator')",
+  );
+  return prepareUsageSettlement(env, "b", "2026-10-05T00:08:12.128Z");
+}
+it("competing operator corrections cannot overwrite the first verified snapshot", async () => {
+  const candidate = await correctionCandidate();
+  const batch = db.batch.bind(db);
+  let release!: () => void,
+    entered!: () => void,
+    held = false;
+  const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    }),
+    ready = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+  const spy = vi.spyOn(db, "batch").mockImplementation(async (statements) => {
+    if (!held && (statements[0] as any).sql.includes("'correction'")) {
+      held = true;
+      entered();
+      await gate;
+    }
+    return batch(statements);
+  });
+  const proof = {
+    invoiceReference: "invoice_A",
+    correctionReference: "synthetic_proof_A",
+    verifiedBy: "operator_A",
+  };
+  const first = recordUsageInvoiceCorrection(
+    env,
+    candidate.id,
+    candidate.computedHash,
+    proof,
+  ).then(
+    () => "accepted",
+    () => "rejected",
+  );
+  await ready;
+  const second = await recordUsageInvoiceCorrection(
+    env,
+    candidate.id,
+    candidate.computedHash,
+    {
+      invoiceReference: "invoice_B",
+      correctionReference: "synthetic_proof_B",
+      verifiedBy: "operator_B",
+    },
+  );
+  release();
+  expect(await first).toBe("rejected");
+  expect(second.recorded).toBe(true);
+  spy.mockRestore();
+  expect(
+    db.database
+      .prepare("SELECT provider_reference,state FROM commercial_usage_exports")
+      .get(),
+  ).toEqual({ provider_reference: "invoice_B", state: "invoice_reconciled" });
+  expect(
+    db.database
+      .prepare(
+        "SELECT correction_reference FROM commercial_usage_invoice_evidence WHERE kind='correction'",
+      )
+      .all(),
+  ).toEqual([{ correction_reference: "synthetic_proof_B" }]);
+});
+it("a new audited adjustment during proof recording cannot waive deletion reconciliation", async () => {
+  const candidate = await correctionCandidate();
+  let changed = false;
+  db.hook = (sql) => {
+    if (
+      !changed &&
+      sql.startsWith("INSERT INTO commercial_usage_invoice_evidence") &&
+      sql.includes("'correction'")
+    ) {
+      changed = true;
+      db.exec(
+        "INSERT INTO commercial_usage_adjustments VALUES('later','b','settled',30000,'2026-10-05T00:08:12.128Z','2026-11-05T00:08:42.107Z','later verified adjustment','2026-11-05T00:08:43Z','operator')",
+      );
+    }
+  };
+  // This attests only the exact reviewed snapshot, not unobserved later changes.
+  await recordUsageInvoiceCorrection(
+    env,
+    candidate.id,
+    candidate.computedHash,
+    {
+      invoiceReference: "invoice_A",
+      correctionReference: "synthetic_proof_A",
+      verifiedBy: "operator_A",
+    },
+  );
+  expect(changed).toBe(true);
+  vi.mocked(fetch).mockClear();
+  await expect(
+    prepareCommercialDeletion(env, "b", {
+      userId: "u",
+      passwordHash: "x",
+      sessionToken: "session",
+    }),
+  ).rejects.toThrow("reconciliation");
+  expect(fetch).not.toHaveBeenCalled();
+  const newer = await prepareUsageSettlement(
+    env,
+    "b",
+    "2026-10-05T00:08:12.128Z",
+  );
+  expect(newer.state).toBe("reconciliation_required");
+  expect(newer.computedHash).not.toBe(candidate.computedHash);
+  expect(newer.overageMinor).toBe(15);
+  expect(
+    db.database
+      .prepare(
+        "SELECT count(*) n FROM commercial_usage_invoice_evidence WHERE kind='invoice_snapshot'",
+      )
+      .get(),
+  ).toEqual({ n: 2 });
+});
+it("proof recording rolls back atomically if installing the corrected invoice fails", async () => {
+  const candidate = await correctionCandidate();
+  db.hook = (sql) => {
+    if (
+      sql.startsWith("UPDATE commercial_usage_exports SET usage_ms=") &&
+      sql.includes("state='invoice_reconciled'")
+    )
+      throw Error("synthetic write failure");
+  };
+  await expect(
+    recordUsageInvoiceCorrection(env, candidate.id, candidate.computedHash, {
+      invoiceReference: "invoice_A",
+      correctionReference: "synthetic_proof_A",
+      verifiedBy: "operator_A",
+    }),
+  ).rejects.toThrow("synthetic write failure");
+  db.hook = null;
+  expect(
+    db.database
+      .prepare(
+        "SELECT count(*) n FROM commercial_usage_invoice_evidence WHERE kind='correction'",
+      )
+      .get(),
+  ).toEqual({ n: 0 });
+  expect(
+    db.database
+      .prepare("SELECT state,provider_reference FROM commercial_usage_exports")
+      .get(),
+  ).toEqual({
+    state: "reconciliation_required",
+    provider_reference: "invoice_original",
+  });
 });
 
 it.each([

@@ -118,6 +118,23 @@ CREATE TABLE commercial_usage_exports (
  created_at TEXT NOT NULL,
  UNIQUE(business_id,cycle_start,cycle_end)
 );
+-- Internal operator attestations preserve prior invoices before corrections.
+CREATE TABLE commercial_usage_invoice_evidence (
+ id TEXT PRIMARY KEY,
+ settlement_id TEXT NOT NULL REFERENCES commercial_usage_exports(id) ON DELETE CASCADE,
+ business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+ kind TEXT NOT NULL CHECK(kind IN ('invoice_snapshot','correction')),
+ snapshot_json TEXT NOT NULL,
+ proof_json TEXT NOT NULL,
+ correction_reference TEXT,
+ recorded_at TEXT NOT NULL,
+ UNIQUE(settlement_id,correction_reference)
+);
+CREATE TRIGGER commercial_invoice_evidence_immutable
+BEFORE UPDATE ON commercial_usage_invoice_evidence
+BEGIN
+ SELECT RAISE(ABORT,'Invoice evidence is immutable');
+END;
 CREATE TABLE commercial_phone_quotes (
  id TEXT PRIMARY KEY,
  business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,

@@ -149,12 +149,16 @@ async function record(
   ];
   // Snapshot counters are not additive. Missing fields remain absent. Token
   // details are independent measurements, never added to their parent total.
+  // Certification belongs to the retained value: a lower terminal cannot certify
+  // a higher interim, and a later higher interim loses the older certification.
   for (const [metric, value] of Object.entries(metrics))
     writes.push(
       env.DB.prepare(
         `INSERT INTO commercial_provider_metrics(business_id,source,usage_key,metric,value,is_final)
  SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM commercial_provider_observations WHERE event_id=? AND payload_hash=? AND business_id=?)
- ON CONFLICT(business_id,source,usage_key,metric) DO UPDATE SET value=MAX(value,excluded.value),is_final=MAX(is_final,excluded.is_final)`,
+ ON CONFLICT(business_id,source,usage_key,metric) DO UPDATE SET
+ is_final=CASE WHEN excluded.value>value THEN excluded.is_final WHEN excluded.value=value THEN MAX(is_final,excluded.is_final) ELSE is_final END,
+ value=MAX(value,excluded.value)`,
       ).bind(
         scope.businessId,
         observation.source,
