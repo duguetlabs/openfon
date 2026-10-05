@@ -4,6 +4,7 @@ import { PREVIEW_TEXT } from './voice-preview-text';
 import { decodeRealtimeAudio, parseRealtimeMessage } from './realtime-input';
 import { GPT_LIVE_SILENCE, silentPcm } from './gpt-live';
 import { pcmWav } from './voice-preview';
+import { azureSeconds } from './azure-usage';
 export interface PreviewUsage {
   sessionId: string;
   seconds?: number;
@@ -110,22 +111,50 @@ export async function azureVoicePreview(
                 throw Error();
               const msg = parseRealtimeMessage(event.data);
               if (
+                sessionId &&
+                ((msg.session_id !== undefined &&
+                  msg.session_id !== sessionId) ||
+                  (msg.type === 'session.started' &&
+                    (msg.session as { id?: unknown } | undefined)?.id !==
+                      sessionId))
+              ) {
+                // One preview owns one session. Refuse replacement identity even
+                // during close drain, before its usage can contaminate this record.
+                result = undefined;
+                complete();
+                return;
+              }
+              if (
                 msg.type === 'session.usage.updated' ||
                 msg.type === 'session.closed'
               ) {
                 const seconds = (msg.usage as { seconds?: unknown } | undefined)
                   ?.seconds;
-                if (sessionId)
+                if (sessionId) {
+                  const valid =
+                    typeof seconds === 'number' &&
+                    azureSeconds(seconds) !== undefined
+                      ? seconds
+                      : undefined;
+                  const previous =
+                    usage?.sessionId === sessionId ? usage.seconds : undefined;
+                  const maximum =
+                    valid === undefined
+                      ? previous
+                      : previous === undefined
+                        ? valid
+                        : Math.max(previous, valid);
                   usage = {
                     sessionId,
-                    ...(typeof seconds === 'number' &&
-                    Number.isFinite(seconds) &&
-                    seconds >= 0 &&
-                    seconds <= 86400
-                      ? { seconds }
-                      : {}),
-                    final: msg.type === 'session.closed',
+                    ...(maximum === undefined ? {} : { seconds: maximum }),
+                    // Counters are cumulative, not additive. A missing/regressing
+                    // terminal amount cannot certify an earlier measured quantity.
+                    final:
+                      msg.type === 'session.closed' &&
+                      (maximum === undefined ||
+                        (valid !== undefined && valid >= maximum)),
                   };
+                }
                 if (msg.type === 'session.closed') {
                   complete();
                   return;
