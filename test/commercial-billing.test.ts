@@ -1,3 +1,17 @@
+import {
+  requestCommercialCancellation,
+  maintainCommercialBilling,
+} from "../src/commercial-cancellation";
+import {
+  beginPaymentMethodUpdate,
+  reconcilePaymentMethodUpdate,
+  getCommercialInvoice,
+} from "../src/commercial-payment";
+import {
+  prepareUsageSettlement,
+  approveUsageSettlement,
+  publishUsageSettlement,
+} from "../src/commercial-settlement";
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, it, expect, vi } from "vitest";
 import { SqliteD1, applyMigrations } from "./sqlite-d1";
@@ -6,9 +20,10 @@ import {
   verifyDodoWebhook,
   processDodoWebhook,
   prepareCommercialDeletion,
+  reconcileBusinessCheckouts,
   type CommercialEnv,
 } from "../src/commercial-dodo";
-import { getBillingView } from "../src/commercial-api";
+import { getBillingView, commercialWorkspace } from "../src/commercial-api";
 let db: SqliteD1, env: CommercialEnv;
 const at = "2026-10-05T00:10:00.000Z";
 const sub = (role = "usage", patch: Record<string, unknown> = {}) => ({
@@ -43,7 +58,7 @@ beforeEach(() => {
   applyMigrations(db);
   db.exec(readFileSync("migrations/0027_commercial.sql", "utf8"));
   db.exec(
-    "INSERT INTO users(id,email,password_hash) VALUES('u','u@example.invalid','x'); INSERT INTO businesses(id,user_id,slug,name) VALUES('b','u','b','B'); INSERT INTO commercial_checkout_intents(id,business_id,provider_mode,plan_id,cadence,product_id,usage_product_id,meter_id,event_name,created_at) VALUES('intent','b','test','flex','annual','baseprod','usageprod','meter','cents','2026-10-05T00:00:00Z')",
+    "INSERT INTO users(id,email,password_hash) VALUES('u','u@example.invalid','x'); INSERT INTO businesses(id,user_id,slug,name) VALUES('b','u','b','B'); INSERT INTO sessions(token,user_id,expires_at) VALUES('session','u','2027-01-01T00:00:00Z'); INSERT INTO commercial_checkout_intents(id,business_id,provider_mode,plan_id,cadence,product_id,usage_product_id,meter_id,event_name,created_at) VALUES('intent','b','test','flex','annual','baseprod','usageprod','meter','cents','2026-10-05T00:00:00Z')",
   );
   env = {
     DB: db,
@@ -157,14 +172,24 @@ it("cancels and verifies both components before account deletion, retaining retr
       );
     }),
   );
-  await expect(prepareCommercialDeletion(env, "b")).rejects.toThrow();
+  await expect(
+    prepareCommercialDeletion(env, "b", {
+      userId: "u",
+      passwordHash: "x",
+      sessionToken: "session",
+    }),
+  ).rejects.toThrow();
   expect(
     db.database
       .prepare("SELECT completed_at FROM commercial_deletion_jobs")
       .get(),
   ).toEqual({ completed_at: null });
   failUsage = false;
-  await prepareCommercialDeletion(env, "b");
+  await prepareCommercialDeletion(env, "b", {
+    userId: "u",
+    passwordHash: "x",
+    sessionToken: "session",
+  });
   expect([...canceled].sort()).toEqual(["base", "usage"]);
   expect(
     db.database
@@ -225,4 +250,324 @@ it("authenticates raw bytes and deduplicates multicart webhook without trusting 
     duplicate: true,
   });
   expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+});
+
+it("uses the same oldest workspace as business settings for same-owner accounts", async () => {
+  db.exec(
+    "DROP TRIGGER businesses_one_workspace_per_user; UPDATE businesses SET created_at='2026-10-04' WHERE id='b'; INSERT INTO businesses(id,user_id,slug,name,created_at) VALUES('another','u','another','Other','2026-10-05')",
+  );
+  expect((await commercialWorkspace(env, "u")).id).toBe("b");
+});
+it("keeps late adjustments attached to the original billing period", async () => {
+  await reconcileSubscription(env, "base", at);
+  await reconcileSubscription(env, "usage", at);
+  db.exec(
+    "INSERT INTO calls(id,business_id,status,connected_at) VALUES('old','b','completed',CURRENT_TIMESTAMP); INSERT INTO commercial_usage_adjustments(id,business_id,call_id,delta_ms,cycle_start,cycle_end,reason,created_at,actor) VALUES('adj','b','old',60000,'2026-09-05T00:00:00Z','2026-10-05T00:00:00Z','late correction','2026-10-05T00:10:00Z','operator')",
+  );
+  expect(
+    (await getBillingView(env, "b", Date.parse(at) + 60000)).usage.durationMs,
+  ).toBe(0);
+});
+it("stale auth and active call block deletion reservation before external effects", async () => {
+  await expect(
+    prepareCommercialDeletion(env, "b", {
+      userId: "u",
+      passwordHash: "x",
+      sessionToken: "stale",
+    }),
+  ).rejects.toThrow();
+  db.exec(
+    "INSERT INTO calls(id,business_id,status,connected_at) VALUES('running','b','active',CURRENT_TIMESTAMP)",
+  );
+  await expect(
+    prepareCommercialDeletion(env, "b", {
+      userId: "u",
+      passwordHash: "x",
+      sessionToken: "session",
+    }),
+  ).rejects.toThrow();
+  expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  expect(
+    db.database
+      .prepare("SELECT COUNT(*) n FROM commercial_deletion_jobs")
+      .get(),
+  ).toEqual({ n: 0 });
+});
+it("projects current components when same-time webhook account writes interleave", async () => {
+  let release!: () => void, reached!: () => void;
+  const blocked = new Promise<void>((r) => (release = r)),
+    paused = new Promise<void>((r) => (reached = r));
+  let accounts = 0;
+  const store = {
+    prepare(sql: string) {
+      const statement = db.prepare(sql);
+      if (sql.includes("INSERT INTO commercial_accounts")) {
+        const run = statement.run.bind(statement);
+        statement.run = async () => {
+          if (++accounts === 1) {
+            reached();
+            await blocked;
+          }
+          return run();
+        };
+      }
+      return statement;
+    },
+    batch: db.batch.bind(db),
+  };
+  const concurrent = { ...env, DB: store } as unknown as CommercialEnv;
+  const base = reconcileSubscription(concurrent, "base", at);
+  await paused;
+  await reconcileSubscription(concurrent, "usage", at);
+  expect(account().status).toBe("active");
+  release();
+  await base;
+  expect(account().status).toBe("active");
+  expect(account().period_end).toBe("2026-11-05T00:08:42.107Z");
+});
+
+it("reserves historical sibling workspaces before the first external cancellation", async () => {
+  db.exec(
+    "DROP TRIGGER businesses_one_workspace_per_user; INSERT INTO businesses(id,user_id,slug,name) VALUES('sibling','u','sibling','Sibling')",
+  );
+  await reconcileSubscription(env, "base", at);
+  await reconcileSubscription(env, "usage", at);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init: RequestInit) => {
+      expect(
+        db.database
+          .prepare("SELECT count(*) n FROM commercial_deletion_jobs")
+          .get(),
+      ).toEqual({ n: 2 });
+      return Response.json(sub(url.split("/").pop(), { status: "cancelled" }));
+    }),
+  );
+  await prepareCommercialDeletion(env, "b", {
+    userId: "u",
+    passwordHash: "x",
+    sessionToken: "session",
+  });
+  expect(
+    db.database
+      .prepare(
+        "SELECT count(*) n FROM commercial_deletion_jobs WHERE completed_at IS NOT NULL",
+      )
+      .get(),
+  ).toEqual({ n: 2 });
+});
+it("expires an abandoned checkout only after its lifetime and complete subscription reconciliation", async () => {
+  vi.setSystemTime("2026-10-07T00:00:00Z");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ items: [] })),
+  );
+  await reconcileBusinessCheckouts(env, "b");
+  expect(
+    db.database.prepare("SELECT state FROM commercial_checkout_intents").get(),
+  ).toEqual({ state: "expired" });
+});
+async function closedSettlement() {
+  await reconcileSubscription(env, "base", at);
+  await reconcileSubscription(env, "usage", at);
+  const begin = Date.parse("2026-10-06T00:00:00Z"),
+    end = begin + 60000;
+  db.exec(
+    "INSERT INTO calls(id,business_id,status,connected_at,ended_at) VALUES('settled','b','completed','2026-10-06T00:00:00Z','2026-10-06T00:01:00Z')",
+  );
+  db.database
+    .prepare("INSERT INTO commercial_call_usage VALUES(?,?,?,?,?,?)")
+    .run("settled", "b", begin, end, 60000, at);
+  vi.setSystemTime("2026-11-05T00:08:43Z");
+  return prepareUsageSettlement(env, "b", "2026-10-05T00:08:12.128Z");
+}
+it("requires explicit credit reconciliation after a lower correction to an exported MAX snapshot", async () => {
+  const draft = await closedSettlement();
+  expect(draft.overageMinor).toBe(15);
+  db.database
+    .prepare("UPDATE commercial_usage_exports SET state='sent' WHERE id=?")
+    .run(draft.id);
+  db.exec(
+    "INSERT INTO commercial_usage_adjustments(id,business_id,call_id,delta_ms,cycle_start,cycle_end,reason,created_at,actor) VALUES('correction','b','settled',-60000,'2026-10-05T00:08:12.128Z','2026-11-05T00:08:42.107Z','verified correction','2026-11-05T00:08:43Z','operator')",
+  );
+  const corrected = await prepareUsageSettlement(
+    env,
+    "b",
+    "2026-10-05T00:08:12.128Z",
+  );
+  expect(corrected.state).toBe("reconciliation_required");
+  expect(corrected.overageMinor).toBe(0);
+  expect(
+    db.database
+      .prepare("SELECT overage_minor,state FROM commercial_usage_exports")
+      .get(),
+  ).toEqual({ overage_minor: 15, state: "reconciliation_required" });
+});
+it("does not shift late settled usage into a new invoice period", async () => {
+  const draft = await closedSettlement();
+  await expect(
+    approveUsageSettlement(env, draft.id, "stale-hash"),
+  ).rejects.toThrow();
+  await approveUsageSettlement(env, draft.id, draft.computedHash);
+  Object.assign(env, {
+    COMMERCIAL_CHARGING_ENABLED: "true",
+    COMMERCIAL_BILLING_VERIFIED: "true",
+    DODO_WEBHOOK_SECRET: "synthetic",
+    DODO_PRODUCTS_JSON: "{}",
+    DODO_METERS_JSON: "{}",
+  });
+  vi.setSystemTime("2026-11-05T02:00:00Z");
+  vi.mocked(fetch).mockClear();
+  await expect(publishUsageSettlement(env, draft.id)).rejects.toThrow(
+    "another month",
+  );
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it("keeps annual usage mandate through paid term and cancels both at its exact end", async () => {
+  await reconcileSubscription(env, "base", at);
+  await reconcileSubscription(env, "usage", at);
+  const scheduled = new Set<string>(),
+    canceled = new Set<string>();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init: RequestInit) => {
+      const role = url.split("/").pop()!;
+      if (init.method === "PATCH") {
+        const body = JSON.parse(init.body as string);
+        if (body.cancel_at_next_billing_date) scheduled.add(role);
+        if (body.status === "cancelled") canceled.add(role);
+      }
+      return Response.json(
+        sub(role, {
+          cancel_at_next_billing_date: scheduled.has(role),
+          status: canceled.has(role) ? "cancelled" : "active",
+        }),
+      );
+    }),
+  );
+  const requested = await requestCommercialCancellation(env, "b");
+  expect(requested.termEnd).toBe("2027-10-05T00:08:42.123Z");
+  expect([...scheduled]).toEqual(["base"]);
+  expect([...canceled]).toEqual([]);
+  await maintainCommercialBilling(env, Date.parse(requested.termEnd) - 1);
+  expect(canceled.size).toBe(0);
+  await maintainCommercialBilling(env, Date.parse(requested.termEnd) + 1000);
+  expect([...canceled].sort()).toEqual(["base", "usage"]);
+  expect(account().retail_stopped_at).toBe(requested.termEnd);
+});
+it("respects cancellation cutoff while provider cancellation is unavailable", async () => {
+  await reconcileSubscription(env, "base", at);
+  await reconcileSubscription(env, "usage", at);
+  db.exec(
+    "INSERT INTO commercial_cancellations VALUES('b','2026-10-05T00:10:01Z','preparing','2026-10-05T00:10:00Z')",
+  );
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response("", { status: 503 })),
+  );
+  expect(
+    (await maintainCommercialBilling(env, Date.parse(at) + 2000)).pending,
+  ).toBe(1);
+  expect(account().retail_stopped_at).toBe("2026-10-05T00:10:01Z");
+  expect(
+    db.database.prepare("SELECT state FROM commercial_cancellations").get(),
+  ).toEqual({ state: "closing" });
+});
+it("reconciles hosted payment authorization and retries explicit sibling propagation", async () => {
+  await reconcileSubscription(env, "base", at);
+  await reconcileSubscription(env, "usage", at);
+  const methods: Record<string, string> = { base: "old", usage: "old" };
+  let paymentSucceeded = false,
+    failBase = true;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init: RequestInit) => {
+      if (url.endsWith("/payments/updatepay"))
+        return Response.json({
+          customer: { customer_id: "customer" },
+          subscription_id: "usage",
+          is_update_payment_method: true,
+          status: paymentSucceeded ? "succeeded" : "processing",
+          payment_method_id: "newmethod",
+        });
+      if (url.endsWith("/update-payment-method")) {
+        const role = url.split("/").at(-2)!;
+        const body = JSON.parse(init.body as string);
+        if (body.type === "new")
+          return Response.json({
+            payment_id: "updatepay",
+            payment_link: "https://test.checkout.dodopayments.com/update",
+          });
+        if (role === "base" && failBase)
+          return new Response("", { status: 503 });
+        methods[role] = body.payment_method_id;
+        return Response.json({});
+      }
+      const role = url.split("/").pop()!;
+      return Response.json(sub(role, { payment_method_id: methods[role] }));
+    }),
+  );
+  expect((await beginPaymentMethodUpdate(env, "b")).url).toContain(
+    "test.checkout",
+  );
+  expect(await reconcilePaymentMethodUpdate(env, "b")).toEqual({
+    updated: false,
+    pending: true,
+  });
+  paymentSucceeded = true;
+  methods.usage = "newmethod";
+  await expect(reconcilePaymentMethodUpdate(env, "b")).rejects.toThrow();
+  expect(
+    db.database.prepare("SELECT state FROM commercial_payment_updates").get(),
+  ).toEqual({ state: "propagating" });
+  failBase = false;
+  expect(await reconcilePaymentMethodUpdate(env, "b")).toEqual({
+    updated: true,
+  });
+  expect(methods).toEqual({ base: "newmethod", usage: "newmethod" });
+});
+it("rejects invoice identifiers outside the current workspace before provider fetch", async () => {
+  await reconcileSubscription(env, "base", at);
+  await reconcileSubscription(env, "usage", at);
+  vi.mocked(fetch).mockClear();
+  await expect(
+    getCommercialInvoice(env, "b", "foreignpayment"),
+  ).rejects.toThrow("Invoice not found");
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it("does not confirm a renewed annual entitlement from only a new monthly usage component", async () => {
+  await reconcileSubscription(env, "base", at);
+  await reconcileSubscription(env, "usage", at);
+  vi.setSystemTime("2027-10-05T00:09:00Z");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      Response.json(
+        sub("usage", {
+          previous_billing_date: "2027-10-05T00:08:42.107Z",
+          next_billing_date: "2027-11-05T00:08:42.107Z",
+        }),
+      ),
+    ),
+  );
+  await reconcileSubscription(env, "usage", "2027-10-05T00:09:00Z");
+  expect(account().status).toBe("pending");
+  expect(account().paid_through).toBe("2027-10-05T00:08:42.123Z");
+  expect(account().retail_stopped_at).toBeNull();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      Response.json(
+        sub("base", {
+          previous_billing_date: "2027-10-05T00:08:42.123Z",
+          next_billing_date: "2028-10-05T00:08:42.123Z",
+        }),
+      ),
+    ),
+  );
+  await reconcileSubscription(env, "base", "2027-10-05T00:09:01Z");
+  expect(account().status).toBe("active");
+  expect(account().paid_through).toBe("2027-11-05T00:08:42.107Z");
 });

@@ -9,6 +9,8 @@ CREATE TABLE commercial_accounts (
  status TEXT NOT NULL DEFAULT 'pending',
  anchor_at TEXT,
  activated_at TEXT,
+ retail_stopped_at TEXT,
+ paid_through TEXT,
  period_end TEXT,
  updated_event_at TEXT,
  UNIQUE(provider_mode,customer_id),
@@ -96,6 +98,8 @@ CREATE TABLE commercial_usage_adjustments (
  business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
  call_id TEXT NOT NULL REFERENCES calls(id) ON DELETE CASCADE,
  delta_ms INTEGER NOT NULL,
+ cycle_start TEXT NOT NULL,
+ cycle_end TEXT NOT NULL,
  reason TEXT NOT NULL,
  created_at TEXT NOT NULL,
  actor TEXT NOT NULL
@@ -109,6 +113,7 @@ CREATE TABLE commercial_usage_exports (
  overage_minor INTEGER NOT NULL,
  state TEXT NOT NULL DEFAULT 'pending',
  provider_reference TEXT,
+ computed_hash TEXT NOT NULL,
  created_at TEXT NOT NULL,
  UNIQUE(business_id,cycle_start,cycle_end)
 );
@@ -131,6 +136,8 @@ CREATE TABLE commercial_phone_orders (
  assistant_id TEXT NOT NULL,
  quote_id TEXT NOT NULL UNIQUE REFERENCES commercial_phone_quotes(id),
  provider_order_id TEXT UNIQUE,
+ provider_number_id TEXT UNIQUE,
+ connection_id TEXT,
  phone_number TEXT NOT NULL,
  state TEXT NOT NULL DEFAULT 'pending',
  created_at TEXT NOT NULL,
@@ -166,4 +173,22 @@ CREATE TABLE commercial_deletion_jobs (
  business_id TEXT PRIMARY KEY REFERENCES businesses(id) ON DELETE CASCADE,
  requested_at TEXT NOT NULL,
  completed_at TEXT
+);
+
+CREATE TABLE commercial_cancellations (
+ business_id TEXT PRIMARY KEY REFERENCES businesses(id) ON DELETE CASCADE,
+ term_end TEXT NOT NULL,
+ state TEXT NOT NULL,
+ requested_at TEXT NOT NULL
+);
+
+CREATE TABLE commercial_payment_updates (
+ business_id TEXT PRIMARY KEY REFERENCES businesses(id) ON DELETE CASCADE,
+ id TEXT NOT NULL,
+ source_subscription_id TEXT NOT NULL,
+ payment_id TEXT,
+ payment_link TEXT,
+ method_id TEXT,
+ state TEXT NOT NULL,
+ created_at TEXT NOT NULL
 );

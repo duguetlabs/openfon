@@ -1,3 +1,4 @@
+import { releaseBusinessPhones } from "./commercial-phone";
 import type { Env } from "./types";
 import {
   PLANS,
@@ -116,7 +117,7 @@ export async function dodoRequest(
     throw new BillingError("Billing returned an unexpected response.");
   }
 }
-function hostedUrl(value: unknown): string {
+export function hostedUrl(value: unknown): string {
   if (typeof value !== "string")
     throw new BillingError("Billing link is unavailable.");
   const u = new URL(value);
@@ -165,6 +166,14 @@ export async function createCheckout(
     throw new BillingError(
       "Subscriptions are not available yet. Your account has not been charged.",
     );
+  if (
+    await env.DB.prepare(
+      "SELECT business_id FROM commercial_deletion_jobs WHERE business_id=?",
+    )
+      .bind(business.id)
+      .first()
+  )
+    throw new BillingError("Account deletion is in progress.", 409);
   const mapping = billingMapping(env, plan, cadence);
   const account = await env.DB.prepare(
     "SELECT subscription_id FROM commercial_accounts WHERE business_id=?",
@@ -299,13 +308,22 @@ export async function createPortal(
   env: CommercialEnv,
   businessId: string,
 ): Promise<string> {
+  if (
+    await env.DB.prepare(
+      "SELECT business_id FROM commercial_deletion_jobs WHERE business_id=?",
+    )
+      .bind(businessId)
+      .first()
+  )
+    throw new BillingError("Account deletion is in progress.", 409);
   const account = await env.DB.prepare(
-    "SELECT customer_id,provider_mode FROM commercial_accounts WHERE business_id=?",
+    "SELECT customer_id,provider_mode,cadence FROM commercial_accounts WHERE business_id=?",
   )
     .bind(businessId)
-    .first<{ customer_id: string; provider_mode: string }>();
+    .first<{ customer_id: string; provider_mode: string; cadence: string }>();
   if (
     !account ||
+    account.cadence !== "monthly" ||
     account.provider_mode !== env.DODO_MODE ||
     !providerId(account.customer_id)
   )
@@ -599,94 +617,101 @@ export async function reconcileSubscription(
       sub.customer.customer_id,
     )
     .run();
-  const { results: parts } = await env.DB.prepare(
-    "SELECT role,status,subscription_id,customer_id,period_start,period_end FROM commercial_subscription_components WHERE business_id=?",
-  )
-    .bind(intent.business_id)
-    .all<{
-      role: string;
-      status: string;
-      subscription_id: string;
-      customer_id: string;
-      period_start: string;
-      period_end: string;
-    }>();
-  const u = parts.find((p) => p.role === "usage"),
-    b = parts.find((p) => p.role === "base");
-  const complete = !!u && (intent.cadence === "monthly" || !!b),
-    active = complete && parts.every((p) => p.status === "active");
-  const state = active
-    ? "active"
-    : parts.some((p) => p.status === "canceled")
-      ? "canceled"
-      : parts.some((p) => p.status === "unpaid")
-        ? "unpaid"
-        : parts.some((p) => p.status === "past_due")
-          ? "past_due"
-          : "pending";
   const now = new Date().toISOString();
+  // Derive the account projection from current component rows in the write
+  // statement itself. Cached reads can regress an active multi-cart account
+  // when same-timestamp webhook deliveries interleave.
   await env.DB.prepare(
-    `INSERT INTO commercial_accounts(business_id,provider_mode,customer_id,subscription_id,plan_id,cadence,status,anchor_at,activated_at,period_end,updated_event_at)
- VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(business_id) DO UPDATE SET status=excluded.status,period_end=excluded.period_end,updated_event_at=excluded.updated_event_at,
- activated_at=COALESCE(commercial_accounts.activated_at,excluded.activated_at),anchor_at=COALESCE(commercial_accounts.anchor_at,excluded.anchor_at)
- WHERE commercial_accounts.customer_id=excluded.customer_id AND (commercial_accounts.updated_event_at IS NULL OR commercial_accounts.updated_event_at<=excluded.updated_event_at)`,
+    `WITH current_components AS (
+    SELECT COALESCE(u.customer_id,b.customer_id) customer_id,u.period_start,u.period_end,CASE WHEN b.period_end IS NULL THEN u.period_end ELSE MIN(u.period_end,b.period_end) END paid_through,
+      CASE WHEN u.status='active' AND u.period_start<=? AND u.period_end>? AND (?='monthly' OR (b.status='active' AND b.period_start<=? AND b.period_end>?)) THEN 'active'
+       WHEN u.status='canceled' OR b.status='canceled' THEN 'canceled'
+       WHEN u.status='unpaid' OR b.status='unpaid' THEN 'unpaid'
+       WHEN u.status='past_due' OR b.status='past_due' THEN 'past_due' ELSE 'pending' END status
+    FROM businesses owner LEFT JOIN commercial_subscription_components u ON u.business_id=owner.id AND u.role='usage'
+    LEFT JOIN commercial_subscription_components b ON b.business_id=owner.id AND b.role='base' WHERE owner.id=?
+  ) INSERT INTO commercial_accounts(business_id,provider_mode,customer_id,subscription_id,plan_id,cadence,status,anchor_at,activated_at,period_end,paid_through,updated_event_at)
+    SELECT ?,?,customer_id,?,?,?,status,CASE WHEN status='active' THEN period_start END,CASE WHEN status='active' THEN ? END,period_end,paid_through,?
+    FROM current_components WHERE customer_id IS NOT NULL
+    ON CONFLICT(business_id) DO UPDATE SET status=excluded.status,period_end=excluded.period_end,paid_through=excluded.paid_through,
+      updated_event_at=MAX(COALESCE(commercial_accounts.updated_event_at,''),excluded.updated_event_at),
+      activated_at=COALESCE(commercial_accounts.activated_at,excluded.activated_at),anchor_at=COALESCE(commercial_accounts.anchor_at,excluded.anchor_at),
+      retail_stopped_at=CASE WHEN commercial_accounts.activated_at IS NOT NULL AND excluded.status IN ('canceled','unpaid','past_due') THEN COALESCE(commercial_accounts.retail_stopped_at,?) ELSE commercial_accounts.retail_stopped_at END
+    WHERE commercial_accounts.customer_id=excluded.customer_id`,
   )
     .bind(
+      now,
+      now,
+      intent.cadence,
+      now,
+      now,
+      intent.business_id,
       intent.business_id,
       env.DODO_MODE!,
-      sub.customer.customer_id,
       intent.id,
       intent.plan_id,
       intent.cadence,
-      state,
-      active ? u!.period_start : null,
-      active ? now : null,
-      u?.period_end ?? null,
+      now,
       eventAt,
+      now,
     )
     .run();
-  if (active) {
-    await env.DB.prepare(
-      `INSERT INTO commercial_billing_periods(business_id,subscription_id,period_start,period_end,plan_id,cadence,recorded_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(business_id,period_start) DO NOTHING`,
-    )
-      .bind(
-        intent.business_id,
-        u!.subscription_id,
-        u!.period_start,
-        u!.period_end,
-        intent.plan_id,
-        intent.cadence,
-        now,
-      )
-      .run();
-    await env.DB.prepare(
-      "UPDATE commercial_checkout_intents SET state='completed' WHERE id=?",
-    )
-      .bind(intent.id)
-      .run();
-  }
+  await env.DB.prepare(
+    `INSERT INTO commercial_billing_periods(business_id,subscription_id,period_start,period_end,plan_id,cadence,recorded_at)
+    SELECT a.business_id,u.subscription_id,u.period_start,u.period_end,a.plan_id,a.cadence,? FROM commercial_accounts a
+    JOIN commercial_subscription_components u ON u.business_id=a.business_id AND u.role='usage'
+    WHERE a.business_id=? AND a.status='active' AND a.retail_stopped_at IS NULL
+    ON CONFLICT(business_id,period_start) DO NOTHING`,
+  )
+    .bind(now, intent.business_id)
+    .run();
+  await env.DB.prepare(
+    "UPDATE commercial_checkout_intents SET state='completed' WHERE id=? AND EXISTS(SELECT 1 FROM commercial_accounts WHERE business_id=? AND status='active')",
+  )
+    .bind(intent.id, intent.business_id)
+    .run();
 }
 
 /** Retry-safe external cleanup before account rows may be deleted. */
 export async function prepareCommercialDeletion(
   env: CommercialEnv,
   businessId: string,
+  auth?: { userId: string; passwordHash: string; sessionToken: string },
 ): Promise<void> {
-  const phones = await env.DB.prepare(
-    "SELECT id FROM commercial_phone_orders WHERE business_id=? AND state NOT IN ('released','failed') LIMIT 1",
+  if (!auth)
+    throw new BillingError("Sign in again before deleting your account.", 409);
+  // This reservation and call admission's NOT EXISTS(marker) form a single
+  // database boundary: either the call wins or deletion wins, never both.
+  const markers = await env.DB.prepare(
+    `INSERT INTO commercial_deletion_jobs(business_id,requested_at)
+    SELECT b.id,? FROM businesses b JOIN users u ON u.id=b.user_id WHERE u.id=? AND u.password_hash=?
+    AND EXISTS(SELECT 1 FROM businesses requested WHERE requested.id=? AND requested.user_id=u.id)
+    AND EXISTS(SELECT 1 FROM sessions WHERE token=? AND user_id=u.id AND expires_at>?)
+    AND NOT EXISTS(SELECT 1 FROM calls JOIN businesses owned ON owned.id=calls.business_id
+      WHERE owned.user_id=u.id AND ((calls.status='active' AND (calls.channel!='web' OR calls.connected_at IS NOT NULL OR calls.browser_claim_required!=1
+        OR EXISTS(SELECT 1 FROM call_turns WHERE call_turns.call_id=calls.id))) OR (calls.reserved_at IS NOT NULL AND calls.carrier_released_at IS NULL)))
+    ON CONFLICT(business_id) DO UPDATE SET requested_at=commercial_deletion_jobs.requested_at RETURNING business_id`,
   )
-    .bind(businessId)
-    .first();
-  if (phones)
+    .bind(
+      new Date().toISOString(),
+      auth.userId,
+      auth.passwordHash,
+      businessId,
+      auth.sessionToken,
+      new Date().toISOString(),
+    )
+    .all<{ business_id: string }>();
+  if (!markers.results.length)
     throw new BillingError(
-      "Release your phone numbers before deleting your account.",
+      "Finish active calls and sign in again if your account changed before deleting.",
       409,
     );
-  await env.DB.prepare(
-    "INSERT INTO commercial_deletion_jobs(business_id,requested_at) VALUES(?,?) ON CONFLICT(business_id) DO NOTHING",
-  )
-    .bind(businessId, new Date().toISOString())
-    .run();
+  for (const marker of markers.results)
+    await finishBusinessDeletion(env, marker.business_id);
+}
+async function finishBusinessDeletion(env: CommercialEnv, businessId: string) {
+  await reconcileBusinessCheckouts(env, businessId);
+  await releaseBusinessPhones(env, businessId);
   const { results: parts } = await env.DB.prepare(
     "SELECT subscription_id,provider_mode FROM commercial_subscription_components WHERE business_id=?",
   )
@@ -734,4 +759,89 @@ export async function prepareCommercialDeletion(
   )
     .bind(new Date().toISOString(), businessId)
     .run();
+}
+
+/** Resolve abandoned checkouts without starting a second payment attempt. */
+export async function reconcileBusinessCheckouts(
+  env: CommercialEnv,
+  businessId: string,
+) {
+  const { results: intents } = await env.DB.prepare(
+    "SELECT id,provider_mode,session_id,created_at FROM commercial_checkout_intents WHERE business_id=? AND state IN ('pending','ready')",
+  )
+    .bind(businessId)
+    .all<{
+      id: string;
+      provider_mode: string;
+      session_id: string | null;
+      created_at: string;
+    }>();
+  for (const intent of intents) {
+    if (intent.provider_mode !== env.DODO_MODE)
+      throw new BillingError("Billing reconciliation needs support.", 409);
+    if (intent.session_id) {
+      const session = await dodoRequest(env, "/checkouts/" + intent.session_id);
+      if (providerId(session.payment_id)) {
+        const payment = await dodoRequest(
+          env,
+          "/payments/" + session.payment_id,
+        );
+        const ids =
+          payment.is_multi_subscription === true
+            ? payment.subscription_ids
+            : [payment.subscription_id];
+        if (Array.isArray(ids))
+          for (const id of ids)
+            if (providerId(id))
+              await reconcileSubscription(env, id, new Date().toISOString());
+      }
+    }
+    // An unconfirmed hosted link is valid for 24h. After an extra hour, enumerate
+    // subscriptions in its fixed creation window before releasing the local lock.
+    // If pagination cannot prove completeness, retain the retryable intent.
+    if (Date.now() - Date.parse(intent.created_at) < 25 * 3600000) continue;
+    let complete = false,
+      found = false;
+    for (let page = 0; page < 20; page++) {
+      const params = new URLSearchParams({
+        page_size: "100",
+        page_number: String(page),
+        created_at_gte: intent.created_at,
+        created_at_lte: new Date(
+          Date.parse(intent.created_at) + 25 * 3600000,
+        ).toISOString(),
+      });
+      const response = await dodoRequest(env, "/subscriptions?" + params);
+      if (!Array.isArray(response.items))
+        throw new BillingError("Billing reconciliation is incomplete.", 409);
+      for (const sub of response.items) {
+        if (
+          sub.metadata?.openfon_checkout_id === intent.id &&
+          providerId(sub.subscription_id)
+        ) {
+          found = true;
+          await reconcileSubscription(
+            env,
+            sub.subscription_id,
+            new Date().toISOString(),
+          );
+        }
+      }
+      if (response.items.length < 100) {
+        complete = true;
+        break;
+      }
+    }
+    if (!complete)
+      throw new BillingError(
+        "Billing reconciliation needs support before retrying.",
+        409,
+      );
+    await env.DB.prepare(
+      "UPDATE commercial_checkout_intents SET state=? WHERE id=? AND business_id=? AND state IN ('pending','ready')",
+    )
+      .bind(found ? "completed" : "expired", intent.id, businessId)
+      .run();
+  }
+  return { reconciled: true };
 }

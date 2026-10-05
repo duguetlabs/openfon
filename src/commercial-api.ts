@@ -1,3 +1,17 @@
+import {
+  beginPaymentMethodUpdate,
+  reconcilePaymentMethodUpdate,
+  listCommercialInvoices,
+  getCommercialInvoice,
+} from "./commercial-payment";
+import { requestCommercialCancellation } from "./commercial-cancellation";
+import {
+  getPhoneView,
+  quotePhoneNumbers,
+  orderPhoneNumber,
+  assignPhoneNumber,
+  reconcilePhoneOrder,
+} from "./commercial-phone";
 import type { Hono } from "hono";
 import type { Env } from "./types";
 import { readLivekitBody } from "./livekit-body";
@@ -11,9 +25,12 @@ import { retailOverage, markOperatorQaCall } from "./commercial-usage";
 import {
   BillingError,
   chargingReady,
+  billingMapping,
+  providerId,
   createCheckout,
   createPortal,
   processDodoWebhook,
+  reconcileBusinessCheckouts,
   type CommercialEnv,
 } from "./commercial-dodo";
 type App = Hono<{ Bindings: Env; Variables: { userId: string } }>;
@@ -23,7 +40,7 @@ export async function getBillingView(
   now = Date.now(),
 ): Promise<BillingView> {
   const account = await env.DB.prepare(
-    "SELECT plan_id,cadence,status,anchor_at,activated_at,period_end,provider_mode FROM commercial_accounts WHERE business_id=?",
+    "SELECT plan_id,cadence,status,anchor_at,activated_at,period_end,provider_mode,customer_id,retail_stopped_at,paid_through FROM commercial_accounts WHERE business_id=?",
   )
     .bind(businessId)
     .first<{
@@ -34,9 +51,41 @@ export async function getBillingView(
       activated_at: string | null;
       period_end: string | null;
       provider_mode: string;
+      customer_id: string;
+      retail_stopped_at: string | null;
+      paid_through: string | null;
     }>();
   const configured = chargingReady(env),
     sameMode = account?.provider_mode === env.DODO_MODE;
+  const cancellation = await env.DB.prepare(
+    "SELECT term_end AS termEnd,state AS status FROM commercial_cancellations WHERE business_id=?",
+  )
+    .bind(businessId)
+    .first<{ termEnd: string; status: string }>();
+  const deleting = !!(await env.DB.prepare(
+    "SELECT business_id FROM commercial_deletion_jobs WHERE business_id=?",
+  )
+    .bind(businessId)
+    .first());
+  const availableCadences: BillingCadence[] =
+    configured && !deleting
+      ? (["monthly", "annual"] as BillingCadence[]).filter((cadence) =>
+          PLANS.every((p) => {
+            try {
+              billingMapping(env, p.id, cadence);
+              return true;
+            } catch {
+              return false;
+            }
+          }),
+        )
+      : [];
+  const portalAvailable =
+    !deleting &&
+    !!sameMode &&
+    account?.cadence === "monthly" &&
+    !!env.DODO_API_KEY &&
+    providerId(account?.customer_id);
   let cycle: BillingView["cycle"] = null,
     usage = {
       durationMs: 0,
@@ -72,7 +121,9 @@ export async function getBillingView(
         usage,
         plans: PLANS,
         checkoutAvailable: false,
-        portalAvailable: true,
+        availableCadences,
+        cancellation,
+        portalAvailable,
         unavailableReason:
           "Usage is being reconciled. No estimated amount is final.",
       };
@@ -81,7 +132,11 @@ export async function getBillingView(
         Date.parse(cycle.start),
         Date.parse(account.activated_at),
       ),
-      end = Math.min(Date.parse(cycle.end), now);
+      end = Math.min(
+        Date.parse(cycle.end),
+        now,
+        account.retail_stopped_at ? Date.parse(account.retail_stopped_at) : now,
+      );
     const total = await env.DB.prepare(
       `SELECT COALESCE(SUM(MAX(0,MIN(u.ended_at_ms,?)-MAX(u.connected_at_ms,?))),0) AS ms
    FROM commercial_call_usage u WHERE u.business_id=? AND u.ended_at_ms>? AND u.connected_at_ms<?
@@ -90,7 +145,7 @@ export async function getBillingView(
       .bind(end, start, businessId, start, end)
       .first<{ ms: number }>();
     const adjustment = await env.DB.prepare(
-      "SELECT COALESCE(SUM(delta_ms),0) AS ms FROM commercial_usage_adjustments WHERE business_id=? AND created_at>=? AND created_at<?",
+      "SELECT COALESCE(SUM(delta_ms),0) AS ms FROM commercial_usage_adjustments WHERE business_id=? AND cycle_start=? AND cycle_end=?",
     )
       .bind(businessId, cycle.start, cycle.end)
       .first<{ ms: number }>();
@@ -115,11 +170,13 @@ export async function getBillingView(
     cycle,
     usage,
     plans: PLANS,
-    checkoutAvailable: configured && !account?.plan_id,
-    portalAvailable: !!sameMode && !!account,
+    checkoutAvailable: availableCadences.length > 0 && !account?.plan_id,
+    availableCadences,
+    cancellation,
+    portalAvailable,
     unavailableReason: configured
       ? null
-      : "Subscriptions are not available yet. Your account has not been charged.",
+      : "No new checkout is available at the moment. Existing billing history is unchanged.",
   };
 }
 export async function commercialWorkspace(
@@ -128,7 +185,7 @@ export async function commercialWorkspace(
 ) {
   if (!userId) throw new BillingError("Sign in to continue.", 401);
   const business = await env.DB.prepare(
-    "SELECT b.id,b.name,u.email FROM businesses b JOIN users u ON u.id=b.user_id WHERE b.user_id=?",
+    "SELECT b.id,b.name,u.email FROM businesses b JOIN users u ON u.id=b.user_id WHERE b.user_id=? ORDER BY b.created_at,b.id LIMIT 1",
   )
     .bind(userId)
     .first<{ id: string; name: string; email: string }>();
@@ -200,6 +257,170 @@ export function registerCommercialRoutes(app: App): void {
         error instanceof BillingError
           ? error
           : new BillingError("Billing settings are temporarily unavailable.");
+      return c.json({ error: e.message }, e.status);
+    }
+  });
+  app.post("/api/me/billing/payment-method", async (c) => {
+    try {
+      const b = await commercialWorkspace(c.env, c.get("userId"));
+      return c.json(await beginPaymentMethodUpdate(c.env, b.id));
+    } catch (error) {
+      const e =
+        error instanceof BillingError
+          ? error
+          : new BillingError("Payment settings are temporarily unavailable.");
+      return c.json({ error: e.message }, e.status);
+    }
+  });
+  app.post("/api/me/billing/payment-method/reconcile", async (c) => {
+    try {
+      const b = await commercialWorkspace(c.env, c.get("userId"));
+      return c.json(await reconcilePaymentMethodUpdate(c.env, b.id));
+    } catch (error) {
+      const e =
+        error instanceof BillingError
+          ? error
+          : new BillingError(
+              "Payment settings could not be reconciled. Please retry.",
+            );
+      return c.json({ error: e.message }, e.status);
+    }
+  });
+  app.get("/api/me/billing/invoices", async (c) => {
+    try {
+      const b = await commercialWorkspace(c.env, c.get("userId"));
+      return c.json(await listCommercialInvoices(c.env, b.id));
+    } catch (error) {
+      const e =
+        error instanceof BillingError
+          ? error
+          : new BillingError("Invoices are temporarily unavailable.");
+      return c.json({ error: e.message }, e.status);
+    }
+  });
+  app.get("/api/me/billing/invoices/:id", async (c) => {
+    try {
+      const b = await commercialWorkspace(c.env, c.get("userId"));
+      return await getCommercialInvoice(c.env, b.id, c.req.param("id"));
+    } catch (error) {
+      const e =
+        error instanceof BillingError
+          ? error
+          : new BillingError("The invoice is temporarily unavailable.");
+      return c.json({ error: e.message }, e.status);
+    }
+  });
+  app.post("/api/me/billing/cancel", async (c) => {
+    try {
+      const b = await commercialWorkspace(c.env, c.get("userId"));
+      return c.json(await requestCommercialCancellation(c.env, b.id));
+    } catch (error) {
+      const e =
+        error instanceof BillingError
+          ? error
+          : new BillingError(
+              "Cancellation could not be confirmed. Please retry.",
+            );
+      return c.json({ error: e.message }, e.status);
+    }
+  });
+  app.post("/api/me/billing/reconcile", async (c) => {
+    try {
+      const b = await commercialWorkspace(c.env, c.get("userId"));
+      return c.json(await reconcileBusinessCheckouts(c.env, b.id));
+    } catch (error) {
+      const e =
+        error instanceof BillingError
+          ? error
+          : new BillingError(
+              "Billing could not be reconciled. Please retry later.",
+            );
+      return c.json({ error: e.message }, e.status);
+    }
+  });
+  app.get("/api/me/phone", async (c) => {
+    try {
+      const b = await commercialWorkspace(c.env, c.get("userId"));
+      return c.json(await getPhoneView(c.env, b.id));
+    } catch (error) {
+      const e =
+        error instanceof BillingError
+          ? error
+          : new BillingError("Phone settings are unavailable.");
+      return c.json({ error: e.message }, e.status);
+    }
+  });
+  app.post("/api/me/phone/quotes", async (c) => {
+    try {
+      const b = await commercialWorkspace(c.env, c.get("userId"));
+      return c.json(
+        await quotePhoneNumbers(c.env, b.id, await commercialBody(c.req.raw)),
+      );
+    } catch (error) {
+      const e =
+        error instanceof BillingError
+          ? error
+          : new BillingError("Phone quotes are unavailable.");
+      return c.json({ error: e.message }, e.status);
+    }
+  });
+  app.post("/api/me/phone/orders", async (c) => {
+    try {
+      const b = await commercialWorkspace(c.env, c.get("userId")),
+        body = await commercialBody(c.req.raw);
+      if (
+        Object.keys(body).some((k) => !["quoteId", "assistantId"].includes(k))
+      )
+        throw new BillingError("Choose a valid number and assistant.", 400);
+      return c.json(
+        await orderPhoneNumber(c.env, b.id, body.quoteId, body.assistantId),
+      );
+    } catch (error) {
+      const e =
+        error instanceof BillingError
+          ? error
+          : new BillingError(
+              "Your number order needs reconciliation. Please refresh its status.",
+            );
+      return c.json({ error: e.message }, e.status);
+    }
+  });
+  app.post("/api/me/phone/orders/:id/reconcile", async (c) => {
+    try {
+      const b = await commercialWorkspace(c.env, c.get("userId"));
+      return c.json(await reconcilePhoneOrder(c.env, b.id, c.req.param("id")));
+    } catch (error) {
+      const e =
+        error instanceof BillingError
+          ? error
+          : new BillingError(
+              "Phone setup could not be reconciled. Please retry later.",
+            );
+      return c.json({ error: e.message }, e.status);
+    }
+  });
+  app.put("/api/me/phone/numbers/:id", async (c) => {
+    try {
+      const b = await commercialWorkspace(c.env, c.get("userId")),
+        body = await commercialBody(c.req.raw);
+      if (
+        Object.keys(body).some((k) => !["assistantId", "enabled"].includes(k))
+      )
+        throw new BillingError("Choose valid phone settings.", 400);
+      return c.json(
+        await assignPhoneNumber(
+          c.env,
+          b.id,
+          c.req.param("id"),
+          body.assistantId,
+          body.enabled,
+        ),
+      );
+    } catch (error) {
+      const e =
+        error instanceof BillingError
+          ? error
+          : new BillingError("Phone settings could not be saved.");
       return c.json({ error: e.message }, e.status);
     }
   });

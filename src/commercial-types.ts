@@ -12,6 +12,7 @@ export interface CommercialBindings {
   COMMERCIAL_PUBLIC_ORIGIN?: string;
   COMMERCIAL_OPERATOR_TOKEN?: string;
   TELNYX_PURCHASES_ENABLED?: string;
+  TELNYX_CARRIER_VERIFIED?: string;
   TELNYX_PURCHASE_COUNTRY?: string;
   TELNYX_MAX_SETUP_MINOR?: string;
   TELNYX_MAX_MONTHLY_MINOR?: string;
@@ -95,6 +96,8 @@ export interface BillingView {
   };
   plans: typeof PLANS;
   checkoutAvailable: boolean;
+  availableCadences: BillingCadence[];
+  cancellation?: { termEnd: string; status: string } | null;
   portalAvailable: boolean;
   unavailableReason: string | null;
 }
