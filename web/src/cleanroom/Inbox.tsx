@@ -43,7 +43,10 @@ export function Inbox({
   const [pending, setPending] = useState("");
   const generation = useRef(0);
   const lock = useRef(false);
-  async function load(append = false) {
+  const loading = useRef(false);
+  async function load(append = false, navigation = false) {
+    if (lock.current && !navigation) return;
+    loading.current = true;
     const gen = ++generation.current;
     setBusy(true);
     setError("");
@@ -71,11 +74,14 @@ export function Inbox({
     } catch (e) {
       if (gen === generation.current) setError(errorText(e));
     } finally {
-      if (gen === generation.current) setBusy(false);
+      if (gen === generation.current) {
+        loading.current = false;
+        setBusy(false);
+      }
     }
   }
   useEffect(() => {
-    void load();
+    void load(false, true);
     return () => {
       generation.current++;
     };
@@ -83,7 +89,7 @@ export function Inbox({
   const filter = (change: Record<string, string>) =>
     onQuery({ status, kind, urgent, environment, ...change });
   async function update(item: ActionItem, patch: object) {
-    if (lock.current) return;
+    if (lock.current || loading.current) return;
     lock.current = true;
     setPending(item.id);
     setError("");
@@ -117,13 +123,14 @@ export function Inbox({
             What callers need from you. Every item links to its conversation.
           </p>
         </div>
-        <Button kind="line" disabled={busy} onClick={() => void load()}>
+        <Button kind="line" disabled={busy || Boolean(pending)} onClick={() => void load()}>
           Refresh
         </Button>
       </div>
       <div className="of-filter-bar">
         <Field label="Status">
           <select
+            disabled={busy || Boolean(pending)}
             value={status}
             onChange={(e) => filter({ status: e.target.value })}
           >
@@ -134,6 +141,7 @@ export function Inbox({
         </Field>
         <Field label="Type">
           <select
+            disabled={busy || Boolean(pending)}
             value={kind}
             onChange={(e) => filter({ kind: e.target.value })}
           >
@@ -147,6 +155,7 @@ export function Inbox({
         </Field>
         <Field label="Priority">
           <select
+            disabled={busy || Boolean(pending)}
             value={urgent}
             onChange={(e) => filter({ urgent: e.target.value })}
           >
@@ -156,6 +165,7 @@ export function Inbox({
         </Field>
         <Field label="Calls">
           <select
+            disabled={busy || Boolean(pending)}
             value={environment}
             onChange={(e) => filter({ environment: e.target.value })}
           >
@@ -202,7 +212,7 @@ export function Inbox({
                     View source call
                   </Button>
                   <Button
-                    disabled={Boolean(pending)}
+                    disabled={busy || Boolean(pending)}
                     onClick={() =>
                       void update(item, {
                         status: item.status === "open" ? "handled" : "open",
@@ -222,7 +232,7 @@ export function Inbox({
                   <input
                     type="date"
                     value={item.due_at?.slice(0, 10) || ""}
-                    disabled={Boolean(pending)}
+                    disabled={busy || Boolean(pending)}
                     onChange={(e) =>
                       void update(item, {
                         due_at: e.target.value
@@ -236,7 +246,7 @@ export function Inbox({
                   <input
                     type="checkbox"
                     checked={Boolean(item.urgent)}
-                    disabled={Boolean(pending)}
+                    disabled={busy || Boolean(pending)}
                     onChange={(e) =>
                       void update(item, { urgent: e.target.checked })
                     }
@@ -249,7 +259,7 @@ export function Inbox({
         </div>
       )}
       {more && (
-        <Button kind="line" disabled={busy} onClick={() => void load(true)}>
+        <Button kind="line" disabled={busy || Boolean(pending)} onClick={() => void load(true)}>
           Load more items
         </Button>
       )}
