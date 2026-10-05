@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import worker from '../src/index';
 import { synthesize, speechConfig, speechVoice } from '../src/providers';
@@ -42,6 +43,7 @@ it('persists independent keys, retains on partial edits, and excludes speech sec
   for (const key of ['text-private','stt-private','speech-only','operator-only']) expect(view).not.toContain(key);
   const other = await (await request(undefined, '/api/me/provider', 's2')).json();
   expect(other).toMatchObject({ tts_provider: 'instance', tts_base_url: '' });
+  db.exec(readFileSync(new URL('../migrations/0026_business_actions.sql', import.meta.url), 'utf8'));
   const exported = await request(undefined, '/api/me/account/export'); expect(exported.status).toBe(200);
   const text = await exported.text();
   for (const hidden of ['speech-only','speech.example','text-private','stt-private']) expect(text).not.toContain(hidden);

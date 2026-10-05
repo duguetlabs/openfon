@@ -12,7 +12,7 @@ type RecordRow = Record<string, unknown>;
 
 // Explicit export columns prevent new credential fields from silently becoming portable.
 const EXPORT_COLUMNS: Record<string, string[]> = {
-  businesses: ['id', 'user_id', 'slug', 'name', 'description', 'address', 'phone', 'website', 'timezone', 'hours_json', 'services_json', 'faqs_json', 'created_at', 'closures_json', 'max_concurrent_calls', 'max_calls_per_day'],
+  businesses: ['id', 'user_id', 'slug', 'name', 'description', 'address', 'phone', 'website', 'timezone', 'hours_json', 'services_json', 'faqs_json', 'created_at', 'closures_json', 'max_concurrent_calls', 'max_calls_per_day', 'contact_email', 'default_language', 'shared_instructions'],
   assistants: ['id', 'business_id', 'public_slug', 'state', 'name', 'greeting', 'persona', 'language', 'voice', 'take_messages', 'custom_instructions', 'engine', 'realtime_model', 'realtime_voice', 'llm_model', 'created_at', 'updated_at', 'activated_at'],
   agent_settings: ['business_id', 'agent_name', 'greeting', 'persona', 'language', 'voice', 'take_messages', 'custom_instructions', 'llm_base_url', 'llm_model', 'engine', 'realtime_model', 'realtime_voice'],
   provider_settings: ['business_id', 'llm_base_url', 'llm_model', 'stt_provider', 'stt_base_url', 'stt_model', 'tts_provider', 'tts_model', 'realtime_provider', 'realtime_base_url', 'created_at', 'updated_at'],
@@ -96,7 +96,6 @@ export function registerAccountApi(app: App): void {
     const data: Record<string, RecordRow[]> = {};
     const tables: Record<string,string[]> = { users: ['id', 'email', 'created_at'], ...EXPORT_COLUMNS };
     if(c.env.OPENFON_MANAGED_WEB==='true') {
-      tables.businesses=[...tables.businesses,'contact_email','default_language','shared_instructions'];
       Object.assign(tables, {
         commercial_accounts: ['plan_id','cadence','status','anchor_at','activated_at','period_end'],
         commercial_call_usage: ['call_id','connected_at_ms','ended_at_ms','duration_ms','recorded_at'],
