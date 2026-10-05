@@ -905,6 +905,23 @@ export default function OpenFon() {
     window.scrollTo({ top: 0, behavior: "instant" });
     return true;
   }
+  async function addAssistant() {
+    if (loading || assistantMutation.current || !boot?.workspace || !canLeave()) return;
+    const name = prompt("Name for your new receptionist")?.trim();
+    if (!name) return;
+    assistantMutation.current = true; setAssistantMutating(true); setError("");
+    const gen = loadGeneration.current;
+    const startLocation = location.href;
+    const startHistory = historyIndex.current;
+    const isCurrent = () => gen === loadGeneration.current && location.href === startLocation && historyIndex.current === startHistory;
+    try {
+      const made = await api.createAssistant({ name });
+      if (!isCurrent() || !canLeave()) return;
+      navigate("assistants", true);
+      await load(made.id);
+    } catch (e) { if (isCurrent()) setError(errorText(e)); }
+    finally { assistantMutation.current = false; setAssistantMutating(false); }
+  }
   async function discoverAssistants() {
     if (assistantListBusy || !boot?.workspace) return;
     const gen = loadGeneration.current;
@@ -1078,7 +1095,7 @@ export default function OpenFon() {
           ) : screen === 'inbox' ? (
             <Inbox query={conversationQuery} onQuery={query=>navigate('inbox',false,undefined,query)} onCall={id=>navigate('conversations',false,id)} />
           ) : screen === 'desk' ? (
-            <Dashboard businessName={boot.workspace.name} assistants={boot.assistants} onNavigate={(next,query)=>navigate(next,false,query?.call,query)} onAssistant={id=>{if(canLeave()){navigate('assistants',true);void load(id);}}} onAdd={()=>navigate('assistants')} />
+            <Dashboard businessName={boot.workspace.name} assistants={boot.assistants} onNavigate={(next,query)=>navigate(next,false,query?.call,query)} onAssistant={id=>{if(canLeave()){navigate('assistants',true);void load(id);}}} onAdd={()=>void addAssistant()} adding={loading || assistantMutating} />
           ) : screen === 'billing' ? (
             <Billing />
           ) : screen === 'phone' ? (
@@ -1106,19 +1123,7 @@ export default function OpenFon() {
                 <button
                   className="of-text-button"
                   disabled={loading || assistantMutating}
-                  onClick={async () => {
-                    if (!canLeave()) return;
-                    const name = prompt("Name for your new receptionist");
-                    if (!name?.trim()) return;
-                    try {
-                      const made = await api.createAssistant({
-                        name: name.trim(),
-                      });
-                      await load(made.id);
-                    } catch (e) {
-                      setError(errorText(e));
-                    }
-                  }}
+                  onClick={() => void addAssistant()}
                 >
                   Add assistant
                 </button>

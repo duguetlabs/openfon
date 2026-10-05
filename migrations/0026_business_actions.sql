@@ -34,7 +34,7 @@ CREATE TABLE call_action_extractions (
 );
 -- Historical intent is a request, never evidence of a confirmed appointment.
 INSERT INTO action_items(id,business_id,call_id,source_key,kind,content,created_at)
-SELECT 'action_booking_'||id,business_id,id,'booking','booking_request',COALESCE(NULLIF(summary,''),'Appointment requested'),started_at
+SELECT 'action_booking_'||id,business_id,id,'booking','booking_request',CASE WHEN status='failed' THEN 'Appointment requested. Review the source call for details.' ELSE COALESCE(NULLIF(summary,''),'Appointment requested') END,started_at
 FROM calls WHERE intent='booking' AND status!='active';
 INSERT INTO action_items(id,business_id,call_id,source_key,kind,content,caller_name,caller_phone,created_at)
 SELECT 'action_message_'||id,business_id,id,'message','message',json_extract(message_json,'$.message'),
@@ -47,7 +47,7 @@ CREATE TRIGGER calls_action_projection_insert AFTER INSERT ON calls
 WHEN NEW.status!='active' AND NOT EXISTS(SELECT 1 FROM call_action_extractions WHERE call_id=NEW.id)
 BEGIN
 INSERT OR IGNORE INTO action_items(id,business_id,call_id,source_key,kind,content,created_at)
-SELECT 'action_booking_'||id,business_id,id,'booking','booking_request',COALESCE(NULLIF(summary,''),'Appointment requested'),started_at
+SELECT 'action_booking_'||id,business_id,id,'booking','booking_request',CASE WHEN status='failed' THEN 'Appointment requested. Review the source call for details.' ELSE COALESCE(NULLIF(summary,''),'Appointment requested') END,started_at
 FROM calls WHERE id=NEW.id AND NOT EXISTS(SELECT 1 FROM action_items WHERE call_id=NEW.id AND kind='booking_request') AND intent='booking' AND status!='active';
 INSERT OR IGNORE INTO action_items(id,business_id,call_id,source_key,kind,content,caller_name,caller_phone,created_at)
 SELECT 'action_message_'||id,business_id,id,'message','message',json_extract(message_json,'$.message'),
@@ -59,7 +59,7 @@ CREATE TRIGGER calls_action_projection_update AFTER UPDATE OF status,summary,int
 WHEN NEW.status!='active' AND NOT EXISTS(SELECT 1 FROM call_action_extractions WHERE call_id=NEW.id)
 BEGIN
 INSERT OR IGNORE INTO action_items(id,business_id,call_id,source_key,kind,content,created_at)
-SELECT 'action_booking_'||id,business_id,id,'booking','booking_request',COALESCE(NULLIF(summary,''),'Appointment requested'),started_at
+SELECT 'action_booking_'||id,business_id,id,'booking','booking_request',CASE WHEN status='failed' THEN 'Appointment requested. Review the source call for details.' ELSE COALESCE(NULLIF(summary,''),'Appointment requested') END,started_at
 FROM calls WHERE id=NEW.id AND NOT EXISTS(SELECT 1 FROM action_items WHERE call_id=NEW.id AND kind='booking_request') AND intent='booking' AND status!='active';
 INSERT OR IGNORE INTO action_items(id,business_id,call_id,source_key,kind,content,caller_name,caller_phone,created_at)
 SELECT 'action_message_'||id,business_id,id,'message','message',json_extract(message_json,'$.message'),

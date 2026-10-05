@@ -1,6 +1,7 @@
 import type { Env } from "./types";
 import type { Hono } from "hono";
 import { readWorkspaceBody } from "./request-validation";
+import { customerActionContentSql } from "./managed-action-content";
 type App = Hono<{ Bindings: Env; Variables: { userId: string } }>;
 export interface ExtractedAction {
   source_key: string;
@@ -225,7 +226,7 @@ export function registerManagedActions(app: App) {
     if (!Number.isSafeInteger(offset) || offset < 0 || offset > 100000)
       return c.json({ error: "Invalid page." }, 400);
     const { results } = await c.env.DB.prepare(
-      `SELECT a.*,assistants.name AS assistant_name,calls.environment FROM action_items a JOIN calls ON calls.id=a.call_id LEFT JOIN assistants ON assistants.id=calls.assistant_id WHERE ${conditions.join(" AND ")} ORDER BY a.created_at DESC,a.id DESC LIMIT 51 OFFSET ?`,
+      `SELECT a.id,a.business_id,a.call_id,a.source_key,a.kind,${customerActionContentSql('a')} AS content,a.caller_name,a.caller_phone,a.status,a.urgent,a.due_at,a.created_at,a.updated_at,assistants.name AS assistant_name,calls.environment FROM action_items a JOIN calls ON calls.id=a.call_id LEFT JOIN assistants ON assistants.id=calls.assistant_id WHERE ${conditions.join(" AND ")} ORDER BY a.created_at DESC,a.id DESC LIMIT 51 OFFSET ?`,
     )
       .bind(...args, offset)
       .all();

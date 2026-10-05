@@ -118,8 +118,7 @@ export function customerCall(value: unknown): Record<string, unknown> {
     : null;
   if (
     original.status === "failed" &&
-    typeof original.summary === "string" &&
-    diagnosticWords.test(original.summary)
+    typeof original.summary === "string"
   )
     out.summary =
       "The call could not complete. Review its transcript for any captured conversation.";

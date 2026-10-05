@@ -15,12 +15,14 @@ export function Dashboard({
   onNavigate,
   onAssistant,
   onAdd,
+  adding,
 }: {
   businessName: string;
   assistants: AssistantSummary[];
   onNavigate: (screen: string, query?: Record<string, string>) => void;
   onAssistant: (id: string) => void;
   onAdd: () => void;
+  adding: boolean;
 }) {
   const [data, setData] = useState<Snapshot | null>(null);
   const [items, setItems] = useState<ActionItem[]>([]);
@@ -168,7 +170,7 @@ export function Dashboard({
         <section>
           <div className="of-sheet-heading">
             <h2>Your assistants</h2>
-            <Button kind="quiet" onClick={onAdd}>
+            <Button kind="quiet" onClick={onAdd} disabled={adding}>
               Add assistant
             </Button>
           </div>

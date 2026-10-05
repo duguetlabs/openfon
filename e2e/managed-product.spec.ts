@@ -622,3 +622,29 @@ test('phone settings discovers a later assistant with retry for rental and purch
   expect(offsets).toContain('32');
   await expect(more).toHaveCount(0);
 });
+
+test('dashboard Add assistant opens the named creation flow and keeps a cancelled choice unchanged', async ({ page }) => {
+  await signup(page, 'dashboard-add');
+  const { assistant: original } = await createWorkspace(page, 'Dashboard assistant creation');
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Home', exact: true }).click();
+  let prompts = 0;
+  const creates: unknown[] = [];
+  page.on('request', request => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/me/assistants') creates.push(request.postDataJSON());
+  });
+  page.once('dialog', async dialog => { prompts++; await dialog.dismiss(); });
+  await page.getByRole('button', { name: 'Add assistant', exact: true }).click();
+  await expect.poll(() => prompts).toBe(1);
+  expect(creates).toEqual([]);
+  await expect(page.getByRole('heading', { name: 'Your reception, at a glance.' })).toBeVisible();
+  page.once('dialog', async dialog => { prompts++; await dialog.accept('Evening receptionist'); });
+  await page.getByRole('button', { name: 'Add assistant', exact: true }).click();
+  await expect(page.getByLabel('Receptionist name', { exact: true })).toHaveValue('Evening receptionist');
+  expect(creates).toEqual([{ name: 'Evening receptionist' }]);
+  const assistants = await (await page.request.get('/api/me/assistants')).json();
+  const made = assistants.find((item: any) => item.name === 'Evening receptionist');
+  expect(made.state).toBe('draft');
+  expect(assistants.some((item: any) => item.id === original.id)).toBe(true);
+  expect(assistants).toHaveLength(2);
+  await expect(page.getByLabel('Assistant', { exact: true })).toHaveValue(made.id);
+});

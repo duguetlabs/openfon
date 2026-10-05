@@ -1,4 +1,5 @@
 import { customerCall } from './managed-web';
+import { customerActionContentSql } from './managed-action-content';
 import { BillingError, prepareCommercialDeletion } from './commercial-dodo';
 import type { Hono, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -117,7 +118,7 @@ export function registerAccountApi(app: App): void {
     // Measure all rows before returning any payload; a global byte gate prevents
     // independently bounded tables from multiplying peak response memory.
     for (const [table, columns] of Object.entries(tables)) {
-      const columnSql = (column:string) => c.env.OPENFON_MANAGED_WEB === 'true' && ['assistants','agent_settings'].includes(table) && column === 'voice' ? "COALESCE(NULLIF(realtime_voice,''),NULLIF(voice,''),'marin')" : column;
+      const columnSql = (column:string) => table === 'action_items' && column === 'content' ? customerActionContentSql('action_items') : c.env.OPENFON_MANAGED_WEB === 'true' && ['assistants','agent_settings'].includes(table) && column === 'voice' ? "COALESCE(NULLIF(realtime_voice,''),NULLIF(voice,''),'marin')" : column;
       const scope = table === 'users' ? 'id=?' : table === 'businesses' ? 'user_id=?'
         : table === 'call_turns' ? 'call_id IN (SELECT calls.id FROM calls JOIN businesses ON businesses.id=calls.business_id WHERE businesses.user_id=?)'
         : table === 'assistant_knowledge_collections' ? 'assistant_id IN (SELECT assistants.id FROM assistants JOIN businesses ON businesses.id=assistants.business_id WHERE businesses.user_id=?)'
