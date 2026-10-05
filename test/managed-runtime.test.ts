@@ -364,3 +364,40 @@ it('failed cached extraction cannot project legacy actions at finalization, whil
     expect(db.database.prepare('SELECT count(*) n FROM commercial_provider_observations').get()).toEqual({n:1});
   }finally{db.close();}
 });
+
+describe('complete managed transcript extraction boundary', () => {
+  for (const count of [200, 201]) it(`${count} final turns cannot seal a truncated action snapshot`, async () => {
+    const {SqliteD1,applyMigrations}=await import('./sqlite-d1');
+    const db=new SqliteD1();
+    try {
+      applyMigrations(db);
+      db.exec(readFileSync('migrations/0026_business_actions.sql','utf8'));
+      db.exec(readFileSync('migrations/0027_commercial.sql','utf8'));
+      db.exec("INSERT INTO users(id,email,password_hash) VALUES('u','u@example.invalid','unused'); INSERT INTO businesses(id,user_id,slug,name) VALUES('b','u','b','Business'); INSERT INTO calls(id,business_id,channel) VALUES('c','b','web')");
+      for(let i=0;i<count;i++)db.database.prepare("INSERT INTO call_turns(call_id,role,text,source_final) VALUES('c','caller',?,1)").run(`Please call me back ${i}`);
+      const fetchMock=vi.fn(async()=>Response.json({id:'resp_complete',model:'gpt-5.4-mini',status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({summary:'Complete notes',intent:'booking',caller_name:'Alex',caller_phone:null,message:'Please call',actions:[{kind:'callback',source_turn_id:1,content:'Please call me back'}]})}]}],usage:{input_tokens:7}}));
+      vi.stubGlobal('fetch',fetchMock);
+      const values=new Map<string,unknown>();
+      const storage={get:async(k:string)=>values.get(k),put:async(k:string,v:unknown)=>{values.set(k,v);},list:async()=>new Map(),deleteAlarm:async()=>{},deleteAll:async()=>{}};
+      const makeSession=()=>{
+        const session=new CallSession({storage} as unknown as DurableObjectState,{...env,DB:db as unknown as D1Database}) as any;
+        session.callId='c';session.history=[{role:'system',content:''},{role:'user',content:'Please call me back'},{role:'assistant',content:'Goodbye'}];session.settings={language:'en'};
+        return session;
+      };
+      await makeSession().finalize();
+      expect(fetchMock).toHaveBeenCalledTimes(count===200?1:0);
+      expect(db.database.prepare('SELECT count(*) n FROM call_turns').get()).toEqual({n:count});
+      expect(db.database.prepare('SELECT count(*) n FROM call_action_extractions').get()).toEqual({n:count===200?1:0});
+      if(count===201){
+        expect(values.has('managed-summary')).toBe(false);
+        expect(values.get('managed-summary-attempted')).toBe(true);
+        expect(db.database.prepare('SELECT count(*) n FROM action_items').get()).toEqual({n:0});
+        expect(db.database.prepare('SELECT status,summary,intent,message_json FROM calls').get()).toEqual({status:'completed',summary:'Call notes could not be prepared from the complete conversation. The full transcript is available.',intent:null,message_json:null});
+        // A new object retry must neither infer a partial result nor revive legacy actions.
+        await makeSession().finalize();
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(db.database.prepare('SELECT count(*) n FROM action_items').get()).toEqual({n:0});
+      }
+    }finally{db.close();}
+  });
+});

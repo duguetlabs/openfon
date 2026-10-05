@@ -2821,7 +2821,7 @@ export class CallSession implements DurableObject {
         await this.state.storage.put('managed-summary-attempted', true);
         try {
           const rows = await this.env.DB.prepare(
-            'SELECT id,source_id,role,text FROM call_turns WHERE call_id=? AND source_final=1 ORDER BY id LIMIT 200'
+            'SELECT id,source_id,role,text FROM call_turns WHERE call_id=? AND source_final=1 ORDER BY id LIMIT 201'
           )
             .bind(this.callId)
             .all<{
@@ -2830,6 +2830,8 @@ export class CallSession implements DurableObject {
               role: string;
               text: string;
             }>();
+          // Probe one extra row: never summarize a prefix and seal it as complete.
+          // processManagedCall keeps its 200-turn budget and rejects overflow before inference.
           const result = await processManagedCall(
             this.env,
             rows.results.map((row) => ({
@@ -2845,6 +2847,11 @@ export class CallSession implements DurableObject {
         } catch {
           console.error('Managed call notes unavailable');
         }
+      }
+      if (!cached) {
+        // Also survives a finalize retry after the attempted marker was persisted.
+        // Keep actions unset and the successful snapshot absent; the transcript remains intact.
+        summary ??= 'Call notes could not be prepared from the complete conversation. The full transcript is available.';
       }
       if (cached) {
         summary = cached.summary.summary;

@@ -54,35 +54,47 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     clearInterval(diagnosticTimer);
     diagnostic(failure?'failure_stop':'normal_stop');
     stopping = (async () => {
-      try {
-        await control.post('events', {
-          callback: context.callback,
-          type: 'service_stopped',
-        });
-      } catch {
-        diagnostic('service_stop_unconfirmed');
-      }
       clearTimeout(monitoring); clearTimeout(deadline);
       providerSession?.stopInputClock();
       const subscriptionsStopped=callerAudio.stop();
       if(!subscriptionsStopped)diagnostic('unsubscribe_already_closed');
       ctx.room.off(RoomEvent.TrackPublished, callerAudio.subscribe);
       try{session?.input.setAudioEnabled(false);}catch{if(ctx.room.isConnected)failed=true;diagnostic('input_already_closed');}
+      let mediaStopped = false;
       try {
         // Drain allows an already-spoken goodbye to finish. Transport/error shutdown interrupts.
         session?.shutdown({drain});
         await within(session?.close()??Promise.resolve(),6000);
+        mediaStopped = true;
         diagnostic('session_closed');
       } catch {
         failed = true;
         diagnostic('session_close_deadline');
         try{session?.output.setAudioEnabled(false);}catch{/* native output may already be closed */}
         void providerSession?.close().catch(()=>{});
+        // Muting alone is not proof of transport shutdown. Disconnect before ending service.
+        try {
+          await within(ctx.room.disconnect(),2000);
+          mediaStopped = true;
+          diagnostic('room_disconnected');
+        } catch { diagnostic('media_stop_unconfirmed'); }
+      }
+      if (mediaStopped) {
+        try {
+          await control.post('events', {callback: context.callback, type: 'service_stopped'});
+        } catch { diagnostic('service_stop_unconfirmed'); }
       }
       usage.finish();
       try { await within(usage.flush(),7000); diagnostic('usage_flushed'); } catch { failed=true; diagnostic('usage_unconfirmed'); }
       try { await within(transcripts.flush(),7000); diagnostic('transcripts_flushed'); } catch { failed = true; diagnostic('transcripts_failed'); }
-      try { await control.post('events', {callback: context.callback, type: 'finished', failed}); diagnostic('finished_acknowledged'); }
+      try {
+        // Preserve server stale-call reconciliation when shutdown could not be confirmed.
+        // Neither a service cutoff nor finalized accounting may assert a fictitious end.
+        if (mediaStopped) {
+          await control.post('events', {callback: context.callback, type: 'finished', failed});
+          diagnostic('finished_acknowledged');
+        } else diagnostic('finished_deferred_media_uncertain');
+      }
       catch(error){diagnostic(error instanceof AdmissionError?'finished_rejected':'finished_unavailable');throw error;}
       finally {
         telemetry.snapshot(true);
