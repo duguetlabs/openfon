@@ -286,6 +286,7 @@ function Desk({
   refreshCalls: () => void;
 }) {
   const [draft, setDraft] = useState<Assistant>(assistant);
+  const [legacyVoiceCatalog, setLegacyVoiceCatalog] = useState(false);
   const [open, setOpen] = useState<string | null>(
     !assistant.greeting ? "identity" : null,
   );
@@ -305,6 +306,7 @@ function Desk({
     "voice",
     "take_messages",
     "custom_instructions",
+    ...(legacyVoiceCatalog ? ["realtime_voice" as const] : []),
   ];
   function editDraft(next: Assistant) {
     for (const key of fields) if (next[key] !== draft[key])
@@ -456,7 +458,7 @@ function Desk({
                   placeholder="Warm, clear and helpful. Keep answers brief."
                 />
               </Field>
-              <VoiceChoices draft={draft} onChange={editDraft} />
+              <VoiceChoices draft={draft} onChange={editDraft} onLegacyCatalog={setLegacyVoiceCatalog} />
             </div>,
           )}
           {job(

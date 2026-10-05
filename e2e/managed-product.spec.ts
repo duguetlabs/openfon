@@ -61,7 +61,13 @@ test("managed customer navigation, isolation and API responses hide technical ro
   await page
     .getByLabel("Their first words")
     .fill("Hello from our managed workshop.");
+  await page.getByRole("combobox", { name: "Voice", exact: true }).selectOption("cedar");
+  const saveRequest = page.waitForRequest((request) =>
+    request.method() === "PUT" && request.url().endsWith(`/api/me/assistants/${assistant.id}`));
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  expect((await saveRequest).postDataJSON()).toEqual({
+    name: "Ada", greeting: "Hello from our managed workshop.", voice: "cedar",
+  });
   await expect(
     page.getByText("Saved. Your next conversation will use this brief."),
   ).toBeVisible();

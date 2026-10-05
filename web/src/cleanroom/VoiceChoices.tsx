@@ -10,9 +10,11 @@ import { Field, Notice, errorText } from "./ui";
 export function VoiceChoices({
   draft,
   onChange,
+  onLegacyCatalog,
 }: {
   draft: Assistant;
   onChange: (a: Assistant) => void;
+  onLegacyCatalog: (legacy: boolean) => void;
 }) {
   const [legacy, setLegacy] = useState(false);
   const [voices, setVoices] = useState<{ id: string; label: string }[]>([]);
@@ -34,12 +36,10 @@ export function VoiceChoices({
     }>("/api/me/voices")
       .then((result) => {
         if (active) {
-          if (
-            !Array.isArray(result.voices) &&
-            Array.isArray(result.native) &&
-            Array.isArray(result.azure)
-          )
-            setLegacy(true);
+          const isLegacy = !Array.isArray(result.voices) &&
+            Array.isArray(result.native) && Array.isArray(result.azure);
+          setLegacy(isLegacy);
+          onLegacyCatalog(isLegacy);
           setVoices(result.voices || []);
           setLoaded(true);
         }

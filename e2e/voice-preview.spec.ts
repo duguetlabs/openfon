@@ -182,6 +182,7 @@ test("nonmanaged deployments retain provider-aware choices and full preview payl
     (
       await page.request.put(`/api/me/assistants/${assistant.id}`, {
         data: {
+          name: "Legacy receptionist",
           engine: "realtime",
           realtime_model: "gpt-realtime-2.1-mini",
           realtime_voice: "cedar",
@@ -229,4 +230,15 @@ test("nonmanaged deployments retain provider-aware choices and full preview payl
       ).json()
     ).realtime_voice,
   ).toBe("cedar");
+  // A voice-only change must be admitted by dirty tracking and persist for calls.
+  const save = page.getByRole("button", { name: "Save changes", exact: true });
+  await expect(save).toBeEnabled();
+  const savedRequest = page.waitForRequest((request) =>
+    request.method() === "PUT" && request.url().endsWith(`/api/me/assistants/${assistant.id}`));
+  await save.click();
+  expect((await savedRequest).postDataJSON()).toEqual({ realtime_voice: "marin" });
+  await expect(page.getByText("Saved. Your next conversation will use this brief.")).toBeVisible();
+  await page.reload();
+  await whoAnswers(page);
+  await expect(page.getByRole("combobox", { name: "Voice", exact: true })).toHaveValue("marin");
 });
