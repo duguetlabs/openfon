@@ -424,6 +424,69 @@ it("does not shift late settled usage into a new invoice period", async () => {
   expect(fetch).not.toHaveBeenCalled();
 });
 
+it.each([
+  "new",
+  "exact",
+  "event_id",
+  "customer_id",
+  "event_name",
+  "timestamp",
+  "cents",
+  "missing",
+])("requires exact duplicate settlement evidence: %s", async (kind) => {
+  const draft = await closedSettlement();
+  await approveUsageSettlement(env, draft.id, draft.computedHash);
+  Object.assign(env, {
+    COMMERCIAL_CHARGING_ENABLED: "true",
+    COMMERCIAL_BILLING_VERIFIED: "true",
+    DODO_WEBHOOK_SECRET: "synthetic",
+    DODO_PRODUCTS_JSON: "{}",
+    DODO_METERS_JSON: "{}",
+  });
+  let event: any;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init: RequestInit) => {
+      if (url.endsWith("/events/ingest")) {
+        event = JSON.parse(init.body as string).events[0];
+        return Response.json({ ingested_count: kind === "new" ? 1 : 0 });
+      }
+      expect(url).toContain("/events/" + event.event_id);
+      if (kind === "missing") return new Response(null, { status: 404 });
+      const response = { ...event, metadata: { ...event.metadata } };
+      if (kind === "cents") response.metadata.cents++;
+      else if (kind === "timestamp")
+        response.timestamp = "2026-11-05T00:00:00Z";
+      else if (kind !== "exact") response[kind] = "different";
+      return Response.json(response);
+    }),
+  );
+  if (["new", "exact"].includes(kind)) {
+    await expect(publishUsageSettlement(env, draft.id)).resolves.toEqual({
+      sent: true,
+      duplicate: kind === "exact",
+    });
+    expect(fetch).toHaveBeenCalledTimes(kind === "new" ? 1 : 2);
+  } else {
+    await expect(publishUsageSettlement(env, draft.id)).rejects.toThrow(
+      "reconciliation",
+    );
+    expect(
+      db.database
+        .prepare(
+          "SELECT state,provider_reference FROM commercial_usage_exports",
+        )
+        .get(),
+    ).toEqual({
+      state: "reconciliation_required",
+      provider_reference: "openfon-" + draft.computedHash,
+    });
+    vi.mocked(fetch).mockClear();
+    await expect(publishUsageSettlement(env, draft.id)).rejects.toThrow();
+    expect(fetch).not.toHaveBeenCalled();
+  }
+});
+
 it("keeps annual usage mandate through paid term and cancels both at its exact end", async () => {
   await reconcileSubscription(env, "base", at);
   await reconcileSubscription(env, "usage", at);

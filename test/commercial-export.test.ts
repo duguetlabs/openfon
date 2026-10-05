@@ -346,6 +346,187 @@ it("defensively fences direct-database QA drift at the export claim, outside sup
   });
   expect(posts).toHaveLength(0);
 });
+it("retires only never-claimed snapshots superseded by an ingested ordinary-usage update", async () => {
+  call();
+  let inserted = false;
+  db.hook = (sql) => {
+    if (
+      !inserted &&
+      sql.startsWith("UPDATE commercial_usage_snapshots SET state='sending'")
+    ) {
+      inserted = true;
+      call("second", Date.parse(activated) + 60000, Date.parse(now));
+    }
+  };
+  expect(await exportCurrentUsage(env, "b", start)).toEqual({
+    state: "pending",
+    reason: "snapshot_changed",
+  });
+  expect(posts).toHaveLength(0);
+  expect(await exportCurrentUsage(env, "b", start)).toEqual({
+    state: "ingested",
+    overageMinor: 32,
+  });
+  expect(
+    db.database
+      .prepare(
+        "SELECT state,usage_ms FROM commercial_usage_snapshots ORDER BY usage_ms",
+      )
+      .all(),
+  ).toEqual([
+    { state: "superseded", usage_ms: 60000 },
+    { state: "ingested", usage_ms: 120000 },
+  ]);
+  db.database
+    .prepare(
+      "INSERT INTO commercial_usage_exports VALUES('settlement','b',?,?,120000,32,'invoice_reconciled','operator-verified','synthetic-hash',?)",
+    )
+    .run(start, end, now);
+  let canceled = false;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_url: string, init: RequestInit) => {
+      if (init.method === "PATCH") canceled = true;
+      return Response.json({
+        ...sub(),
+        status: canceled ? "cancelled" : "active",
+      });
+    }),
+  );
+  await prepareCommercialDeletion(env, "b", {
+    userId: "u",
+    passwordHash: "hash",
+    sessionToken: "session",
+  });
+  expect(canceled).toBe(true);
+  expect(
+    db.database
+      .prepare("SELECT completed_at FROM commercial_deletion_jobs")
+      .get()?.completed_at,
+  ).toBeTruthy();
+});
+it.each([
+  "prepared",
+  "sending",
+  "reconciliation_required",
+  "other_customer",
+  "larger",
+  "claim_before_cleanup",
+])(
+  "only retires safely superseded prepared records on retry, preserving %s boundaries",
+  async (kind) => {
+    call();
+    await exportCurrentUsage(env, "b", start);
+    db.database
+      .prepare(
+        `INSERT INTO commercial_usage_snapshots
+      SELECT 'older',business_id,cycle_start,cycle_end,subscription_id,?,provider_mode,event_name,event_timestamp,?,?,?,created_at,NULL FROM commercial_usage_snapshots LIMIT 1`,
+      )
+      .run(
+        kind === "other_customer" ? "other" : "customer",
+        kind === "larger" ? 120000 : 30000,
+        kind === "larger" ? 32 : 8,
+        ["sending", "reconciliation_required"].includes(kind)
+          ? kind
+          : "prepared",
+      );
+    let concurrentClaim = false;
+    db.hook = (sql) => {
+      if (
+        kind === "claim_before_cleanup" &&
+        !concurrentClaim &&
+        sql.startsWith(
+          "UPDATE commercial_usage_snapshots SET state='superseded'",
+        )
+      ) {
+        concurrentClaim = true;
+        // Deterministic second-writer SQL boundary; no provider request implied.
+        db.exec(
+          "UPDATE commercial_usage_snapshots SET state='sending' WHERE id='older' AND state='prepared'",
+        );
+      }
+    };
+    vi.mocked(fetch).mockClear();
+    await exportCurrentUsage(env, "b", start);
+    expect(
+      db.database
+        .prepare(
+          "SELECT state FROM commercial_usage_snapshots WHERE id='older'",
+        )
+        .get(),
+    ).toEqual({
+      state:
+        kind === "prepared"
+          ? "superseded"
+          : kind === "claim_before_cleanup"
+            ? "sending"
+            : ["sending", "reconciliation_required"].includes(kind)
+              ? kind
+              : "prepared",
+    });
+    if (kind === "claim_before_cleanup") expect(concurrentClaim).toBe(true);
+    expect(fetch).not.toHaveBeenCalled();
+  },
+);
+it("preserves a real overlapping invocation's sending claim before delayed cleanup", async () => {
+  call();
+  let releaseCleanup!: () => void, cleanupReached!: () => void;
+  let releasePost!: () => void, postReached!: () => void;
+  const cleanupGate = new Promise<void>((resolve) => {
+    releaseCleanup = resolve;
+  });
+  const cleanupReady = new Promise<void>((resolve) => {
+    cleanupReached = resolve;
+  });
+  const postGate = new Promise<void>((resolve) => {
+    releasePost = resolve;
+  });
+  const postReady = new Promise<void>((resolve) => {
+    postReached = resolve;
+  });
+  const prepare = db.prepare.bind(db);
+  let delayed = false;
+  const spy = vi.spyOn(db, "prepare").mockImplementation((sql) => {
+    const statement = prepare(sql);
+    if (
+      !delayed &&
+      sql.startsWith("UPDATE commercial_usage_snapshots SET state='superseded'")
+    ) {
+      delayed = true;
+      const run = statement.run.bind(statement);
+      statement.run = async () => {
+        cleanupReached();
+        await cleanupGate;
+        return run();
+      };
+    }
+    return statement;
+  });
+  const original = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation(async (...args) => {
+    if (String(args[0]).endsWith("/events/ingest")) {
+      postReached();
+      await postGate;
+    }
+    return original(...args);
+  });
+  const stale = exportCurrentUsage(env, "b", start);
+  await cleanupReady;
+  const writer = exportCurrentUsage(env, "b", start);
+  await postReady;
+  releaseCleanup();
+  expect(await stale).toEqual({
+    state: "reconciliation_required",
+    reason: "provider_confirmation_pending",
+  });
+  expect(
+    db.database.prepare("SELECT state FROM commercial_usage_snapshots").get(),
+  ).toEqual({ state: "sending" });
+  releasePost();
+  expect(await writer).toEqual({ state: "ingested", overageMinor: 16 });
+  expect(posts).toHaveLength(1);
+  spy.mockRestore();
+});
 it.each(["unsnapshotted", "prepared", "ingested"])(
   "keeps %s outstanding retail usage before irreversible deletion cleanup",
   async (kind) => {

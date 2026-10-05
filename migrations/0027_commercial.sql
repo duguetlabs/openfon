@@ -259,7 +259,7 @@ CREATE TABLE commercial_usage_snapshots (
  event_timestamp TEXT NOT NULL,
  usage_ms INTEGER NOT NULL,
  overage_minor INTEGER NOT NULL,
- state TEXT NOT NULL CHECK(state IN ('prepared','sending','ingested','reconciliation_required','reconciled')),
+ state TEXT NOT NULL CHECK(state IN ('prepared','sending','ingested','reconciliation_required','reconciled','superseded')),
  created_at TEXT NOT NULL,
  confirmed_at TEXT,
  FOREIGN KEY(business_id,cycle_start) REFERENCES commercial_usage_streams(business_id,cycle_start) ON DELETE CASCADE

@@ -98,6 +98,33 @@ async function total(env: CommercialEnv, c: Context, now: number) {
   return retailOverage(ms, c.plan_id, c.cadence);
 }
 
+async function retireSupersededSnapshots(
+  env: CommercialEnv,
+  businessId: string,
+  start: string,
+) {
+  // A prepared record has never acquired a provider writer. Retire it only
+  // when the same mandate already has a confirmed equal-or-higher MAX event.
+  // Check state in this write: a concurrent sending claim must always survive.
+  await env.DB.prepare(
+    `UPDATE commercial_usage_snapshots SET state='superseded'
+     WHERE business_id=? AND cycle_start=? AND state='prepared' AND EXISTS(
+       SELECT 1 FROM commercial_usage_snapshots newer
+       WHERE newer.business_id=commercial_usage_snapshots.business_id
+       AND newer.cycle_start=commercial_usage_snapshots.cycle_start
+       AND newer.cycle_end=commercial_usage_snapshots.cycle_end
+       AND newer.subscription_id=commercial_usage_snapshots.subscription_id
+       AND newer.customer_id=commercial_usage_snapshots.customer_id
+       AND newer.provider_mode=commercial_usage_snapshots.provider_mode
+       AND newer.event_name=commercial_usage_snapshots.event_name
+       AND newer.state='ingested'
+       AND newer.usage_ms>=commercial_usage_snapshots.usage_ms
+       AND newer.overage_minor>=commercial_usage_snapshots.overage_minor)`,
+  )
+    .bind(businessId, start)
+    .run();
+}
+
 /** Publish only finalized calls in the still-current, verified usage mandate.
  * Ingestion is not invoice confirmation. Uncertain writes never unlock by expiry.
  */
@@ -111,6 +138,7 @@ export async function exportCurrentUsage(
   let c = await context(env, businessId, start);
   if (!c || c.provider_mode !== env.DODO_MODE || !c.activated_at)
     return { state: "unavailable" };
+  await retireSupersededSnapshots(env, businessId, start);
   const stamp = new Date(now).toISOString();
   await env.DB.prepare(
     `INSERT INTO commercial_usage_streams(business_id,cycle_start,cycle_end,last_checked_at) VALUES(?,?,?,?)
@@ -272,7 +300,10 @@ export async function exportCurrentUsage(
       now,
     )
     .first();
-  if (!claimed) return { state: "pending", reason: "snapshot_changed" };
+  if (!claimed) {
+    await retireSupersededSnapshots(env, businessId, start);
+    return { state: "pending", reason: "snapshot_changed" };
+  }
   const record = await env.DB.prepare(
     "SELECT * FROM commercial_usage_snapshots WHERE id=?",
   )
@@ -341,7 +372,6 @@ export async function exportCurrentUsage(
         "UPDATE commercial_usage_streams SET last_usage_ms=MAX(last_usage_ms,?),last_overage_minor=MAX(last_overage_minor,?) WHERE business_id=? AND cycle_start=?",
       ).bind(amount.durationMs, amount.overageMinor, businessId, start),
     ]);
-    return { state: "ingested", overageMinor: amount.overageMinor };
   } catch {
     await env.DB.prepare(
       "UPDATE commercial_usage_snapshots SET state='reconciliation_required' WHERE id=?",
@@ -350,6 +380,8 @@ export async function exportCurrentUsage(
       .run();
     return flag(env, businessId, start, "provider_result_uncertain");
   }
+  await retireSupersededSnapshots(env, businessId, start);
+  return { state: "ingested", overageMinor: amount.overageMinor };
 }
 
 /** Five least-recently checked periods per minute; no global scans or retries of uncertain writes. */

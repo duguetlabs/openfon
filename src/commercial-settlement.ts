@@ -80,7 +80,7 @@ export async function prepareUsageSettlement(
   const automatic = await env.DB.prepare(
     `SELECT COALESCE(MAX(overage_minor),0) maximum,
     COALESCE(MAX(CASE WHEN state IN ('sending','reconciliation_required') THEN 1 ELSE 0 END),0) uncertain
-    FROM commercial_usage_snapshots WHERE business_id=? AND cycle_start=? AND state<>'prepared'`,
+    FROM commercial_usage_snapshots WHERE business_id=? AND cycle_start=? AND state NOT IN ('prepared','superseded')`,
   )
     .bind(businessId, period.period_start)
     .first<{ maximum: number; uncertain: number }>();
@@ -239,23 +239,45 @@ export async function publishUsageSettlement(
     .first();
   if (!claimed)
     throw new BillingError("Settlement changed before sending.", 409);
-  const result = await dodoRequest(env, "/events/ingest", "POST", {
-    events: [
-      {
-        event_id: eventId,
-        customer_id: record.customer_id,
-        event_name: record.event_name,
-        timestamp: new Date(timestamp).toISOString(),
-        metadata: { cents: record.overage_minor },
-      },
-    ],
-  });
-  if (![0, 1].includes(result.ingested_count))
+  let duplicate = false;
+  try {
+    const result = await dodoRequest(env, "/events/ingest", "POST", {
+      events: [
+        {
+          event_id: eventId,
+          customer_id: record.customer_id,
+          event_name: record.event_name,
+          timestamp: new Date(timestamp).toISOString(),
+          metadata: { cents: record.overage_minor },
+        },
+      ],
+    });
+    if (![0, 1].includes(result.ingested_count))
+      throw new BillingError("Usage export needs reconciliation.", 409);
+    duplicate = result.ingested_count === 0;
+    if (duplicate) {
+      const event = await dodoRequest(env, "/events/" + eventId);
+      if (
+        event.event_id !== eventId ||
+        event.customer_id !== record.customer_id ||
+        event.event_name !== record.event_name ||
+        event.metadata?.cents !== record.overage_minor ||
+        Date.parse(event.timestamp) !== timestamp
+      )
+        throw new BillingError("Usage export needs reconciliation.", 409);
+    }
+  } catch {
+    await env.DB.prepare(
+      "UPDATE commercial_usage_exports SET state='reconciliation_required' WHERE id=? AND computed_hash=? AND state='sending'",
+    )
+      .bind(id, record.computed_hash)
+      .run();
     throw new BillingError("Usage export needs reconciliation.", 409);
+  }
   await env.DB.prepare(
     "UPDATE commercial_usage_exports SET state='sent' WHERE id=? AND computed_hash=? AND state='sending'",
   )
     .bind(id, record.computed_hash)
     .run();
-  return { sent: true, duplicate: result.ingested_count === 0 };
+  return { sent: true, duplicate };
 }
