@@ -72,3 +72,48 @@ Sources:
 ## Recovering an uncertain payment writer
 
 There is deliberately no customer unlock or automatic expiry. Before operator recovery, stop admission of payment-update requests for the affected workspace, establish that the original application invocation is no longer running, and obtain provider confirmation that its action has settled. A single immediate GET after a timeout is insufficient proof that a delayed write cannot still land. Reconcile the hosted payment's ownership and selected method against every owned subscription, retaining the current job and provider identities. Only after that evidence may an operator repair the job and remove the exact writer token; never start a replacement authorization while the earlier mutation remains uncertain. No automated recovery endpoint is implemented. Billing remains gated until this operational recovery and invoice acceptance are ready.
+
+## Operator deployment configuration
+
+The guarded release can expose billing information while keeping new checkout and automatic usage export disabled. The current acceptance state does **not** authorize setting `COMMERCIAL_BILLING_VERIFIED=true`.
+
+Apply the reviewed `0027_commercial.sql` before deploying code that uses its tables, including paid-coverage intervals, payment writers and usage outboxes. It has not yet been remotely applied at this checkpoint. If an earlier version has already been applied in another environment, create an additive migration; editing an applied migration will not update that database. Retain a protected database backup and the exact Worker version/schema combination in the release preflight. Do not reset existing account, call or provider data.
+
+| Setting | Required value or role |
+|---|---|
+| `DODO_MODE` | `test` for the isolated sandbox environment; `live` only for the independently configured commercial environment. |
+| `DODO_API_KEY` | Vault-backed API key for that exact Dodo mode, installed as a server secret. |
+| `DODO_WEBHOOK_SECRET` | Signing secret for that mode's webhook endpoint, also a server secret. |
+| `DODO_PRODUCTS_JSON` | Map of product IDs described below, from the same Dodo mode. |
+| `DODO_METERS_JSON` | Map of usage meter IDs and event names described below, from the same mode. |
+| `COMMERCIAL_TAX_POLICY` | `exclusive` for the selected published prices; product `tax_inclusive` must therefore be false. |
+| `COMMERCIAL_PUBLIC_ORIGIN` | Exact HTTPS application origin, without a path, query or fragment; production is `https://openfon.ai`. |
+| `COMMERCIAL_CHARGING_ENABLED` | Leave unset or `false` for the guarded release. |
+| `COMMERCIAL_BILLING_VERIFIED` | Leave unset or `false` until the outstanding actual invoice/aggregation and recovery gates are resolved. |
+| `COMMERCIAL_OPERATOR_TOKEN` | Optional separate server secret for authenticated operator QA exclusion; never a customer-controlled call flag. |
+
+Use distinct test/live secrets, products, meters, webhook destinations and application databases. Do not switch a business with an existing subscription between test and live modes. Read secrets through the authorized vault tooling and install them through the deployment platform's secret mechanism; never put them in JSON examples, source, command output or browser configuration.
+
+For every plan key `flex`, `small` and `growth`, `DODO_PRODUCTS_JSON` contains:
+
+- `<plan>:monthly`: the monthly usage-based product, including its monthly base.
+- `<plan>:annual`: the recurring annual base product, paid upfront.
+- `<plan>:annual:usage`: a **different**, zero-base monthly usage product for the same annual plan.
+
+`DODO_METERS_JSON` contains `<plan>:monthly` and `<plan>:annual`, each with the shape `{ "id": "REPLACE_WITH_METER_ID", "event": "REPLACE_WITH_EVENT_NAME" }`. The annual entry belongs to the annual plan's monthly usage product. Configure MAX aggregation over numeric metadata property `cents`, no filter, price per unit `1` in EUR minor units and free threshold `0`; OpenFon already removes the plan allowance before reporting rounded cents. Products must have no discount, trial or purchasing-power adjustment. The monthly bases are 1900 / 6900 / 23900 cents; annual bases are 20400 / 69600 / 250800 cents. Annual usage-product bases are zero. The application verifies product, currency, quantity, interval and meter configuration before accepting enrollment.
+
+Configure the mode-specific Dodo webhook at `<COMMERCIAL_PUBLIC_ORIGIN>/api/billing/webhook` for the applicable subscription lifecycle and payment notifications. Preserve the raw request body and Standard Webhooks signature headers. The handler verifies signatures and re-reads provider state; checkout redirects do not authorize enrollment. Keep the existing per-minute `maintainCommercialBilling` schedule enabled for cancellation recovery even while charging is disabled. Normal current-period usage export runs through that same schedule only when both charging and verification gates pass. A cadence appears in the customer interface only when mappings for all three plans are present.
+
+### Acceptance before charging
+
+Actual sandbox evidence covers combined annual/monthly checkout, a standalone zero-base hosted checkout, invoice PDF retrieval and a hosted payment-method update. Synthetic tests cover coverage recovery, ownership, SQL races, outbox replay and exception routing. Neither class proves a normal metered renewal invoice: the one-cent and €2 control events were ingested but no aggregation/renewal history was observed. Resolve the ordinary metered invoice, zero/minimum amount, late/downward credit reconciliation, uncertain payment/outbox recovery and term-end lifecycle acceptance before enabling verification. Keep the explicit annual-upfront policy; there is no automatic customer enrollment, retroactive charge, carry-forward or waiver.
+
+### Phone purchase prerequisites
+
+Leave `TELNYX_PURCHASES_ENABLED` and `TELNYX_CARRIER_VERIFIED` unset or false. Enabling purchasing also requires `TELNYX_ENABLED`, the server `TELNYX_API_KEY`, the validated `TELNYX_CONNECTION_ID`, `TELNYX_PURCHASE_COUNTRY` (two-letter country), `TELNYX_PURCHASE_CURRENCY` (three-letter currency), and integer minor-unit ceilings `TELNYX_MAX_SETUP_MINOR` / `TELNYX_MAX_MONTHLY_MINOR`. Country/regulatory requirements, live direct-carrier acceptance, actual account quotes, rental charging and rental termination policy remain unresolved. Do not infer authorization from the account balance or published rate tables. Purchasing and assistant publication are separate operations; a purchased rental starts with answering disabled.
+
+### Rollback and paused charging
+
+Disabling `COMMERCIAL_CHARGING_ENABLED` or `COMMERCIAL_BILLING_VERIFIED` stops new OpenFon checkout and automated usage export. It does **not** cancel existing Dodo renewals, issue refunds, release rented numbers or erase owed usage. Keep authenticated webhooks, cancellation/deletion recovery and authoritative call-interval capture operating. A backlog still in its original current period can be recomputed; closed-period and uncertain outboxes require reconciliation, not re-dating into a new period.
+
+Retain the commercial schema and immutable provider/outbox identities when rolling back application code. Do not truncate the ledger, lower a sent MAX value, clear a writer solely because it is old, or downgrade to code that silently ignores unresolved commercial cleanup. Disable phone purchasing separately; that does not release existing rentals. Any actual refund, credit, cancellation or number release is an explicit operational action with verified ownership and readback.
