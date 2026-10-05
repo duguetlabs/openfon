@@ -14,7 +14,7 @@ it('deduplicates events and cumulative snapshots without charging missing counte
  await ingestProviderUsage(env,context,event({eventId:'e2',metrics:{voiceSessionSeconds:'2.500'}}));
  await ingestProviderUsage(env,context,event({eventId:'late',metrics:{voiceSessionSeconds:'1.500'}}));
  await ingestProviderUsage(env,context,event({eventId:'closed',final:true,metrics:{}}));
- expect(db.database.prepare('SELECT metric,value,is_final FROM commercial_provider_metrics').all()).toEqual([{metric:'voiceSessionMs',value:2500,is_final:0}]);
+ expect(db.database.prepare('SELECT metric,value,is_final FROM commercial_provider_metrics').all()).toEqual([{metric:'voiceSessionNanoseconds',value:2500000000,is_final:0}]);
  expect(db.database.prepare('SELECT COUNT(*) AS n FROM commercial_provider_observations').get()).toEqual({n:4});
 });
 it('rejects cross-workspace/call/job scope and conflicting replay without overwriting',async()=>{
@@ -22,7 +22,7 @@ it('rejects cross-workspace/call/job scope and conflicting replay without overwr
  await expect(ingestProviderUsage(env,{...context,businessId:'other'},event())).rejects.toThrow();
  await expect(ingestProviderUsage(env,context,event({jobId:'otherjob'}))).rejects.toThrow();
  await expect(ingestProviderUsage(env,context,event({metrics:{voiceSessionSeconds:'200'}}))).rejects.toThrow('Conflicting');
- expect(db.database.prepare('SELECT value FROM commercial_provider_metrics').get()).toEqual({value:1250});
+ expect(db.database.prepare('SELECT value FROM commercial_provider_metrics').get()).toEqual({value:1250000000});
 });
 it('keeps response totals distinct from subcategories and separates operations',async()=>{
  const metrics={inputTokens:100,cachedInputTokens:20,outputTokens:30,reasoningTokens:10,totalTokens:130};
@@ -57,4 +57,13 @@ it('retail rounds aggregate overage once and retains exact plan rates',()=>{
  expect(retailOverage(500*60000+30000,'small','monthly').overageMinor).toBe(5);
  expect(retailOverage(2500*60000,'growth','annual').overageMinor).toBe(0);
  expect(retailOverage(2000,'flex','monthly').overageMinor).toBe(1);
+});
+
+it('preserves provider nanoseconds and deduplicates the same snapshot observed later',async()=>{
+ const sample=event({metrics:{voiceSessionSeconds:'1.123456789'}});
+ expect(normalizeUsage(sample)).toEqual({voiceSessionNanoseconds:1123456789});
+ await ingestProviderUsage(env,context,sample);
+ expect(await ingestProviderUsage(env,context,{...sample,observedAt:'2026-10-05T13:00:00Z'})).toEqual({duplicate:true});
+ expect(()=>normalizeUsage(event({metrics:{voiceSessionSeconds:'1.1234567891'}}))).toThrow();
+ expect(()=>normalizeUsage(event({metrics:{voiceSessionSeconds:'9999999999'}}))).toThrow();
 });

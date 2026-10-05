@@ -18,9 +18,12 @@ export function normalizeUsage(observation:UsageObservation):Record<string,numbe
  const output:Record<string,number>={};
  for(const [key,value] of Object.entries(observation.metrics)){
   if(key==='voiceSessionSeconds'){
-   if(typeof value!=='string'||!/^\d{1,10}(\.\d{1,3})?$/.test(value))throw new UsageError('Invalid provider seconds');
-   const [whole,fraction='']=value.split('.');const ms=Number(whole)*1000+Number(fraction.padEnd(3,'0'));
-   if(!int(ms))throw new UsageError('Invalid provider seconds');output.voiceSessionMs=ms;
+   if(typeof value!=='string'||!/^\d{1,10}(\.\d{1,9})?$/.test(value))throw new UsageError('Invalid provider seconds');
+   const [whole,fraction='']=value.split('.');
+   const ns=BigInt(whole)*1000000000n+BigInt(fraction.padEnd(9,'0'));
+   if(ns>BigInt(Number.MAX_SAFE_INTEGER))throw new UsageError('Invalid provider seconds');
+   // Preserve sub-millisecond provider precision exactly; never round cost units.
+   output.voiceSessionNanoseconds=Number(ns);
   }else if(tokenFields.includes(key as typeof tokenFields[number])&&int(value)){output[key]=value;}
   else throw new UsageError('Invalid usage metric');
  }
@@ -33,7 +36,9 @@ async function record(env:Store,scope:{businessId:string;operationId:string;call
  if(!ident(scope.operationId)||!ident(scope.businessId))throw new UsageError('Invalid operation');
  const metrics=normalizeUsage(observation);
  const usageKey=observation.source==='azure_voice'?observation.providerSessionId:observation.providerResponseId!;
- const canonical=JSON.stringify({scope,source:observation.source,usageKey,observedAt:observation.observedAt,final:observation.final,model:observation.model??null,metrics:Object.fromEntries(Object.entries(metrics).sort())});
+ // Observation time is provenance, not usage identity: providers may repeat
+ // an identical cumulative snapshot in a later message.
+ const canonical=JSON.stringify({scope,source:observation.source,usageKey,final:observation.final,model:observation.model??null,metrics:Object.fromEntries(Object.entries(metrics).sort())});
  const hash=await usageHash(canonical);
  const prior=await env.DB.prepare('SELECT payload_hash FROM commercial_provider_observations WHERE event_id=?').bind(observation.eventId).first<{payload_hash:string}>();
  if(prior){if(prior.payload_hash!==hash)throw new UsageError('Conflicting usage event');return {duplicate:true};}
