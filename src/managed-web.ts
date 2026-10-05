@@ -98,7 +98,7 @@ function assistant(value: unknown): unknown {
   const original = value as Record<string, unknown>;
   const out = pick(value, assistantFields);
   if ("realtime_voice" in original)
-    out.voice = original.realtime_voice || original.voice || "";
+    out.voice = original.realtime_voice || original.voice || "marin";
   // Installed iOS 1.0.0 requires these Codable keys. Empty compatibility values
   // reveal no routing configuration; its selectedVoice then uses `voice`.
   if ("greeting" in original) {

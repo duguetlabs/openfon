@@ -10,7 +10,7 @@ Apply only additive migrations 0026 and 0027 after a restricted backup and resto
 
 `COMMERCIAL_BILLING_VERIFIED` must remain unset until real invoice, meter and lifecycle acceptance passes. `COMMERCIAL_CHARGING_ENABLED` alone cannot enable checkout. Phone purchasing/activation requires the separate carrier verification and operator country/currency/budget settings; keep those gates off until actual carrier acceptance. A sandbox checkout is not proof of accurate recurring invoices or live charges. See [billing evidence](../commercial/billing-and-costs.md) and [managed product](../managed-web.md).
 
-Read-only production aggregation against the candidate’s exact 19-voice catalog found one compatible active assistant, one active assistant requiring an explicit voice selection, and one draft requiring a selection. No data was changed. A managed cutover would make that incompatible active assistant unavailable until its owner chooses a compatible voice; uninterrupted public-link migration is not yet established.
+Read-only production aggregation found one explicitly compatible active assistant and one active assistant with both saved voice fields blank. Exact released source already resolves the blank selection to Marin. The candidate preserves that known effective default on read/runtime, so no active public link requires a voice change in this aggregate. Stored values remain unchanged; nonempty incompatible voices still require an explicit compatible choice. This configuration check is not actual provider/audio acceptance.
 
 No physical microphone, real Azure audio, PSTN or paid deployment acceptance is inferred from unit tests or browser fixtures.
 

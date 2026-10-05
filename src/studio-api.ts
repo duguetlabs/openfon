@@ -1312,7 +1312,7 @@ export function registerStudioApi(app: StudioApp): void {
     }
     const provider = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
       .bind(assistant.business_id).first<ProviderSettings>();
-    const incompatibility = managedWeb(c.env) ? (managedVoiceCatalog(c.env).voices.some(v=>v.id===(assistant.realtime_voice||assistant.voice)) ? null : 'Choose an available voice before publishing.') : assistantCompatibilityError(c.env, provider, assistant);
+    const incompatibility = managedWeb(c.env) ? (managedVoiceCatalog(c.env).voices.some(v=>v.id===(assistant.realtime_voice||assistant.voice||managedVoiceCatalog(c.env).defaultVoice)) ? null : 'Choose an available voice before publishing.') : assistantCompatibilityError(c.env, provider, assistant);
     if (incompatibility) return c.json({ error: incompatibility }, 400);
     // Pin the checked configuration in the write itself. A concurrent provider
     // switch preserves draft fields; it must not race this activation check.

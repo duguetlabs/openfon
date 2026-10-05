@@ -350,6 +350,23 @@ describe("Managed customer response boundary", () => {
       ).json(),
     ).toEqual({ ok: true });
   });
+  it("shows the known historical Marin default for a saved assistant with both voice fields blank", async () => {
+    const route = app();
+    route.get("/api/me/assistants/a", (c) =>
+      c.json({ id: "a", greeting: "Hello", voice: "", realtime_voice: "" }),
+    );
+    expect(
+      await (
+        await route.request("http://local/api/me/assistants/a", {}, env)
+      ).json(),
+    ).toEqual({
+      id: "a",
+      greeting: "Hello",
+      voice: "marin",
+      engine: "",
+      realtime_voice: "",
+    });
+  });
   it("strips technical values while retaining installed iOS decoding shape", async () => {
     const route = app();
     route.get("/api/me/assistants/a", (c) =>

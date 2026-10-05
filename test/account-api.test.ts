@@ -103,6 +103,12 @@ describe('account self service', () => {
     expect(db.database.prepare('SELECT voice,realtime_voice FROM assistants WHERE id=?').get(made.id)).toEqual({voice:'marin',realtime_voice:'marin'});
     db.database.prepare("UPDATE assistants SET realtime_voice='',voice='de-DE-KatjaNeural' WHERE id=?").run(made.id);
     expect((await call(`/api/me/assistants/${made.id}/activate`,'POST')).status).toBe(400);
+    db.database.prepare("UPDATE assistants SET voice='',realtime_voice='' WHERE id=?").run(made.id);
+    expect((await call(`/api/me/assistants/${made.id}/activate`,'POST')).status).toBe(200);
+    expect(db.database.prepare('SELECT voice,realtime_voice FROM assistants WHERE id=?').get(made.id)).toEqual({voice:'',realtime_voice:''});
+    const exported=await (await call('/api/me/account/export')).json() as any;
+    expect(exported.data.assistants.find((a:any)=>a.id===made.id).voice).toBe('marin');
+
     expect((await call(`/api/me/assistants/${made.id}`,'PUT',{voice:''})).status).toBe(400);
     expect((await call(`/api/me/assistants/${made.id}`,'PUT',{voice:'cedar'})).status).toBe(200);
     expect((await call(`/api/me/assistants/${made.id}/activate`,'POST')).status).toBe(200);
