@@ -644,9 +644,17 @@ test('historical receptionists are discoverable, deduplicated, selected correctl
   await select.selectOption(primary.id);
   await expect(select).toHaveValue(primary.id);
   await expect(select.locator(`option[value="${target.id}"]`)).toHaveCount(0);
+  let pendingTarget: Route | undefined;
+  await page.route(`**/api/me/assistants/${target.id}`, route => {
+    if (route.request().method() !== 'GET') return route.continue();
+    pendingTarget = route;
+  });
   await page.goBack(); // previous business screen retains the selected historical target
   await expect(page).toHaveURL(new RegExp(`assistant=${target.id}`));
+  await expect.poll(() => Boolean(pendingTarget)).toBe(true);
   await page.getByRole('navigation',{name:'Settings'}).getByRole('button',{name:'Assistants',exact:true}).click();
+  await pendingTarget!.continue();
+  await page.unroute(`**/api/me/assistants/${target.id}`);
   await expect(select).toHaveValue(target.id);
   await page.getByRole('button', { name: 'Enable web calls', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Pause web calls', exact: true })).toBeEnabled();

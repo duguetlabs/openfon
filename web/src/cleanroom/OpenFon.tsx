@@ -875,11 +875,17 @@ export default function OpenFon() {
   }, [assistant?.id, boot?.account.id]);
   function navigate(next: string, saved = false, selectedCall?: string, query?: Record<string, string>) {
     if (!saved && next !== screen && !canLeave()) return false;
-    if (loadPending.current) {
+    // Opening the assistant editor continues a history-selected assistant load.
+    // Other navigation still supersedes it, preventing late results from taking over.
+    const keepAssistantLoad = loadPending.current && next === "assistants";
+    const targetAssistant = keepAssistantLoad
+      ? new URLSearchParams(location.search).get("assistant") || location.pathname.match(/^\/assistants\/([^/]+)/)?.[1] || boot?.assistants[0]?.id
+      : assistant?.id;
+    if (loadPending.current && !keepAssistantLoad) {
       ++loadGeneration.current; session.invalidate(); loadPending.current = false; setLoading(false);
     }
     const url = new URL(screenPaths[next] || "/overview", location.origin);
-    if (assistant && assistant.id !== boot?.assistants[0]?.id) url.searchParams.set("assistant", assistant.id);
+    if (targetAssistant && targetAssistant !== boot?.assistants[0]?.id) url.searchParams.set("assistant", targetAssistant);
     if ((next === "conversations" || next === "inbox") && screen === next) {
       const current = new URLSearchParams(location.search);
       for (const key of ["search", "environment", "assistantId", "status", "intent", "direction", "from", "to", "channel", "kind", "urgent"]) if (current.has(key)) url.searchParams.set(key, current.get(key)!);
