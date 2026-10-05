@@ -41,6 +41,14 @@ describe('Managed business actions',()=>{
   db.exec("INSERT INTO calls(id,business_id,status)VALUES('fallback','b','active');UPDATE calls SET status='completed',intent='booking' WHERE id='fallback'");
   expect(db.database.prepare("SELECT kind FROM action_items WHERE call_id='fallback'").get()).toEqual({kind:'booking_request'});
  });
+ it('never seals a partial invalid extraction but does seal a deliberate empty result',async()=>{
+  db.exec("INSERT INTO calls(id,business_id,status)VALUES('invalid','b','active'),('empty','b','active')");
+  await expect(persistCallActions(env,'invalid',[{source_key:'valid',kind:'todo',content:'Valid task'},{source_key:'bad:key',kind:'todo',content:'Invalid source key'}])).rejects.toThrow('Invalid extracted actions');
+  expect(db.database.prepare("SELECT * FROM call_action_extractions WHERE call_id='invalid'").get()).toBeUndefined();
+  await persistCallActions(env,'empty',[]);
+  await persistCallActions(env,'empty',[{source_key:'late',kind:'todo',content:'Stale late task'}]);
+  expect(db.database.prepare("SELECT count(*) AS n FROM action_items WHERE call_id='empty'").get()).toEqual({n:0});
+ });
  it('database rejects linking an item to another workspace call',()=>{expect(()=>db.exec("INSERT INTO action_items(id,business_id,call_id,source_key,kind,content)VALUES('bad','b','other','bad','todo','bad')")).toThrow('action call must belong to business');});
  it('never reads or updates another account item',async()=>{await persistCallActions(env,'other',[{source_key:'private',kind:'todo',content:'Private'}]);const result=await(await get('/api/me/actions?environment=all')).json();expect(JSON.stringify(result)).not.toContain('Private');const res=await app().request('http://local/api/me/actions/action_other_private',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({status:'handled'})},env);expect(res.status).toBe(404);});
  it('handles status, urgency, due dates and invalid values explicitly',async()=>{const id='action_message_c';const route=app();const send=(body:unknown)=>route.request(`http://local/api/me/actions/${id}`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify(body)},env);expect((await send({status:'confirmed'})).status).toBe(400);expect((await send({urgent:1})).status).toBe(400);expect((await send({due_at:'invalid'})).status).toBe(400);expect((await send({status:'handled',urgent:true,due_at:'2026-10-05T10:00:00Z'})).status).toBe(200);expect(db.database.prepare('SELECT status,urgent FROM action_items WHERE id=?').get(id)).toEqual({status:'handled',urgent:1});});

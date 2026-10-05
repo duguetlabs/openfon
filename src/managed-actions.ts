@@ -7,9 +7,10 @@ const kinds = ['booking_request','message','callback','todo'];
 /** Stable extraction slots reconcile retries without reopening handled actions. No booking confirmation is inferred. */
 export async function persistCallActions(env: Env, callId: string, actions: ExtractedAction[]): Promise<void> {
   if (env.OPENFON_MANAGED_WEB !== 'true') return;
-  const valid = actions.slice(0, 20).filter(a => a && typeof a.source_key==='string' && /^[a-z0-9_-]{1,80}$/.test(a.source_key) && kinds.includes(a.kind) && typeof a.content==='string' && a.content.trim()
+  if(!Array.isArray(actions)||actions.length>20)throw new Error('Invalid extracted actions.');
+  const valid = actions.filter(a => a && typeof a.source_key==='string' && /^[a-z0-9_-]{1,80}$/.test(a.source_key) && kinds.includes(a.kind) && typeof a.content==='string' && a.content.trim()
     && (a.source_turn_id===undefined || Number.isSafeInteger(a.source_turn_id)&&a.source_turn_id>0));
-  if (!valid.length) return;
+  if(valid.length!==actions.length)throw new Error('Invalid extracted actions.');
   const legacy = await env.DB.prepare("SELECT source_key FROM action_items WHERE call_id=? AND source_key IN ('booking','message')").bind(callId).all<{source_key:string}>();
   const available=new Set(legacy.results.map(row=>row.source_key));
   // The same source turn can contain several distinct requests. Content is part
