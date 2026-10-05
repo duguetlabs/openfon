@@ -326,3 +326,115 @@ it("does not treat a lower closed-period settlement as undoing automatic MAX ing
     approveUsageSettlement(env, settlement.id, settlement.computedHash),
   ).rejects.toThrow();
 });
+it("defensively fences direct-database QA drift at the export claim, outside supported QA API behavior", async () => {
+  call();
+  let marked = false;
+  db.hook = (sql) => {
+    if (
+      !marked &&
+      sql.startsWith("UPDATE commercial_usage_snapshots SET state='sending'")
+    ) {
+      marked = true;
+      db.database.exec(
+        "INSERT INTO commercial_qa_calls VALUES('call','operator','2026-10-05')",
+      );
+    }
+  };
+  expect(await exportCurrentUsage(env, "b", start)).toEqual({
+    state: "pending",
+    reason: "snapshot_changed",
+  });
+  expect(posts).toHaveLength(0);
+});
+it.each(["unsnapshotted", "prepared", "ingested"])(
+  "keeps %s outstanding retail usage before irreversible deletion cleanup",
+  async (kind) => {
+    call();
+    if (kind === "ingested") await exportCurrentUsage(env, "b", start);
+    if (kind === "prepared") {
+      db.database
+        .prepare(
+          "INSERT INTO commercial_usage_streams(business_id,cycle_start,cycle_end,last_checked_at) VALUES(?,?,?,?)",
+        )
+        .run("b", start, end, now);
+      db.database
+        .prepare(
+          "INSERT INTO commercial_usage_snapshots VALUES('prepared','b',?,?,'usage','customer','test','cents',?,60000,16,'prepared',?,NULL)",
+        )
+        .run(start, end, now, now);
+    }
+    vi.mocked(fetch).mockClear();
+    await expect(
+      prepareCommercialDeletion(env, "b", {
+        userId: "u",
+        passwordHash: "hash",
+        sessionToken: "session",
+      }),
+    ).rejects.toThrow("reconciliation");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(
+      db.database
+        .prepare("SELECT completed_at FROM commercial_deletion_jobs")
+        .get(),
+    ).toEqual({ completed_at: null });
+    expect(
+      db.database.prepare("SELECT COUNT(*) n FROM commercial_call_usage").get(),
+    ).toEqual({ n: 1 });
+  },
+);
+it.each(["no_due", "invoice_reconciled", "outbox_reconciled"])(
+  "allows an idempotent clean deletion retry after %s evidence",
+  async (kind) => {
+    if (kind !== "no_due") {
+      call();
+      if (kind === "outbox_reconciled") {
+        db.database
+          .prepare(
+            "INSERT INTO commercial_usage_streams(business_id,cycle_start,cycle_end,last_checked_at) VALUES(?,?,?,?)",
+          )
+          .run("b", start, end, now);
+        db.database
+          .prepare(
+            "INSERT INTO commercial_usage_snapshots VALUES('prepared','b',?,?,'usage','customer','test','cents',?,60000,16,'prepared',?,NULL)",
+          )
+          .run(start, end, now, now);
+      }
+      await expect(
+        prepareCommercialDeletion(env, "b", {
+          userId: "u",
+          passwordHash: "hash",
+          sessionToken: "session",
+        }),
+      ).rejects.toThrow();
+      if (kind === "outbox_reconciled")
+        db.exec("UPDATE commercial_usage_snapshots SET state='reconciled'");
+      db.database
+        .prepare(
+          "INSERT INTO commercial_usage_exports VALUES('settlement','b',?,?,60000,16,'invoice_reconciled','operator-verified','synthetic-hash',?)",
+        )
+        .run(start, end, now);
+    }
+    let canceled = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        if (init.method === "PATCH") canceled = true;
+        return Response.json({
+          ...sub(),
+          status: canceled ? "cancelled" : "active",
+        });
+      }),
+    );
+    await prepareCommercialDeletion(env, "b", {
+      userId: "u",
+      passwordHash: "hash",
+      sessionToken: "session",
+    });
+    expect(
+      db.database
+        .prepare("SELECT completed_at FROM commercial_deletion_jobs")
+        .get()?.completed_at,
+    ).toBeTruthy();
+    expect(canceled).toBe(true);
+  },
+);

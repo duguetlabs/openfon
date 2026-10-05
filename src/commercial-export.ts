@@ -6,6 +6,7 @@ import {
 } from "./commercial-dodo";
 import {
   coveredRetailMilliseconds,
+  COVERED_RETAIL_MILLISECONDS_SQL,
   retailOverage,
   usageHash,
 } from "./commercial-usage";
@@ -236,7 +237,8 @@ export async function exportCurrentUsage(
  AND (a.retail_stopped_at IS NULL OR a.retail_stopped_at>?) AND u.subscription_id=? AND u.period_start=? AND u.period_end=? AND u.period_end>?)
  AND NOT EXISTS(SELECT 1 FROM commercial_cancellations WHERE business_id=? AND term_end<=?)
  AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=?)
- AND NOT EXISTS(SELECT 1 FROM commercial_usage_adjustments WHERE business_id=? AND cycle_start=?) RETURNING id`,
+ AND NOT EXISTS(SELECT 1 FROM commercial_usage_adjustments WHERE business_id=? AND cycle_start=?)
+ AND ? = (${COVERED_RETAIL_MILLISECONDS_SQL}) RETURNING id`,
   )
     .bind(
       id,
@@ -260,6 +262,14 @@ export async function exportCurrentUsage(
       businessId,
       businessId,
       start,
+      amount.durationMs,
+      businessId,
+      now,
+      Math.max(Date.parse(start), Date.parse(c.activated_at)),
+      businessId,
+      Math.max(Date.parse(start), Date.parse(c.activated_at)),
+      now,
+      now,
     )
     .first();
   if (!claimed) return { state: "pending", reason: "snapshot_changed" };

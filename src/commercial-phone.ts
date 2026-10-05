@@ -32,7 +32,7 @@ export async function phoneRequest(
   try {
     response = await fetch("https://api.telnyx.com/v2" + path, {
       method,
-      redirect: "error",
+      redirect: "manual", // Workers-compatible; non-2xx responses, including redirects, are rejected.
       signal: AbortSignal.timeout(15000),
       headers: {
         Authorization: `Bearer ${env.TELNYX_API_KEY}`,
@@ -234,7 +234,10 @@ export async function orderPhoneNumber(
         WHERE q.id=? AND q.business_id=? AND q.used_at IS NULL AND julianday(q.expires_at)>julianday('now')
         AND q.phone_number=? AND q.country=? AND q.currency=? AND q.setup_minor<=? AND q.monthly_minor<=?
         AND EXISTS(SELECT 1 FROM assistants WHERE id=? AND business_id=?)
-        AND EXISTS(SELECT 1 FROM commercial_accounts WHERE business_id=? AND status='active')
+        AND EXISTS(SELECT 1 FROM commercial_accounts WHERE business_id=? AND status='active'
+          AND activated_at IS NOT NULL AND julianday(paid_through)>julianday('now')
+          AND (retail_stopped_at IS NULL OR julianday(retail_stopped_at)>julianday('now')))
+        AND NOT EXISTS(SELECT 1 FROM commercial_cancellations WHERE business_id=? AND julianday(term_end)<=julianday('now'))
         AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=?)`,
       ).bind(
         id,
@@ -250,6 +253,7 @@ export async function orderPhoneNumber(
         Number(env.TELNYX_MAX_SETUP_MINOR),
         Number(env.TELNYX_MAX_MONTHLY_MINOR),
         assistantId,
+        businessId,
         businessId,
         businessId,
         businessId,
@@ -274,6 +278,27 @@ export async function orderPhoneNumber(
       "This order changed or account deletion started. Refresh its status.",
       409,
     );
+  const eligible = await env.DB.prepare(
+    `SELECT o.id FROM commercial_phone_orders o JOIN commercial_accounts a ON a.business_id=o.business_id
+    WHERE o.id=? AND o.business_id=? AND o.state='pending' AND a.status='active' AND a.activated_at IS NOT NULL
+    AND julianday(a.paid_through)>julianday('now') AND (a.retail_stopped_at IS NULL OR julianday(a.retail_stopped_at)>julianday('now'))
+    AND NOT EXISTS(SELECT 1 FROM commercial_cancellations c WHERE c.business_id=o.business_id AND julianday(c.term_end)<=julianday('now'))
+    AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs d WHERE d.business_id=o.business_id)`,
+  )
+    .bind(id, businessId)
+    .first();
+  if (!eligible) {
+    // No provider request was made: this reservation is safe to fail locally.
+    await env.DB.prepare(
+      "UPDATE commercial_phone_orders SET state='failed' WHERE id=? AND business_id=? AND state='pending' AND provider_order_id IS NULL AND provider_number_id IS NULL",
+    )
+      .bind(id, businessId)
+      .run();
+    throw new BillingError(
+      "Your subscription or account changed before ordering. Refresh billing settings.",
+      409,
+    );
+  }
   // Never retry an ambiguous rental POST. The durable reference supports reconciliation.
   const response = await phoneRequest(env, "/number_orders", "POST", {
     phone_numbers: [{ phone_number: quote.phone_number }],
@@ -368,10 +393,12 @@ export async function releaseBusinessPhones(
       // the account; it records cleanup identity without creating a usable route.
       await reconcilePhoneOrder(env, businessId, order.id);
       const refreshed = await env.DB.prepare(
-        "SELECT provider_number_id FROM commercial_phone_orders WHERE id=? AND business_id=?",
+        "SELECT provider_number_id,state FROM commercial_phone_orders WHERE id=? AND business_id=?",
       )
         .bind(order.id, businessId)
-        .first<{ provider_number_id: string | null }>();
+        .first<{ provider_number_id: string | null; state: string }>();
+      if (refreshed?.state === "failed" || refreshed?.state === "released")
+        continue;
       order.provider_number_id = refreshed?.provider_number_id ?? null;
     }
     if (!providerId(order.provider_number_id) || !order.connection_id)
@@ -488,6 +515,54 @@ export async function reconcilePhoneOrder(
     remote.data.customer_reference !== id
   )
     throw new BillingError("The number order could not be verified.", 409);
+  if (remote.data.status === "failure") {
+    if (order.provider_number_id) return { id, status: "review" };
+    const query = new URLSearchParams({
+      "filter[phone_number]": order.phone_number,
+      "page[number]": "1",
+      "page[size]": "100",
+    });
+    const inventory = await phoneRequest(env, "/phone_numbers?" + query);
+    if (
+      !Array.isArray(inventory?.data) ||
+      inventory.meta?.page_number !== 1 ||
+      !Number.isInteger(inventory.meta?.total_results) ||
+      inventory.meta.total_results !== inventory.data.length ||
+      !Number.isInteger(inventory.meta?.total_pages) ||
+      inventory.meta.total_pages > 1 ||
+      inventory.data.some(
+        (number: any) => number.phone_number === order.phone_number,
+      )
+    )
+      throw new BillingError(
+        "The unsuccessful order still needs rental reconciliation. Please contact support.",
+        409,
+      );
+    await env.DB.prepare(
+      `UPDATE commercial_phone_orders SET state='failed' WHERE id=? AND business_id=?
+      AND provider_order_id=? AND provider_number_id IS NULL AND state IN ('pending','review')
+      AND NOT EXISTS(SELECT 1 FROM telnyx_number_routes WHERE business_id=? AND phone_number=?)`,
+    )
+      .bind(
+        id,
+        businessId,
+        order.provider_order_id,
+        businessId,
+        order.phone_number,
+      )
+      .run();
+    const failed = await env.DB.prepare(
+      "SELECT state FROM commercial_phone_orders WHERE id=? AND business_id=?",
+    )
+      .bind(id, businessId)
+      .first<{ state: string }>();
+    if (failed?.state !== "failed")
+      throw new BillingError(
+        "The unsuccessful order still needs reconciliation.",
+        409,
+      );
+    return { id, status: "failed" };
+  }
   if (remote.data.status !== "success") return { id, status: "review" };
   const query = new URLSearchParams({
     "filter[phone_number]": order.phone_number,

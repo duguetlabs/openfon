@@ -7,7 +7,11 @@ import {
   type BillingCadence,
 } from "./commercial-types";
 import { readLivekitBody } from "./livekit-body";
-import { usageHash } from "./commercial-usage";
+import {
+  usageHash,
+  coveredRetailMilliseconds,
+  retailOverage,
+} from "./commercial-usage";
 export type CommercialEnv = Env & CommercialBindings;
 export class BillingError extends Error {
   constructor(
@@ -83,7 +87,7 @@ export async function dodoRequest(
   try {
     response = await fetch(`https://${env.DODO_MODE}.dodopayments.com${path}`, {
       method,
-      redirect: "error",
+      redirect: "manual", // Workers-compatible; non-2xx responses, including redirects, are rejected.
       signal: AbortSignal.timeout(15000),
       headers: {
         Authorization: `Bearer ${env.DODO_API_KEY}`,
@@ -726,6 +730,110 @@ export async function prepareCommercialDeletion(
   for (const marker of markers.results)
     await finishBusinessDeletion(env, marker.business_id);
 }
+/** No financial-retention policy is invented here: unresolved retail amounts
+ * block irreversible cleanup until an operator verifies the original invoices.
+ */
+async function requireReconciledDeletionUsage(
+  env: CommercialEnv,
+  businessId: string,
+) {
+  const account = await env.DB.prepare(
+    `SELECT a.activated_at,a.paid_through,a.retail_stopped_at,c.term_end
+    FROM commercial_accounts a LEFT JOIN commercial_cancellations c ON c.business_id=a.business_id WHERE a.business_id=?`,
+  )
+    .bind(businessId)
+    .first<{
+      activated_at: string | null;
+      paid_through: string | null;
+      retail_stopped_at: string | null;
+      term_end: string | null;
+    }>();
+  if (!account?.activated_at) return;
+  const problem = () =>
+    new BillingError(
+      "Usage billing needs reconciliation before deletion. Please contact support.",
+      409,
+    );
+  if (
+    await env.DB.prepare(
+      "SELECT id FROM commercial_usage_snapshots WHERE business_id=? AND state IN ('prepared','sending','reconciliation_required') LIMIT 1",
+    )
+      .bind(businessId)
+      .first()
+  )
+    throw problem();
+  if (
+    await env.DB.prepare(
+      `SELECT c.id FROM calls c WHERE c.business_id=? AND c.connected_at IS NOT NULL
+    AND (c.ended_at IS NULL OR julianday(c.ended_at)>julianday(?))
+    AND NOT EXISTS(SELECT 1 FROM commercial_call_usage u WHERE u.call_id=c.id)
+    AND NOT EXISTS(SELECT 1 FROM commercial_qa_calls q WHERE q.call_id=c.id) LIMIT 1`,
+    )
+      .bind(businessId, account.activated_at)
+      .first()
+  )
+    throw problem();
+  const { results: periods } = await env.DB.prepare(
+    "SELECT period_start,period_end,plan_id,cadence FROM commercial_billing_periods WHERE business_id=? ORDER BY period_start LIMIT 101",
+  )
+    .bind(businessId)
+    .all<{
+      period_start: string;
+      period_end: string;
+      plan_id: PlanId;
+      cadence: BillingCadence;
+    }>();
+  if (periods.length > 100) throw problem();
+  for (const period of periods) {
+    const start = Math.max(
+        Date.parse(period.period_start),
+        Date.parse(account.activated_at),
+      ),
+      end = Math.min(
+        Date.now(),
+        Date.parse(period.period_end),
+        account.paid_through ? Date.parse(account.paid_through) : Infinity,
+        account.retail_stopped_at
+          ? Date.parse(account.retail_stopped_at)
+          : Infinity,
+        account.term_end ? Date.parse(account.term_end) : Infinity,
+      );
+    const raw = await coveredRetailMilliseconds(env, businessId, start, end);
+    const adjustment = await env.DB.prepare(
+      "SELECT COALESCE(SUM(delta_ms),0) ms FROM commercial_usage_adjustments WHERE business_id=? AND cycle_start=? AND cycle_end=?",
+    )
+      .bind(businessId, period.period_start, period.period_end)
+      .first<{ ms: number }>();
+    const amount = retailOverage(
+      Math.max(0, raw + (adjustment?.ms ?? 0)),
+      period.plan_id,
+      period.cadence,
+    );
+    const automatic = await env.DB.prepare(
+      "SELECT COALESCE(MAX(overage_minor),0) maximum FROM commercial_usage_snapshots WHERE business_id=? AND cycle_start=? AND state='ingested'",
+    )
+      .bind(businessId, period.period_start)
+      .first<{ maximum: number }>();
+    const settlement = await env.DB.prepare(
+      "SELECT state,usage_ms,overage_minor FROM commercial_usage_exports WHERE business_id=? AND cycle_start=? AND cycle_end=?",
+    )
+      .bind(businessId, period.period_start, period.period_end)
+      .first<{ state: string; usage_ms: number; overage_minor: number }>();
+    if (
+      amount.overageMinor > 0 ||
+      (automatic?.maximum ?? 0) > 0 ||
+      (settlement?.overage_minor ?? 0) > 0
+    ) {
+      if (
+        settlement?.state !== "invoice_reconciled" ||
+        settlement.usage_ms !== amount.durationMs ||
+        settlement.overage_minor !== amount.overageMinor
+      )
+        throw problem();
+    }
+  }
+}
+
 async function finishBusinessDeletion(env: CommercialEnv, businessId: string) {
   if (
     await env.DB.prepare(
@@ -738,17 +846,7 @@ async function finishBusinessDeletion(env: CommercialEnv, businessId: string) {
       "A payment update must finish reconciliation before deletion. Please contact support.",
       409,
     );
-  if (
-    await env.DB.prepare(
-      "SELECT id FROM commercial_usage_snapshots WHERE business_id=? AND state IN ('sending','reconciliation_required') LIMIT 1",
-    )
-      .bind(businessId)
-      .first()
-  )
-    throw new BillingError(
-      "Usage billing needs reconciliation before deletion. Please contact support.",
-      409,
-    );
+  await requireReconciledDeletionUsage(env, businessId);
   await reconcileBusinessCheckouts(env, businessId);
   await releaseBusinessPhones(env, businessId);
   const { results: parts } = await env.DB.prepare(

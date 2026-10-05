@@ -259,3 +259,125 @@ it("recovers and reassigns a rental after its historical assistant was deleted",
       .get(),
   ).toEqual({ assistant_id: "replacement", enabled: 0 });
 });
+function paidPhoneAccount() {
+  db.exec(
+    "INSERT INTO commercial_accounts(business_id,provider_mode,customer_id,status,activated_at,paid_through) VALUES('b','test','customer','active','2026-01-01','2999-01-01')",
+  );
+  Object.assign(env, {
+    TELNYX_PURCHASES_ENABLED: "true",
+    TELNYX_CARRIER_VERIFIED: "true",
+    TELNYX_ENABLED: "true",
+    TELNYX_PURCHASE_COUNTRY: "AT",
+    TELNYX_PURCHASE_CURRENCY: "USD",
+    TELNYX_MAX_SETUP_MINOR: "100",
+    TELNYX_MAX_MONTHLY_MINOR: "100",
+  });
+}
+it.each(["cancellation", "paid_through", "retail_stop"])(
+  "rejects a rental when %s eligibility expires at the SQL intent boundary",
+  async (boundary) => {
+    paidPhoneAccount();
+    env.DB = {
+      prepare: (sql: string) => db.prepare(sql),
+      batch: async (statements: any[]) => {
+        if (boundary === "cancellation")
+          db.exec(
+            "INSERT INTO commercial_cancellations VALUES('b','2000-01-01','scheduled','2000-01-01')",
+          );
+        if (boundary === "paid_through")
+          db.exec("UPDATE commercial_accounts SET paid_through='2000-01-01'");
+        if (boundary === "retail_stop")
+          db.exec(
+            "UPDATE commercial_accounts SET retail_stopped_at='2000-01-01'",
+          );
+        return db.batch(statements);
+      },
+    } as unknown as D1Database;
+    await expect(orderPhoneNumber(env, "b", "quote", "asst")).rejects.toThrow();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(
+      db.database
+        .prepare("SELECT COUNT(*) n FROM commercial_phone_orders")
+        .get(),
+    ).toEqual({ n: 0 });
+  },
+);
+it("fails an unsent reserved rental if cancellation arrives before its provider request", async () => {
+  paidPhoneAccount();
+  let inserted = false;
+  db.hook = (sql) => {
+    if (
+      !inserted &&
+      sql.startsWith("SELECT o.id FROM commercial_phone_orders")
+    ) {
+      inserted = true;
+      db.database.exec(
+        "INSERT INTO commercial_cancellations VALUES('b','2000-01-01','scheduled','2000-01-01')",
+      );
+    }
+  };
+  await expect(orderPhoneNumber(env, "b", "quote", "asst")).rejects.toThrow();
+  expect(fetch).not.toHaveBeenCalled();
+  expect(
+    db.database.prepare("SELECT state FROM commercial_phone_orders").get(),
+  ).toEqual({ state: "failed" });
+});
+it.each(["failure", "pending", "allocated", "wrong_reference"])(
+  "retains uncertain rentals and resolves only verified empty failure: %s",
+  async (kind) => {
+    order("review");
+    db.exec("UPDATE commercial_phone_orders SET provider_number_id=NULL");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        url.includes("/number_orders/")
+          ? Response.json({
+              data: {
+                id: "remoteorder",
+                customer_reference:
+                  kind === "wrong_reference" ? "foreign" : "order",
+                status: kind === "pending" ? "pending" : "failure",
+              },
+            })
+          : Response.json({
+              data:
+                kind === "allocated"
+                  ? [
+                      {
+                        id: "number",
+                        phone_number: "+431234567",
+                        connection_id: "connection",
+                      },
+                    ]
+                  : [],
+              meta: {
+                page_number: 1,
+                total_pages: 1,
+                total_results: kind === "allocated" ? 1 : 0,
+              },
+            }),
+      ),
+    );
+    if (kind === "failure") {
+      await releaseBusinessPhones(env, "b");
+      expect(
+        db.database.prepare("SELECT state FROM commercial_phone_orders").get(),
+      ).toEqual({ state: "failed" });
+      vi.mocked(fetch).mockClear();
+      await releaseBusinessPhones(env, "b");
+      expect(fetch).not.toHaveBeenCalled();
+    } else {
+      await expect(releaseBusinessPhones(env, "b")).rejects.toThrow();
+      expect(
+        db.database.prepare("SELECT state FROM commercial_phone_orders").get(),
+      ).toEqual({ state: "review" });
+    }
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.some(
+          ([, init]) => init?.method === "DELETE" || init?.method === "POST",
+        ),
+    ).toBe(false);
+  },
+);

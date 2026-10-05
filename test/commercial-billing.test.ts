@@ -738,3 +738,10 @@ it("retains delivered coverage when the cancellation scheduler confirms the stop
     (await getBillingView(env, "b", initial + 120000)).usage.durationMs,
   ).toBe(60000);
 });
+it("keeps owned invoice history readable while deletion awaits reconciliation", async () => {
+  await reconcileSubscription(env, "base", at);
+  await reconcileSubscription(env, "usage", at);
+  db.exec("INSERT INTO commercial_deletion_jobs VALUES('b','2026-10-05',NULL)");
+  const { listCommercialInvoices } = await import("../src/commercial-payment");
+  expect(await listCommercialInvoices(env, "b")).toEqual({ invoices: [] });
+});

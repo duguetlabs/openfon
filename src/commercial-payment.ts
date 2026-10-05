@@ -59,7 +59,11 @@ async function withPaymentWriter<T>(
   }
 }
 
-async function paymentAccount(env: CommercialEnv, businessId: string) {
+async function paymentAccount(
+  env: CommercialEnv,
+  businessId: string,
+  allowDeleting = false,
+) {
   const account = await env.DB.prepare(
     "SELECT customer_id,provider_mode FROM commercial_accounts WHERE business_id=?",
   )
@@ -72,11 +76,12 @@ async function paymentAccount(env: CommercialEnv, businessId: string) {
   )
     throw new BillingError("Billing details are not available.", 409);
   if (
-    await env.DB.prepare(
+    !allowDeleting &&
+    (await env.DB.prepare(
       "SELECT business_id FROM commercial_deletion_jobs WHERE business_id=?",
     )
       .bind(businessId)
-      .first()
+      .first())
   )
     throw new BillingError("Account deletion is in progress.", 409);
   return account;
@@ -268,7 +273,7 @@ export async function listCommercialInvoices(
   env: CommercialEnv,
   businessId: string,
 ) {
-  await paymentAccount(env, businessId);
+  await paymentAccount(env, businessId, true);
   const { results } = await env.DB.prepare(
     "SELECT DISTINCT payment_id AS id,amount_minor AS amountMinor,currency,occurred_at AS date FROM commercial_payment_events WHERE business_id=? AND payment_id IS NOT NULL AND event_type='payment.succeeded' ORDER BY occurred_at DESC LIMIT 50",
   )
@@ -282,7 +287,7 @@ export async function getCommercialInvoice(
   paymentId: string,
 ): Promise<Response> {
   if (!providerId(paymentId)) throw new BillingError("Invoice not found.", 400);
-  const account = await paymentAccount(env, businessId),
+  const account = await paymentAccount(env, businessId, true),
     owned = await env.DB.prepare(
       "SELECT payment_id FROM commercial_payment_events WHERE business_id=? AND provider_mode=? AND payment_id=? LIMIT 1",
     )
@@ -296,7 +301,7 @@ export async function getCommercialInvoice(
     `https://${env.DODO_MODE}.dodopayments.com/invoices/payments/${paymentId}`,
     {
       headers: { Authorization: `Bearer ${env.DODO_API_KEY}` },
-      redirect: "error",
+      redirect: "manual", // Workers-compatible; non-2xx responses, including redirects, are rejected.
       signal: AbortSignal.timeout(15000),
     },
   );
