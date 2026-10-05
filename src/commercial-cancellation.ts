@@ -6,6 +6,32 @@ import {
   type CommercialEnv,
 } from "./commercial-dodo";
 
+async function reserveCancellationBatch(
+  env: CommercialEnv,
+  phase: "preparing" | "due",
+  now: number,
+) {
+  const condition =
+    phase === "due"
+      ? "c.term_end<=? AND c.state IN ('preparing','scheduled','closing')"
+      : "c.term_end>? AND c.state='preparing'";
+  // One SQLite write selects and advances the batch before any remote await.
+  // A logical timestamp breaks ties across restarts/concurrent same-clock runs.
+  // New jobs enter at their request time, rather than jumping ahead of every retry.
+  return env.DB.prepare(
+    `INSERT INTO commercial_cancellation_attempts(business_id,phase,attempt_order)
+     SELECT c.business_id,?,MAX(?,COALESCE((SELECT MAX(attempt_order) FROM commercial_cancellation_attempts WHERE phase=?),0)+1)
+     FROM commercial_cancellations c JOIN commercial_accounts a ON a.business_id=c.business_id
+     LEFT JOIN commercial_cancellation_attempts q ON q.business_id=c.business_id AND q.phase=?
+     WHERE ${condition}
+     ORDER BY COALESCE(q.attempt_order,CAST((julianday(c.requested_at)-2440587.5)*86400000 AS INTEGER),0),c.term_end,c.business_id LIMIT 5
+     ON CONFLICT(business_id,phase) DO UPDATE SET attempt_order=excluded.attempt_order
+     RETURNING business_id`,
+  )
+    .bind(phase, now, phase, phase, new Date(now).toISOString())
+    .all<{ business_id: string }>();
+}
+
 /** Cancel renewal as one product while retaining the customer's paid term. */
 export async function requestCommercialCancellation(
   env: CommercialEnv,
@@ -95,20 +121,22 @@ export async function finishDueCommercialCancellations(
   env: CommercialEnv,
   now = Date.now(),
 ) {
-  const { results: jobs } = await env.DB.prepare(
-    "SELECT c.business_id,c.term_end,a.customer_id,a.provider_mode FROM commercial_cancellations c JOIN commercial_accounts a ON a.business_id=c.business_id WHERE c.term_end<=? AND c.state IN ('preparing','scheduled','closing') ORDER BY c.term_end LIMIT 5",
-  )
-    .bind(new Date(now).toISOString())
-    .all<{
-      business_id: string;
-      term_end: string;
-      customer_id: string;
-      provider_mode: string;
-    }>();
+  const { results: jobs } = await reserveCancellationBatch(env, "due", now);
   let completed = 0,
     pending = 0;
-  for (const job of jobs) {
+  for (const reserved of jobs) {
     try {
+      const job = await env.DB.prepare(
+        "SELECT c.business_id,c.term_end,a.customer_id,a.provider_mode FROM commercial_cancellations c JOIN commercial_accounts a ON a.business_id=c.business_id WHERE c.business_id=? AND c.term_end<=? AND c.state IN ('preparing','scheduled','closing')",
+      )
+        .bind(reserved.business_id, new Date(now).toISOString())
+        .first<{
+          business_id: string;
+          term_end: string;
+          customer_id: string;
+          provider_mode: string;
+        }>();
+      if (!job) continue;
       if (job.provider_mode !== env.DODO_MODE)
         throw new BillingError("Cancellation mode mismatch.");
       await env.DB.prepare(
@@ -176,14 +204,22 @@ export async function maintainCommercialBilling(
   env: CommercialEnv,
   now = Date.now(),
 ) {
-  const { results: preparing } = await env.DB.prepare(
-    "SELECT business_id FROM commercial_cancellations WHERE state='preparing' AND term_end>? ORDER BY requested_at LIMIT 5",
-  )
-    .bind(new Date(now).toISOString())
-    .all<{ business_id: string }>();
+  const { results: preparing } = await reserveCancellationBatch(
+    env,
+    "preparing",
+    now,
+  );
   let pendingPreparation = 0;
   for (const job of preparing) {
     try {
+      if (
+        !(await env.DB.prepare(
+          "SELECT business_id FROM commercial_cancellations WHERE business_id=? AND state='preparing' AND term_end>?",
+        )
+          .bind(job.business_id, new Date(now).toISOString())
+          .first())
+      )
+        continue;
       await requestCommercialCancellation(env, job.business_id);
     } catch {
       pendingPreparation++;

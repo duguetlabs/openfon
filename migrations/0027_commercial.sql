@@ -184,6 +184,15 @@ CREATE TABLE commercial_cancellations (
  requested_at TEXT NOT NULL
 );
 
+-- Persist bounded retry rotation before remote calls, independently per phase.
+CREATE TABLE commercial_cancellation_attempts (
+ business_id TEXT NOT NULL REFERENCES commercial_cancellations(business_id) ON DELETE CASCADE,
+ phase TEXT NOT NULL CHECK(phase IN ('preparing','due')),
+ attempt_order INTEGER NOT NULL,
+ PRIMARY KEY(business_id,phase)
+);
+CREATE INDEX commercial_cancellation_attempt_order ON commercial_cancellation_attempts(phase,attempt_order);
+
 CREATE TABLE commercial_payment_updates (
  business_id TEXT PRIMARY KEY REFERENCES businesses(id) ON DELETE CASCADE,
  id TEXT NOT NULL,
