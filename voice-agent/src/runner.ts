@@ -1,3 +1,4 @@
+import { configureSdkLogging, SDK_LOG_LEVEL } from './logging.js';
 import { UsageOutbox } from './usage-outbox.js';
 import { operatorAzureConfig } from './config.js';
 import { fileURLToPath } from 'node:url';
@@ -19,12 +20,12 @@ operatorAzureConfig();
 const port = Number(process.env.LIVEKIT_AGENT_PORT ?? '8081');
 if (!Number.isInteger(port) || port < 1024 || port > 65535)
   throw new Error('Invalid LIVEKIT_AGENT_PORT');
-initializeLogger({ pretty: false, level: 'error' });
+configureSdkLogging();
 const server = new AgentServer(
   new ServerOptions({
     agent: fileURLToPath(new URL('./worker.js', import.meta.url)),
     agentName: 'openfon-released-web',
-    logLevel: 'error',
+    logLevel: SDK_LOG_LEVEL,
     production: true,
     host: '127.0.0.1',
     port,

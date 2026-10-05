@@ -1,3 +1,4 @@
+import { configureSdkLogging } from './logging.js';
 import {UsageOutbox} from './usage-outbox.js';
 import {AzureUsageCapture} from './usage.js';
 import {defineAgent, voice, llm, AutoSubscribe, type JobContext} from '@livekit/agents';
@@ -18,6 +19,7 @@ import {ProviderReadiness} from './provider-readiness.js';
 import {speechOutcome,successfulPlayout} from './playout.js';
 
 export default defineAgent({entry: async (ctx: JobContext) => {
+  configureSdkLogging();
   const metadata = JSON.parse(ctx.job.metadata || '{}') as {callId?: string};
   const control = new ControlClient(process.env.OPENFON_API_URL!, process.env.OPENFON_AGENT_SERVICE_TOKEN!, metadata.callId || '', ctx.job.room?.name || ctx.room.name || '', ctx.job.id);
   const context = await control.context();
