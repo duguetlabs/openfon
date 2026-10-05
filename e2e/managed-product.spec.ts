@@ -456,3 +456,52 @@ test("inbox pagination retains unseen tasks after handling loaded items", async 
   await expect(page.getByText("Pagination task 151", { exact: true })).toBeVisible();
   await expect(page.locator(".of-action-row")).toHaveCount(173);
 });
+
+for (const change of ["clear urgency", "move overdue date"] as const) {
+  test(`priority pagination uses server membership after ${change}`, async ({ page }) => {
+    const past = "2000-01-01T23:59:59.000Z", future = "2099-01-01T23:59:59.000Z";
+    const items = Array.from({ length: 75 }, (_, index) => ({
+      id: `priority-${index + 1}`, call_id: "synthetic-call", kind: "todo",
+      content: `Priority task ${index + 1}`, caller_name: "Caller", caller_phone: "",
+      assistant_name: "Reception", status: "open", urgent: index === 0 && change === "move overdue date" ? 0 : 1,
+      due_at: index < 2 ? past : future, created_at: "2026-10-05T00:00:00Z", environment: "live",
+    }));
+    if (change === "clear urgency") items[0].due_at = future;
+    await page.route("**/api/me/actions**", async route => {
+      const request = route.request(), url = new URL(request.url());
+      if (request.method() === "PATCH") {
+        Object.assign(items.find(item => item.id === url.pathname.split("/").pop())!, request.postDataJSON());
+        await route.fulfill({ json: { ok: true } });
+        return;
+      }
+      const offset = Number(url.searchParams.get("offset") || 0);
+      const selected = items.filter(item => item.status === "open" &&
+        (url.searchParams.get("urgent") !== "true" || item.urgent === 1 || Date.parse(item.due_at) < Date.now()));
+      await route.fulfill({ json: { items: selected.slice(offset, offset + 50), hasMore: selected.length > offset + 50 } });
+    });
+    await signup(page, "priority-pagination");
+    await createWorkspace(page, "Priority pagination");
+    await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Messages & to-dos", exact: true }).click();
+    await page.getByRole("combobox", { name: "Priority", exact: true }).selectOption("true");
+    const row = (n: number) => page.locator(".of-action-row").filter({ has: page.getByText(`Priority task ${n}`, { exact: true }) });
+    const more = page.getByRole("button", { name: "Load more items" });
+    await expect(page.locator(".of-action-row")).toHaveCount(50);
+    async function mutate(n: number) {
+      const response = page.waitForResponse(response => response.request().method() === "PATCH" && response.url().endsWith(`/priority-${n}`));
+      if (change === "clear urgency") await row(n).getByRole("checkbox", { name: "Urgent", exact: true }).click();
+      else await row(n).getByLabel("Due date", { exact: true }).fill("2099-01-01");
+      await response;
+      await expect(more).toBeEnabled();
+    }
+    // Clearing urgency retains an overdue item; moving a date retains an urgent one.
+    await mutate(2);
+    await expect(row(2)).toBeVisible();
+    await mutate(1);
+    await more.click();
+    await expect(more).toHaveCount(0);
+    await expect(row(51)).toBeVisible();
+    await expect(row(1)).toHaveCount(0);
+    await expect(row(2)).toBeVisible();
+    await expect(page.locator(".of-action-row")).toHaveCount(74);
+  });
+}

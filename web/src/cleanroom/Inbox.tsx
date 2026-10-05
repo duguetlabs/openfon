@@ -102,6 +102,14 @@ export function Inbox({
       );
       if (gen !== generation.current) return;
       setNotice("Item updated.");
+      if (urgent === "true") {
+        // Membership depends on the server's clock and combined urgency/date
+        // predicate. Restart paging rather than guessing that predicate locally.
+        setItems([]);
+        setMore(false);
+        await load(false, true);
+        return;
+      }
       setItems((old) =>
         old
           .map((a) => (a.id === item.id ? { ...a, ...patch } : a))
