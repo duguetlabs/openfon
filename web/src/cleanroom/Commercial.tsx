@@ -368,7 +368,7 @@ interface PhoneConfig {
   numbers: {
     id: string;
     number: string;
-    assistantId: string;
+    assistantId: string | null;
     status: string;
     enabled?: boolean;
   }[];
@@ -526,8 +526,8 @@ export function PhoneNumbers({
                         </p>
                         <Field label="Assistant who answers">
                           <select
-                            value={n.assistantId}
-                            disabled={busy}
+                            value={n.assistantId ?? ""}
+                            disabled={busy || !assistants.length}
                             onChange={(e) =>
                               void manageNumber(n.id, {
                                 assistantId: e.target.value,
@@ -535,6 +535,10 @@ export function PhoneNumbers({
                               })
                             }
                           >
+                            <option value="" disabled>Choose an assistant</option>
+                            {n.assistantId && !assistants.some(a => a.id === n.assistantId) && (
+                              <option value={n.assistantId}>Current assistant</option>
+                            )}
                             {assistants.map((a) => (
                               <option key={a.id} value={a.id}>
                                 {a.name}
@@ -542,13 +546,19 @@ export function PhoneNumbers({
                             ))}
                           </select>
                         </Field>
+                        {!assistants.length && !n.assistantId && (
+                          <p className="of-help">
+                            Add an assistant in Settings → Assistants before assigning this number.{" "}
+                            <a href="/settings/assistants">Open Assistants</a>
+                          </p>
+                        )}
                         <Button
                           kind="line"
                           disabled={
-                            busy || (!data.provisioningAvailable && !n.enabled)
+                            busy || !n.assistantId || (!data.provisioningAvailable && !n.enabled)
                           }
                           onClick={() =>
-                            void manageNumber(n.id, {
+                            n.assistantId && void manageNumber(n.id, {
                               assistantId: n.assistantId,
                               enabled: !n.enabled,
                             })

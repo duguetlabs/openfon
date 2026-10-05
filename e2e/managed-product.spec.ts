@@ -505,3 +505,50 @@ for (const change of ["clear urgency", "move overdue date"] as const) {
     await expect(page.locator(".of-action-row")).toHaveCount(74);
   });
 }
+
+test('an unassigned rented phone number accepts an explicit sole replacement before enabling calls', async ({ page }) => {
+  await signup(page, 'phone-reassignment');
+  const { assistant } = await createWorkspace(page, 'Phone reassignment workshop');
+  let assigned: string | null = null;
+  let enabled = false;
+  const writes: unknown[] = [];
+  await page.route('**/api/me/phone', route => route.fulfill({ json: {
+    provisioningAvailable: true,
+    numbers: [{ id: 'owned-rental', number: '+431234567890', status: 'active', assistantId: assigned, enabled }],
+  } }));
+  await page.route('**/api/me/phone/numbers/owned-rental', route => {
+    const body = route.request().postDataJSON();
+    writes.push(body); assigned = body.assistantId; enabled = body.enabled;
+    return route.fulfill({ json: { ok: true } });
+  });
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Phone number', exact: true }).click();
+  const rental = page.getByRole('article').filter({ has: page.getByRole('heading', { name: '+431234567890', exact: true }) });
+  const select = rental.getByRole('combobox', { name: 'Assistant who answers' });
+  await expect(select).toHaveValue('');
+  await expect(rental.getByRole('button', { name: 'Enable phone calls', exact: true })).toBeDisabled();
+  expect(writes).toEqual([]);
+  await select.selectOption(assistant.id);
+  await expect.poll(() => writes).toEqual([{ assistantId: assistant.id, enabled: false }]);
+  await expect(select).toHaveValue(assistant.id);
+  await expect(rental.getByRole('button', { name: 'Enable phone calls', exact: true })).toBeEnabled();
+  await rental.getByRole('button', { name: 'Enable phone calls', exact: true }).click();
+  await expect.poll(() => writes).toEqual([{ assistantId: assistant.id, enabled: false }, { assistantId: assistant.id, enabled: true }]);
+  await expect(rental.getByText('Answering calls', { exact: true })).toBeVisible();
+});
+
+test('an unassigned rented phone number explains an empty assistant list without enabling calls', async ({ page }) => {
+  await signup(page, 'phone-no-assistants');
+  await createWorkspace(page, 'Empty phone workshop');
+  const bootstrap = await (await page.request.get('/api/me/bootstrap')).json();
+  await page.route('**/api/me/bootstrap', route => route.fulfill({ json: { ...bootstrap, assistants: [] } }));
+  await page.route('**/api/me/phone', route => route.fulfill({ json: {
+    provisioningAvailable: true,
+    numbers: [{ id: 'unassigned-rental', number: '+431234567891', status: 'active', assistantId: null, enabled: false }],
+  } }));
+  await page.goto('/settings/phone');
+  const rental = page.getByRole('article').filter({ has: page.getByRole('heading', { name: '+431234567891', exact: true }) });
+  await expect(rental.getByRole('combobox', { name: 'Assistant who answers' })).toBeDisabled();
+  await expect(rental.getByText('Add an assistant in Settings → Assistants before assigning this number.')).toBeVisible();
+  await expect(rental.getByRole('button', { name: 'Enable phone calls', exact: true })).toBeDisabled();
+});
