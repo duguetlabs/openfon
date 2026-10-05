@@ -26,7 +26,7 @@
   // Retires call rows left 'active' by a start that never connected or by a
   // deploy that restarted the worker mid-call. Cron Triggers are on the free
   // plan, so self-hosters get the sweep too.
-  "triggers": { "crons": ["*/5 * * * *"] },
+  "triggers": { "crons": ["* * * * *"] },
   "vars": {
     // Enable only on a deployment whose private test callers expect recording.
     "TEST_CALL_DEBUG": "false",

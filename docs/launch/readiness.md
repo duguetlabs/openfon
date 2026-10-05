@@ -1,5 +1,16 @@
 # Release checklist
 
+## Current managed product candidate — 2026-10-05
+
+The managed Web restructure and direct Azure replacement are under integration, not yet a production acceptance claim. Customer-facing backend/model controls are removed and server-rejected. Dashboard and inbox use stored calls/actions; booking requests are not confirmed appointments. Voice changes do not alter post-call processing. Accounts, data and historical routing remain preserved.
+
+Current bounded evidence: 124 selected Worker API/privacy/commercial tests passed. Both TypeScript projects and the additive migration-through-0027 restore/preservation rehearsal passed. Complete retained browser run: 95 passed, two language-preview fixtures failed because they had not selected a compatible voice; the corrected fixture-only follow-up passed both cases. Managed browser: three passed, including real local ownership/routing restrictions and synthetic billing lifecycle recovery. A new-workspace explicit default/retry-preservation regression passed. These checks use synthetic inference/audio where applicable. Final suite/build, review/CI, exact staging and production readbacks are pending. A native iOS decoder/source compatibility check is not a newly installed-app test.
+
+Commercial sandbox subscription payment and lifecycle evidence is tracked in [billing and costs](../commercial/billing-and-costs.md). Verification gates remain off until actual usage invoice/minimum/cancellation acceptance passes; usage ledger correctness is distinct from a successful card checkout. Phone provisioning remains gated pending authorized geography, rental/call budget and real carrier validation. Local direct-Azure wiring still needs actual provider/audio acceptance, and restaurant-noise behavior requires consented physical testing.
+
+The remainder records historical evidence. Older Kataleptic and voice defaults describe those dated releases, not the new managed candidate's routing.
+
+
 The browser application is launched at https://openfon.ai. Production deployment
 was explicitly authorized; this is not live telephone/carrier acceptance.
 

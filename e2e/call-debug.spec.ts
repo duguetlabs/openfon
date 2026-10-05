@@ -16,7 +16,7 @@ test('test debug notice, continuous Pipeline microphone, saved evidence and owne
   const id=assistants[0].id;
   expect((await page.request.put(`/api/me/assistants/${id}`, {data:{name:'Debug receptionist',persona:'Helpful',language:'en',engine:'pipeline',greeting:'Hello from the synthetic debug test.'}})).status()).toBe(200);
   await page.goto(`/test?assistant=${id}`);
-  await expect(page.getByText('Debug mode on for test calls.',{exact:true})).toBeVisible();
+  await expect(page.getByText('Recording is on for private tests.',{exact:true})).toBeVisible();
   await page.evaluate(()=>{
     // Quiet generated microphone keeps the unchanged VAD idle while the extra
     // diagnostic track records. No physical microphone or paid provider is used.
@@ -46,10 +46,10 @@ test('test debug notice, continuous Pipeline microphone, saved evidence and owne
   expect(rows.some(r=>r.track==='microphone'&&r.format==='pcm_s16le_24000')).toBe(true);
   expect(rows.some(r=>r.kind==='browser'&&r.name==='speech_end')).toBe(true);
   expect(rows.some(r=>r.kind==='caller_event'&&r.text?.includes('bicycles'))).toBe(true);
-  await workspaceMenu(page, 'Messages & conversations');
+  await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Call logs',exact:true}).click();
   await page.locator('.of-call-list button').first().click();
-  await page.getByText('Advanced · recording & diagnostics', {exact:true}).click();
-  await expect(page.getByRole('link',{name:'Download debug bundle'})).toBeVisible();
+  await page.locator('summary').filter({hasText:'Call recording'}).click();
+  await expect(page.getByRole('link',{name:'Download recording'})).toBeVisible();
   await page.getByRole('button',{name:'Delete recording',exact:true}).click();
   await expect(page.getByText(/No recording is available/)).toBeVisible();
   expect(await (await page.request.get(path)).json()).toEqual({available:false});
@@ -68,7 +68,7 @@ test('recording disclosure remains visible when debug-config cannot be read',asy
   await page.getByRole('button',{name:'Meet your receptionist', exact:true}).click();
   await expect(page.getByRole('button',{name:'Start browser conversation',exact:true})).toBeVisible();
   await page.goto('/test');
-  await expect(page.getByText(/Test calls may record audio, transcripts and configuration/)).toBeVisible();
+  await expect(page.getByText(/Test calls may retain audio and transcripts/)).toBeVisible();
 });
 
 for (const outcome of ['success', 'failure'] as const) test(`recording deletion ${outcome} survives call completion and stale recording reads`, async ({page}) => {
@@ -102,7 +102,7 @@ for (const outcome of ['success', 'failure'] as const) test(`recording deletion 
   });
   try{
     await page.goto(`/conversations?call=${callId}`);
-    await page.getByText('Advanced · recording & diagnostics',{exact:true}).click();
+    await page.locator('summary').filter({hasText:'Call recording'}).click();
     await expect(page.getByRole('button',{name:'Delete recording',exact:true})).toBeEnabled();
     await page.getByRole('button',{name:'Refresh recording',exact:true}).click();
     await expect.poll(()=>pendingRead).toBe(true);
@@ -125,7 +125,7 @@ for (const outcome of ['success', 'failure'] as const) test(`recording deletion 
     }else{
       await expect(page.getByRole('button',{name:'Delete recording',exact:true})).toBeEnabled();
       await page.getByRole('button',{name:'Refresh recording',exact:true}).click();
-      await expect(page.getByRole('link',{name:'Download debug bundle'})).toBeVisible();
+      await expect(page.getByRole('link',{name:'Download recording'})).toBeVisible();
       await expect(page.getByRole('alert')).toContainText('Synthetic recording deletion refusal');
       expect(deletes).toBe(1);
       await page.getByRole('button',{name:'Delete recording',exact:true}).click();

@@ -40,11 +40,11 @@ async function dismiss(page: Page, action: () => Promise<unknown>) {
   await changing;
 }
 async function selectCommittedReceptionist(page: Page, id: string, primary = false) {
-  const picker = page.getByLabel('Receptionist', { exact: true });
+  const picker = page.getByLabel('Assistant', { exact: true });
   await picker.selectOption(id);
   // Selection is asynchronous. The URL changes only after the target snapshot
   // commits; opening another screen during the loader cancels that selection.
-  await expect(page).toHaveURL(url => url.pathname === '/overview' &&
+  await expect(page).toHaveURL(url => url.pathname === '/settings/assistants' &&
     url.searchParams.get('assistant') === (primary ? null : id));
   await expect(picker).toBeEnabled();
   await expect(picker).toHaveValue(id);
@@ -77,7 +77,7 @@ test('new workspace remains private, protected receptionist edits persist, and p
   await page.getByLabel('Their first words').fill('Hello from the workshop test.');
   await expect(page.getByRole('button', { name: 'Enable web calls' })).toBeDisabled();
   for (const action of [
-    () => page.getByRole('button', { name: 'Messages', exact: true }).click(),
+    () => page.getByRole('button', { name: 'Call logs', exact: true }).click(),
     () => page.getByRole('button', { name: 'Business details', exact: true }).click(),
     () => page.reload({ timeout: 1500 }),
     () => workspaceMenu(page, 'Sign out'),
@@ -92,8 +92,9 @@ test('new workspace remains private, protected receptionist edits persist, and p
   await expect(page.getByText('Saved. Your next conversation will use this brief.')).toBeVisible();
   await page.getByLabel('Their first words').fill('This edit should be discarded.');
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: 'Messages', exact: true }).click();
-  await page.getByRole('button', { name: 'Back to your desk', exact: true }).click();
+  await page.getByRole('button', { name: 'Call logs', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Assistants', exact: true }).click();
   await whoAnswers(page);
   await expect(page.getByLabel('Their first words')).toHaveValue('Hello from the workshop test.');
   await page.getByRole('button', { name: 'Enable web calls', exact: true }).click();
@@ -112,7 +113,7 @@ test('knowledge drafts, approval, attachment and navigation guards survive reloa
   const chosen = await collectionPicker(page).inputValue();
   await page.getByLabel(/^Collection description/).fill('Unsaved collection description');
   for (const action of [
-    () => page.getByRole('button', { name: 'Messages', exact: true }).click(),
+    () => page.getByRole('button', { name: 'Call logs', exact: true }).click(),
     () => collectionPicker(page).selectOption({ index: 0 }),
     () => page.reload({ timeout: 1500 }),
   ]) {
@@ -126,7 +127,7 @@ test('knowledge drafts, approval, attachment and navigation guards survive reloa
   await page.getByLabel(/^The answer/).fill('Yes. Bring your bicycle during opening hours.');
   await page.getByLabel('Use this answer in conversations').uncheck();
   for (const action of [
-    () => page.getByRole('button', { name: 'Messages', exact: true }).click(),
+    () => page.getByRole('button', { name: 'Call logs', exact: true }).click(),
     () => collectionPicker(page).selectOption({ index: 0 }),
     () => page.reload({ timeout: 1500 }),
   ]) {
@@ -154,8 +155,8 @@ test('knowledge drafts, approval, attachment and navigation guards survive reloa
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   for (const [path, title] of [
-    ['/conversations', 'Messages & conversations'],
-    ['/connections', 'Your connections'],
+    ['/conversations', 'Call logs'],
+    ['/connections', 'My business'],
     ['/account', 'Your account'],
   ]) {
     await page.goto(path);
@@ -170,7 +171,7 @@ test('account can change password, export data without credentials, and delete',
 }) => {
   await signup(page);
   const copiedSession = (await page.context().cookies()).find((cookie) => cookie.name === 'ofs')!.value;
-  await page.goto('/account');
+  await page.goto('/settings/account');
   await page.getByLabel('Current password', { exact: true }).fill('Local-Test-Password-Only-1234');
   await page.getByLabel(/^New password/).fill('Changed-Local-Test-Password-1234');
   await page.getByLabel('Repeat new password', { exact: true }).fill('Changed-Local-Test-Password-1234');
@@ -282,7 +283,7 @@ test('private test call traverses Worker websocket and persists transcript and s
 test('pending real test reservations are cancelled on end and navigation', async ({ page }) => {
   await signup(page);
   for (const leave of ['end', 'navigate'] as const) {
-    await page.goto('/overview');
+    await page.goto('/settings/assistants');
     let held: Route | undefined;
     let response: import('@playwright/test').APIResponse | undefined;
     let reservedId = '';
@@ -300,7 +301,7 @@ test('pending real test reservations are cancelled on end and navigation', async
         await expect(
           page.getByRole('button', { name: 'Start browser conversation', exact: true }),
         ).toBeVisible();
-      } else await page.getByRole('button', { name: 'Messages', exact: true }).click();
+      } else await page.getByRole('button', { name: 'Call logs', exact: true }).click();
       const route = held!;
       held = undefined;
       await route.fulfill({
@@ -325,7 +326,7 @@ test('missing requested receptionist requires explicit replacement and retries i
   expect(created.status()).toBe(201);
   const deleted = await created.json();
   expect((await page.request.delete(`/api/me/assistants/${deleted.id}`)).ok()).toBe(true);
-  await page.goto(`/overview?assistant=${deleted.id}`);
+  await page.goto(`/settings/assistants?assistant=${deleted.id}`);
   await expect(page.getByRole('heading', { name: 'Receptionist unavailable' })).toBeVisible();
   const selector = page.getByLabel('Choose a replacement receptionist');
   await expect(selector).toHaveValue('');
@@ -337,7 +338,7 @@ test('missing requested receptionist requires explicit replacement and retries i
   await selector.selectOption(assistant.id);
   await page.getByRole('button', { name: 'Use selected receptionist' }).click();
   await expect(page.getByRole('button', { name: 'Start browser conversation' })).toBeEnabled();
-  await expect(page.getByLabel('Receptionist', { exact: true })).toHaveValue(assistant.id);
+  await expect(page.getByLabel('Assistant', { exact: true })).toHaveValue(assistant.id);
   await expect(page).not.toHaveURL(new RegExp(deleted.id));
   let fail = true;
   await page.route(`**/api/me/assistants/${assistant.id}`, (route) => {
@@ -347,7 +348,7 @@ test('missing requested receptionist requires explicit replacement and retries i
     }
     return route.continue();
   });
-  await page.goto(`/overview?assistant=${assistant.id}`);
+  await page.goto(`/settings/assistants?assistant=${assistant.id}`);
   await expect(page.getByRole('alert')).toContainText('Temporary requested receptionist failure');
   await page.getByRole('button', { name: 'Try again', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Start browser conversation' })).toBeEnabled();
@@ -392,7 +393,7 @@ test('business settings save independently of an active receptionist', async ({ 
   await page.getByLabel('Business name', { exact: true }).fill('Updated business facts');
   await expect(page.getByLabel('Receptionist name', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Save business details', exact: true }).click();
-  await expect(page).toHaveURL('/overview');
+  await expect(page).toHaveURL('/settings/business');
   expect((await (await page.request.get('/api/me/business')).json()).name).toBe('Updated business facts');
   expect(await (await page.request.get(`/api/me/assistants/${assistant.id}`)).json()).toEqual(before);
   expect(writes).toBe(0);
@@ -403,7 +404,7 @@ test('late conversation searches cannot replace newer results or the current sea
   page,
 }) => {
   await signup(page);
-  await page.goto('/conversations');
+  await page.goto('/calls');
   let held: Route | undefined;
   const requests: string[] = [];
   let holdFirst = true;
@@ -485,16 +486,16 @@ test('late conversation searches cannot replace newer results or the current sea
     await expect(page.getByRole('heading', { name: 'The conversation', exact: true })).toBeVisible();
     await expect(page).toHaveURL(/call=current-result/);
     await page.goBack();
-    await expect(page.getByRole('heading', { name: 'Messages & conversations', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Call logs', exact: true })).toBeVisible();
     await expect(page).not.toHaveURL(/call=/);
     await page.goForward();
     await expect(page.getByRole('heading', { name: 'The conversation', exact: true })).toBeVisible();
     await expect(page.getByText('Current second result', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'All conversations', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Messages & conversations', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Call logs', exact: true })).toBeVisible();
     await expect(page).not.toHaveURL(/call=/);
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'Messages & conversations', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Call logs', exact: true })).toBeVisible();
     await expect(page).not.toHaveURL(/call=/);
   } finally {
     if (held) await held.abort();
@@ -563,11 +564,11 @@ test('primary receptionists never offer deletion while a secondary draft remains
   const secondary = await created.json();
   expect(secondary.state).toBe('draft');
   expect(secondary.public_slug).not.toBe(primary.public_slug);
-  await page.goto(`/overview?assistant=${secondary.id}`);
+  await page.goto(`/settings/assistants?assistant=${secondary.id}`);
   await whoAnswers(page);
   await expect(page.getByLabel('Receptionist name', { exact: true })).toHaveValue('Secondary draft');
   await expect(remove).toBeEnabled();
-  await page.getByLabel('Receptionist', { exact: true }).selectOption(primary.id);
+  await page.getByLabel('Assistant', { exact: true }).selectOption(primary.id);
   await whoAnswers(page);
   await expect(page.getByLabel('Receptionist name', { exact: true })).toHaveValue('Alex');
   await expect(remove).toHaveCount(0);
@@ -609,10 +610,11 @@ test('historical receptionists are discoverable, deduplicated, selected correctl
     }
     return route.fulfill({ json: [primary, target] });
   });
-  await page.goto('/overview');
+  await page.goto('/settings/assistants');
   await connections(page);
-  await page.getByRole('button', { name: 'Back to your desk', exact: true }).click();
-  const select = page.getByLabel('Receptionist', { exact: true });
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Assistants', exact: true }).click();
+  const select = page.getByLabel('Assistant', { exact: true });
   await expect(select.locator('option')).toHaveCount(32);
   await page.getByRole('button', { name: 'Find more receptionists', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Temporary pagination failure');
@@ -633,7 +635,8 @@ test('historical receptionists are discoverable, deduplicated, selected correctl
   expect(requested).toBe(`/api/me/assistants/${target.id}/test-calls`);
   await connections(page);
   await expect(page).toHaveURL(new RegExp(`assistant=${target.id}`));
-  await page.getByRole('button', { name: 'Back to your desk', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Assistants', exact: true }).click();
   await page.reload();
   await expect(select).toHaveValue(target.id);
   // Reset the current bootstrap to its first page, then traverse older entries.
@@ -641,15 +644,9 @@ test('historical receptionists are discoverable, deduplicated, selected correctl
   await select.selectOption(primary.id);
   await expect(select).toHaveValue(primary.id);
   await expect(select.locator(`option[value="${target.id}"]`)).toHaveCount(0);
-  await page.goBack();
-  await expect(page.getByRole('heading', { name: 'Your connections', exact: true })).toBeVisible();
-  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('de');
-  await page.goBack();
-  await expect(select).toHaveValue(target.id);
-  await page.goBack();
-  await expect(page.getByRole('heading', { name: 'Your connections', exact: true })).toBeVisible();
-  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');
-  await page.goForward();
+  await page.goBack(); // previous business screen retains the selected historical target
+  await expect(page).toHaveURL(new RegExp(`assistant=${target.id}`));
+  await page.getByRole('navigation',{name:'Settings'}).getByRole('button',{name:'Assistants',exact:true}).click();
   await expect(select).toHaveValue(target.id);
   await page.getByRole('button', { name: 'Enable web calls', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Pause web calls', exact: true })).toBeEnabled();
@@ -749,7 +746,7 @@ test('a queued search navigation cannot overwrite a newer typed draft', async ({
     };
   });
   await signup(page);
-  await page.goto('/conversations');
+  await page.goto('/calls');
   await page.getByLabel('Search conversations').fill('first');
   // Hold React's scheduled navigation commit while the next discrete input
   // arrives, reproducing the ordering observed in both failed CI traces.
@@ -873,78 +870,6 @@ test('historic receptionist and status conversation filters survive edits, histo
   });
 });
 
-test('confirmed history navigation between receptionists resets the previous connection draft', async ({
-  page,
-}) => {
-  const { assistant: primary } = await signup(page);
-  const created = await page.request.post('/api/me/assistants', {
-    data: {
-      name: 'Other receptionist',
-      persona: 'Warm and clear',
-      greeting: 'Hello from the other receptionist.',
-      engine: 'pipeline',
-      language: 'fr',
-    },
-  });
-  expect(created.status()).toBe(201);
-  const other = await created.json();
-  await page.reload();
-  await selectCommittedReceptionist(page, other.id);
-  await connections(page);
-  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('fr');
-  await page.getByRole('button', { name: 'Back to your desk', exact: true }).click();
-  await selectCommittedReceptionist(page, primary.id, true);
-  await connections(page);
-  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');
-  const writes: string[] = [];
-  page.on('request', (request) => {
-    if (request.method() === 'PUT' && /\/api\/me\/assistants\//.test(request.url()))
-      writes.push(new URL(request.url()).pathname);
-  });
-  await page.getByLabel('Language', { exact: true }).fill('de');
-  let held: Route | undefined;
-  let holdNext = true;
-  await page.route(`**/api/me/assistants/${other.id}`, (route) => {
-    if (route.request().method() === 'GET' && holdNext) {
-      holdNext = false;
-      held = route;
-      return;
-    }
-    return route.continue();
-  });
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.evaluate(() => history.go(-2));
-  await expect(page).toHaveURL(new RegExp(`assistant=${other.id}`));
-  await expect.poll(() => !!held).toBe(true);
-  await expect(page.getByRole('heading', { name: 'Your connections', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Start browser conversation', exact: true })).toHaveCount(0);
-  const response = held!;
-  held = undefined;
-  await response.fulfill({ status: 503, json: { error: 'Target temporarily unavailable' } });
-  await expect(page.getByRole('alert').filter({ hasText: 'Target temporarily unavailable' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Receptionist unavailable', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Start browser conversation', exact: true })).toHaveCount(0);
-  expect(writes).toEqual([]);
-  await page.getByRole('button', { name: 'Retry requested receptionist', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Your connections', exact: true })).toBeVisible();
-  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('fr');
-  await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toBeDisabled();
-  expect(writes).toEqual([]);
-  await page.getByLabel('Language', { exact: true }).fill('es');
-  await page.getByRole('button', { name: 'Save connections', exact: true }).click();
-  await expect(page.getByText('Connections saved.', { exact: false })).toBeVisible();
-  expect(writes).toEqual([`/api/me/assistants/${other.id}`]);
-  expect((await (await page.request.get(`/api/me/assistants/${primary.id}`)).json()).language).toBe('en');
-  expect((await (await page.request.get(`/api/me/assistants/${other.id}`)).json()).language).toBe('es');
-  await page.evaluate(() => history.go(2));
-  await expect(page.getByRole('heading', { name: 'Your connections', exact: true })).toBeVisible();
-  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');
-  await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toBeDisabled();
-  expect(writes).toEqual([`/api/me/assistants/${other.id}`]);
-});
-
 for (const path of ['/call/%E0%A4', '/widget/%E0%A4']) {
   test(`malformed public link ${path} shows an unavailable state without a render crash`, async ({
     page,
@@ -984,12 +909,18 @@ async function prepareDelayedHistory(page: Page) {
   const other = await created.json();
   await page.reload();
   await selectCommittedReceptionist(page, other.id);
-  await connections(page);
-  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('fr');
-  await page.getByRole('button', { name: 'Back to your desk', exact: true }).click();
+  const returnToAssistant=async()=>{
+    await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Settings',exact:true}).click();
+    await page.getByRole('navigation',{name:'Settings'}).getByRole('button',{name:'Assistants',exact:true}).click();
+  };
+  await connections(page); await returnToAssistant();
+  await whoAnswers(page);
+  await expect(page.getByRole('combobox',{name:'Language',exact:true})).toHaveValue('fr');
+  // Preserve this assistant screen in history, then create exactly three newer entries.
+  await connections(page); await returnToAssistant();
   await selectCommittedReceptionist(page, primary.id, true);
-  await connections(page);
-  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');
+  await whoAnswers(page);
+  await expect(page.getByRole('combobox',{name:'Language',exact:true})).toHaveValue('en');
   return { primary, other };
 }
 
@@ -1015,15 +946,15 @@ for (const { leave, failLate } of [
       return route.continue();
     });
     try {
-      await page.evaluate(() => history.go(-2));
+      await page.evaluate(() => history.go(-3));
       await expect.poll(() => !!held).toBe(true);
       await expect(page).toHaveURL(new RegExp(`assistant=${other.id}`));
-      await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toHaveCount(0);
-      if (leave === 'forward') await page.evaluate(() => history.go(2));
+      await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toHaveCount(0);
+      if (leave === 'forward') await page.evaluate(() => history.go(3));
       else await page.getByRole('button', { name: 'OpenFon home', exact: true }).click();
       await expect(page).not.toHaveURL(new RegExp(other.id));
-      if (leave === 'forward') await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');
-      else await expect(page.getByLabel('Receptionist', { exact: true })).toHaveValue(primary.id);
+      if (leave === 'forward') { await whoAnswers(page); await expect(page.getByRole('combobox', { name: 'Language', exact: true })).toHaveValue('en'); }
+      else await expect(page.getByRole('heading',{name:'Your reception, at a glance.'})).toBeVisible();
       const lateResponse = page.waitForResponse(
         (request) => new URL(request.url()).pathname === `/api/me/assistants/${other.id}`,
       );
@@ -1039,9 +970,10 @@ for (const { leave, failLate } of [
       await expect(page).not.toHaveURL(new RegExp(other.id));
       await expect(page.getByRole('alert')).toHaveCount(0);
       if (leave === 'forward') {
-        await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');
-        await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toBeDisabled();
-      } else await expect(page.getByLabel('Receptionist', { exact: true })).toHaveValue(primary.id);
+        await expect(page.getByRole('combobox', { name: 'Language', exact: true })).toHaveValue('en');
+        await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toHaveCount(0);
+        await expect(page.getByRole('button',{name:'Start browser conversation'})).toBeEnabled();
+      } else await expect(page.getByRole('heading',{name:'Your reception, at a glance.'})).toBeVisible();
     } finally {
       if (held) await held.abort();
     }
@@ -1059,26 +991,30 @@ test('the newer visit to the same receptionist wins when an earlier visit finish
     held.push({ route, response, released: false });
   });
   try {
-    await page.evaluate(() => history.go(-2));
+    await page.evaluate(() => history.go(-3));
     await expect.poll(() => held.length).toBe(1);
-    await page.evaluate(() => history.go(2));
-    await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');
+    await page.evaluate(() => history.go(3));
+    await whoAnswers(page);
+    await expect(page.getByRole('combobox', { name: 'Language', exact: true })).toHaveValue('en');
     expect(
       (await page.request.put(`/api/me/assistants/${other.id}`, { data: { language: 'es' } })).ok(),
     ).toBe(true);
-    await page.evaluate(() => history.go(-2));
+    await page.evaluate(() => history.go(-3));
     await expect.poll(() => held.length).toBe(2);
     held[1].released = true;
     await held[1].route.fulfill({ response: held[1].response });
-    await expect(page.getByLabel('Language', { exact: true })).toHaveValue('es');
+    await whoAnswers(page);
+    await expect(page.getByRole('combobox', { name: 'Language', exact: true })).toHaveValue('es');
     const lateResponse = page.waitForResponse((response) => response.request() === held[0].route.request());
     held[0].released = true;
     await held[0].route.fulfill({ response: held[0].response });
     await (await lateResponse).finished();
     await page.waitForLoadState('networkidle');
     await expect(page).toHaveURL(new RegExp(`assistant=${other.id}`));
-    await expect(page.getByLabel('Language', { exact: true })).toHaveValue('es');
-    await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toBeDisabled();
+    await whoAnswers(page);
+    await expect(page.getByRole('combobox', { name: 'Language', exact: true })).toHaveValue('es');
+    await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toHaveCount(0);
+        await expect(page.getByRole('button',{name:'Start browser conversation'})).toBeEnabled();
     await expect(page.getByRole('alert')).toHaveCount(0);
   } finally {
     for (const entry of held) if (!entry.released) await entry.route.abort();

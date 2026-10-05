@@ -1,6 +1,20 @@
 # Production preflight
 
-## Current LiveKit deployment — 2026-10-03
+## Managed business / direct Azure candidate — 2026-10-05
+
+The candidate on `codex/managed-business-launch` introduces the managed dashboard, actionable inbox, complete call logs, business and assistant settings, gated phone setup and billing. It routes managed inference directly to Azure; it is **not yet a verified deployment**. The released deployment below remains the last independently verified production source until this section records exact new Worker/runtime identities.
+
+Before rollout: obtain current-commit review/CI clearance, stage the exact source with `OPENFON_MANAGED_WEB=true`, configure the separate direct Azure voice, speech-preview and text-processing services, and validate that customer JSON/screens contain no routing configuration. Preserve existing assistants/credentials/public links; incompatible saved voices require an explicit new voice selection. New assistants store the default voice explicitly.
+
+Apply only additive migrations 0026 and 0027 after a restricted backup and restore/preservation rehearsal. Do not blanket-apply historical 0024 to staging. The managed schedule runs every minute for bounded cancellation reconciliation, retaining call cleanup. Atomic admission also refuses accounts whose paid cancellation term has ended, independent of schedule delivery.
+
+`COMMERCIAL_BILLING_VERIFIED` must remain unset until real invoice, meter and lifecycle acceptance passes. `COMMERCIAL_CHARGING_ENABLED` alone cannot enable checkout. Phone purchasing/activation requires the separate carrier verification and operator country/currency/budget settings; keep those gates off until actual carrier acceptance. A sandbox checkout is not proof of accurate recurring invoices or live charges. See [billing evidence](../commercial/billing-and-costs.md) and [managed product](../managed-web.md).
+
+Read-only production aggregation against the candidate’s exact 19-voice catalog found one compatible active assistant, one active assistant requiring an explicit voice selection, and one draft requiring a selection. No data was changed. A managed cutover would make that incompatible active assistant unavailable until its owner chooses a compatible voice; uninterrupted public-link migration is not yet established.
+
+No physical microphone, real Azure audio, PSTN or paid deployment acceptance is inferred from unit tests or browser fixtures.
+
+## Last verified released deployment — 2026-10-03
 
 PR #42 is merged and deployed to staging and production. Cloudflare retains application and state authority; separate self-hosted Azure LiveKit and Node services carry audio to Kataleptic. The released interface, accounts, saved configurations and public links are preserved. This deployment does not include the separate editions/redesign prototype.
 

@@ -38,7 +38,7 @@ jobs:
           node scripts/asterisk-smoke.mjs
           node scripts/realtime-smoke.mjs
           node scripts/realtime-smoke.mjs --gateway
-      - run: python3 -O scripts/migration-rehearsal.py . --through 25
+      - run: python3 -O scripts/migration-rehearsal.py . --through 27
 
   voice-agent:
     runs-on: ubuntu-latest
@@ -104,6 +104,8 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      - name: Managed customer edition boundaries
+        run: OPENFON_E2E_MANAGED=true npm run test:e2e
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

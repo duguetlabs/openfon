@@ -1,3 +1,9 @@
+import { maintainCommercialBilling } from './commercial-cancellation';
+import { registerCommercialRoutes } from './commercial-api';
+import { customerRecording } from './customer-recording';
+import { managedWeb, managedVoiceCatalog } from './managed-azure';
+import { registerManagedActions } from './managed-actions';
+import { registerManagedWebBoundary } from './managed-web';
 import {readLivekitBody} from './livekit-body';
 import { livekitEnabled, secureEqual } from './livekit';
 import { checkedPresetWriteSql, checkedPresetWrite, checkedPresetSourceSql, checkedPresetSource } from './preset-write-snapshot';
@@ -465,6 +471,9 @@ app.get('/api/me', async (c) => {
   return c.json(user);
 });
 
+registerManagedWebBoundary(app);
+registerManagedActions(app);
+registerCommercialRoutes(app);
 registerStudioApi(app);
 registerAccountApi(app);
 
@@ -548,10 +557,14 @@ app.post('/api/me/business', async (c) => {
     // reconciliation an observable change even when the user accepts the old
     // UI's Alex/friendly/en defaults verbatim.
     c.env.DB.prepare(
-      "INSERT INTO agent_settings (business_id, agent_name, persona, language) VALUES (?, '', '', '')"
+      managedWeb(c.env)
+        ? "INSERT INTO agent_settings (business_id,agent_name,persona,language,engine,voice,realtime_voice) VALUES (?,'','','','realtime','marin','marin')"
+        : "INSERT INTO agent_settings (business_id, agent_name, persona, language) VALUES (?, '', '', '')"
     ).bind(id),
     c.env.DB.prepare(
-      `INSERT INTO assistants (id, business_id, public_slug, state, name)
+      managedWeb(c.env)
+        ? "INSERT INTO assistants (id,business_id,public_slug,state,name,engine,voice,realtime_voice) VALUES (?,?,?,'draft','','realtime','marin','marin')"
+        : `INSERT INTO assistants (id, business_id, public_slug, state, name)
        VALUES (?, ?, ?, 'draft', '')`
     ).bind(assistantId, id, slug),
     c.env.DB.prepare('INSERT INTO provider_settings (business_id) VALUES (?)').bind(id),
@@ -599,8 +612,15 @@ app.put('/api/me/business/:id', async (c) => {
   // remain untouched.
   const servicesJson = b.services_json ?? biz.services_json;
   const faqsJson = b.faqs_json ?? biz.faqs_json;
+  const additions = ['contact_email','default_language','shared_instructions'] as const;
+  const extra = additions.filter(key => b[key] !== undefined);
+  for (const key of extra) {
+    if (typeof b[key] !== 'string' || b[key]!.length > (key === 'shared_instructions' ? 6000 : 320)) return c.json({error:'Business details are too long or invalid.'},400);
+  }
+  if (b.default_language !== undefined && !/^[a-z]{2}(?:-[A-Za-z]{2,8})?$/.test(b.default_language)) return c.json({error:'Choose a valid language.'},400);
+  if (b.contact_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(b.contact_email)) return c.json({error:'Enter a valid contact email.'},400);
   const businessUpdate = c.env.DB.prepare(
-    `UPDATE businesses SET name=?, description=?, address=?, phone=?, website=?, timezone=?, hours_json=?, services_json=?, faqs_json=?, closures_json=?, max_concurrent_calls=?, max_calls_per_day=? WHERE id=?`
+    `UPDATE businesses SET name=?, description=?, address=?, phone=?, website=?, timezone=?, hours_json=?, services_json=?, faqs_json=?, closures_json=?, max_concurrent_calls=?, max_calls_per_day=?${extra.map(key=>`, ${key}=?`).join('')} WHERE id=?`
   )
     .bind(
       b.name?.trim() || biz.name,
@@ -615,6 +635,7 @@ app.put('/api/me/business/:id', async (c) => {
       b.closures_json ?? biz.closures_json,
       clampCap(b.max_concurrent_calls, biz.max_concurrent_calls, 50),
       clampCap(b.max_calls_per_day, biz.max_calls_per_day, 100_000),
+      ...extra.map(key => b[key]),
       biz.id
     );
   if (servicesChanged || faqsChanged) {
@@ -759,7 +780,8 @@ for (const path of ['/api/me/calls/:callId/debug', '/api/me/calls/:callId/debug/
     if (!owned) return c.json({ error: 'Not found' }, 404);
     const stub = c.env.CALL_SESSION.get(c.env.CALL_SESSION.idFromName(owned.id));
     const suffix = path.endsWith('/download') ? '/download' : '';
-    return stub.fetch(new Request('https://call-debug/debug' + suffix, { method: c.req.method }));
+    const recording = await stub.fetch(new Request('https://call-debug/debug' + suffix, { method: c.req.method }));
+    return managedWeb(c.env) && suffix && c.req.method === 'GET' ? customerRecording(recording) : recording;
   });
 }
 
@@ -959,6 +981,7 @@ let voicesCache: { endpoint: string; data: { native: VoiceOption[]; hdDefault: s
 let azureVoicesCache: { region: string; key: string; data: VoiceOption[]; at: number } | null = null;
 
 app.get('/api/me/voices', async (c) => {
+  if(managedWeb(c.env))return c.json(managedVoiceCatalog(c.env));
   const workspace = await c.env.DB.prepare('SELECT id FROM businesses WHERE user_id = ?').bind(c.get('userId')).first<{ id: string }>();
   const provider = workspace ? await c.env.DB.prepare('SELECT realtime_provider, realtime_base_url FROM provider_settings WHERE business_id = ?')
     .bind(workspace.id).first<{ realtime_provider: string; realtime_base_url: string }>() : null;
@@ -1249,7 +1272,8 @@ app.post('/api/public/call/start', bodyLimit({
       WHERE (SELECT COUNT(*) FROM calls
               WHERE business_id = ? AND environment = 'live' AND started_at > datetime('now', '-1 day')
                 AND NOT (status = 'abandoned' AND connected_at IS NULL AND reserved_at IS NULL)) < ?
-        AND EXISTS (SELECT 1 FROM assistants WHERE id=? AND business_id=? AND state='active')`
+        AND EXISTS (SELECT 1 FROM assistants WHERE id=? AND business_id=? AND state='active')
+        ${managedWeb(c.env) ? "AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=?) AND NOT EXISTS(SELECT 1 FROM commercial_cancellations WHERE business_id=? AND julianday(term_end)<=julianday('now'))" : ''}`
   )
     .bind(
       callId,
@@ -1259,7 +1283,8 @@ app.post('/api/public/call/start', bodyLimit({
       target.business_id,
       target.max_calls_per_day,
       target.assistant_id,
-      target.business_id
+      target.business_id,
+      ...(managedWeb(c.env) ? [target.business_id,target.business_id] : [])
     )
     .run();
   if ((claim.meta.changes ?? 0) !== 1) {
@@ -1269,6 +1294,7 @@ app.post('/api/public/call/start', bodyLimit({
       "SELECT id FROM assistants WHERE id=? AND business_id=? AND state='active'"
     ).bind(target.assistant_id, target.business_id).first();
     if (!active) return c.json({ error: 'Unknown or unavailable assistant' }, 404);
+    if (managedWeb(c.env) && await c.env.DB.prepare("SELECT 1 FROM commercial_deletion_jobs WHERE business_id=? UNION ALL SELECT 1 FROM commercial_cancellations WHERE business_id=? AND julianday(term_end)<=julianday('now') LIMIT 1").bind(target.business_id,target.business_id).first()) return c.json({error:'This assistant is currently unavailable. Please contact the business directly.'},409);
     return tooMany(c, 'This agent has reached its daily call limit. Please try again tomorrow.', 3600);
   }
   return c.json({ callId });
@@ -1350,6 +1376,7 @@ app.get('/ws/call/:callId', async (c) => {
     c.env.DB.prepare(
       `UPDATE calls SET connected_at = datetime('now')
         WHERE id = ? AND status='active' AND channel NOT IN ('telnyx','asterisk') AND connected_at IS NULL
+          ${managedWeb(c.env) ? "AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=calls.business_id) AND NOT EXISTS(SELECT 1 FROM commercial_cancellations WHERE business_id=calls.business_id AND julianday(term_end)<=julianday('now'))" : ''}
           AND (environment = 'test' OR EXISTS (
             SELECT 1 FROM assistants
              WHERE assistants.business_id=calls.business_id
@@ -1520,5 +1547,6 @@ export default {
   scheduled: (_event, env, ctx) => {
     ctx.waitUntil(sweepStaleCalls(env));
     ctx.waitUntil(reconcileTelnyxCalls(env));
+    if (managedWeb(env)) ctx.waitUntil(maintainCommercialBilling(env));
   },
 } satisfies ExportedHandler<Env>;

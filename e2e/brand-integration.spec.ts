@@ -3,8 +3,8 @@ import { signup, createWorkspace, workspaceMenu, connections, whoAnswers } from 
 import type { Page } from '@playwright/test';
 
 async function business(page: Page) {
-  await page.getByRole('main').getByRole('button', { name: 'Business details', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Your business', exact: true })).toBeVisible();
+  await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Settings',exact:true}).click();
+  await expect(page.getByRole('heading', { name: 'My business', exact: true })).toBeVisible();
 }
 async function revealFacts(page: Page) {
   for (const details of await page.locator('.of-business-details').all()) {
@@ -29,7 +29,7 @@ test('existing business facts remain editable without dropping preserved row fie
   await page.getByLabel('Service 1 price', { exact: true }).fill('€25');
   await page.getByRole('textbox', { name: 'FAQ 1 answer', exact: true }).fill('Behind the workshop.');
   await page.getByRole('button', { name: 'Save business details', exact: true }).click();
-  await expect(page).toHaveURL(/\/overview$/);
+  await expect(page.getByText('Business details saved.',{exact:true})).toBeVisible();
   const saved = (await (await page.request.get('/api/me/bootstrap')).json()).workspace;
   expect(saved.phone).toBe('+43 222 333');
   expect(JSON.parse(saved.hours_json)[0]).toMatchObject({ open: '08:30', note: 'Side entrance' });
@@ -40,7 +40,7 @@ test('existing business facts remain editable without dropping preserved row fie
   await expect(page.getByLabel('Contact phone', { exact: true })).toHaveValue('+43 222 333');
   await page.getByLabel('Contact phone', { exact: true }).fill('+43 123 456');
   await page.getByRole('button', { name: 'Save business details', exact: true }).click();
-  await expect(page).toHaveURL(/\/overview$/);
+  await expect(page.getByText('Business details saved.',{exact:true})).toBeVisible();
   const later = (await (await page.request.get('/api/me/bootstrap')).json()).workspace;
   for (const key of Object.keys(facts)) expect(later[key]).toBe(saved[key]);
 });
@@ -71,35 +71,35 @@ test('business save admits one write and keeps edits typed while acknowledgment 
   expect(writes).toBe(1);
   expect((await (await page.request.get('/api/me/bootstrap')).json()).workspace.name).toBe('First acknowledged name');
   await page.getByRole('button', { name: 'Save business details', exact: true }).click();
-  await expect(page).toHaveURL(/\/overview$/);
+  await expect(page.getByText('Business details saved.',{exact:true})).toBeVisible();
   expect(writes).toBe(2);
   expect((await (await page.request.get('/api/me/bootstrap')).json()).workspace.name).toBe('Newer unsaved name');
 });
 
 test('browser history, reload and deep links follow the current screen and protect dirty forms', async ({ page }) => {
   await signup(page, 'history'); await createWorkspace(page);
-  await business(page); await expect(page).toHaveURL(/\/business$/);
-  await connections(page); await expect(page).toHaveURL(/\/connections$/);
+  await business(page); await expect(page).toHaveURL(/\/settings\/business$/);
+  await connections(page); await expect(page).toHaveURL(/\/calls$/);
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Your connections', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Call logs', exact: true })).toBeVisible();
   await page.goBack();
-  await expect(page.getByRole('heading', { name: 'Your business', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'My business', exact: true })).toBeVisible();
   await page.getByLabel('Business name', { exact: true }).fill('Keep this draft');
   page.once('dialog', dialog => dialog.dismiss());
   await page.goBack();
-  await expect(page).toHaveURL(/\/business$/);
+  await expect(page).toHaveURL(/\/settings\/business$/);
   await expect(page.getByLabel('Business name', { exact: true })).toHaveValue('Keep this draft');
   page.once('dialog', dialog => dialog.accept());
-  await page.goBack(); await expect(page).toHaveURL(/\/overview$/);
-  await page.goForward(); await expect(page).toHaveURL(/\/business$/);
-  await page.goto('/account');
+  await page.goBack(); await expect(page).toHaveURL(/\/settings\/assistants$/);
+  await page.goForward(); await expect(page).toHaveURL(/\/settings\/business$/);
+  await page.goto('/settings/account');
   await expect(page.getByRole('heading', { name: 'Your account', exact: true })).toBeVisible();
-  await page.goto('/conversations');
-  await expect(page.getByRole('heading', { name: /Messages|Conversations/ }).first()).toBeVisible();
+  await page.goto('/calls');
+  await expect(page.getByRole('heading', { name: 'Call logs' }).first()).toBeVisible();
 });
 
 test('integrated brand keeps business and connection controls usable on desktop and mobile', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/settings/assistants');
   await page.screenshot({ path: '/tmp/openfon-brand-integration/welcome-desktop.png', fullPage: true });
   await signup(page, 'visual-integration'); await createWorkspace(page, 'Oak Street Workshop');
   await page.screenshot({ path: '/tmp/openfon-brand-integration/desk-desktop.png', fullPage: true });
@@ -108,74 +108,15 @@ test('integrated brand keeps business and connection controls usable on desktop 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: '/tmp/openfon-brand-integration/business-mobile.png', fullPage: true });
-  await connections(page);
-  for (const details of await page.locator('.of-brand-connections details').all()) {
-    if (await details.getAttribute('open') === null) await details.locator('summary').first().click();
-  }
-  const select = page.getByRole('combobox', { name: 'Conversation engine', exact: true });
+  await page.getByRole('navigation',{name:'Settings'}).getByRole('button',{name:'Assistants',exact:true}).click();
+  await whoAnswers(page);
+  const select=page.getByRole('combobox',{name:'Language',exact:true});
   await expect(select).toBeVisible();
-  expect(await select.evaluate(element => parseFloat(getComputedStyle(element).paddingRight))).toBeGreaterThanOrEqual(48);
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: '/tmp/openfon-brand-integration/connections-mobile.png', fullPage: true });
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.screenshot({ path: '/tmp/openfon-brand-integration/connections-desktop.png', fullPage: true });
-});
-
-test('recipe save waits for pending voice drafts instead of leaving an overwrite behind', async ({ page }) => {
-  await signup(page, 'recipe-draft');
-  const { assistant } = await createWorkspace(page);
-  const saved = await (await page.request.get(`/api/me/assistants/${assistant.id}`)).json();
-  const fields = ['name', 'greeting', 'persona', 'language', 'voice', 'take_messages', 'custom_instructions', 'engine', 'realtime_model', 'realtime_voice', 'llm_model'];
-  const portable = Object.fromEntries(fields.map(key => [key, key === 'take_messages' ? !!saved[key] : saved[key]]));
-  portable.name = 'Portable receptionist'; portable.persona = 'Helpful receptionist.';
-  await connections(page);
-  await page.getByRole('textbox', { name: 'Language', exact: true }).fill('de');
-  await expect(page.getByText('Save connection changes to see applicable routing evidence.', { exact: true })).toBeVisible();
-  await page.locator('input[type="file"]').setInputFiles({ name: 'saved.openfon.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ format: 'openfon-assistant', version: 1, assistant: portable })) });
-  await page.getByRole('checkbox', { name: 'Also replace language, engine and voice settings' }).check();
-  const apply = page.getByRole('button', { name: 'Save this recipe', exact: true });
-  await expect(apply).toBeDisabled();
-  await expect(page.getByText('Save your connection and voice edits before saving this recipe.')).toBeVisible();
-  expect((await (await page.request.get(`/api/me/assistants/${assistant.id}`)).json()).language).toBe(saved.language);
-  await page.getByRole('button', { name: 'Save connections', exact: true }).click();
-  await expect(apply).toBeEnabled();
-  expect((await (await page.request.get(`/api/me/assistants/${assistant.id}`)).json()).language).toBe('de');
-  await apply.click();
-  await expect(page.getByText('Recipe imported into this receptionist.', { exact: true })).toBeVisible();
-  await expect(page.getByRole('textbox', { name: 'Language', exact: true })).toHaveValue(saved.language);
-  await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toBeDisabled();
-  const importRecipe = async (name: string, language: string) => {
-    await page.locator('input[type="file"]').setInputFiles({ name: `${language}.openfon.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ format: 'openfon-assistant', version: 1, assistant: { ...portable, name, language } })) });
-    await expect(page.getByRole('heading', { name: `Review “${name}”`, exact: true })).toBeVisible();
-  };
-  const includeVoice = page.getByRole('checkbox', { name: 'Also replace language, engine and voice settings' });
-  await importRecipe('Second recipe', 'fr');
-  await expect(includeVoice).not.toBeChecked();
-  await includeVoice.check();
-  await importRecipe('Third recipe', 'es');
-  await expect(includeVoice).not.toBeChecked();
-  await includeVoice.check();
-  await page.locator('.of-import-review').getByRole('button', { name: 'Cancel', exact: true }).click();
-  await importRecipe('Fourth recipe', 'it');
-  await expect(includeVoice).not.toBeChecked();
-  let releaseImport!: () => void;
-  const importAck = new Promise<void>(resolve => { releaseImport = resolve; });
-  let importWritten = false;
-  await page.route(`**/api/me/assistants/${assistant.id}`, async route => {
-    if (route.request().method() !== 'PUT') return route.continue();
-    const response = await route.fetch(); importWritten = true;
-    await importAck; await route.fulfill({ response });
-  });
-  await apply.click();
-  await expect.poll(() => importWritten).toBe(true);
-  await expect(page.locator('input[type="file"]')).toBeDisabled();
-  await expect(includeVoice).toBeDisabled();
-  await expect(page.locator('.of-import-review').getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
-  releaseImport();
-  await expect(page.getByRole('heading', { name: 'Review “Fourth recipe”', exact: true })).not.toBeVisible();
-  const final = await (await page.request.get(`/api/me/assistants/${assistant.id}`)).json();
-  expect(final.name).toBe('Fourth recipe');
-  expect(final.language).toBe(saved.language);
+  expect(await select.evaluate(element=>parseFloat(getComputedStyle(element).paddingRight))).toBeGreaterThanOrEqual(32);
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:test.info().outputPath('assistants-mobile.png'),fullPage:true});
+  await page.setViewportSize({width:1280,height:900});
+  await page.screenshot({path:test.info().outputPath('assistants-desktop.png'),fullPage:true});
 });
 
 
@@ -208,7 +149,7 @@ test('business refresh after an acknowledged save preserves concurrent fields an
   expect(writes).toBe(1); expect(reads).toBe(2);
   await expect(page.getByRole('button', { name: 'Save business details', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Save business details', exact: true }).click();
-  await expect(page).toHaveURL(/\/overview$/);
+  await expect(page.getByText('Business details saved.',{exact:true})).toBeVisible();
   expect(writes).toBe(2);
   await business(page);
   await expect(page.getByLabel('Contact phone', { exact: true })).toHaveValue('+43 555 999');
@@ -224,15 +165,15 @@ test('combined receptionist and knowledge drafts require only one navigation con
   await page.getByLabel('What might a customer ask?', { exact: true }).fill('Keep my knowledge draft?');
   let dialogs = 0, accept = false;
   page.on('dialog', async dialog => { dialogs++; if (accept) await dialog.accept(); else await dialog.dismiss(); });
-  await page.getByRole('banner').getByRole('button', { name: 'Messages', exact: true }).click();
+  await page.getByRole('navigation', {name:'Main navigation'}).getByRole('button', { name: 'Call logs', exact: true }).click();
   expect(dialogs).toBe(1);
-  await expect(page).toHaveURL(/\/overview$/);
+  await expect(page).toHaveURL(/\/settings\/assistants$/);
   await expect(page.getByLabel('What might a customer ask?', { exact: true })).toHaveValue('Keep my knowledge draft?');
   await expect(page.getByLabel('Their first words')).toHaveValue('Keep my receptionist draft.');
   accept = true;
-  await page.getByRole('banner').getByRole('button', { name: 'Messages', exact: true }).click();
+  await page.getByRole('navigation', {name:'Main navigation'}).getByRole('button', { name: 'Call logs', exact: true }).click();
   expect(dialogs).toBe(2);
-  await expect(page).toHaveURL(/\/conversations$/);
+  await expect(page).toHaveURL(/\/calls$/);
 });
 
 for (const refreshParent of [false, true]) {
