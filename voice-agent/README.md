@@ -28,6 +28,8 @@ Configure the Node process:
 
 Then run `npm --prefix voice-agent start`. It registers as `openfon-released-web`. The application creates each room before dispatching its agent. For loopback development a separately installed LiveKit server may run with `livekit-server --dev --bind 127.0.0.1`; its documented development key/secret are for that loopback instance only. A local application must use local D1 and local Durable Objects. Do not point a local candidate at production state.
 
+Saved voice compatibility preserves the released default: when both stored voice fields are empty, the effective voice remains Marin, without rewriting the assistant. A nonempty saved selection must be supported; it is never replaced by that default. New assistants store their chosen default explicitly, and blank customer edits remain invalid. Browser and carrier admission resolve the same saved fields; carrier reservation pins both fields before starting a call.
+
 Inference is pinned to genuine `realtime.GPTLiveModel`, `gpt-live-1`, mono PCM 24 kHz and delegated `gpt-5.4-mini` with `maxOutputTokens: 512`. Voice/persona instructions belong to `voice.Agent`. Model, voice, format and delegated-model acknowledgements are checked. No alternative model or speech fallback is used. Wire debug logging must stay disabled.
 
 ## Self-hosted infrastructure

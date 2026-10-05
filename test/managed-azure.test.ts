@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   azureConfig,
   managedVoice,
+  savedManagedVoice,
   managedVoiceCatalog,
 } from '../src/managed-azure';
 import { resolveSummary } from '../src/summary-settings';
@@ -63,10 +64,18 @@ describe('managed Azure routing and context', () => {
     expect(Object.keys(catalog)).toEqual(['voices', 'defaultVoice']);
     expect(() => managedVoice('invented')).toThrow();
   });
-  it.each(['', ' ', 'azure-only'])('requires an explicit compatible saved voice instead of defaulting %j', async voice => {
+  it.each([' ', 'azure-only'])('rejects a nonempty incompatible saved voice %j', async voice => {
     const {managedBrowserSettings}=await import('../src/livekit-settings');
     expect(()=>managedVoice(voice)).toThrow('Choose an available voice');
     expect(()=>managedBrowserSettings(env,{engine:'pipeline',realtime_voice:'',voice} as AgentSettings)).toThrow('Choose an available voice');
+  });
+  it('preserves the released Marin default for both blank saved fields without accepting blank input', async () => {
+    const {managedBrowserSettings}=await import('../src/livekit-settings');
+    const saved={engine:'pipeline',realtime_voice:'',voice:''} as AgentSettings;
+    expect(savedManagedVoice(saved)).toBe('marin');
+    expect(managedBrowserSettings(env,saved).realtime_voice).toBe('marin');
+    expect(saved).toEqual({engine:'pipeline',realtime_voice:'',voice:''});
+    expect(()=>managedVoice('')).toThrow('Choose an available voice');
   });
   it('preserves compatible legacy voice meaning and leaves nonmanaged default behavior intact', async () => {
     const {managedBrowserSettings}=await import('../src/livekit-settings');

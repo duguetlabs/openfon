@@ -1,5 +1,5 @@
 import {azureIdentifier,azureUsageObservation} from './azure-usage';
-import {managedWeb,azureConfig,managedVoice} from './managed-azure';
+import {managedWeb,azureConfig,savedManagedVoice} from './managed-azure';
 import {processManagedCall,managedTextObservation,type ManagedSummary} from './managed-processing';
 import {ingestProviderUsage,recordTextUsage,recordCompletedCallUsage,UsageError} from './commercial-usage';
 import type {UsageObservation} from './commercial-types';
@@ -585,7 +585,7 @@ export class CallSession implements DurableObject {
     const selected=this.settings!.engine==='realtime'?this.settings!.realtime_voice:this.settings!.voice;
     if(managedWeb(this.env))azureConfig(this.env);
     const voice = managedWeb(this.env)
-      ? managedVoice(this.settings!.realtime_voice || this.settings!.voice)
+      ? savedManagedVoice(this.settings!)
       : gptLiveVoice(selected || 'marin');
     this.lang=this.settings!.language in SUPPORTED_LANGUAGES?this.settings!.language:'en';
     const instructions=buildSystemPrompt(this.biz!,this.settings!,new Date(),this.knowledge);
@@ -758,9 +758,7 @@ export class CallSession implements DurableObject {
         language: this.settings!.language || this.biz?.default_language || 'en',
         engine: 'realtime',
         realtime_model: cfg.liveModel,
-        realtime_voice: managedVoice(
-          this.settings!.realtime_voice || this.settings!.voice
-        ),
+        realtime_voice: savedManagedVoice(this.settings!),
         realtime_provider: 'instance',
       };
     }

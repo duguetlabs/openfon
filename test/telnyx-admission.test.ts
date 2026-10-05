@@ -200,10 +200,20 @@ describe('operator-managed Azure carrier admission', () => {
     expect(await reserve()).toBe(true);
     expect(await telnyxMediaAllowed(env,id)).toBe(true);
   });
-  it.each(['', 'azure-only'])('rejects a legacy empty realtime selection with incompatible fallback %j', async voice => {
+  it.each([' ', 'azure-only'])('rejects a legacy empty realtime selection with incompatible fallback %j', async voice => {
     db.database.prepare("UPDATE assistants SET realtime_voice='',voice=? WHERE id='assistant'").run(voice);
     expect(await reserve()).toBe(false);
     expect(rows()).toEqual({calls:[],links:[]});
+  });
+  it('admits both blank saved voice fields with the released default and preserves their bytes', async () => {
+    db.exec("UPDATE assistants SET realtime_voice='',voice='' WHERE id='assistant'");
+    const saved=db.database.prepare("SELECT realtime_voice,voice FROM assistants WHERE id='assistant'").get();
+    expect(await reserve()).toBe(true);
+    expect(db.database.prepare("SELECT realtime_voice,voice FROM assistants WHERE id='assistant'").get()).toEqual(saved);
+  });
+  it('pins both saved voice fields even when an explicit realtime voice wins', async () => {
+    const observation=holdBatch(()=>db.exec("UPDATE assistants SET voice='cedar' WHERE id='assistant'"));
+    expect(await reserve()).toBe(false);expect(observation().delta).toBe(0);
   });
   it('uses a compatible legacy voice and pins it at reservation time', async () => {
     db.exec("UPDATE assistants SET realtime_voice='',voice='cedar' WHERE id='assistant'");

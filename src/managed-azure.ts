@@ -1,4 +1,4 @@
-import type { Env } from './types';
+import type { AgentSettings, Env } from './types';
 /** Operator-only connection. Customer profiles never determine destinations or credentials. */
 export function managedWeb(env: Pick<Env, 'OPENFON_MANAGED_WEB'>): boolean {
   return env.OPENFON_MANAGED_WEB === 'true';
@@ -38,6 +38,12 @@ export function managedVoice(value: string): string {
   if (!MANAGED_VOICES.includes(selected))
     throw new Error('Choose an available voice before calling.');
   return selected;
+}
+/** Preserve the released saved default without accepting blank customer input. */
+export function savedManagedVoice(
+  settings: Pick<AgentSettings, 'realtime_voice' | 'voice'>
+): string {
+  return managedVoice(settings.realtime_voice || settings.voice || 'marin');
 }
 export function azureConfig(
   env: Pick<
