@@ -200,6 +200,18 @@ describe('operator-managed Azure carrier admission', () => {
     expect(await reserve()).toBe(true);
     expect(await telnyxMediaAllowed(env,id)).toBe(true);
   });
+  it.each(['', 'azure-only'])('rejects a legacy empty realtime selection with incompatible fallback %j', async voice => {
+    db.database.prepare("UPDATE assistants SET realtime_voice='',voice=? WHERE id='assistant'").run(voice);
+    expect(await reserve()).toBe(false);
+    expect(rows()).toEqual({calls:[],links:[]});
+  });
+  it('uses a compatible legacy voice and pins it at reservation time', async () => {
+    db.exec("UPDATE assistants SET realtime_voice='',voice='cedar' WHERE id='assistant'");
+    const observation=holdBatch(()=>db.exec("UPDATE assistants SET voice='verse' WHERE id='assistant'"));
+    expect(await reserve()).toBe(false);expect(observation().delta).toBe(0);
+    env.DB=db as unknown as D1Database;
+    expect(await reserve()).toBe(true);
+  });
   it('keeps managed quota enforcement atomic', async () => {
     holdBatch(() =>
       db.exec("UPDATE businesses SET max_concurrent_calls=0 WHERE id='biz'")

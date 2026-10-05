@@ -63,6 +63,18 @@ describe('managed Azure routing and context', () => {
     expect(Object.keys(catalog)).toEqual(['voices', 'defaultVoice']);
     expect(() => managedVoice('invented')).toThrow();
   });
+  it.each(['', ' ', 'azure-only'])('requires an explicit compatible saved voice instead of defaulting %j', async voice => {
+    const {managedBrowserSettings}=await import('../src/livekit-settings');
+    expect(()=>managedVoice(voice)).toThrow('Choose an available voice');
+    expect(()=>managedBrowserSettings(env,{engine:'pipeline',realtime_voice:'',voice} as AgentSettings)).toThrow('Choose an available voice');
+  });
+  it('preserves compatible legacy voice meaning and leaves nonmanaged default behavior intact', async () => {
+    const {managedBrowserSettings}=await import('../src/livekit-settings');
+    const saved={engine:'pipeline',realtime_voice:'',voice:'cedar'} as AgentSettings;
+    expect(managedBrowserSettings(env,saved).realtime_voice).toBe('cedar');
+    expect(saved.voice).toBe('cedar');expect(saved.realtime_voice).toBe('');
+    expect(managedBrowserSettings({...env,OPENFON_MANAGED_WEB:'false',REALTIME_API_KEY:'synthetic'}, {...saved,voice:''}).realtime_voice).toBe('marin');
+  });
   it('separates business facts and inherited responsibilities from assistant overrides and enforced restrictions', () => {
     const business = {
       name: 'Practice',

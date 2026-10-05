@@ -31,7 +31,7 @@ export async function reserveTelnyxCall(
   if (await matchingLink()) return true;
   const settings = await env.DB.prepare(
     `SELECT route.business_id, route.assistant_id, assistants.engine, assistants.realtime_model,
-       assistants.realtime_voice, provider_settings.business_id IS NOT NULL AS provider_present,
+       assistants.realtime_voice, assistants.voice, provider_settings.business_id IS NOT NULL AS provider_present,
        provider_settings.realtime_provider, provider_settings.realtime_base_url, provider_settings.realtime_api_key
      FROM telnyx_number_routes route JOIN assistants ON assistants.id=route.assistant_id
      LEFT JOIN provider_settings ON provider_settings.business_id=route.business_id
@@ -40,7 +40,7 @@ export async function reserveTelnyxCall(
   ).bind(call.connectionId, to).first<AgentSettings & ProviderSettings & { assistant_id: string; provider_present: number }>();
   if(!settings)return false;
   const managed=managedWeb(env);
-  if(managed){try{azureConfig(env);managedVoice(settings.realtime_voice);}catch{return false;}}
+  if(managed){try{azureConfig(env);managedVoice(settings.realtime_voice||settings.voice);}catch{return false;}}
   else if(!telephoneRealtimeAvailable(env,settings)||assistantCompatibilityError(env,settings,settings))return false;
   // Admission linearizes at the conditional INSERT, using the same route and
   // compatibility snapshot that passed readiness. Pickup still loads current
@@ -61,7 +61,7 @@ export async function reserveTelnyxCall(
             AND julianday(term_end)<=julianday('now'))`:''}
           AND route.business_id=? AND route.assistant_id=?
           AND assistants.engine IS ? AND assistants.realtime_model IS ? AND assistants.realtime_voice IS ?
-          ${managed?'':`AND (provider_settings.business_id IS NOT NULL)=?
+          ${managed?`AND COALESCE(NULLIF(assistants.realtime_voice,''),assistants.voice) IS ?`:`AND (provider_settings.business_id IS NOT NULL)=?
           AND provider_settings.realtime_provider IS ? AND provider_settings.realtime_base_url IS ?
           AND provider_settings.realtime_api_key IS ?`}
           AND trim(assistants.name)<>'' AND trim(assistants.persona)<>''
@@ -72,7 +72,7 @@ export async function reserveTelnyxCall(
                  AND started_at > datetime('now', '-1 day')
                  AND NOT (status='abandoned' AND connected_at IS NULL AND reserved_at IS NULL)) < businesses.max_calls_per_day`
     ).bind(callId, from, call.connectionId, to, settings.business_id, settings.assistant_id,
-      settings.engine, settings.realtime_model, settings.realtime_voice, ...(managed?[]:[settings.provider_present,
+      settings.engine, settings.realtime_model, settings.realtime_voice, ...(managed?[settings.realtime_voice||settings.voice]:[settings.provider_present,
       settings.realtime_provider ?? null, settings.realtime_base_url ?? null, settings.realtime_api_key ?? null])),
     // SQLite changes() refers to the immediately preceding reservation INSERT,
     // not D1 result metadata. A rejected/ignored INSERT cannot attach a new link

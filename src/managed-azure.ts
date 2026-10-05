@@ -34,7 +34,7 @@ export function managedVoiceCatalog(_env?: Env) {
   };
 }
 export function managedVoice(value: string): string {
-  const selected = value || 'marin';
+  const selected = value;
   if (!MANAGED_VOICES.includes(selected))
     throw new Error('Choose an available voice before calling.');
   return selected;
