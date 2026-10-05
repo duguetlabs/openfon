@@ -738,6 +738,17 @@ async function finishBusinessDeletion(env: CommercialEnv, businessId: string) {
       "A payment update must finish reconciliation before deletion. Please contact support.",
       409,
     );
+  if (
+    await env.DB.prepare(
+      "SELECT id FROM commercial_usage_snapshots WHERE business_id=? AND state IN ('sending','reconciliation_required') LIMIT 1",
+    )
+      .bind(businessId)
+      .first()
+  )
+    throw new BillingError(
+      "Usage billing needs reconciliation before deletion. Please contact support.",
+      409,
+    );
   await reconcileBusinessCheckouts(env, businessId);
   await releaseBusinessPhones(env, businessId);
   const { results: parts } = await env.DB.prepare(

@@ -1,3 +1,4 @@
+import { maintainCurrentUsage } from "./commercial-export";
 import {
   BillingError,
   dodoRequest,
@@ -170,7 +171,7 @@ export async function finishDueCommercialCancellations(
   return { completed, pending };
 }
 
-/** Call every minute; no charge POSTs, bounded five cancellations per invocation. */
+/** Call every minute: bounded cancellation maintenance and separately gated usage export. */
 export async function maintainCommercialBilling(
   env: CommercialEnv,
   now = Date.now(),
@@ -191,5 +192,6 @@ export async function maintainCommercialBilling(
   return {
     ...(await finishDueCommercialCancellations(env, now)),
     pendingPreparation,
+    usage: await maintainCurrentUsage(env, now),
   };
 }

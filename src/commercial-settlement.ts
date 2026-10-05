@@ -77,6 +77,41 @@ export async function prepareUsageSettlement(
       cents: total.overageMinor,
     }),
   );
+  const automatic = await env.DB.prepare(
+    `SELECT COALESCE(MAX(overage_minor),0) maximum,
+    COALESCE(MAX(CASE WHEN state IN ('sending','reconciliation_required') THEN 1 ELSE 0 END),0) uncertain
+    FROM commercial_usage_snapshots WHERE business_id=? AND cycle_start=? AND state<>'prepared'`,
+  )
+    .bind(businessId, period.period_start)
+    .first<{ maximum: number; uncertain: number }>();
+  if (
+    automatic &&
+    (automatic.uncertain || automatic.maximum > total.overageMinor)
+  ) {
+    const conflict = await env.DB.prepare(
+      `INSERT INTO commercial_usage_exports(id,business_id,cycle_start,cycle_end,usage_ms,overage_minor,state,computed_hash,created_at)
+      VALUES(?,?,?,?,?,?,'reconciliation_required',?,?) ON CONFLICT(business_id,cycle_start,cycle_end)
+      DO UPDATE SET state='reconciliation_required' RETURNING id`,
+    )
+      .bind(
+        crypto.randomUUID(),
+        businessId,
+        period.period_start,
+        period.period_end,
+        total.durationMs,
+        total.overageMinor,
+        hash,
+        new Date(now).toISOString(),
+      )
+      .first<{ id: string }>();
+    return {
+      id: conflict!.id,
+      state: "reconciliation_required",
+      computedHash: hash,
+      overageMinor: total.overageMinor,
+      previousOverageMinor: automatic.maximum,
+    };
+  }
   const old = await env.DB.prepare(
     "SELECT id,state,overage_minor,computed_hash FROM commercial_usage_exports WHERE business_id=? AND cycle_start=? AND cycle_end=?",
   )

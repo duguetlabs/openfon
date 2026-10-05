@@ -371,6 +371,7 @@ export async function coveredRetailMilliseconds(
   businessId: string,
   start: number,
   end: number,
+  finalizedBy = Number.MAX_SAFE_INTEGER,
 ): Promise<number> {
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start)
     return 0;
@@ -381,10 +382,10 @@ export async function coveredRetailMilliseconds(
     FROM commercial_paid_coverage WHERE business_id=?
   ) SELECT COALESCE(SUM(MAX(0,MIN(u.ended_at_ms,c.end_ms,?)-MAX(u.connected_at_ms,c.start_ms,?))),0) ms
     FROM commercial_call_usage u JOIN coverage c ON u.ended_at_ms>c.start_ms AND u.connected_at_ms<c.end_ms
-    WHERE u.business_id=? AND u.ended_at_ms>? AND u.connected_at_ms<?
+    WHERE u.business_id=? AND u.ended_at_ms>? AND u.connected_at_ms<? AND u.ended_at_ms<=?
     AND NOT EXISTS(SELECT 1 FROM commercial_qa_calls q WHERE q.call_id=u.call_id)`,
   )
-    .bind(businessId, end, start, businessId, start, end)
+    .bind(businessId, end, start, businessId, start, end, finalizedBy)
     .first<{ ms: number }>();
   return total?.ms ?? 0;
 }

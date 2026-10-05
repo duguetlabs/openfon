@@ -234,3 +234,39 @@ BEGIN
  WHERE NEW.status='active' AND NEW.paid_through>NEW.coverage_checked_at AND NEW.retail_stopped_at IS NULL
  AND NOT EXISTS(SELECT 1 FROM commercial_paid_coverage WHERE business_id=NEW.business_id AND closed_at IS NULL);
 END;
+
+-- Current-period cumulative MAX snapshots. Payloads never change after insertion.
+CREATE TABLE commercial_usage_streams (
+ business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+ cycle_start TEXT NOT NULL,
+ cycle_end TEXT NOT NULL,
+ state TEXT NOT NULL DEFAULT 'active' CHECK(state IN ('active','reconciliation_required')),
+ reason TEXT,
+ last_checked_at TEXT NOT NULL,
+ last_usage_ms INTEGER NOT NULL DEFAULT 0,
+ last_overage_minor INTEGER NOT NULL DEFAULT 0,
+ PRIMARY KEY(business_id,cycle_start)
+);
+CREATE TABLE commercial_usage_snapshots (
+ id TEXT PRIMARY KEY,
+ business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+ cycle_start TEXT NOT NULL,
+ cycle_end TEXT NOT NULL,
+ subscription_id TEXT NOT NULL,
+ customer_id TEXT NOT NULL,
+ provider_mode TEXT NOT NULL,
+ event_name TEXT NOT NULL,
+ event_timestamp TEXT NOT NULL,
+ usage_ms INTEGER NOT NULL,
+ overage_minor INTEGER NOT NULL,
+ state TEXT NOT NULL CHECK(state IN ('prepared','sending','ingested','reconciliation_required')),
+ created_at TEXT NOT NULL,
+ confirmed_at TEXT,
+ FOREIGN KEY(business_id,cycle_start) REFERENCES commercial_usage_streams(business_id,cycle_start) ON DELETE CASCADE
+);
+CREATE INDEX commercial_snapshot_cycle ON commercial_usage_snapshots(business_id,cycle_start,state);
+CREATE TRIGGER commercial_snapshot_payload_immutable
+BEFORE UPDATE OF business_id,cycle_start,cycle_end,subscription_id,customer_id,provider_mode,event_name,event_timestamp,usage_ms,overage_minor,created_at ON commercial_usage_snapshots
+BEGIN
+ SELECT RAISE(ABORT,'Commercial usage snapshot payloads are immutable');
+END;
