@@ -169,6 +169,6 @@ jobs:
             exit 1
           fi
           if ! npm run deploy; then
-            echo "::error::Deploy failed. It applies D1 migrations before uploading, so CLOUDFLARE_API_TOKEN needs 'D1: Edit' as well as 'Workers Scripts: Edit'. Cloudflare's 'Edit Cloudflare Workers' template does not include D1 — use a Custom Token."
+            echo "::error::Deploy failed. No migrations were applied by this command. Inspect the routing, applied-migration and credential-name prerequisites above; the deploy token needs Workers Scripts access and D1 read access."
             exit 1
           fi

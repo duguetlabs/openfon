@@ -31,10 +31,12 @@ npx wrangler secret put DEFAULT_STT_API_KEY
 # npx wrangler secret put AZURE_SPEECH_KEY
 npm run typecheck
 npm run build
-npm run deploy
+npm run build
+npx wrangler d1 migrations apply openfon --remote --config wrangler.jsonc
+npx wrangler deploy --config wrangler.jsonc
 ```
 
-Enter each credential at Wrangler’s prompt. `npm run deploy` builds, applies **remote D1 migrations**, then uploads the Worker; it is not a local preview. Verify the account and database first. If using an API token instead of interactive login, the deployment needs Workers Scripts and D1 edit permissions and an explicit `CLOUDFLARE_ACCOUNT_ID` to select the intended account. Use your credential manager; do not paste keys into commands or bug reports.
+Enter each credential at Wrangler’s prompt. These explicit self-hosted commands apply **remote D1 migrations** and upload to your configured account; they are not a local preview. Verify your own account/database first and review existing-installation migrations before applying them. The managed `openfon.ai` operator instead uses `npm run deploy`, which validates `wrangler.production.json` and already-applied migrations without applying any; see [production preflight](launch/production-preflight.md). If using an API token instead of interactive login, the deployment needs Workers Scripts and D1 edit permissions and an explicit `CLOUDFLARE_ACCOUNT_ID` to select the intended account. Use your credential manager; do not paste keys into commands or bug reports.
 
 For a final public domain, supply `OPENFON_PUBLIC_URL=https://your-domain.example` to the build/deploy environment after replacing the example with your actual HTTPS origin. Without it, preview builds omit canonical/sitemap metadata. This is metadata configuration, not domain provisioning.
 
