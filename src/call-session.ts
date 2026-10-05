@@ -456,6 +456,17 @@ export class CallSession implements DurableObject {
         .first())
     )
       throw new Error('Calling is unavailable while account deletion is pending.');
+    // This is startup admission, not a running-call timer. A carrier session
+    // already connected before the cutoff keeps its natural completion.
+    if (
+      managedWeb(this.env) &&
+      (await this.env.DB.prepare(
+        `SELECT 1 FROM commercial_cancellations cancellation
+         JOIN calls ON calls.business_id=cancellation.business_id
+         WHERE calls.id=? AND julianday(cancellation.term_end)<=julianday('now')
+           AND NOT (calls.channel IN ('telnyx','asterisk') AND calls.connected_at IS NOT NULL)`
+      ).bind(this.callId).first())
+    ) throw new Error('Calling is unavailable after the subscription ends.');
     const budget = await this.env.DB.prepare('SELECT COALESCE(SUM(length(CAST(text AS BLOB))), 0) AS bytes FROM call_turns WHERE call_id = ?')
       .bind(this.callId).first<{ bytes: number }>();
     this.persistedTranscriptBytes = budget?.bytes ?? 0;
@@ -615,6 +626,12 @@ export class CallSession implements DurableObject {
         return new Response(null, { status: 410 });
       if(typeof body.jobId!=='string'||body.jobId.length>128||!body.jobId)return new Response(null,{status:400});
       if(media.jobId&&media.jobId!==body.jobId)return new Response(null,{status:409});
+      // The agent polls this context while speaking. Only its first admission
+      // checks cancellation; an admitted job is allowed to finish naturally.
+      if (!media.jobId && managedWeb(this.env) && await this.env.DB.prepare(
+        `SELECT 1 FROM commercial_cancellations WHERE business_id=(SELECT business_id FROM calls WHERE id=?)
+         AND julianday(term_end)<=julianday('now')`
+      ).bind(media.callId).first()) return new Response(null,{status:410});
       if(await this.expireLivekitStartup(media))return new Response(null,{status:410});
       media.jobId=body.jobId;await this.state.storage.put('livekit',media);
       return Response.json({callId:media.callId,room:media.room,caller:media.caller,callback:media.callback,instructions:media.instructions,greeting:media.greeting,voice:media.voice,language:media.language,commands:media.commands??[]});

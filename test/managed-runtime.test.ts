@@ -290,3 +290,56 @@ it('unconfirmed setup failures finish without a fictitious billed interval, whil
     db.close();
   }
 });
+
+describe('managed cancellation admission cutoff', () => {
+  async function fixture(termEnd: string) {
+    const { SqliteD1, applyMigrations } = await import('./sqlite-d1');
+    const db = new SqliteD1();
+    applyMigrations(db);
+    db.exec(readFileSync('migrations/0027_commercial.sql', 'utf8'));
+    db.exec("INSERT INTO users(id,email,password_hash) VALUES('u','u@example.invalid','unused'); INSERT INTO businesses(id,user_id,slug,name) VALUES('b','u','b','Business'); INSERT INTO calls(id,business_id,channel,connected_at) VALUES('c','b','web','1999-12-31 23:59:59')");
+    db.database.prepare("INSERT INTO commercial_cancellations VALUES('b',?,'uncertain','1999-12-31T00:00:00Z')").run(termEnd);
+    const media = {callId:'c',room:'room',caller:'caller',callback:'callback',instructions:'Instructions',greeting:'Hello',voice:'marin',language:'en',startupDeadline:Date.now()+60000};
+    const values = new Map<string, unknown>([['livekit',media]]);
+    const storage = {get:async(k:string)=>structuredClone(values.get(k)),put:async(k:string,v:unknown)=>{values.set(k,structuredClone(v));}};
+    const session = new CallSession({storage} as unknown as DurableObjectState,{...env,DB:db as unknown as D1Database,LIVEKIT_AGENT_SERVICE_TOKEN:'synthetic-service'}) as any;
+    const context = (jobId='job')=>session.livekitRequest(new Request('https://internal/livekit/context?call=c',{method:'POST',headers:{Authorization:'Bearer synthetic-service','Content-Type':'application/json'},body:JSON.stringify({room:'room',jobId})}));
+    return {db,session,context,values};
+  }
+  it('refuses a first job after expiry without recording it', async () => {
+    const {db,context,values}=await fixture('2000-01-01T00:00:00Z');
+    try {
+      expect((await context()).status).toBe(410);
+      expect((values.get('livekit') as any).jobId).toBeUndefined();
+    } finally {db.close();}
+  });
+  it('admits before expiry and preserves same-job polling after expiry, while rejecting replacement jobs', async () => {
+    const {db,context,values}=await fixture('2999-01-01T00:00:00Z');
+    try {
+      expect((await context()).status).toBe(200);
+      db.exec("UPDATE commercial_cancellations SET term_end='2000-01-01T00:00:00Z'");
+      expect((await context()).status).toBe(200);
+      expect((await context('replacement')).status).toBe(409);
+      expect((values.get('livekit') as any).jobId).toBe('job');
+    } finally {db.close();}
+  });
+  it('does not apply the managed job cutoff to self-hosted calls', async () => {
+    const {db,session,context}=await fixture('2000-01-01T00:00:00Z');
+    try {
+      session.env.OPENFON_MANAGED_WEB='false';
+      expect((await context()).status).toBe(200);
+    } finally {db.close();}
+  });
+  it('blocks new call startup after expiry but preserves a connected carrier startup', async () => {
+    const {db,session}=await fixture('2000-01-01T00:00:00Z');
+    try {
+      session.callId='c';
+      session.loadSettings=async()=>{session.settings={};};
+      await expect(session.loadCall()).rejects.toThrow('subscription ends');
+      db.exec("UPDATE calls SET channel='telnyx',connected_at=NULL");
+      await expect(session.loadCall()).rejects.toThrow('subscription ends');
+      db.exec("UPDATE calls SET connected_at='1999-12-31 23:59:59'");
+      await expect(session.loadCall()).resolves.toBeUndefined();
+    } finally {db.close();}
+  });
+});

@@ -56,7 +56,9 @@ export async function reserveTelnyxCall(
         WHERE route.connection_id=? AND route.phone_number=? AND route.enabled=1
           AND assistants.business_id=route.business_id AND assistants.state='active'
           AND (${managed?'1':"assistants.engine='realtime'"})
-          ${managed?'AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=route.business_id)':''}
+          ${managed?`AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=route.business_id)
+          AND NOT EXISTS(SELECT 1 FROM commercial_cancellations WHERE business_id=route.business_id
+            AND julianday(term_end)<=julianday('now'))`:''}
           AND route.business_id=? AND route.assistant_id=?
           AND assistants.engine IS ? AND assistants.realtime_model IS ? AND assistants.realtime_voice IS ?
           ${managed?'':`AND (provider_settings.business_id IS NOT NULL)=?
@@ -97,7 +99,10 @@ export async function telnyxMediaAllowed(env: Env, callId: string): Promise<bool
      WHERE calls.id=? AND calls.channel='telnyx' AND calls.status='active'
        AND calls.reserved_at IS NOT NULL AND calls.carrier_released_at IS NULL
        AND route.enabled=1 AND assistants.state='active' AND (${managedWeb(env)?'1':"assistants.engine='realtime'"})
-       ${managedWeb(env)?'AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=calls.business_id)':''}`
+       ${managedWeb(env)?`AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=calls.business_id)
+       AND (calls.connected_at IS NOT NULL OR NOT EXISTS(
+         SELECT 1 FROM commercial_cancellations WHERE business_id=calls.business_id
+           AND julianday(term_end)<=julianday('now')))` :''}`
   ).bind(callId).first();
   return Boolean(row);
 }

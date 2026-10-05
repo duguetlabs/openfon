@@ -1,6 +1,6 @@
 import {readFileSync} from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { reserveTelnyxCall, telnyxLocalCallId } from '../src/telnyx-admission';
+import { reserveTelnyxCall, telnyxLocalCallId, telnyxMediaAllowed } from '../src/telnyx-admission';
 import { SqliteD1, applyMigrations } from './sqlite-d1';
 import { fakeEnv } from './fake-d1';
 import type { Env } from '../src/types';
@@ -173,6 +173,32 @@ describe('operator-managed Azure carrier admission', () => {
     );
     expect(await reserve()).toBe(false);
     expect(rows()).toEqual({ calls: [], links: [] });
+  });
+  it.each(['requested', 'confirmed', 'uncertain'])('refuses expired %s cancellation at the actual reservation INSERT', async state => {
+    const observation=holdBatch(()=>db.database.prepare(
+      "INSERT INTO commercial_cancellations VALUES('biz','2000-01-01T00:00:00Z',?,'2000-01-01T00:00:00Z')"
+    ).run(state));
+    expect(await reserve()).toBe(false);
+    expect(observation().delta).toBe(0);
+    expect(rows()).toEqual({calls:[],links:[]});
+  });
+  it('allows future cancellation, then blocks first media after expiry while preserving exact-link recovery', async () => {
+    db.exec("INSERT INTO commercial_cancellations VALUES('biz','2999-01-01T00:00:00Z','requested','2000-01-01T00:00:00Z')");
+    expect(await reserve()).toBe(true);
+    expect(await telnyxMediaAllowed(env,id)).toBe(true);
+    db.exec("UPDATE commercial_cancellations SET term_end='2000-01-01T00:00:00Z'");
+    expect(await telnyxMediaAllowed(env,id)).toBe(false);
+    const saved=rows(),start=changes();
+    expect(await reserve()).toBe(true);
+    expect(rows()).toEqual(saved);expect(changes()).toBe(start);
+    db.database.prepare("UPDATE calls SET connected_at='1999-12-31 23:59:59' WHERE id=?").run(id);
+    expect(await telnyxMediaAllowed(env,id)).toBe(true);
+  });
+  it('does not apply managed cancellation policy to self-hosted calls', async () => {
+    env.OPENFON_MANAGED_WEB='false';
+    db.exec("UPDATE assistants SET engine='realtime',realtime_model='gpt-realtime-2',realtime_voice='marin'; UPDATE provider_settings SET realtime_provider='kataleptic',realtime_api_key='synthetic'; INSERT INTO commercial_cancellations VALUES('biz','2000-01-01T00:00:00Z','requested','2000-01-01T00:00:00Z')");
+    expect(await reserve()).toBe(true);
+    expect(await telnyxMediaAllowed(env,id)).toBe(true);
   });
   it('keeps managed quota enforcement atomic', async () => {
     holdBatch(() =>
