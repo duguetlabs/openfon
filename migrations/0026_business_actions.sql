@@ -25,6 +25,13 @@ BEGIN SELECT RAISE(ABORT,'action call must belong to business'); END;
 CREATE TRIGGER action_items_owner_update BEFORE UPDATE OF call_id,business_id ON action_items
 WHEN NOT EXISTS(SELECT 1 FROM calls WHERE id=NEW.call_id AND business_id=NEW.business_id)
 BEGIN SELECT RAISE(ABORT,'action call must belong to business'); END;
+-- One immutable successful extraction snapshot per call. Concurrent/repeated
+-- processing cannot append a paraphrased duplicate or transfer handled status.
+CREATE TABLE call_action_extractions (
+ call_id TEXT PRIMARY KEY REFERENCES calls(id) ON DELETE CASCADE,
+ token TEXT NOT NULL,
+ created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 -- Historical intent is a request, never evidence of a confirmed appointment.
 INSERT INTO action_items(id,business_id,call_id,source_key,kind,content,created_at)
 SELECT 'action_booking_'||id,business_id,id,'booking','booking_request',COALESCE(NULLIF(summary,''),'Appointment requested'),started_at
@@ -41,22 +48,22 @@ WHEN NEW.status!='active'
 BEGIN
 INSERT OR IGNORE INTO action_items(id,business_id,call_id,source_key,kind,content,created_at)
 SELECT 'action_booking_'||id,business_id,id,'booking','booking_request',COALESCE(NULLIF(summary,''),'Appointment requested'),started_at
-FROM calls WHERE id=NEW.id AND intent='booking' AND status!='active';
+FROM calls WHERE id=NEW.id AND NOT EXISTS(SELECT 1 FROM action_items WHERE call_id=NEW.id AND kind='booking_request') AND intent='booking' AND status!='active';
 INSERT OR IGNORE INTO action_items(id,business_id,call_id,source_key,kind,content,caller_name,caller_phone,created_at)
 SELECT 'action_message_'||id,business_id,id,'message','message',json_extract(message_json,'$.message'),
  CASE WHEN json_type(message_json,'$.caller_name')='text' THEN json_extract(message_json,'$.caller_name') ELSE '' END,
  CASE WHEN json_type(message_json,'$.caller_phone')='text' THEN json_extract(message_json,'$.caller_phone') ELSE '' END,started_at
-FROM calls WHERE id=NEW.id AND status!='active' AND CASE WHEN json_valid(message_json) THEN json_type(message_json,'$.message')='text' AND trim(json_extract(message_json,'$.message'))!='' ELSE 0 END;
+FROM calls WHERE id=NEW.id AND NOT EXISTS(SELECT 1 FROM action_items WHERE call_id=NEW.id AND kind='message') AND status!='active' AND CASE WHEN json_valid(message_json) THEN json_type(message_json,'$.message')='text' AND trim(json_extract(message_json,'$.message'))!='' ELSE 0 END;
 END;
 CREATE TRIGGER calls_action_projection_update AFTER UPDATE OF status,summary,intent,message_json ON calls
 WHEN NEW.status!='active'
 BEGIN
 INSERT OR IGNORE INTO action_items(id,business_id,call_id,source_key,kind,content,created_at)
 SELECT 'action_booking_'||id,business_id,id,'booking','booking_request',COALESCE(NULLIF(summary,''),'Appointment requested'),started_at
-FROM calls WHERE id=NEW.id AND intent='booking' AND status!='active';
+FROM calls WHERE id=NEW.id AND NOT EXISTS(SELECT 1 FROM action_items WHERE call_id=NEW.id AND kind='booking_request') AND intent='booking' AND status!='active';
 INSERT OR IGNORE INTO action_items(id,business_id,call_id,source_key,kind,content,caller_name,caller_phone,created_at)
 SELECT 'action_message_'||id,business_id,id,'message','message',json_extract(message_json,'$.message'),
  CASE WHEN json_type(message_json,'$.caller_name')='text' THEN json_extract(message_json,'$.caller_name') ELSE '' END,
  CASE WHEN json_type(message_json,'$.caller_phone')='text' THEN json_extract(message_json,'$.caller_phone') ELSE '' END,started_at
-FROM calls WHERE id=NEW.id AND status!='active' AND CASE WHEN json_valid(message_json) THEN json_type(message_json,'$.message')='text' AND trim(json_extract(message_json,'$.message'))!='' ELSE 0 END;
+FROM calls WHERE id=NEW.id AND NOT EXISTS(SELECT 1 FROM action_items WHERE call_id=NEW.id AND kind='message') AND status!='active' AND CASE WHEN json_valid(message_json) THEN json_type(message_json,'$.message')='text' AND trim(json_extract(message_json,'$.message'))!='' ELSE 0 END;
 END;
