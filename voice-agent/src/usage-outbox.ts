@@ -28,6 +28,9 @@ const LIMIT = 1000,
   RETENTION_MS = 7 * 86400000;
 /** Restricted persistent volume. No transcript, destination URL or provider/service key is stored. */
 export class UsageOutbox {
+  private writing: Promise<void> = Promise.resolve();
+  private delivering: Promise<void> = Promise.resolve();
+  private persistenceFailure: unknown;
   constructor(
     private directory: string,
     private base: string,
@@ -48,7 +51,7 @@ export class UsageOutbox {
   private async pruneTemporary(): Promise<void> {
     for (const name of await readdir(this.directory))
       if (
-        /^(?:[a-f0-9]{64}\.json\.[a-f0-9-]{36}\.tmp|[a-f0-9-]{36}\.probe)$/.test(
+        /^(?:[a-f0-9]{64}\.json\.[a-f0-9-]{36}\.tmp|[a-f0-9-]{36}\.probe|\.replay-cursor\.[a-f0-9-]{36}\.tmp)$/.test(
           name
         )
       )
@@ -150,8 +153,32 @@ export class UsageOutbox {
   }
   async send(value: PendingUsage): Promise<void> {
     this.valid(value);
+    // Queue disk work independently: later observations become durable even
+    // when an earlier remote delivery is slow. Preserve callback order.
+    const stored = this.writing.then(() => this.persist(value));
+    this.writing = stored.then(
+      () => {},
+      (error) => {
+        this.persistenceFailure = error;
+      }
+    );
+    const delivery = this.delivering.then(async () => {
+      const record = await stored;
+      await this.deliver(record.value);
+      await this.remove(this.file(record.value));
+    });
+    this.delivering = delivery.catch(() => {});
+    // Surface disk failure immediately, even behind a stalled remote request.
+    await Promise.all([stored, delivery]);
+  }
+  async flushPersistence(): Promise<void> {
+    await this.writing;
+    if (this.persistenceFailure)
+      throw Error('Usage journal persistence unconfirmed');
+  }
+  private async persist(value: PendingUsage): Promise<Stored> {
     const target = this.file(value);
-    const stored = await this.withLock(async () => {
+    return this.withLock(async () => {
       try {
         return JSON.parse(await readFile(target, 'utf8')) as Stored;
       } catch (error) {
@@ -177,8 +204,6 @@ export class UsageOutbox {
       await this.syncDirectory();
       return stored;
     });
-    await this.deliver(stored.value);
-    await this.remove(target);
   }
   private async remove(file: string) {
     await unlink(file).catch((error) => {
@@ -222,16 +247,49 @@ export class UsageOutbox {
   async replay(
     limit = 20
   ): Promise<{ sent: number; pending: number; dead: number; expired: number }> {
-    const names = await this.withLock(async () => {
+    if (!Number.isSafeInteger(limit) || limit < 0 || limit > LIMIT)
+      throw Error('Invalid usage replay limit');
+    const { names, selected } = await this.withLock(async () => {
       await this.pruneTemporary();
-      return (await readdir(this.directory)).filter((name) =>
-        /^[a-f0-9]{64}\.(json|dead)$/.test(name)
-      );
+      const sorted = (await readdir(this.directory))
+        .filter((name) => /^[a-f0-9]{64}\.(json|dead)$/.test(name))
+        .sort();
+      const cursorFile = join(this.directory, '.replay-cursor');
+      let cursor = '';
+      try {
+        if ((await stat(cursorFile)).size > 80)
+          throw Error('Invalid usage replay cursor');
+        cursor = await readFile(cursorFile, 'utf8');
+        if (!/^[a-f0-9]{64}\.json$/.test(cursor))
+          throw Error('Invalid usage replay cursor');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+      const after = sorted.findIndex((name) => name > cursor);
+      const start = after < 0 ? 0 : after;
+      const names = [...sorted.slice(start), ...sorted.slice(0, start)];
+      const selected = names
+        .filter((name) => name.endsWith('.json'))
+        .slice(0, limit);
+      if (selected.length) {
+        // Reserve the next bounded batch before callbacks. A restart or a
+        // failed prefix must not repeatedly prevent later calls from delivery.
+        const temporary = cursorFile + '.' + randomUUID() + '.tmp';
+        const file = await open(temporary, 'wx', 0o600);
+        try {
+          await file.writeFile(selected[selected.length - 1]!);
+          await file.sync();
+        } finally {
+          await file.close();
+        }
+        await rename(temporary, cursorFile);
+        await this.syncDirectory();
+      }
+      return { names, selected: new Set(selected) };
     });
     let sent = 0,
       dead = 0,
       expired = 0,
-      attempted = 0,
       pending = 0;
     for (const name of names) {
       const file = join(this.directory, name);
@@ -268,7 +326,7 @@ export class UsageOutbox {
           continue;
         }
         if (this.file(stored.value) !== file) throw new AdmissionError(400);
-        if (attempted++ >= limit) {
+        if (!selected.has(name)) {
           pending++;
           continue;
         }

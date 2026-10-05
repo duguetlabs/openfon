@@ -65,7 +65,7 @@ test('usage persists before failed callback; a restarted process replays identic
       expired: 0,
     });
     assert.deepEqual(delivered, [value]);
-    assert.equal((await readdir(dir)).length, 0);
+    assert.deepEqual(await readdir(dir), ['.replay-cursor']);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

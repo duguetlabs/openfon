@@ -85,6 +85,8 @@ export default defineAgent({entry: async (ctx: JobContext) => {
         } catch { diagnostic('service_stop_unconfirmed'); }
       }
       usage.finish();
+      try { await within(outbox.flushPersistence(),7000); diagnostic('usage_journal_flushed'); }
+      catch { failed=true; diagnostic('usage_journal_unconfirmed'); }
       try { await within(usage.flush(),7000); diagnostic('usage_flushed'); } catch { failed=true; diagnostic('usage_unconfirmed'); }
       try { await within(transcripts.flush(),7000); diagnostic('transcripts_flushed'); } catch { failed = true; diagnostic('transcripts_failed'); }
       try {

@@ -146,7 +146,10 @@ export class AzureUsageCapture {
       this.fail();
       return;
     }
-    this.pending = this.pending.then(async () => {
+    // Start local journal admission now; a prior remote callback must not keep
+    // a terminal observation only in memory. The outbox serializes disk and
+    // network work independently while this aggregate still tracks delivery.
+    const delivery = (async () => {
       try {
         await this.send(observation);
       } catch (error) {
@@ -155,7 +158,8 @@ export class AzureUsageCapture {
       } finally {
         this.queued--;
       }
-    });
+    })();
+    this.pending = Promise.all([this.pending, delivery]).then(() => {});
   }
   finish(): void {
     if (this.sessionId && !this.terminal)
