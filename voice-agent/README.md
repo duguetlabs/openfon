@@ -1,26 +1,30 @@
 # Released Web voice worker
 
-This candidate preserves the released OpenFon application and moves browser audio to LiveKit. It does not replace authentication, business APIs, public links or call history with the prototype application. Telephone integrations remain on their existing transports.
+This candidate preserves the released OpenFon application and uses LiveKit for browser audio and direct operator Azure inference. It does not replace authentication, business APIs, public links or call history with the prototype application. Telephone integrations remain on their existing transports.
 
 ## Operator setup
 
 Use Node 22.22 or newer (development: 24.20.0). Install the root and worker dependencies with `npm ci` and `npm --prefix voice-agent ci`. Build the worker with `npm --prefix voice-agent run build`.
 
-A LiveKit server and this long-running Node worker are required **in addition** to the Cloudflare application. Cloudflare Workers cannot run the Node agent. The browser must be able to reach LiveKit over secure WebSocket/WebRTC; LiveKit also needs appropriate TURN/UDP connectivity. The agent must reach LiveKit, Kataleptic and the application's operator callback route.
+A LiveKit server and this long-running Node worker are required **in addition** to the Cloudflare application. Cloudflare Workers cannot run the Node agent. The browser must be able to reach LiveKit over secure WebSocket/WebRTC; LiveKit also needs appropriate TURN/UDP connectivity. The agent must reach LiveKit, Azure and the application's operator callback route.
 
 Configure the Cloudflare application:
 
 - `WEB_VOICE_TRANSPORT=livekit` (absent means the existing transport).
 - `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`.
 - `LIVEKIT_AGENT_SERVICE_TOKEN`: a separate high-entropy operator credential.
-- `REALTIME_API_KEY`: operator Kataleptic key for voice samples.
+- `OPENFON_MANAGED_WEB=true`: operator-controlled managed edition; it also enables the LiveKit browser transport.
+- `AZURE_OPENAI_ENDPOINT`: HTTPS Azure resource root, with no path, query or embedded credentials.
+- `AZURE_OPENAI_API_KEY`: operator resource credential.
+- `AZURE_OPENAI_LIVE_DEPLOYMENT=gpt-live-1` and `AZURE_OPENAI_TEXT_DEPLOYMENT=gpt-5.4-mini` (these defaults are pinned; unsupported deployments fail setup).
 
 Configure the Node process:
 
 - `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`: the same LiveKit service.
 - `OPENFON_API_URL`: the application origin. HTTPS is mandatory except loopback development.
 - `OPENFON_AGENT_SERVICE_TOKEN`: matches the application's service token.
-- `KATALEPTIC_API_KEY`: authorized Kataleptic key; provision through the vault/environment, never through customer data or a tracked file.
+- `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`: the same authorized Azure resource, provisioned through the vault/environment.
+- `OPENFON_USAGE_DIR`: an absolute, persistent, restricted writable directory, separate for staging and production.
 
 Then run `npm --prefix voice-agent start`. It registers as `openfon-released-web`. The application creates each room before dispatching its agent. For loopback development a separately installed LiveKit server may run with `livekit-server --dev --bind 127.0.0.1`; its documented development key/secret are for that loopback instance only. A local application must use local D1 and local Durable Objects. Do not point a local candidate at production state.
 
@@ -28,19 +32,30 @@ Inference is pinned to genuine `realtime.GPTLiveModel`, `gpt-live-1`, mono PCM 2
 
 ## Self-hosted infrastructure
 
-LiveKit Cloud is optional. A self-hosted LiveKit server carries audio; the Node worker coordinates the call and connects to Kataleptic for inference. Neither service requires an inference GPU. The existing Cloudflare application, D1 database and Durable Objects remain the account, transcript and call-lifecycle authority.
+LiveKit Cloud is optional. A self-hosted LiveKit server carries audio; the Node worker coordinates the call and connects directly to Azure for inference. Neither service requires an inference GPU. The existing Cloudflare application, D1 database and Durable Objects remain the account, transcript and call-lifecycle authority.
 
 The worker has a separate container build: `docker build -t openfon-voice-agent voice-agent` from the repository root. Its build context allowlist excludes credentials, local state and recordings. The runtime uses a non-root user and a digest-pinned Node image. Supply the operator settings listed above only at runtime. The image does not include a LiveKit server, TLS termination or a TURN relay.
 
-The proposed Azure deployment is a dedicated Linux VM in Europe running the self-hosted LiveKit service and worker, with secure signaling, WebRTC media connectivity and TURN fallback. Ordinary HTTP-only hosting is insufficient. Keep staging and production credentials, rooms and callback origins separate. VM size, region, cost, network configuration and resource creation remain pending selection of the billing subscription and budget. No Azure deployment, high-availability guarantee or Azure audio acceptance is established by the container build.
+The existing Azure Linux VM hosts separate staging and production LiveKit/Node services. Keep their credentials, rooms, usage volumes and callback origins separate. The existing Cloudflare application and state remain in place. Changing inference routing does not change the media network, certificates or telephone carrier transport. This source change alone does not establish a new Azure deployment or high-availability guarantee.
 
 ## Migration and existing choices
 
 Apply additive migration `0025_livekit_call_events.sql` **before** enabling the flag. It adds transcript source ID, revision and finality; historical rows remain final and unchanged. No assistant, account, credential, engine choice or public link is rewritten. Remote migration and deployment are separate approval gates.
 
-The browser feature flag intentionally routes Web calls through GPT-Live regardless of historical engine selection. It does not change telephone routing. The saved voice field for the assistant's existing engine remains authoritative. Compatible voices appear in the existing voice menu; an incompatible saved voice fails explicitly and must be changed deliberately. Samples use the same selected GPT-Live voice and Kataleptic speech protocol, using the existing bounded sample generator rather than a LiveKit room. Its Worker key and the Node key must have access to the same service. Changing a voice does not change summary configuration.
+The managed flag pins Web browser and carrier inference, previews and post-call processing to operator Azure configuration. It does not rewrite saved assistant/provider choices or credentials. Managed voices are the compatible saved selection; incompatible choices require explicit correction. Carrier admission retains route/account ownership, source snapshot and quota checks. The unmanaged mode retains existing provider choices.
 
-Disable the flag to restore the original browser transport; retain the additive migration and saved transcript rows. Do not remove columns on rollback.
+Voice previews use direct Azure's selected GPT-Live voice and live audio protocol without creating a LiveKit room. Call summaries and structured actions use direct Azure Responses independently of voice selection. Apply the product/action and usage-ledger migrations with the corresponding release before enabling managed processing. Do not remove additive columns on rollback. Operator rollback must restore a reviewed complete Worker/Node/configuration pair; toggling the flag alone does not turn this direct-Azure Node build into the older gateway build.
+
+The pinned LiveKit SDK has a minimal reproducible authentication extension: `scripts/patch-livekit-azure.mjs` verifies exact source/distribution hashes for version 1.9.1, adds an `api-key` header option, and leaves the default bearer behavior unchanged. Installation fails on unexpected hashes. No dependency version is silently replaced.
+
+## Usage evidence and recovery
+
+Provider voice seconds remain cumulative decimal seconds; delegated token counters retain response identity and distinguish input, output, cached and reasoning subsets. Provider cost and customer billing are separate. Missing provider usage stays unknown; it is never replaced by zero or local wall time. Customer service duration uses server-owned start/stop timestamps and preserves failed calls too.
+
+Before a paid Node session, the persistent usage volume must be writable and have capacity. Each observation is durably written before callback delivery and deleted only after acknowledgement. Restarts replay the original identity and timestamp. Files are mode 0600 in a 0700 directory, capped at 1,000 records of 16 KiB each. They contain numeric usage, call/room/job identity and a callback capability, never audio, transcripts, provider credentials or destination URLs. Protect this volume as sensitive. Revoked/deleted/malformed records are quarantined; records expire after seven days, with numeric backlog/expiration diagnostics. An active writer's lock is never expired by a timer.
+
+Carrier usage uses Durable Object storage and the same idempotent ledger. The existing graceful provider close waits at most two seconds; missing final usage records an unknown, non-final observation and does not extend the call. Node close and callback flush also have explicit deadlines. Uncertain usage delivery remains queued for reconciliation. Call summary attempts are admitted once before inference; an ambiguous crash/failure does not silently pay for a second attempt. Invalid or partial extraction preserves usage but never seals a successful action snapshot.
+
 
 ## Lifecycle and transcripts
 

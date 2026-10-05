@@ -4,3 +4,6 @@
 !tsconfig.json
 !src/
 !src/**
+!scripts/
+!scripts/patch-livekit-azure.mjs
+!scripts/livekit-azure-patch.json

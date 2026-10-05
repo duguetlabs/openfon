@@ -1,3 +1,4 @@
+import {managedWeb} from './managed-azure';
 import type { Env } from './types';
 
 export interface LivekitSession {
@@ -6,8 +7,10 @@ export interface LivekitSession {
   commands?:Array<{id:string;text:string}>;
   jobId?: string; closing?: boolean; finished?: boolean; failed?: boolean;
   startupDeadline?: number; ready?: boolean;
+  /** Trusted service-start timestamp, only set after actual generated speech. */
+  serviceStartedAtMs?: number; serviceEndedAtMs?: number;
 }
-export function livekitEnabled(env: Env): boolean { return env.WEB_VOICE_TRANSPORT === 'livekit'; }
+export function livekitEnabled(env: Env): boolean { return managedWeb(env)||env.WEB_VOICE_TRANSPORT === 'livekit'; }
 export function secureEqual(a: string, b: string): boolean {
   if (!a || !b || a.length !== b.length) return false;
   let diff=0; for(let i=0;i<a.length;i++)diff|=a.charCodeAt(i)^b.charCodeAt(i); return diff===0;

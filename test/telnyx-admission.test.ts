@@ -1,3 +1,4 @@
+import {readFileSync} from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { reserveTelnyxCall, telnyxLocalCallId } from '../src/telnyx-admission';
 import { SqliteD1, applyMigrations } from './sqlite-d1';
@@ -117,4 +118,16 @@ describe('Telnyx checked admission snapshot',()=>{
     }} as unknown as D1Database;
     expect(await reserve()).toBe(false);expect(rows()).toEqual({calls:[],links:[]});
   });
+});
+
+describe('operator-managed Azure carrier admission',()=>{
+ beforeEach(()=>{db.exec(readFileSync('migrations/0027_commercial.sql','utf8'));Object.assign(env,{OPENFON_MANAGED_WEB:'true',AZURE_OPENAI_ENDPOINT:'https://fixture.cognitiveservices.azure.com',AZURE_OPENAI_API_KEY:'synthetic-azure'});db.exec("UPDATE assistants SET engine='pipeline',realtime_model='legacy',realtime_voice='marin' WHERE id='assistant'; UPDATE provider_settings SET realtime_provider='custom',realtime_api_key='' WHERE business_id='biz'");});
+ it('admits a compatible saved pipeline assistant without changing saved configuration',async()=>{
+  const before=db.database.prepare("SELECT * FROM assistants WHERE id='assistant'").get();expect(await reserve()).toBe(true);expect(db.database.prepare("SELECT * FROM assistants WHERE id='assistant'").get()).toEqual(before);
+ });
+ it('does not borrow a customer credential when operator Azure is missing',async()=>{env.AZURE_OPENAI_API_KEY='';expect(await reserve()).toBe(false);expect(rows()).toEqual({calls:[],links:[]});});
+ it('ignores unrelated saved provider changes but retains account and route identity',async()=>{holdBatch(()=>db.exec("DELETE FROM provider_settings"));expect(await reserve()).toBe(true);});
+ it.each([['voice',"UPDATE assistants SET realtime_voice='cedar' WHERE id='assistant'"],['foreign assistant',"UPDATE telnyx_number_routes SET business_id='other-biz',assistant_id='cross'"],['route disabled','UPDATE telnyx_number_routes SET enabled=0']])('refuses changed %s during reservation',async(_,sql)=>{holdBatch(()=>db.exec(sql));expect(await reserve()).toBe(false);expect(rows()).toEqual({calls:[],links:[]});});
+ it('refuses a deletion marker committed at the reservation boundary',async()=>{holdBatch(()=>db.exec("INSERT INTO commercial_deletion_jobs(business_id,requested_at) VALUES('biz','2026-10-05T00:00:00Z')"));expect(await reserve()).toBe(false);expect(rows()).toEqual({calls:[],links:[]});});
+ it('keeps managed quota enforcement atomic',async()=>{holdBatch(()=>db.exec("UPDATE businesses SET max_concurrent_calls=0 WHERE id='biz'"));expect(await reserve()).toBe(false);});
 });

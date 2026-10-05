@@ -14,6 +14,6 @@ export function azureConfig(env:Pick<Env,'AZURE_OPENAI_ENDPOINT'|'AZURE_OPENAI_A
   !/^([a-z0-9-]+)\.(cognitiveservices\.azure\.com|openai\.azure\.com)$/.test(endpoint.hostname)||endpoint.pathname!=='/'||!env.AZURE_OPENAI_API_KEY)
   throw new Error('Calling is not available yet. Please try again later.');
  const live=env.AZURE_OPENAI_LIVE_DEPLOYMENT||'gpt-live-1',text=env.AZURE_OPENAI_TEXT_DEPLOYMENT||'gpt-5.4-mini';
- if(live!=='gpt-live-1'||!/^gpt-[a-z0-9.-]{1,60}$/.test(text))throw new Error('Calling is not available yet. Please try again later.');
+ if(live!=='gpt-live-1'||text!=='gpt-5.4-mini')throw new Error('Calling is not available yet. Please try again later.');
  return {baseURL:endpoint.origin+'/openai/v1',apiKey:env.AZURE_OPENAI_API_KEY,liveModel:live,textModel:text};
 }

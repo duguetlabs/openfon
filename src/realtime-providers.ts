@@ -1,3 +1,4 @@
+import {azureConfig,managedWeb} from './managed-azure';
 import { GPT_LIVE_VOICES } from './realtime-voices';
 import type { AgentSettings, Env } from './types';
 import { LlmConfigError, validateLlmBaseUrl } from './providers';
@@ -15,6 +16,8 @@ export interface RealtimeConfig {
   apiKey: string;
   model: string;
   protocol: 'gateway' | 'openai';
+  /** Set only by operator-managed resolver, never from customer input. */
+  azure?: boolean;
 }
 export const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime';
 export const KATALEPTIC_HD_MODEL = 'kataleptic-realtime-hd';
@@ -47,6 +50,7 @@ export function defaultGatewayModel(baseUrl: string): string {
 // Explicit workspace providers never borrow an operator credential. The instance
 // option alone preserves the legacy gateway URL/key/model defaults.
 export function resolveRealtime(env: Env & { REALTIME_PROVIDER?: RealtimeProvider }, settings: (AgentSettings & RealtimeSettings) | null): RealtimeConfig {
+  if(managedWeb(env)){const cfg=azureConfig(env);return {provider:'custom',protocol:'gateway',azure:true,baseUrl:cfg.baseURL.replace(/^https:/,'wss:')+'/realtime',apiKey:cfg.apiKey,model:cfg.liveModel};}
   const selection = settings?.realtime_provider || 'instance';
   const instance = selection === 'instance';
   const provider = instance ? env.REALTIME_PROVIDER || 'kataleptic' : selection;
@@ -111,7 +115,7 @@ export function realtimeConnection(config: RealtimeConfig): { url: string; heade
   // Workers fetch Upgrade supports server-side Authorization; never put a
   // durable configured API key in URL query parameters or browser subprotocols.
   url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
-  return { url: url.href, headers: { Upgrade: 'websocket', Authorization: `Bearer ${config.apiKey}` } };
+  return { url: url.href, headers: config.azure?{Upgrade:'websocket','api-key':config.apiKey}:{ Upgrade: 'websocket', Authorization: `Bearer ${config.apiKey}` } };
 }
 
 // GPT-Live has no `?model=` and no `/realtime` path: the gateway serves it at
@@ -129,7 +133,7 @@ export function gptLiveConnection(config: RealtimeConfig): { url: string; header
   if (url.protocol === 'wss:') url.protocol = 'https:';
   else if (url.protocol === 'ws:') url.protocol = 'http:';
   else throw new LlmConfigError('Realtime endpoint must be an absolute WebSocket URL.');
-  return { url: url.href, headers: { Upgrade: 'websocket', Authorization: `Bearer ${config.apiKey}` } };
+  return { url: url.href, headers: config.azure?{Upgrade:'websocket','api-key':config.apiKey}:{ Upgrade: 'websocket', Authorization: `Bearer ${config.apiKey}` } };
 }
 
 export function realtimeCapabilities(config: RealtimeConfig) {

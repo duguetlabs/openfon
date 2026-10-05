@@ -1,3 +1,4 @@
+import {azureConfig,managedWeb} from './managed-azure';
 import type { Hono } from 'hono';
 import type { AgentSettings, Env, LlmConfig, ProviderSettings } from './types';
 import { LlmConfigError, resolveLlm, validateLlmBaseUrl } from './providers';
@@ -13,6 +14,7 @@ export interface SummarySettings {
 }
 
 export function resolveSummary(env: Env, config: SummarySettings | null, provider: ProviderSettings | null, assistant: AgentSettings | null): LlmConfig {
+  if(managedWeb(env)){const cfg=azureConfig(env);return {baseUrl:cfg.baseURL,apiKey:cfg.apiKey,model:cfg.textModel};}
   if (!config || config.mode === 'legacy') return resolveLlm(env, assistant);
   if (config.mode === 'workspace') {
     return resolveLlm(env, { ...provider, llm_model: config.model || provider?.llm_model || '' } as AgentSettings);
@@ -25,6 +27,7 @@ export function resolveSummary(env: Env, config: SummarySettings | null, provide
 }
 
 export async function loadSummaryLlm(env: Env, businessId: string, assistant: AgentSettings | null): Promise<LlmConfig> {
+  if(managedWeb(env))return resolveSummary(env,null,null,null);
   const config = await env.DB.prepare('SELECT * FROM summary_settings WHERE business_id=?').bind(businessId).first<SummarySettings>();
   const provider = config?.mode === 'workspace'
     ? await env.DB.prepare('SELECT * FROM provider_settings WHERE business_id=?').bind(businessId).first<ProviderSettings>() : null;

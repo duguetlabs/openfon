@@ -75,12 +75,15 @@ export interface GptLiveSessionOptions {
   voice: string; // '' = service default
   delegationModel: string;
   delegationInstructions: string;
+  maxDelegationTokens?:number;
   greeting: string | null;
 }
 
 /** What CallSession provides. Every method is synchronous and must not throw. */
 export interface GptLiveHost {
   readonly debug: CallDebug | null;
+  /** Internal numeric usage observation; host must not expose/log raw events. */
+  providerEvent?(event:Record<string,unknown>):void;
   /** Rate/size admission and decode for one output chunk; null if the call is failing. */
   admitAudio(encoded: string, source: object): ArrayBuffer | null;
   /** The agent went quiet: output admission may start a new bounded segment. */
@@ -120,6 +123,7 @@ export function gptLiveSessionStart(options: GptLiveSessionOptions): { type: 'se
         parameters: { type: 'object', properties: {}, additionalProperties: false },
       }],
       tool_choice: 'auto',
+      ...(options.maxDelegationTokens?{max_output_tokens:options.maxDelegationTokens}:{}),
     } },
   } };
 }
@@ -189,6 +193,7 @@ export class GptLiveEngine {
       this.host.debug?.event('connect_attempt', { engine: 'gpt-live' });
       const response = await fetch(connection.url, { headers: connection.headers, redirect: 'manual', signal: controller.signal });
       if (response.status !== 101 || !response.webSocket) {
+        void response.body?.cancel().catch(()=>{});
         this.host.debug?.event('connect_rejected', { status: response.status });
         return false;
       }
@@ -221,6 +226,7 @@ export class GptLiveEngine {
         let msg: Record<string, unknown>;
         try { msg = parseRealtimeMessage(event.data); } catch { return settled ? this.host.failed(new GptLiveProtocolError('sent an invalid message')) : settle(false); }
         if (typeof msg.type !== 'string') return settled ? this.host.failed(new GptLiveProtocolError('sent an invalid message')) : settle(false);
+        this.host.providerEvent?.(msg);
         if (!this.started) {
           if (msg.type === 'session.started') {
             if (!this.confirmed(msg.session, start.session)) { this.host.debug?.event('session_rejected'); settle(false); return; }
@@ -258,9 +264,9 @@ export class GptLiveEngine {
   // both before a caller is told the line is ready.
   private confirmed(echo: unknown, sent: Record<string, unknown>): boolean {
     if (!echo || typeof echo !== 'object') return false;
-    const session = echo as { model?: unknown; audio?: { format?: { type?: unknown; rate?: unknown }; output?: { voice?: unknown } } };
+    const session = echo as { model?: unknown; delegation?:{responses?:{model?:unknown}}; audio?: { format?: { type?: unknown; rate?: unknown }; output?: { voice?: unknown } } };
     const voice = (sent.audio as { output?: { voice?: string } }).output?.voice;
-    return session.model === GPT_LIVE_MODEL &&
+    return (!this.config.azure||session.delegation?.responses?.model===(sent.delegation as {responses:{model:string}}).responses.model)&&session.model === GPT_LIVE_MODEL &&
       session.audio?.format?.type === GPT_LIVE_AUDIO_FORMAT.type && session.audio.format.rate === GPT_LIVE_AUDIO_FORMAT.rate &&
       (voice === undefined || session.audio.output?.voice === voice);
   }
@@ -311,6 +317,9 @@ export class GptLiveEngine {
     } catch { return false; }
   }
 
+  private closeWaiters:Array<()=>void>=[];
+  async closeAndDrain():Promise<void>{this.close();if(!this.ws)return;await new Promise<void>(resolve=>this.closeWaiters.push(resolve));}
+
   private detach(): void {
     if (this.keepalive !== undefined) clearTimeout(this.keepalive);
     this.keepalive = undefined;
@@ -318,6 +327,7 @@ export class GptLiveEngine {
     if (this.closeTimer !== undefined) clearTimeout(this.closeTimer);
     this.closeTimer = undefined;
     this.ws = null; this.started = false;
+    for(const resolve of this.closeWaiters.splice(0))resolve();
   }
 
   private discard(): void {

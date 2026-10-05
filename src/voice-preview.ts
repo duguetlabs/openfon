@@ -1,3 +1,13 @@
+import {azureSeconds} from './azure-usage';
+import {managedWeb} from './managed-azure';
+import {azureVoicePreview} from './managed-voice-preview';
+import {recordPreviewUsage} from './commercial-usage';
+export async function generateManagedVoicePreview(env:Env,selection:{voice:string;language:string},signal:AbortSignal,context:{businessId:string;operationId:string}):Promise<ArrayBuffer>{
+ return azureVoicePreview(env,selection,signal,async usage=>{
+  const seconds=azureSeconds(usage.seconds),metrics=seconds===undefined?{}:{voiceSessionSeconds:seconds};
+  await recordPreviewUsage(env,context,{eventId:'preview_'+context.operationId,source:'azure_voice',providerSessionId:usage.sessionId,observedAt:new Date().toISOString(),final:usage.final,metrics,model:'gpt-live-1'});
+ });
+}
 import type { AgentSettings, Env } from './types';
 import { speechConfig, speechVoice, synthesize, voiceForReply } from './providers';
 import { GPT_LIVE_MODEL, gptLiveConnection, isGptLiveModel, liveRealtimeVoice, realtimeCapabilities, realtimeConnection, resolveRealtime, type RealtimeConfig } from './realtime-providers';
@@ -170,6 +180,7 @@ export function gptLivePreview(config: RealtimeConfig, voice: string, text: stri
 }
 
 export async function generateVoicePreview(env: Env, settings: AgentSettings, signal: AbortSignal): Promise<ArrayBuffer> {
+  if(managedWeb(env))return generateManagedVoicePreview(env,{voice:settings.realtime_voice||settings.voice,language:settings.language},signal,{businessId:settings.business_id,operationId:crypto.randomUUID()});
   const text = PREVIEW_TEXT[settings.language];
   if (!text) throw failed();
   if (settings.engine === 'pipeline') {

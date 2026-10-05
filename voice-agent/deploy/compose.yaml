@@ -24,6 +24,8 @@ services:
     security_opt: [no-new-privileges:true]
     read_only: true
     tmpfs: ["/tmp:size=64m,mode=1777"]
+    volumes:
+      - ./usage:/var/lib/openfon-usage
     env_file: agent.env
     depends_on: [livekit]
     logging:
