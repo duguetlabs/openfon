@@ -343,3 +343,24 @@ describe('managed cancellation admission cutoff', () => {
     } finally {db.close();}
   });
 });
+
+it('failed cached extraction cannot project legacy actions at finalization, while keeping summary and charged usage', async () => {
+  const {SqliteD1,applyMigrations}=await import('./sqlite-d1');
+  const db=new SqliteD1();
+  try {
+    applyMigrations(db);
+    db.exec(readFileSync('migrations/0026_business_actions.sql','utf8'));
+    db.exec(readFileSync('migrations/0027_commercial.sql','utf8'));
+    db.exec("INSERT INTO users(id,email,password_hash) VALUES('u','u@example.invalid','unused'); INSERT INTO businesses(id,user_id,slug,name) VALUES('b','u','b','Business'); INSERT INTO calls(id,business_id,channel) VALUES('c','b','web')");
+    const cached={summary:{summary:'Useful call notes',intent:'booking',caller_name:'Alex',caller_phone:null,message:'Call me back',actions:[],responseId:'resp_partial',model:'gpt-5.4-mini',usage:{inputTokens:7},processingFailed:true},observation:{eventId:'summary_resp_partial',source:'azure_text',providerSessionId:'resp_partial',providerResponseId:'resp_partial',observedAt:new Date().toISOString(),final:true,metrics:{inputTokens:7},model:'gpt-5.4-mini'}};
+    const values=new Map<string,unknown>([['managed-summary',cached]]);
+    const storage={get:async(k:string)=>values.get(k),put:async(k:string,v:unknown)=>{values.set(k,v);},list:async()=>new Map(),deleteAlarm:async()=>{},deleteAll:async()=>{}};
+    const session=new CallSession({storage} as unknown as DurableObjectState,{...env,DB:db as unknown as D1Database}) as any;
+    session.callId='c';session.history=[{role:'system',content:''},{role:'user',content:'Please call me back'},{role:'assistant',content:'Goodbye'}];session.settings={language:'en'};
+    await session.finalize();
+    expect(db.database.prepare('SELECT count(*) n FROM action_items').get()).toEqual({n:0});
+    expect(db.database.prepare('SELECT count(*) n FROM call_action_extractions').get()).toEqual({n:0});
+    expect(db.database.prepare('SELECT status,summary,intent,message_json,outcome FROM calls').get()).toEqual({status:'completed',summary:'Useful call notes',intent:null,message_json:null,outcome:'answered'});
+    expect(db.database.prepare('SELECT count(*) n FROM commercial_provider_observations').get()).toEqual({n:1});
+  }finally{db.close();}
+});

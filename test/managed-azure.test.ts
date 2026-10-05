@@ -221,7 +221,7 @@ describe('partial extraction is not a complete action snapshot', () => {
               content: [
                 {
                   type: 'output_text',
-                  text: JSON.stringify({ summary: 'Partial', actions }),
+                  text: JSON.stringify({ summary: 'Partial', intent: 'booking', message: 'Call me back', caller_name: 'Alex', actions }),
                 },
               ],
             },
@@ -236,6 +236,10 @@ describe('partial extraction is not a complete action snapshot', () => {
     );
     expect(result.processingFailed).toBe(true);
     expect(result.actions).toEqual([]);
+    expect(result.intent).toBeNull();
+    expect(result.message).toBeNull();
+    expect(result.summary).toBe('Partial');
+    expect(result.caller_name).toBe('Alex');
     expect(result.usage.inputTokens).toBe(7);
   });
 });

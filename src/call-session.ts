@@ -2848,14 +2848,18 @@ export class CallSession implements DurableObject {
       }
       if (cached) {
         summary = cached.summary.summary;
-        intent = cached.summary.intent;
-        const callerPhone = normalizeCallerPhone(cached.summary.caller_phone);
-        if (cached.summary.caller_name || callerPhone || cached.summary.message)
-          messageJson = JSON.stringify({
-            caller_name: cached.summary.caller_name,
-            caller_phone: callerPhone,
-            message: cached.summary.message,
-          });
+        // Also defend retries of a cached result from before validation failed:
+        // useful notes and usage survive, but no legacy action projection does.
+        if (!cached.summary.processingFailed) {
+          intent = cached.summary.intent;
+          const callerPhone = normalizeCallerPhone(cached.summary.caller_phone);
+          if (cached.summary.caller_name || callerPhone || cached.summary.message)
+            messageJson = JSON.stringify({
+              caller_name: cached.summary.caller_name,
+              caller_phone: callerPhone,
+              message: cached.summary.message,
+            });
+        }
       }
     } else if (this.history.length > 2) {
       try {

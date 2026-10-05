@@ -178,10 +178,11 @@ export async function processManagedCall(
   if (!responseId || !model) throw Error('Call notes could not be prepared.');
   return {
     summary: str(result.summary, 4000),
-    intent: str(result.intent, 64),
+    // Failed structured validation must not leak actions through legacy projection fields.
+    intent: processingFailed ? null : str(result.intent, 64),
     caller_name: str(result.caller_name, 200),
     caller_phone: str(result.caller_phone, 200),
-    message: str(result.message, 4000),
+    message: processingFailed ? null : str(result.message, 4000),
     actions: processingFailed ? [] : actions,
     responseId,
     model,
