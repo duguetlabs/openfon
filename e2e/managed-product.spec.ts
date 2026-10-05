@@ -552,3 +552,73 @@ test('an unassigned rented phone number explains an empty assistant list without
   await expect(rental.getByText('Add an assistant in Settings → Assistants before assigning this number.')).toBeVisible();
   await expect(rental.getByRole('button', { name: 'Enable phone calls', exact: true })).toBeDisabled();
 });
+
+test('inbox preserves the explicit all-calls environment across filtering and reload', async ({ page }) => {
+  const reads: string[] = [];
+  await page.route('**/api/me/actions?*', route => {
+    const environment = new URL(route.request().url()).searchParams.get('environment') || 'live';
+    reads.push(environment);
+    return route.fulfill({ json: { hasMore: false, items: environment === 'all' ? [{
+      id: 'private-action', call_id: 'private-call', kind: 'message', content: 'Private test message',
+      caller_name: '', caller_phone: '', assistant_name: 'Reception', status: 'open', urgent: 0,
+      due_at: null, created_at: '2026-10-05T00:00:00Z', environment: 'test',
+    }] : [] } });
+  });
+  await signup(page, 'inbox-all');
+  await createWorkspace(page, 'Inbox all calls');
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Messages & to-dos', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Calls', exact: true }).selectOption('all');
+  await expect(page).toHaveURL(/environment=all/);
+  await expect(page.getByText('Private test message', { exact: true })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Type', exact: true }).selectOption('message');
+  await expect(page).toHaveURL(/environment=all/);
+  await page.reload();
+  await expect(page.getByRole('combobox', { name: 'Calls', exact: true })).toHaveValue('all');
+  await expect(page.getByText('Private test message', { exact: true })).toBeVisible();
+  expect(reads).toContain('all');
+});
+
+test('phone settings discovers a later assistant with retry for rental and purchase selectors', async ({ page }) => {
+  await signup(page, 'phone-pagination');
+  const { assistant } = await createWorkspace(page, 'Phone pagination');
+  const bootstrap = await (await page.request.get('/api/me/bootstrap')).json();
+  const primary = bootstrap.assistants[0];
+  const firstPage = Array.from({ length: 32 }, (_, index) => ({ ...primary, id: index ? `page-${index}` : assistant.id, state: 'draft' }));
+  const later = { ...primary, id: 'later-owned-assistant', name: 'Later phone assistant', state: 'active' };
+  await page.route('**/api/me/bootstrap', route => route.fulfill({ json: { ...bootstrap, assistants: firstPage } }));
+  let fail = true;
+  const offsets: string[] = [];
+  await page.route(/\/api\/me\/assistants(?:\?.*)?$/, route => {
+    const offset = new URL(route.request().url()).searchParams.get('offset') || '0';
+    offsets.push(offset);
+    if (offset === '0') return route.fulfill({ json: firstPage });
+    if (fail) { fail = false; return route.fulfill({ status: 503, json: { error: 'Assistant page unavailable' } }); }
+    return route.fulfill({ json: [primary, later] });
+  });
+  let assigned: string | null = null;
+  const writes: unknown[] = [];
+  await page.route('**/api/me/phone', route => route.fulfill({ json: { provisioningAvailable: true,
+    numbers: [{ id: 'paged-rental', number: '+431234567892', status: 'active', assistantId: assigned, enabled: false }],
+  } }));
+  await page.route('**/api/me/phone/numbers/paged-rental', route => {
+    const body = route.request().postDataJSON(); writes.push(body); assigned = body.assistantId;
+    return route.fulfill({ json: { ok: true } });
+  });
+  await page.goto('/settings/phone');
+  const more = page.getByRole('button', { name: 'Find more assistants', exact: true });
+  await expect(more).toBeVisible();
+  await more.click();
+  await expect(page.getByRole('alert')).toContainText('Assistant page unavailable');
+  await more.click();
+  const rental = page.getByRole('article').filter({ has: page.getByRole('heading', { name: '+431234567892', exact: true }) });
+  const rentalSelect = rental.getByRole('combobox', { name: 'Assistant who answers' });
+  await expect(rentalSelect.locator(`option[value="${later.id}"]`)).toHaveCount(1);
+  await expect(rentalSelect.locator(`option[value="${assistant.id}"]`)).toHaveCount(1);
+  await rentalSelect.selectOption(later.id);
+  await expect.poll(() => writes).toEqual([{ assistantId: later.id, enabled: false }]);
+  const purchaseSelect = page.locator('.of-filter-bar').getByRole('combobox', { name: 'Assistant who answers' });
+  await purchaseSelect.selectOption(later.id);
+  await expect(purchaseSelect).toHaveValue(later.id);
+  expect(offsets).toContain('32');
+  await expect(more).toHaveCount(0);
+});

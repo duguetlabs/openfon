@@ -388,8 +388,14 @@ interface Quote {
 }
 export function PhoneNumbers({
   assistants,
+  moreAssistants,
+  assistantListBusy,
+  onMoreAssistants,
 }: {
   assistants: AssistantSummary[];
+  moreAssistants: boolean;
+  assistantListBusy: boolean;
+  onMoreAssistants: () => void;
 }) {
   const [data, setData] = useState<PhoneConfig | null>(null);
   const [quotes, setQuotes] = useState<Quote[]>([]);
@@ -507,6 +513,11 @@ export function PhoneNumbers({
       ) : (
         data && (
           <>
+            {moreAssistants && (
+              <Button kind="line" disabled={busy || assistantListBusy} onClick={onMoreAssistants}>
+                {assistantListBusy ? "Loading assistants…" : "Find more assistants"}
+              </Button>
+            )}
             {data.numbers.length ? (
               <div>
                 {data.numbers.map((n) => (

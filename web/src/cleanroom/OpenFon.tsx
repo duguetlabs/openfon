@@ -892,7 +892,7 @@ export default function OpenFon() {
     }
     if (query) {
       for (const [key, value] of Object.entries(query)) {
-        if (value && !(key === "environment" && value === "all")) url.searchParams.set(key, value); else url.searchParams.delete(key);
+        if (value && !(next === "conversations" && key === "environment" && value === "all")) url.searchParams.set(key, value); else url.searchParams.delete(key);
       }
     }
     if (selectedCall) url.searchParams.set("call", selectedCall);
@@ -1082,7 +1082,7 @@ export default function OpenFon() {
           ) : screen === 'billing' ? (
             <Billing />
           ) : screen === 'phone' ? (
-            <PhoneNumbers assistants={boot.assistants} />
+            <PhoneNumbers assistants={boot.assistants} moreAssistants={moreAssistants} assistantListBusy={assistantListBusy} onMoreAssistants={() => void discoverAssistants()} />
           ) : assistant ? (
             <>
               <div className="of-assistant-switch">
