@@ -154,22 +154,28 @@ export async function prepareUsageSettlement(
       (automatic.maximum > total.overageMinor && !correctedInvoice))
   ) {
     if (old) await requireInvoiceReconciliation(env, old, now);
-    const conflict = await env.DB.prepare(
-      `INSERT INTO commercial_usage_exports(id,business_id,cycle_start,cycle_end,usage_ms,overage_minor,state,computed_hash,created_at)
+    // The existing row was already guarded above. Never reopen a newer invoice
+    // installed while that guarded transition was returning to this invocation.
+    const conflict =
+      old ??
+      (await env.DB.prepare(
+        `INSERT INTO commercial_usage_exports(id,business_id,cycle_start,cycle_end,usage_ms,overage_minor,state,computed_hash,created_at)
       VALUES(?,?,?,?,?,?,'reconciliation_required',?,?) ON CONFLICT(business_id,cycle_start,cycle_end)
-      DO UPDATE SET state='reconciliation_required' RETURNING id`,
-    )
-      .bind(
-        crypto.randomUUID(),
-        businessId,
-        period.period_start,
-        period.period_end,
-        total.durationMs,
-        total.overageMinor,
-        hash,
-        new Date(now).toISOString(),
+      DO NOTHING RETURNING id`,
       )
-      .first<{ id: string }>();
+        .bind(
+          crypto.randomUUID(),
+          businessId,
+          period.period_start,
+          period.period_end,
+          total.durationMs,
+          total.overageMinor,
+          hash,
+          new Date(now).toISOString(),
+        )
+        .first<{ id: string }>());
+    if (!conflict)
+      throw new BillingError("The settlement changed. Review it again.", 409);
     return {
       id: conflict!.id,
       state: "reconciliation_required",

@@ -662,6 +662,102 @@ it("competing operator corrections cannot overwrite the first verified snapshot"
       .all(),
   ).toEqual([{ correction_reference: "synthetic_proof_B" }]);
 });
+it("stale automatic-conflict preparation cannot reopen a concurrently verified invoice correction", async () => {
+  const candidate = await correctionCandidate();
+  db.exec(
+    "INSERT INTO commercial_usage_streams(business_id,cycle_start,cycle_end,last_checked_at,last_usage_ms,last_overage_minor) VALUES('b','2026-10-05T00:08:12.128Z','2026-11-05T00:08:42.107Z','2026-10-06',60000,15)",
+  );
+  db.exec(
+    "INSERT INTO commercial_usage_snapshots VALUES('ingested','b','2026-10-05T00:08:12.128Z','2026-11-05T00:08:42.107Z','usage','customer','test','cents','2026-10-06T00:01:01Z',60000,15,'ingested','2026-10-06T00:01:01Z','2026-10-06T00:01:01Z')",
+  );
+  const batch = db.batch.bind(db);
+  let release!: () => void,
+    entered!: () => void,
+    held = false;
+  const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    }),
+    ready = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+  const spy = vi.spyOn(db, "batch").mockImplementation(async (statements) => {
+    const result = await batch(statements);
+    if (!held && (statements[0] as any).sql.includes("'invoice_snapshot'")) {
+      held = true;
+      entered();
+      await gate;
+    }
+    return result;
+  });
+  const stale = prepareUsageSettlement(env, "b", "2026-10-05T00:08:12.128Z");
+  await ready;
+  const proof = {
+    invoiceReference: "invoice_corrected",
+    correctionReference: "synthetic_verified_credit",
+    verifiedBy: "operator_fixture",
+  };
+  await recordUsageInvoiceCorrection(
+    env,
+    candidate.id,
+    candidate.computedHash,
+    proof,
+  );
+  const verified = db.database
+    .prepare("SELECT * FROM commercial_usage_exports WHERE id=?")
+    .get(candidate.id);
+  release();
+  await stale;
+  spy.mockRestore();
+  expect(
+    db.database
+      .prepare("SELECT * FROM commercial_usage_exports WHERE id=?")
+      .get(candidate.id),
+  ).toEqual(verified);
+  expect(
+    await recordUsageInvoiceCorrection(
+      env,
+      candidate.id,
+      candidate.computedHash,
+      proof,
+    ),
+  ).toEqual({
+    recorded: true,
+    duplicate: true,
+    computedHash: candidate.computedHash,
+  });
+  expect(
+    (await prepareUsageSettlement(env, "b", "2026-10-05T00:08:12.128Z")).state,
+  ).toBe("invoice_reconciled");
+  expect(
+    db.database
+      .prepare("SELECT count(*) n FROM commercial_usage_invoice_evidence")
+      .get(),
+  ).toEqual({ n: 2 });
+  const canceled = new Set<string>();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init: RequestInit) => {
+      const role = url.split("/").pop()!;
+      if (init.method === "PATCH") canceled.add(role);
+      return Response.json(
+        sub(role, { status: canceled.has(role) ? "cancelled" : "active" }),
+      );
+    }),
+  );
+  await prepareCommercialDeletion(env, "b", {
+    userId: "u",
+    passwordHash: "x",
+    sessionToken: "session",
+  });
+  expect([...canceled].sort()).toEqual(["base", "usage"]);
+  expect(
+    db.database
+      .prepare(
+        "SELECT completed_at FROM commercial_deletion_jobs WHERE business_id='b'",
+      )
+      .get()?.completed_at,
+  ).toBeTruthy();
+});
 it("a new audited adjustment during proof recording cannot waive deletion reconciliation", async () => {
   const candidate = await correctionCandidate();
   let changed = false;
