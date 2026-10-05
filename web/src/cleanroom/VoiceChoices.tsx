@@ -1,3 +1,4 @@
+import { LegacyVoiceChoices } from "./LegacyVoiceChoices";
 import { useEffect, useRef, useState } from "react";
 import {
   api,
@@ -13,6 +14,7 @@ export function VoiceChoices({
   draft: Assistant;
   onChange: (a: Assistant) => void;
 }) {
+  const [legacy, setLegacy] = useState(false);
   const [voices, setVoices] = useState<{ id: string; label: string }[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -24,11 +26,20 @@ export function VoiceChoices({
   const revision = useRef(0);
   useEffect(() => {
     let active = true;
-    request<{ voices: { id: string; label: string }[]; defaultVoice: string }>(
-      "/api/me/voices",
-    )
+    request<{
+      voices?: { id: string; label: string }[];
+      defaultVoice?: string;
+      native?: unknown[];
+      azure?: unknown[];
+    }>("/api/me/voices")
       .then((result) => {
         if (active) {
+          if (
+            !Array.isArray(result.voices) &&
+            Array.isArray(result.native) &&
+            Array.isArray(result.azure)
+          )
+            setLegacy(true);
           setVoices(result.voices || []);
           setLoaded(true);
         }
@@ -99,6 +110,7 @@ export function VoiceChoices({
       if (gen === revision.current) setBusy(false);
     }
   }
+  if (legacy) return <LegacyVoiceChoices draft={draft} onChange={onChange} />;
   return (
     <div className="of-voice-choices">
       <div className="of-two-fields">

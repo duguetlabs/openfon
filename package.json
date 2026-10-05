@@ -9,13 +9,14 @@
     "dev": "vite",
     "dev:worker": "wrangler dev",
     "build": "vite build && node scripts/site-metadata.mjs",
-    "deploy": "npm run build && npm run db:migrate && wrangler deploy",
+    "deploy": "node scripts/deploy-managed.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.worker.json && tsc --noEmit -p web/tsconfig.json",
     "test": "vitest run",
     "db:migrate:local": "wrangler d1 migrations apply openfon --local",
     "db:migrate": "wrangler d1 migrations apply openfon --remote",
     "test:e2e": "playwright test",
-    "test:telnyx": "node scripts/telnyx-smoke.mjs"
+    "test:telnyx": "node scripts/telnyx-smoke.mjs",
+    "deploy:check": "node scripts/deploy-managed.mjs --check"
   },
   "dependencies": {
     "hono": "^4.6.0",

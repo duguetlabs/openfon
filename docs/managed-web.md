@@ -14,7 +14,7 @@ Saving an assistant, testing it and publishing its public link are separate acti
 
 An appointment request is a **booking request**, not a confirmed booking. OpenFon has no calendar-confirmation workflow in this release and does not display extracted intent as a completed appointment.
 
-A call can produce several actions, including several of the same kind. Structured extraction references actual caller turns. The first complete, validated extraction snapshot is immutable: retries, reordered output and stale parallel completions cannot append paraphrases or reopen handled work. Invalid partial output does not seal the snapshot. A deliberate empty result does. Historical message and booking intent are preserved as compatibility actions, including handled state; later extraction does not duplicate those singletons. This release does not offer an automatic replacement/re-extraction workflow.
+A call can produce several actions, including several of the same kind. Structured extraction references actual caller turns. The first complete, validated extraction snapshot is immutable: retries, reordered output and stale parallel completions cannot append paraphrases or reopen handled work. Invalid partial output does not seal the snapshot. A deliberate empty result does; legacy terminal projection triggers cannot override any completed structured snapshot. Failed structured extraction does not produce fallback booking/message actions. Historical message and booking intent are preserved as compatibility actions, including handled state; later extraction does not duplicate those singletons. This release does not offer an automatic replacement/re-extraction workflow.
 
 ## Customer and operator boundaries
 
@@ -37,7 +37,7 @@ Historical test recordings remain available only where they actually exist. Cust
 - **0026:** business contact email, initial language and shared instructions; owned action items and immutable extraction snapshots; historical request/message projection.
 - **0027:** commercial account, usage, payment, telephone and lifecycle state. It does not enroll existing accounts in a paid plan or charge historical calls.
 
-Apply only the reviewed pending migrations for each environment. Staging historically omits 0024, which rewrites saved model choices; do not include it merely because it is absent from a migration list. Take a restricted D1 backup, verify restoration and foreign keys, then validate the exact candidate on staging before production. Durable Object state needs its own operational recovery consideration.
+Use the guarded `npm run deploy` production entrypoint and explicit managed production config. Shared `wrangler.jsonc` remains the legacy/local harness configuration. The production entrypoint verifies routing and existing migration/credential-name prerequisites, and does not apply migrations. Apply only the reviewed pending migrations for each environment. Staging historically omits 0024, which rewrites saved model choices; do not include it merely because it is absent from a migration list. Take a restricted D1 backup, verify restoration and foreign keys, then validate the exact candidate on staging before production. Durable Object state needs its own operational recovery consideration.
 
 ## Validation boundaries
 

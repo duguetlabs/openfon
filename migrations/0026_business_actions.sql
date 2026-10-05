@@ -44,7 +44,7 @@ FROM calls WHERE status!='active' AND CASE WHEN json_valid(message_json) THEN js
 
 -- Project legacy summary writers once at the write boundary, never during inbox reads.
 CREATE TRIGGER calls_action_projection_insert AFTER INSERT ON calls
-WHEN NEW.status!='active'
+WHEN NEW.status!='active' AND NOT EXISTS(SELECT 1 FROM call_action_extractions WHERE call_id=NEW.id)
 BEGIN
 INSERT OR IGNORE INTO action_items(id,business_id,call_id,source_key,kind,content,created_at)
 SELECT 'action_booking_'||id,business_id,id,'booking','booking_request',COALESCE(NULLIF(summary,''),'Appointment requested'),started_at
@@ -56,7 +56,7 @@ SELECT 'action_message_'||id,business_id,id,'message','message',json_extract(mes
 FROM calls WHERE id=NEW.id AND NOT EXISTS(SELECT 1 FROM action_items WHERE call_id=NEW.id AND kind='message') AND status!='active' AND CASE WHEN json_valid(message_json) THEN json_type(message_json,'$.message')='text' AND trim(json_extract(message_json,'$.message'))!='' ELSE 0 END;
 END;
 CREATE TRIGGER calls_action_projection_update AFTER UPDATE OF status,summary,intent,message_json ON calls
-WHEN NEW.status!='active'
+WHEN NEW.status!='active' AND NOT EXISTS(SELECT 1 FROM call_action_extractions WHERE call_id=NEW.id)
 BEGIN
 INSERT OR IGNORE INTO action_items(id,business_id,call_id,source_key,kind,content,created_at)
 SELECT 'action_booking_'||id,business_id,id,'booking','booking_request',COALESCE(NULLIF(summary,''),'Appointment requested'),started_at

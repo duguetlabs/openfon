@@ -126,8 +126,8 @@ jobs:
   #
   # Two traps, both of which fail before anything ships:
   #
-  # The "Edit Cloudflare Workers" template does NOT grant D1 Edit, and `npm run
-  # deploy` applies pending D1 migrations before uploading the worker.
+  # The deploy guard needs D1 Read to verify applied migrations before upload.
+  # Approved migrations are applied separately with a suitable D1 Edit credential.
   #
   # And a runner has no cached account, so without CLOUDFLARE_ACCOUNT_ID wrangler
   # tries to discover one by listing /accounts — which the two permissions above
@@ -147,13 +147,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # `npm run deploy` applies D1 migrations before uploading the worker.
-      # The worker queries columns and tables the migrations create, so shipping
-      # it against an unmigrated database takes every route that touches them
-      # down. Some migrations revoke obsolete credentials or scrub snapshots;
-      # they are not all additive. The 0016 compatibility barrier refuses an
-      # inconsistent legacy/provider pair and blocks unsafe old-worker writes
-      # after scrubbing. See docs/migration-compatibility.md before dispatch.
+      # Canonical managed config is validated and existing remote migrations and
+      # secret names are checked read-only. No migration runs in this workflow.
+      # Apply only reviewed 0026/0027 separately after backup/staging acceptance.
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

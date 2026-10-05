@@ -52,6 +52,45 @@ describe("Managed business actions", () => {
         .get(),
     ).toEqual({ name: "Test", slug: "test" });
   });
+  it.each([false, true])(
+    "terminal legacy projections respect a completed structured snapshot (nonempty=%s)",
+    async (nonempty) => {
+      db.exec(
+        "INSERT INTO calls(id,business_id,status)VALUES('structured','b','active')",
+      );
+      await persistCallActions(
+        env,
+        "structured",
+        nonempty
+          ? [
+              {
+                source_key: "only_callback",
+                kind: "callback",
+                content: "Call tomorrow",
+              },
+            ]
+          : [],
+      );
+      db.exec(
+        `UPDATE calls SET status='completed',intent='booking',summary='A discussion',message_json='{"message":"Legacy summary text"}' WHERE id='structured'`,
+      );
+      expect(
+        db.database
+          .prepare("SELECT kind FROM action_items WHERE call_id='structured'")
+          .all(),
+      ).toEqual(nonempty ? [{ kind: "callback" }] : []);
+      db.exec(
+        "UPDATE calls SET summary='Repeated summary' WHERE id='structured'",
+      );
+      expect(
+        db.database
+          .prepare(
+            "SELECT count(*) AS n FROM action_items WHERE call_id='structured'",
+          )
+          .get(),
+      ).toEqual({ n: nonempty ? 1 : 0 });
+    },
+  );
   it("repeated projection is idempotent and keeps handled status", async () => {
     db.exec(
       "UPDATE action_items SET status='handled' WHERE source_key='message'",
