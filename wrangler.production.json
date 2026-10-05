@@ -1,0 +1,80 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "openfon",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-01",
+  "assets": {
+    "directory": "dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/api/*",
+      "/ws/*"
+    ]
+  },
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "openfon",
+      "database_id": "c45afdaa-c04e-4401-af5c-801bb79fc88c",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CALL_SESSION",
+        "class_name": "CallSession"
+      },
+      {
+        "name": "TELNYX_CALL",
+        "class_name": "TelnyxCall"
+      },
+      {
+        "name": "ASTERISK_CALL",
+        "class_name": "AsteriskCall"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "CallSession"
+      ]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": [
+        "TelnyxCall"
+      ]
+    },
+    {
+      "tag": "v3",
+      "new_sqlite_classes": [
+        "AsteriskCall"
+      ]
+    }
+  ],
+  "triggers": {
+    "crons": [
+      "* * * * *"
+    ]
+  },
+  "vars": {
+    "OPENFON_MANAGED_WEB": "true",
+    "WEB_VOICE_TRANSPORT": "livekit",
+    "AZURE_OPENAI_ENDPOINT": "https://duguet-labs-eu.cognitiveservices.azure.com/",
+    "AZURE_OPENAI_LIVE_DEPLOYMENT": "gpt-live-1",
+    "AZURE_OPENAI_TEXT_DEPLOYMENT": "gpt-5.4-mini",
+    "LIVEKIT_URL": "wss://voice.openfon.ai",
+    "TELNYX_ENABLED": "false",
+    "ASTERISK_ENABLED": "false",
+    "TELNYX_PURCHASES_ENABLED": "false",
+    "COMMERCIAL_CHARGING_ENABLED": "false",
+    "TEST_CALL_DEBUG": "false"
+  }
+}

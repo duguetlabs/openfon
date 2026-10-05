@@ -1,9 +1,12 @@
+import { CallDiagnostics } from './Diagnostics';
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, callbackMessage, callDate } from "../cleanroom-runtime";
 import type { AssistantSummary, Call, CallDetail, Page } from "../cleanroom-runtime";
 import { Button, Empty, Notice, errorText } from "./ui";
 import { Icon } from "./icons";
-import { CallDiagnostics } from './Diagnostics';
+import { request } from "../cleanroom-runtime";
+import type { ActionItem } from "./Inbox";
+const channelName = (channel:string) => ({web:'Web',telnyx:'Phone',phone:'Phone',asterisk:'Business phone system',business_phone:'Business phone system'}[channel] || 'Call');
 export function CallRows({
   calls,
   onOpen,
@@ -46,6 +49,7 @@ export function CallRows({
                   day: "numeric",
                 })}
               </time>
+              <span>{call.assistant_name || 'Assistant'} · {call.duration_s == null ? 'In progress' : `${call.duration_s}s`} · {channelName(call.channel)}</span>
               <span>
                 {call.status === "failed"
                   ? call.environment === "test"
@@ -88,6 +92,8 @@ export function Conversations({
 }) {
   const params = new URLSearchParams(query);
   const [page, setPage] = useState<Page<Call>>({ items: [], nextCursor: null });
+  const [related, setRelated] = useState<ActionItem[]>([]);
+  useEffect(()=>{let active=true;setRelated([]);if(initial)request<{items:ActionItem[]}>(`/api/me/actions?environment=all&callId=${encodeURIComponent(initial)}`).then(data=>{if(active)setRelated(data.items);}).catch(()=>{});return()=>{active=false;};},[initial]);
   const [detail, setDetail] = useState<CallDetail | null>(null);
   const [selectedId, setSelectedId] = useState<string | undefined>(initial);
   const selected = useRef(initial);
@@ -115,6 +121,7 @@ export function Conversations({
       const committed = new URLSearchParams(query);
       const environment = committed.get("environment") === "test" ? "test" : committed.get("environment") === "live" ? "live" : "all";
       const data = await api.calls({ environment, search: committed.get("search") || "", assistantId: committed.get("assistantId") || undefined,
+        channel: committed.get("channel") || undefined,
         status: committed.get("status") || undefined, intent: committed.get("intent") || undefined,
         direction: committed.get("direction") === "outbound" ? "outbound" : committed.get("direction") === "inbound" ? "inbound" : undefined,
         from: committed.get("from") || undefined, to: committed.get("to") || undefined, cursor, limit: 30 });
@@ -189,11 +196,11 @@ export function Conversations({
       </button>
       <div className="of-page-heading">
         <div>
-          <h1>{selectedId ? "The conversation" : "Messages & conversations"}</h1>
+          <h1>{selectedId ? "The conversation" : "Call logs"}</h1>
           <p>
             {detail
               ? `${callDate(detail.started_at).toLocaleString()} · ${detail.environment === "test" ? "Browser rehearsal" : "Live conversation"}`
-              : "The details your callers leave, ready for your follow-up."}
+              : "Every call, its transcript and the next steps it created."}
           </p>
         </div>
         <Button
@@ -241,6 +248,7 @@ export function Conversations({
               </p>
             )}
             <dl>
+              <dt>Channel</dt><dd>{channelName(detail.channel)}</dd>
               <dt>Status</dt>
               <dd>{detail.status}</dd>
               <dt>Receptionist</dt>
@@ -253,7 +261,7 @@ export function Conversations({
               {detail.outcome && (
                 <>
                   <dt>Outcome</dt>
-                  <dd>{detail.outcome}</dd>
+                  <dd>{detail.outcome.replaceAll("_", " ")}</dd>
                 </>
               )}
               {detail.duration_s != null && (
@@ -263,6 +271,7 @@ export function Conversations({
                 </>
               )}
             </dl>
+            {related.length>0&&<section><h3>Related messages & to-dos</h3>{related.map(item=><p key={item.id}>{item.kind.replaceAll('_',' ')} · {item.status}: {item.content}</p>)}<a href="/messages">Open messages & to-dos</a></section>}
             {detail.failure_message && (
               <Notice error>{detail.failure_message}</Notice>
             )}
@@ -343,6 +352,9 @@ export function Conversations({
               <option value="">All statuses</option>
               {["active", "completed", "failed", "abandoned"].map(status => <option key={status} value={status}>{status}</option>)}
             </select>
+            <select aria-label="Channel" value={params.get('channel')||''} onChange={e=>onQuery({channel:e.target.value})}><option value="">All channels</option><option value="web">Web</option><option value="phone">Phone</option><option value="business_phone">Business phone system</option></select>
+            <label>From<input aria-label="From date" type="date" value={params.get('from')?.slice(0,10)||''} onChange={e=>onQuery({from:e.target.value?`${e.target.value}T00:00:00Z`:''})}/></label>
+            <label>Before<input aria-label="Before date" type="date" value={params.get('to')?.slice(0,10)||''} onChange={e=>onQuery({to:e.target.value?`${e.target.value}T00:00:00Z`:''})}/></label>
             <Button type="submit" kind="line">Search</Button>
             {moreAssistants && <Button type="button" kind="quiet" disabled={assistantListBusy} onClick={onMoreAssistants}>{assistantListBusy ? "Loading receptionists…" : "Find more receptionists"}</Button>}
           </form>
@@ -367,7 +379,8 @@ export function Conversations({
           )}
         </>
       )}
-      {detail?.environment === 'test' && <CallDiagnostics key={detail.id} callId={detail.id} active={detail.status === 'active'} />}
+
+      {detail?.environment === "test" && detail.channel === "web" && <CallDiagnostics key={detail.id} callId={detail.id} active={detail.status === "active"} />}
     </section>
   );
 }

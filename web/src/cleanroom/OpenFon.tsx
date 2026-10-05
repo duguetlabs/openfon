@@ -6,7 +6,7 @@
  * FORM: Owner-selected identity adaptation; provider/runtime and saved-state behavior preserved.
  */
 import { useEffect, useLayoutEffect, useState, useRef } from "react";
-import { api, ApiError, callbackMessage, onPrivateUnauthorized } from "../cleanroom-runtime";
+import { api, ApiError, onPrivateUnauthorized } from "../cleanroom-runtime";
 import type {
   Assistant,
   AssistantFields,
@@ -27,11 +27,14 @@ import {
 import { Icon } from "./icons";
 import { Rehearsal } from "./Rehearsal";
 import { Knowledge } from "./Knowledge";
-import { CallRows, Conversations } from "./Conversations";
+import { Conversations } from "./Conversations";
 import { Business } from "./Business";
-import { Connections } from "./Connections";
+import { Billing, PhoneNumbers } from "./Commercial";
+import { Dashboard } from "./Dashboard";
+import { Inbox } from "./Inbox";
+import "./managed.css";
 import { VoiceChoices } from "./VoiceChoices";
-import { Welcome, DeskIntroduction } from "./Welcome";
+import { Welcome } from "./Welcome";
 import { Account } from './Account';
 import { PromptExamples } from './PromptExamples';
 import { SessionCoordinator, browserLogoutIntentStorage, SignOutRecoveryError,
@@ -273,42 +276,17 @@ function Desk({
   assistant,
   setAssistant,
   workspace,
-  calls,
-  onConversations,
-  onConnections,
   onBusiness,
   refreshCalls,
-  onStory,
 }: {
   assistant: Assistant;
   setAssistant: (a: Assistant) => void;
   workspace: Workspace;
-  calls: Call[];
-  onConversations: (id?: string) => void;
-  onConnections: () => void;
   onBusiness: () => void;
   refreshCalls: () => void;
-  onStory: () => void;
 }) {
-  const [introVisible, setIntroVisible] = useState(() => {
-    try {
-      return (
-        localStorage.getItem(`openfon:introduction:${workspace.id}`) !==
-        "hidden"
-      );
-    } catch {
-      return true;
-    }
-  });
-  function dismissIntro() {
-    setIntroVisible(false);
-    try {
-      localStorage.setItem(`openfon:introduction:${workspace.id}`, "hidden");
-    } catch {
-      /* Nonessential preference. */
-    }
-  }
   const [draft, setDraft] = useState<Assistant>(assistant);
+  const [legacyVoiceCatalog, setLegacyVoiceCatalog] = useState(false);
   const [open, setOpen] = useState<string | null>(
     !assistant.greeting ? "identity" : null,
   );
@@ -328,10 +306,7 @@ function Desk({
     "voice",
     "take_messages",
     "custom_instructions",
-    "engine",
-    "realtime_model",
-    "realtime_voice",
-    "llm_model",
+    ...(legacyVoiceCatalog ? ["realtime_voice" as const] : []),
   ];
   function editDraft(next: Assistant) {
     for (const key of fields) if (next[key] !== draft[key])
@@ -407,9 +382,6 @@ function Desk({
     }
   }
   useDirtyGuard(dirty || busy);
-  const messages = calls.filter(
-    (c) => c.environment === "live" && callbackMessage(c.message_json)?.message,
-  );
   const job = (
     id: string,
     title: string,
@@ -442,7 +414,7 @@ function Desk({
         <section className="of-cue-sheet" key="business-brief">
           <div className="of-sheet-heading">
             <div>
-              <h2>The business brief</h2>
+              <h2>Assistant details</h2>
               <p>For {workspace.name}</p>
             </div>
             <button className="of-text-button" onClick={onBusiness}>
@@ -486,7 +458,7 @@ function Desk({
                   placeholder="Warm, clear and helpful. Keep answers brief."
                 />
               </Field>
-              <VoiceChoices draft={draft} onChange={editDraft} />
+              <VoiceChoices draft={draft} onChange={editDraft} onLegacyCatalog={setLegacyVoiceCatalog} />
             </div>,
           )}
           {job(
@@ -584,88 +556,15 @@ function Desk({
               ? "Complete ‘Who answers’ first."
               : undefined
           }
-          onConnections={onConnections}
           onEnded={refreshCalls}
         />
   );
   return (
     <>
-      {introVisible && !messages.length ? (
-        <DeskIntroduction
-          onStory={onStory}
-          onDismiss={dismissIntro}
-          stateLabel={
-            assistant.state === "active"
-              ? "Available on the web"
-              : assistant.state === "paused"
-                ? "Web calls paused"
-                : "Draft receptionist"
-          }
-        />
-      ) : (
-        <div className="of-page-heading">
-          <div>
-            <h1>
-              {messages.length
-                ? "A message worth your attention."
-                : "A good first hello."}
-            </h1>
-            <p>
-              {messages.length
-                ? `Here’s what your callers wanted you to know.`
-                : "Give your receptionist the details. Then hear it for yourself."}
-            </p>
-          </div>
-          <span
-            className={`of-state-tag ${assistant.state === "active" ? "active" : ""}`}
-          >
-            {assistant.state === "active"
-              ? "Available on the web"
-              : assistant.state === "paused"
-                ? "Web calls paused"
-                : "Draft receptionist"}
-          </span>
-        </div>
-      )}
-      {messages.length > 0 && (
-        <section className="of-priority-messages">
-          <CallRows calls={messages.slice(0, 3)} onOpen={onConversations} />
-          {messages.length > 3 && (
-            <Button kind="quiet" onClick={() => onConversations()}>
-              View all messages
-            </Button>
-          )}
-        </section>
-      )}
+      <div className="of-page-heading"><div><h1>{assistant.name || 'Your assistant'}</h1><p>Save its details, test privately, then choose when it is available.</p></div><span className="of-state-tag">{assistant.state === 'active' ? 'Available' : assistant.state === 'paused' ? 'Paused' : 'Draft'}</span></div>
       <div className={`of-desk-grid ${open ? "has-expanded-brief" : ""}`}>
         {open ? [brief, rehearsal] : [rehearsal, brief]}
       </div>
-      <section className="of-desk-bottom">
-        <div>
-          <h2>
-            {messages.length
-              ? "Keep the conversation going."
-              : "Messages & follow-ups"}
-          </h2>
-          <p>
-            {messages.length
-              ? "Review the full conversation or keep improving your receptionist."
-              : "A place for the details you don’t want to miss."}
-          </p>
-        </div>
-        <Button kind="quiet" icon="arrow" onClick={() => onConversations()}>
-          View conversations
-        </Button>
-      </section>
-      {!messages.length &&
-        (calls.length ? (
-          <CallRows calls={calls.slice(0, 3)} onOpen={onConversations} />
-        ) : (
-          <Empty title="Your first message will appear here.">
-            Try asking your receptionist to take a message during a browser
-            rehearsal.
-          </Empty>
-        ))}
       <section className="of-availability">
         <div>
           <h3>
@@ -780,10 +679,15 @@ function PublicCall({ slug }: { slug: string }) {
     </div>
   );
 }
-const screenPaths: Record<string, string> = { desk: "/overview", business: "/business", connections: "/connections", conversations: "/conversations", account: "/account", story: "/about" };
+const screenPaths: Record<string, string> = { desk: "/overview", assistants: "/settings/assistants", business: "/settings/business", phone: "/settings/phone", billing: "/billing", inbox: "/messages", conversations: "/calls", account: "/settings/account", story: "/about" };
 function screenFromPath() {
   const path = location.pathname;
-  if (/^\/(?:connections|settings)\/?$/.test(path)) return "connections";
+  if (/^\/settings\/assistants|^\/assistants(?:\/|$)|^\/test/.test(path)) return "assistants";
+  if (/^\/settings\/phone/.test(path)) return "phone";
+  if (/^\/(?:settings\/)?billing/.test(path)) return "billing";
+  if (/^\/messages/.test(path)) return "inbox";
+  if (/^\/settings\/account/.test(path)) return "account";
+  if (/^\/(?:connections|settings)(?:\/|$)/.test(path)) return "business";
   if (/^\/(?:conversations|calls)(?:\/|$)/.test(path)) return "conversations";
   if (/^\/business\/?$/.test(path)) return "business";
   if (/^\/account\/?$/.test(path)) return "account";
@@ -897,6 +801,7 @@ export default function OpenFon() {
     const gen = ++loadGeneration.current;
     loadPending.current = true; setLoading(true);
     setError('');
+    let accepted = false;
     await session.refresh(async () => {
       const b = await api.bootstrap();
       if (gen !== loadGeneration.current) throw new Error('Session changed.');
@@ -915,6 +820,7 @@ export default function OpenFon() {
       return { boot: b, assistant: a, calls: result?.items || [], missingTarget: unavailable };
     }, snapshot => {
       if (gen !== loadGeneration.current) return;
+      accepted = true;
       setBoot(snapshot.boot); setAssistant(snapshot.assistant); setCalls(snapshot.calls);
       assistantOffset.current = 0; setMoreAssistants(snapshot.boot.assistants.length >= 32); setAssistantListBusy(false);
       setMissingTarget(snapshot.missingTarget); setReplacement(""); setDeletedTarget(false);
@@ -926,7 +832,7 @@ export default function OpenFon() {
       }
       if (selected && snapshot.assistant) {
         const url = new URL(location.href);
-        if (/^\/(?:assistants|studio|test)(?:\/|$)/.test(url.pathname)) url.pathname = "/overview";
+        if (/^\/(?:assistants|studio|test)(?:\/|$)/.test(url.pathname)) url.pathname = "/settings/assistants";
         if (snapshot.assistant.id === snapshot.boot.assistants[0]?.id) url.searchParams.delete("assistant");
         else url.searchParams.set("assistant", snapshot.assistant.id);
         history.replaceState({ ...history.state, openfonIndex: historyIndex.current }, "", url.pathname + url.search);
@@ -941,6 +847,7 @@ export default function OpenFon() {
       }
       loadPending.current = false; setLoading(false);
     }, showRecovery);
+    return accepted;
   }
   useEffect(() => {
     if (!publicMatch) void load();
@@ -968,18 +875,24 @@ export default function OpenFon() {
   }, [assistant?.id, boot?.account.id]);
   function navigate(next: string, saved = false, selectedCall?: string, query?: Record<string, string>) {
     if (!saved && next !== screen && !canLeave()) return false;
-    if (loadPending.current) {
+    // Opening the assistant editor continues a history-selected assistant load.
+    // Other navigation still supersedes it, preventing late results from taking over.
+    const keepAssistantLoad = loadPending.current && next === "assistants";
+    const targetAssistant = keepAssistantLoad
+      ? new URLSearchParams(location.search).get("assistant") || location.pathname.match(/^\/assistants\/([^/]+)/)?.[1] || boot?.assistants[0]?.id
+      : assistant?.id;
+    if (loadPending.current && !keepAssistantLoad) {
       ++loadGeneration.current; session.invalidate(); loadPending.current = false; setLoading(false);
     }
     const url = new URL(screenPaths[next] || "/overview", location.origin);
-    if (assistant && assistant.id !== boot?.assistants[0]?.id) url.searchParams.set("assistant", assistant.id);
-    if (next === "conversations" && screen === "conversations") {
+    if (targetAssistant && targetAssistant !== boot?.assistants[0]?.id) url.searchParams.set("assistant", targetAssistant);
+    if ((next === "conversations" || next === "inbox") && screen === next) {
       const current = new URLSearchParams(location.search);
-      for (const key of ["search", "environment", "assistantId", "status", "intent", "direction", "from", "to"]) if (current.has(key)) url.searchParams.set(key, current.get(key)!);
+      for (const key of ["search", "environment", "assistantId", "status", "intent", "direction", "from", "to", "channel", "kind", "urgent"]) if (current.has(key)) url.searchParams.set(key, current.get(key)!);
     }
     if (query) {
       for (const [key, value] of Object.entries(query)) {
-        if (value && !(key === "environment" && value === "all")) url.searchParams.set(key, value); else url.searchParams.delete(key);
+        if (value && !(next === "conversations" && key === "environment" && value === "all")) url.searchParams.set(key, value); else url.searchParams.delete(key);
       }
     }
     if (selectedCall) url.searchParams.set("call", selectedCall);
@@ -991,6 +904,23 @@ export default function OpenFon() {
     setMenu(false);
     window.scrollTo({ top: 0, behavior: "instant" });
     return true;
+  }
+  async function addAssistant() {
+    if (loading || assistantMutation.current || !boot?.workspace || !canLeave()) return;
+    const name = prompt("Name for your new receptionist")?.trim();
+    if (!name) return;
+    assistantMutation.current = true; setAssistantMutating(true); setError("");
+    const gen = loadGeneration.current;
+    const startLocation = location.href;
+    const startHistory = historyIndex.current;
+    const isCurrent = () => gen === loadGeneration.current && location.href === startLocation && historyIndex.current === startHistory;
+    try {
+      const made = await api.createAssistant({ name });
+      if (!isCurrent() || !canLeave()) return;
+      navigate("assistants", true);
+      await load(made.id);
+    } catch (e) { if (isCurrent()) setError(errorText(e)); }
+    finally { assistantMutation.current = false; setAssistantMutating(false); }
   }
   async function discoverAssistants() {
     if (assistantListBusy || !boot?.workspace) return;
@@ -1054,17 +984,6 @@ export default function OpenFon() {
               How it works
             </button>
           )}
-          {boot?.workspace && (
-            <button
-              className="of-header-link messages-link"
-              onClick={() => {
-                setCallId(undefined);
-                navigate("conversations");
-              }}
-            >
-              Messages
-            </button>
-          )}
           <div className="of-menu-wrap">
             <button
               className="of-workspace-button"
@@ -1086,7 +1005,7 @@ export default function OpenFon() {
                 <div className="of-workspace-menu">
                   {boot?.workspace && (
                     <>
-                      <button onClick={() => { setCallId(undefined); navigate("conversations"); }}><Icon name="message" />Messages & conversations</button>
+                      <button onClick={() => navigate("inbox")}><Icon name="message" />Messages & to-dos</button>
                       <button onClick={() => navigate("story")}>
                         <Icon name="phone" />
                         How OpenFon works
@@ -1095,9 +1014,9 @@ export default function OpenFon() {
                         <Icon name="book" />
                         Business details
                       </button>
-                      <button onClick={() => navigate("connections")}>
+                      <button onClick={() => navigate("business")}>
                         <Icon name="settings" />
-                        Connections & portability
+                        Settings
                       </button>
                     </>
                   )}
@@ -1119,6 +1038,9 @@ export default function OpenFon() {
           </div>
         </div>
       </header>
+      {boot?.workspace && <nav className="of-primary-nav" aria-label="Main navigation">
+        {[['desk','Home'],['inbox','Messages & to-dos'],['conversations','Call logs'],['business','Settings'],['billing','Billing']].map(([key,label])=><button key={key} aria-current={(screen===key || key==='business'&&['assistants','phone','account'].includes(screen))?'page':undefined} onClick={()=>navigate(key)}>{label}</button>)}
+      </nav>}
       {error && (
         <div className="of-global-error">
           <Notice error>
@@ -1131,12 +1053,16 @@ export default function OpenFon() {
       )}
       {!boot ? null : screen === 'account' ? (
         <main className="of-main" id="of-main">
+          {boot.workspace&&<nav className="of-settings-nav" aria-label="Settings">{[['business','My business'],['assistants','Assistants'],['phone','Phone number'],['account','Account & privacy']].map(([key,label])=><button key={key} aria-current={screen===key?'page':undefined} onClick={()=>navigate(key)}>{label}</button>)}</nav>}
           <Account email={boot.account.email} onDelete={deleteAccount} onDone={() => navigate('desk')} />
         </main>
       ) : !boot.workspace ? (
-        <Setup onDone={() => load()} />
+        <Setup onDone={async () => { if (await load()) navigate("assistants", true); }} />
       ) : (
         <main className="of-main" id="of-main">
+          {['business','assistants','phone','account'].includes(screen) && <nav className="of-settings-nav" aria-label="Settings">
+            {[['business','My business'],['assistants','Assistants'],['phone','Phone number'],['account','Account & privacy']].map(([key,label])=><button key={key} aria-current={screen===key?'page':undefined} onClick={()=>navigate(key)}>{label}</button>)}
+          </nav>}
           {loading ? <Loading /> : missingTarget ? (
             <section className="of-business-form of-form">
               <h1>{deletedTarget ? "Receptionist deleted" : "Receptionist unavailable"}</h1>
@@ -1159,22 +1085,25 @@ export default function OpenFon() {
           ) : screen === "business" ? (
             <Business
               workspace={boot.workspace}
-              onBack={(saved) => { navigate("desk", saved); }}
+              onBack={(saved) => { if (!saved) navigate("desk"); }}
               onSaved={workspace => setBoot(current => current ? { ...current, workspace } : current)}
             />
           ) : screen === "conversations" ? (
             <Conversations initial={callId} query={conversationQuery} onQuery={query => navigate("conversations", false, undefined, query)} assistants={boot.assistants} moreAssistants={moreAssistants} assistantListBusy={assistantListBusy} onMoreAssistants={() => void discoverAssistants()} onSelect={id => navigate("conversations", false, id)} onBack={() => navigate("desk")} />
-          ) : screen === "connections" && assistant ? (
-            <Connections
-              key={assistant.id}
-              assistant={assistant}
-              onBack={() => navigate("desk")}
-              onSaved={() => api.assistant(assistant.id).then(acceptAssistant)}
-            />
+          ) : screen === 'account' ? (
+            <Account email={boot.account.email} onDelete={deleteAccount} onDone={() => navigate('desk')} />
+          ) : screen === 'inbox' ? (
+            <Inbox query={conversationQuery} onQuery={query=>navigate('inbox',false,undefined,query)} onCall={id=>navigate('conversations',false,id)} />
+          ) : screen === 'desk' ? (
+            <Dashboard businessName={boot.workspace.name} assistants={boot.assistants} onNavigate={(next,query)=>navigate(next,false,query?.call,query)} onAssistant={id=>{if(canLeave()){navigate('assistants',true);void load(id);}}} onAdd={()=>void addAssistant()} adding={loading || assistantMutating} />
+          ) : screen === 'billing' ? (
+            <Billing />
+          ) : screen === 'phone' ? (
+            <PhoneNumbers assistants={boot.assistants} moreAssistants={moreAssistants} assistantListBusy={assistantListBusy} onMoreAssistants={() => void discoverAssistants()} />
           ) : assistant ? (
             <>
               <div className="of-assistant-switch">
-                <label htmlFor="of-receptionist">Receptionist</label>
+                <label htmlFor="of-receptionist">Assistant</label>
                 <select
                   id="of-receptionist"
                   value={assistant.id}
@@ -1194,21 +1123,9 @@ export default function OpenFon() {
                 <button
                   className="of-text-button"
                   disabled={loading || assistantMutating}
-                  onClick={async () => {
-                    if (!canLeave()) return;
-                    const name = prompt("Name for your new receptionist");
-                    if (!name?.trim()) return;
-                    try {
-                      const made = await api.createAssistant({
-                        name: name.trim(),
-                      });
-                      await load(made.id);
-                    } catch (e) {
-                      setError(errorText(e));
-                    }
-                  }}
+                  onClick={() => void addAssistant()}
                 >
-                  Add receptionist
+                  Add assistant
                 </button>
               </div>
               <Desk
@@ -1216,14 +1133,8 @@ export default function OpenFon() {
                 assistant={assistant}
                 setAssistant={acceptAssistant}
                 workspace={boot.workspace}
-                calls={calls}
-                onConnections={() => navigate("connections")}
                 onBusiness={() => navigate("business")}
-                onConversations={(id) => {
-                  navigate("conversations", false, id);
-                }}
                 refreshCalls={() => void refreshCalls()}
-                onStory={() => navigate("story")}
               />
             </>
           ) : (

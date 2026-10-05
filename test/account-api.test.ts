@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from '../src/index';
 import { AccountAuthBudget, accountAuthBudget } from '../src/account-auth-budget';
@@ -30,6 +31,9 @@ beforeEach(async ({ task }) => {
     applyMigrations(db, 25, 25);
   }
   else applyMigrations(db);
+  if (task.name !== 'refuses pre-claim live sessions after migration and bootstrap backfill') {
+    db.exec(readFileSync(new URL('../migrations/0026_business_actions.sql', import.meta.url), 'utf8'));
+  }
   env = { ...fakeEnv(), DB: db as unknown as D1Database };
   oldHash = await hashPassword(password);
   for (const id of ['owner', 'other']) {
@@ -42,6 +46,121 @@ beforeEach(async ({ task }) => {
 afterEach(() => { db.close(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('account self service', () => {
+  it.each(['false', 'true'])('exports saved shared business details in managed mode %s [business-export]', async managed => {
+    db.exec(readFileSync(new URL('../migrations/0027_commercial.sql', import.meta.url), 'utf8'));
+    env.OPENFON_MANAGED_WEB = managed;
+    const details = {
+      contact_email: 'empfang@example.test',
+      default_language: 'de-DE',
+      shared_instructions: 'Begrüße freundlich. Escalate urgent concerns.\nNever confirm an appointment without approval.',
+    };
+    const foreignDetails = { contact_email: 'private-contact@example.test', default_language: 'fr', shared_instructions: 'Other account private instructions' };
+    expect((await call('/api/me/business/biz-owner', 'PUT', details)).status).toBe(200);
+    expect((await call('/api/me/business/biz-other', 'PUT', foreignDetails, 'other-session')).status).toBe(200);
+    expect(db.database.prepare('SELECT contact_email,default_language,shared_instructions FROM businesses WHERE id=?').get('biz-owner')).toEqual(details);
+    db.database.prepare('INSERT INTO provider_settings(business_id,llm_base_url,llm_model,llm_api_key) VALUES(?,?,?,?)')
+      .run('biz-owner', 'https://private-endpoint.example/v1', 'private-model', 'synthetic-export-secret');
+
+    const response = await call('/api/me/account/export');
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    const data = JSON.parse(text).data;
+    expect(data.businesses).toEqual([expect.objectContaining({ id: 'biz-owner', ...details })]);
+    for (const forbidden of ['biz-other', foreignDetails.contact_email, foreignDetails.shared_instructions, 'synthetic-export-secret', 'private-endpoint.example', oldHash, 'owner-session']) expect(text).not.toContain(forbidden);
+    if (managed === 'true') {
+      for (const table of ['provider_settings', 'engine_presets', 'engine_profiles', 'summary_settings']) expect(data[table]).toBeUndefined();
+      expect(data.commercial_accounts).toEqual([]);
+      expect(text).not.toContain('private-model');
+    } else {
+      expect(data.provider_settings).toEqual([expect.objectContaining({ llm_model: 'private-model', llm_base_url: '' })]);
+      expect(data.commercial_accounts).toBeUndefined();
+    }
+    const cleared = { contact_email: '', default_language: 'en', shared_instructions: '' };
+    expect((await call('/api/me/business/biz-owner', 'PUT', cleared)).status).toBe(200);
+    const clearedResponse = await call('/api/me/account/export');
+    expect(clearedResponse.status).toBe(200);
+    expect((await clearedResponse.json() as any).data.businesses).toEqual([expect.objectContaining(cleared)]);
+  });
+
+  it('exports managed actions and billing with bounded positive projections and no technical tables', async () => {
+    db.exec(readFileSync(new URL('../migrations/0027_commercial.sql',import.meta.url),'utf8'));
+    env.OPENFON_MANAGED_WEB='true';
+    db.exec("INSERT INTO calls(id,business_id,status,intent)VALUES('managed','biz-owner','completed','booking');INSERT INTO commercial_accounts(business_id,status,provider_mode,customer_id)VALUES('biz-owner','none','test','customer-owner')");
+    const response=await call('/api/me/account/export');expect(response.status).toBe(200);
+    const body=await response.json() as any;
+    expect(body.data.action_items).toHaveLength(1);expect(body.data.action_items[0].kind).toBe('booking_request');
+    expect(body.data.commercial_accounts).toHaveLength(1);
+    for(const key of ['provider_settings','engine_presets','engine_profiles','summary_settings'])expect(body.data[key]).toBeUndefined();
+    expect(body.data.businesses).toHaveLength(1);expect(body.data.businesses[0].id).toBe('biz-owner');
+    expect(JSON.stringify(body)).not.toContain('biz-other');
+  });
+
+  it.each([['public','deletion'],['private','deletion'],['public','cancellation'],['private','cancellation']])('refuses %s managed call creation when %s begins after handler reads', async (channel,reason) => {
+    db.exec(readFileSync(new URL('../migrations/0027_commercial.sql',import.meta.url),'utf8'));
+    env.OPENFON_MANAGED_WEB='true';
+    const made=await call('/api/me/assistants','POST',{name:'Managed',persona:'Helpful',language:'en',greeting:'Hello',voice:'marin'});
+    expect(made.status).toBe(201);const assistant=await made.json() as any;
+    expect((await call(`/api/me/assistants/${assistant.id}/activate`,'POST')).status).toBe(200);
+    const prepare=db.prepare.bind(db);let injected=false;
+    vi.spyOn(db,'prepare').mockImplementation((sql:string)=>{
+      if(!injected && /^\s*INSERT INTO calls/.test(sql)){
+        injected=true;db.exec(reason==='deletion' ? "INSERT INTO commercial_deletion_jobs(business_id,requested_at)VALUES('biz-owner','2026-09-11T12:00:00Z')" : "INSERT INTO commercial_cancellations(business_id,term_end,state,requested_at)VALUES('biz-owner','2020-01-01T00:00:00Z','preparing','2020-01-01T00:00:00Z')");
+      }
+      return prepare(sql);
+    });
+    const response=channel==='private'?await call(`/api/me/assistants/${assistant.id}/test-calls`,'POST'):await call('/api/public/call/start','POST',{slug:assistant.public_slug});
+    expect(injected).toBe(true);expect(response.status).toBe(409);
+    expect(db.database.prepare("SELECT count(*) AS n FROM calls WHERE business_id='biz-owner'").get()).toEqual({n:0});
+  });
+
+  it('refuses an existing managed browser ticket when cancellation reaches its term before the connection claim',async()=>{
+    db.exec(readFileSync(new URL('../migrations/0027_commercial.sql',import.meta.url),'utf8'));
+    env.OPENFON_MANAGED_WEB='true';
+    db.exec("INSERT INTO calls(id,business_id,environment,browser_claim_required)VALUES('ticket','biz-owner','test',1)");
+    const prepare=db.prepare.bind(db);let injected=false;
+    vi.spyOn(db,'prepare').mockImplementation((sql:string)=>{
+      if(!injected && /UPDATE calls SET connected_at = datetime/.test(sql)) {
+        injected=true;db.exec("INSERT INTO commercial_cancellations(business_id,term_end,state,requested_at)VALUES('biz-owner','2020-01-01T00:00:00Z','preparing','2020-01-01T00:00:00Z')");
+      }
+      return prepare(sql);
+    });
+    const response=await worker.fetch(new Request('https://openfon.test/ws/call/ticket',{headers:{Cookie:'ofs=owner-session',Upgrade:'websocket'}}),env,fakeCtx);
+    expect(injected).toBe(true);expect(response.status).toBe(409);
+    expect(db.database.prepare("SELECT connected_at FROM calls WHERE id='ticket'").get()).toEqual({connected_at:null});
+  });
+
+  it('stores the default managed voice explicitly and requires a compatible choice for historical voices',async()=>{
+    db.exec(readFileSync(new URL('../migrations/0027_commercial.sql',import.meta.url),'utf8'));
+    env.OPENFON_MANAGED_WEB='true';
+    const response=await call('/api/me/assistants','POST',{name:'New receptionist'});
+    expect(response.status).toBe(201);const made=await response.json() as any;
+    expect(made.voice).toBe('marin');
+    expect(db.database.prepare('SELECT voice,realtime_voice FROM assistants WHERE id=?').get(made.id)).toEqual({voice:'marin',realtime_voice:'marin'});
+    db.database.prepare("UPDATE assistants SET realtime_voice='',voice='de-DE-KatjaNeural' WHERE id=?").run(made.id);
+    expect((await call(`/api/me/assistants/${made.id}/activate`,'POST')).status).toBe(400);
+    db.database.prepare("UPDATE assistants SET voice='',realtime_voice='' WHERE id=?").run(made.id);
+    expect((await call(`/api/me/assistants/${made.id}/activate`,'POST')).status).toBe(200);
+    expect(db.database.prepare('SELECT voice,realtime_voice FROM assistants WHERE id=?').get(made.id)).toEqual({voice:'',realtime_voice:''});
+    const exported=await (await call('/api/me/account/export')).json() as any;
+    expect(exported.data.assistants.find((a:any)=>a.id===made.id).voice).toBe('marin');
+
+    expect((await call(`/api/me/assistants/${made.id}`,'PUT',{voice:''})).status).toBe(400);
+    expect((await call(`/api/me/assistants/${made.id}`,'PUT',{voice:'cedar'})).status).toBe(200);
+    expect((await call(`/api/me/assistants/${made.id}/activate`,'POST')).status).toBe(200);
+  });
+
+  it('initializes only a brand-new managed workspace with an explicit compatible first voice',async()=>{
+    db.exec(readFileSync(new URL('../migrations/0027_commercial.sql',import.meta.url),'utf8'));
+    env.OPENFON_MANAGED_WEB='true';db.exec("DELETE FROM businesses WHERE id='biz-owner'");
+    const response=await call('/api/me/business','POST',{name:'New business'});expect(response.status).toBe(201);
+    const made=await response.json() as any;
+    expect(db.database.prepare('SELECT voice,realtime_voice FROM assistants WHERE business_id=?').get(made.id)).toEqual({voice:'marin',realtime_voice:'marin'});
+    db.database.prepare("UPDATE assistants SET realtime_voice='',voice='saved-legacy-voice' WHERE business_id=?").run(made.id);
+    db.database.prepare("UPDATE agent_settings SET realtime_voice='',voice='saved-legacy-voice' WHERE business_id=?").run(made.id);
+    expect((await call('/api/me/business','POST',{name:'Repeat request'})).status).toBe(200);
+    expect(db.database.prepare('SELECT voice,realtime_voice FROM assistants WHERE business_id=?').get(made.id)).toEqual({voice:'saved-legacy-voice',realtime_voice:''});
+  });
+
   it('requires authentication for export and mutations', async () => {
     const response = await call('/api/me/account/export', 'GET', undefined, 'invalid');
     expect(response.status).toBe(401);
@@ -382,6 +501,7 @@ describe('account self service', () => {
     const insert = db.database.prepare('INSERT INTO knowledge_items (id,business_id,collection_id,kind,content) VALUES (?,?,?, ?,?)');
     for (let i = 0; i < 5; i++) insert.run(`large-${i}`, 'biz-owner', 'large', 'note', 'x'.repeat(1024 * 1024));
     applyMigrations(db, 13, 13); applyMigrations(db, 22, 23); applyMigrations(db, 25, 25);
+    db.exec(readFileSync(new URL('../migrations/0026_business_actions.sql', import.meta.url), 'utf8'));
     db.database.function('json_object', { varargs: true }, () => { throw new Error('Rejected exports must not construct JSON'); });
     const response = await call('/api/me/account/export');
     expect(response.status).toBe(413);

@@ -22,7 +22,7 @@ if not re.fullmatch(r'[a-zA-Z0-9_-]+', args.cert_name):
     parser.error('Invalid certificate name')
 os.umask(0o077)
 secrets = json.loads(args.credentials.read_text())
-required = ['LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET', 'OPENFON_AGENT_SERVICE_TOKEN', 'KATALEPTIC_API_KEY']
+required = ['LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET', 'OPENFON_AGENT_SERVICE_TOKEN', 'AZURE_OPENAI_ENDPOINT', 'AZURE_OPENAI_API_KEY']
 for key in required:
     if not isinstance(secrets.get(key), str) or not secrets[key] or any(c in secrets[key] for c in '\r\n\x00'):
         parser.error('Missing or invalid credential field: '+key)
@@ -55,8 +55,10 @@ config = {
 }
 (out / 'livekit.yaml').write_text(json.dumps(config, indent=2)+'\n')
 agent = dict(secrets)
-agent.update(LIVEKIT_URL=f'ws://127.0.0.1:{port}', OPENFON_API_URL=callback, LK_OPENAI_DEBUG='0', LIVEKIT_AGENT_PORT='8091' if staging else '8081')
-(out / 'agent.env').write_text(''.join(f'{k}={agent[k]}\n' for k in [*required, 'LIVEKIT_URL', 'OPENFON_API_URL', 'LK_OPENAI_DEBUG', 'LIVEKIT_AGENT_PORT']))
+(out / 'usage').mkdir(mode=0o700,exist_ok=True)
+os.chown(out / 'usage',1000,1000)
+agent.update(OPENFON_USAGE_DIR='/var/lib/openfon-usage',LIVEKIT_URL=f'ws://127.0.0.1:{port}', OPENFON_API_URL=callback, LK_OPENAI_DEBUG='0', LIVEKIT_AGENT_PORT='8091' if staging else '8081')
+(out / 'agent.env').write_text(''.join(f'{k}={agent[k]}\n' for k in [*required, 'LIVEKIT_URL', 'OPENFON_API_URL', 'LK_OPENAI_DEBUG', 'LIVEKIT_AGENT_PORT','OPENFON_USAGE_DIR']))
 (out / '.env').write_text('LIVEKIT_IMAGE=livekit/livekit-server@sha256:6fd3b7088874c4d119160dd688798dfec852bc014786d392caad15f6f63912a3\nAGENT_IMAGE='+args.agent_image+'\n')
 shutil.copyfile(Path(__file__).with_name('compose.yaml'), out / 'compose.yaml')
 for path in out.iterdir():

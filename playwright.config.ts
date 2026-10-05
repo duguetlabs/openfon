@@ -4,6 +4,8 @@ const port = process.env.OPENFON_E2E_PORT || process.env.OPENFON_TEST_PORT || '8
 
 export default defineConfig({
   testDir: './e2e',
+  testMatch: process.env.OPENFON_E2E_MANAGED === 'true' ? '**/managed-product.spec.ts' : '**/*.spec.ts',
+  testIgnore: process.env.OPENFON_E2E_MANAGED === 'true' ? [] : ['**/managed-product.spec.ts'],
   fullyParallel: false,
   workers: 1,
   timeout: 30_000,

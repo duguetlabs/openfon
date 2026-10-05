@@ -17,14 +17,9 @@ test('saved voice persists and six calls release audio, including suspended play
   expect((await page.request.put(`/api/me/assistants/${id}`, {data:{name:'Playback receptionist',persona:'Helpful',language:'en'}})).status()).toBe(200);
   await page.route('**/voice-preview', route => route.fulfill({ status: 503, json: { error: 'No provider in synthetic test' } }));
   await page.goto(`/assistants/${id}`);
-  await connections(page);
-  await page.getByRole('combobox', {name:'Conversation engine',exact:true}).selectOption('realtime');
-  await page.getByLabel('Realtime model', {exact:true}).fill('gpt-realtime-2');
-  await page.getByLabel('Realtime voice', {exact:true}).fill('alloy');
-  await page.getByRole('button', {name:'Save connections',exact:true}).click();
-  await expect(page.getByRole('status').filter({hasText:'Connections saved'})).toBeVisible();
-  const saved = await (await page.request.get(`/api/me/assistants/${id}`)).json();
-  expect(saved).toMatchObject({ realtime_model: 'gpt-realtime-2', realtime_voice: 'alloy' });
+  expect((await page.request.put(`/api/me/assistants/${id}`, {data:{engine:'realtime',realtime_model:'gpt-realtime-2',realtime_voice:'alloy'}})).ok()).toBe(true);
+  const saved=await(await page.request.get(`/api/me/assistants/${id}`)).json();
+  expect(saved).toMatchObject({realtime_model:'gpt-realtime-2',realtime_voice:'alloy'});
   await page.goto(`/test?assistant=${id}`);
   // Real Chrome AudioContext/source playback; synthetic socket and permission
   // denial isolate output behavior from provider timing and physical microphones.

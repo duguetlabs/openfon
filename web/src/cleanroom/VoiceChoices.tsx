@@ -1,43 +1,47 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { api, supportedLanguages, voiceChoicesFor } from "../cleanroom-runtime";
-import type {
-  Assistant,
-  Provider,
-  ProviderCatalog,
+import { LegacyVoiceChoices } from "./LegacyVoiceChoices";
+import { useEffect, useRef, useState } from "react";
+import {
+  api,
+  request,
+  supportedLanguages,
+  type Assistant,
 } from "../cleanroom-runtime";
-import { Button, Field, Notice, errorText } from "./ui";
-import { PREVIEW_TEXT } from '../../../src/voice-preview-text';
+import { Field, Notice, errorText } from "./ui";
 export function VoiceChoices({
   draft,
   onChange,
+  onLegacyCatalog,
 }: {
   draft: Assistant;
   onChange: (a: Assistant) => void;
+  onLegacyCatalog: (legacy: boolean) => void;
 }) {
-  const [provider, setProvider] = useState<Provider | null>(null);
-  const [catalog, setCatalog] = useState<ProviderCatalog | null>(null);
-  const [catalogUnavailable, setCatalogUnavailable] = useState(false);
+  const [legacy, setLegacy] = useState(false);
+  const [voices, setVoices] = useState<{ id: string; label: string }[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [sample, setSample] = useState("");
-  const [sampleLabel, setSampleLabel] = useState("");
-  const localPreview = useRef(false);
-  const sampleUrl = useRef("");
+  const [playing, setPlaying] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const audio = useRef<HTMLAudioElement | null>(null);
-  const audioRef = useCallback((element: HTMLAudioElement | null) => {
-    // React detaches refs before passive cleanup, so stop a removed player here.
-    if (!element) audio.current?.pause();
-    audio.current = element;
-  }, []);
-  const request = useRef<AbortController | null>(null);
+  const requestRef = useRef<AbortController | null>(null);
+  const cache = useRef(new Map<string, string>());
+  const revision = useRef(0);
   useEffect(() => {
     let active = true;
-    Promise.all([api.provider(), api.providerCatalog().catch(() => null)])
-      .then(([p, c]) => {
+    request<{
+      voices?: { id: string; label: string }[];
+      defaultVoice?: string;
+      native?: unknown[];
+      azure?: unknown[];
+    }>("/api/me/voices")
+      .then((result) => {
         if (active) {
-          setProvider(p);
-          setCatalog(c);
-          setCatalogUnavailable(!c);
+          const isLegacy = !Array.isArray(result.voices) &&
+            Array.isArray(result.native) && Array.isArray(result.azure);
+          setLegacy(isLegacy);
+          onLegacyCatalog(isLegacy);
+          setVoices(result.voices || []);
+          setLoaded(true);
         }
       })
       .catch((e) => {
@@ -45,195 +49,126 @@ export function VoiceChoices({
       });
     return () => {
       active = false;
-      request.current?.abort();
+      requestRef.current?.abort();
       audio.current?.pause();
-      if (sampleUrl.current) URL.revokeObjectURL(sampleUrl.current);
-      if (localPreview.current) window.speechSynthesis?.cancel();
+      for (const url of cache.current.values()) URL.revokeObjectURL(url);
+      cache.current.clear();
     };
   }, []);
   useEffect(() => {
-    request.current?.abort();
+    revision.current++;
+    requestRef.current?.abort();
     audio.current?.pause();
-    if (localPreview.current) {
-      window.speechSynthesis?.cancel();
-      localPreview.current = false;
-    }
-    if (sampleUrl.current) {
-      URL.revokeObjectURL(sampleUrl.current);
-      sampleUrl.current = "";
-    }
-    setSample("");
-    setSampleLabel("");
     setBusy(false);
-    setError("");
-  }, [
-    draft.id,
-    draft.engine,
-    draft.language,
-    draft.voice,
-    draft.realtime_model,
-    draft.realtime_voice,
-    draft.greeting,
-  ]);
-  const realtime = draft.engine === "realtime";
-  const browserVoice =
-    !provider?.managed_browser_voice && !realtime && provider?.effective_tts_provider === "browser";
-  const selected = realtime ? draft.realtime_voice : draft.voice;
-  const choices =
-    provider ? voiceChoicesFor(draft, provider, catalog) : [];
-  async function preview() {
-    request.current?.abort();
-    const controller = new AbortController();
-    request.current = controller;
-    audio.current?.pause();
-    setError("");
+    setPlaying(false);
+  }, [draft.id, draft.voice, draft.language]);
+  async function play() {
+    if (playing) {
+      audio.current?.pause();
+      setPlaying(false);
+      return;
+    }
+    if (busy) {
+      requestRef.current?.abort();
+      revision.current++;
+      setBusy(false);
+      return;
+    }
+    const gen = revision.current;
     setBusy(true);
+    setError("");
+    const controller = new AbortController();
+    requestRef.current = controller;
     try {
-      if (browserVoice) {
-        if (!("speechSynthesis" in window))
-          throw new Error(
-            "This browser cannot play a voice sample. Try a browser rehearsal instead.",
-          );
-        speechSynthesis.cancel();
-        const language = draft.language.toLowerCase();
-        const speech = new SpeechSynthesisUtterance(
-          PREVIEW_TEXT[language.split("-")[0]] || PREVIEW_TEXT.en,
+      const key = `${draft.id}:${draft.voice}:${draft.language}`;
+      let url = cache.current.get(key);
+      if (!url) {
+        const blob = await api.voicePreview(
+          draft.id,
+          { voice: draft.voice, language: draft.language },
+          controller.signal,
         );
-        speech.lang = draft.language;
-        const voices = speechSynthesis.getVoices();
-        const local = voices.find(v => v.lang.toLowerCase() === language)
-          ?? voices.find(v => v.lang.toLowerCase().split("-")[0] === language.split("-")[0]);
-        if (local) speech.voice = local;
-        speech.onend = () => {
-          if (!controller.signal.aborted) {
-            localPreview.current = false;
-            setBusy(false);
-          }
-        };
-        speech.onerror = () => {
-          if (controller.signal.aborted) return;
-          localPreview.current = false;
-          setBusy(false);
-          setError(
-            "The sample could not play. Try again or use a browser rehearsal.",
-          );
-        };
-        localPreview.current = true;
-        speechSynthesis.speak(speech);
-        return;
+        if (controller.signal.aborted || gen !== revision.current) return;
+        if (blob.size > 960044)
+          throw new Error("Voice sample is too large. Please try again.");
+        url = URL.createObjectURL(blob);
+        cache.current.set(key, url);
+        if (cache.current.size > 8) {
+          const [oldKey, oldUrl] = cache.current.entries().next().value!;
+          URL.revokeObjectURL(oldUrl);
+          cache.current.delete(oldKey);
+        }
       }
-      const blob = await api.voicePreview(
-        draft.id,
-        {
-          engine: draft.engine,
-          language: draft.language,
-          voice: draft.voice,
-          realtime_model: draft.realtime_model,
-          realtime_voice: draft.realtime_voice,
-        },
-        controller.signal,
-      );
-      if (controller.signal.aborted) return;
-      if (blob.size > 960044) throw new Error('Voice sample is too large.');
-      if (sampleUrl.current) URL.revokeObjectURL(sampleUrl.current);
-      sampleUrl.current = URL.createObjectURL(blob);
-      setSample(sampleUrl.current);
-      setSampleLabel(
-        `${draft.language} · ${selected || "Provider default"}${draft.engine === "realtime" ? ` · ${draft.realtime_model || provider?.effective_realtime_model || "Default model"}` : ""}`,
-      );
+      if (!audio.current) audio.current = new Audio();
+      audio.current.src = url;
+      audio.current.onended = () => setPlaying(false);
+      await audio.current.play();
+      if (gen === revision.current) setPlaying(true);
     } catch (e) {
-      if (!controller.signal.aborted) {
-        setError(errorText(e));
-        setBusy(false);
-      }
+      if (!controller.signal.aborted) setError(errorText(e));
     } finally {
-      if (!browserVoice && !controller.signal.aborted) setBusy(false);
+      if (gen === revision.current) setBusy(false);
     }
   }
+  if (legacy) return <LegacyVoiceChoices draft={draft} onChange={onChange} />;
   return (
-    <div className="of-voice-choices of-brand-voice">
-      <div className="of-voice-heading">
-        <h3 className="of-reading-title">Language & voice</h3>
-        <p>Choose how your receptionist sounds, then listen to a sample.</p>
-      </div>
+    <div className="of-voice-choices">
       <div className="of-two-fields">
         <Field label="Language">
           <select
             value={draft.language}
             onChange={(e) => onChange({ ...draft, language: e.target.value })}
           >
-            {!supportedLanguages.some(
-              (option) => option.id === draft.language,
-            ) && (
-              <option value={draft.language}>
-                {draft.language || "Choose a language"}
-              </option>
+            {!supportedLanguages.some((v) => v.id === draft.language) && (
+              <option value={draft.language}>{draft.language}</option>
             )}
-            {supportedLanguages.map((option) => (
-              <option value={option.id} key={option.id}>
-                {option.label}
+            {supportedLanguages.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.label}
               </option>
             ))}
           </select>
         </Field>
-        <Field label="Voice">
-          <select
-            value={selected}
-            disabled={browserVoice}
-            onChange={(e) =>
-              onChange({
-                ...draft,
-                [realtime ? "realtime_voice" : "voice"]: e.target.value,
-              })
-            }
-          >
-            {browserVoice ? <option value={selected}>Browser default (language-based)</option> : <>
-              <option value="">Provider default</option>
-              {selected && !choices.some((v) => v.id === selected) && (
-                <option value={selected}>{selected}</option>
+        <div className="of-voice-sample-choice">
+          <Field label="Voice">
+            <select
+              value={draft.voice || ""}
+              disabled={!loaded}
+              onChange={(e) => onChange({ ...draft, voice: e.target.value })}
+            >
+              <option value="" disabled>
+                Choose a voice
+              </option>
+              {draft.voice && !voices.some((v) => v.id === draft.voice) && (
+                <option value={draft.voice}>
+                  Saved voice — choose an available voice
+                </option>
               )}
-              {choices.map((v) => (
+              {voices.map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.label}
                 </option>
               ))}
-            </>}
-          </select>
-        </Field>
+            </select>
+          </Field>
+          <button
+            type="button"
+            className="of-button line of-voice-preview-button"
+            disabled={!loaded || !voices.some((v) => v.id === draft.voice)}
+            aria-label={
+              busy
+                ? "Cancel voice sample"
+                : playing
+                  ? "Stop voice sample"
+                  : "Play voice sample"
+            }
+            onClick={() => void play()}
+          >
+            {busy || playing ? "■" : "▶"}
+          </button>
+        </div>
       </div>
-      <div className="of-voice-sample">
-        <Button
-          kind="line"
-          icon="phone"
-          disabled={busy || !provider}
-          onClick={() => void preview()}
-        >
-          {busy
-            ? browserVoice
-              ? "Playing sample…"
-              : "Preparing sample…"
-            : "Listen to a sample"}
-        </Button>
-        {busy && <Button kind="quiet" onClick={() => {
-          request.current?.abort();
-          audio.current?.pause();
-          if (localPreview.current) { window.speechSynthesis?.cancel(); localPreview.current = false; }
-          setBusy(false);
-        }}>Stop sample</Button>}
-        <small>{browserVoice ? "Your browser chooses an installed voice for the selected language." : "A short preview of these voice choices."}</small>
-      </div>
-      {sample && (
-        <figure className="of-sample-result">
-          <figcaption>Voice sample: {sampleLabel}</figcaption>
-          <audio
-            ref={audioRef}
-            controls
-            src={sample}
-            aria-label={`Receptionist voice sample: ${sampleLabel}`}
-          />
-        </figure>
-      )}
-      {catalogUnavailable && <Notice>The live Kataleptic catalog is temporarily unavailable. Saved settings remain usable.</Notice>}
+
       {error && <Notice error>{error}</Notice>}
     </div>
   );

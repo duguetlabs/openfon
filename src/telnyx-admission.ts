@@ -1,3 +1,4 @@
+import {managedWeb,azureConfig,savedManagedVoice} from './managed-azure';
 import { telephoneRealtimeAvailable } from './realtime-providers';
 import type { AgentSettings, Env, ProviderSettings } from './types';
 import { assistantCompatibilityError } from './provider-settings';
@@ -30,15 +31,17 @@ export async function reserveTelnyxCall(
   if (await matchingLink()) return true;
   const settings = await env.DB.prepare(
     `SELECT route.business_id, route.assistant_id, assistants.engine, assistants.realtime_model,
-       assistants.realtime_voice, provider_settings.business_id IS NOT NULL AS provider_present,
+       assistants.realtime_voice, assistants.voice, provider_settings.business_id IS NOT NULL AS provider_present,
        provider_settings.realtime_provider, provider_settings.realtime_base_url, provider_settings.realtime_api_key
      FROM telnyx_number_routes route JOIN assistants ON assistants.id=route.assistant_id
      LEFT JOIN provider_settings ON provider_settings.business_id=route.business_id
      WHERE route.connection_id=? AND route.phone_number=? AND route.enabled=1
        AND assistants.business_id=route.business_id AND assistants.state='active'`
   ).bind(call.connectionId, to).first<AgentSettings & ProviderSettings & { assistant_id: string; provider_present: number }>();
-  if (!settings || !telephoneRealtimeAvailable(env, settings) ||
-      assistantCompatibilityError(env, settings, settings)) return false;
+  if(!settings)return false;
+  const managed=managedWeb(env);
+  if(managed){try{azureConfig(env);savedManagedVoice(settings);}catch{return false;}}
+  else if(!telephoneRealtimeAvailable(env,settings)||assistantCompatibilityError(env,settings,settings))return false;
   // Admission linearizes at the conditional INSERT, using the same route and
   // compatibility snapshot that passed readiness. Pickup still loads current
   // configuration; this is not a freeze for the lifetime of the carrier leg.
@@ -52,12 +55,15 @@ export async function reserveTelnyxCall(
          LEFT JOIN provider_settings ON provider_settings.business_id=route.business_id
         WHERE route.connection_id=? AND route.phone_number=? AND route.enabled=1
           AND assistants.business_id=route.business_id AND assistants.state='active'
-          AND assistants.engine='realtime'
+          AND (${managed?'1':"assistants.engine='realtime'"})
+          ${managed?`AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=route.business_id)
+          AND NOT EXISTS(SELECT 1 FROM commercial_cancellations WHERE business_id=route.business_id
+            AND julianday(term_end)<=julianday('now'))`:''}
           AND route.business_id=? AND route.assistant_id=?
           AND assistants.engine IS ? AND assistants.realtime_model IS ? AND assistants.realtime_voice IS ?
-          AND (provider_settings.business_id IS NOT NULL)=?
+          ${managed?`AND assistants.voice IS ?`:`AND (provider_settings.business_id IS NOT NULL)=?
           AND provider_settings.realtime_provider IS ? AND provider_settings.realtime_base_url IS ?
-          AND provider_settings.realtime_api_key IS ?
+          AND provider_settings.realtime_api_key IS ?`}
           AND trim(assistants.name)<>'' AND trim(assistants.persona)<>''
           AND trim(assistants.language)<>''
           AND (SELECT COUNT(*) FROM calls WHERE business_id=route.business_id AND environment='live'
@@ -66,8 +72,8 @@ export async function reserveTelnyxCall(
                  AND started_at > datetime('now', '-1 day')
                  AND NOT (status='abandoned' AND connected_at IS NULL AND reserved_at IS NULL)) < businesses.max_calls_per_day`
     ).bind(callId, from, call.connectionId, to, settings.business_id, settings.assistant_id,
-      settings.engine, settings.realtime_model, settings.realtime_voice, settings.provider_present,
-      settings.realtime_provider ?? null, settings.realtime_base_url ?? null, settings.realtime_api_key ?? null),
+      settings.engine, settings.realtime_model, settings.realtime_voice, ...(managed?[settings.voice]:[settings.provider_present,
+      settings.realtime_provider ?? null, settings.realtime_base_url ?? null, settings.realtime_api_key ?? null])),
     // SQLite changes() refers to the immediately preceding reservation INSERT,
     // not D1 result metadata. A rejected/ignored INSERT cannot attach a new link
     // to a preexisting row; exact existing-link recovery is handled above.
@@ -82,6 +88,7 @@ export async function reserveTelnyxCall(
 }
 
 export async function telnyxMediaAllowed(env: Env, callId: string): Promise<boolean> {
+  if(managedWeb(env)){try{azureConfig(env);}catch{return false;}}
   const row = await env.DB.prepare(
     `SELECT calls.id FROM calls
       JOIN assistants ON assistants.id=calls.assistant_id AND assistants.business_id=calls.business_id
@@ -91,7 +98,11 @@ export async function telnyxMediaAllowed(env: Env, callId: string): Promise<bool
         AND route.phone_number=link.phone_number
      WHERE calls.id=? AND calls.channel='telnyx' AND calls.status='active'
        AND calls.reserved_at IS NOT NULL AND calls.carrier_released_at IS NULL
-       AND route.enabled=1 AND assistants.state='active' AND assistants.engine='realtime'`
+       AND route.enabled=1 AND assistants.state='active' AND (${managedWeb(env)?'1':"assistants.engine='realtime'"})
+       ${managedWeb(env)?`AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=calls.business_id)
+       AND (calls.connected_at IS NOT NULL OR NOT EXISTS(
+         SELECT 1 FROM commercial_cancellations WHERE business_id=calls.business_id
+           AND julianday(term_end)<=julianday('now')))` :''}`
   ).bind(callId).first();
   return Boolean(row);
 }

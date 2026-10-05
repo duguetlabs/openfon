@@ -1,6 +1,7 @@
+import { managedWeb, managedVoiceCatalog } from './managed-azure';
 import {livekitEnabled} from './livekit';
 import {managedBrowserSettings} from './livekit-settings';
-import { generateVoicePreview, PREVIEW_TEXT } from './voice-preview';
+import { generateVoicePreview, generateManagedVoicePreview, PREVIEW_TEXT } from './voice-preview';
 import { defaultGatewayModel, KATALEPTIC_REALTIME_URL, resolveRealtime } from './realtime-providers';
 import { registerSummaryApi } from './summary-settings';
 import { providerCatalog } from './provider-catalog';
@@ -1125,6 +1126,13 @@ export function registerStudioApi(app: StudioApp): void {
       .bind(c.get('userId')).first<{ id: string }>();
     if (!workspace) return c.json({ error: 'Create a workspace first' }, 409);
     const body = await readWorkspaceBody<Partial<Omit<Assistant, 'take_messages'>> & { take_messages?: number | boolean }>(c.req);
+    if(managedWeb(c.env)) {
+      if(body.voice && !managedVoiceCatalog(c.env).voices.some(v=>v.id===body.voice))return c.json({error:'Choose an available voice.'},400);
+      body.voice=body.voice||managedVoiceCatalog(c.env).defaultVoice;
+      body.realtime_voice=body.voice;
+      body.engine='realtime';
+      if(body.language===undefined){const defaults=await c.env.DB.prepare('SELECT default_language FROM businesses WHERE id=?').bind(workspace.id).first<{default_language:string}>();body.language=defaults?.default_language||'en';}
+    }
     if (
       (body.name !== undefined && !body.name.trim()) ||
       (body.persona !== undefined && !body.persona.trim()) ||
@@ -1135,14 +1143,14 @@ export function registerStudioApi(app: StudioApp): void {
     if (!body.name?.trim()) return c.json({ error: 'Assistant name required' }, 400);
     const realtimeProvider = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
       .bind(workspace.id).first<ProviderSettings>();
-    const incompatibility = assistantCompatibilityError(c.env, realtimeProvider, body);
+    const incompatibility = managedWeb(c.env) ? null : assistantCompatibilityError(c.env, realtimeProvider, body);
     if (incompatibility) return c.json({ error: incompatibility }, 400);
     await workspaceForUser(c.env, c.get('userId'));
     // Foundation may repair a missing provider row. Validate and pin that
     // resulting snapshot; earlier legitimate repairs are outside this batch.
     const createProvider = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
       .bind(workspace.id).first<ProviderSettings>();
-    if (assistantCompatibilityError(c.env, createProvider, body)) {
+    if (!managedWeb(c.env) && assistantCompatibilityError(c.env, createProvider, body)) {
       return c.json({ error: 'Provider configuration changed. Reload and retry.' }, 409);
     }
     // The shared UPDATE predicate needs an explicit source workspace for INSERT.
@@ -1201,6 +1209,10 @@ export function registerStudioApi(app: StudioApp): void {
     const assistant = await ownedAssistant(c.env, c.get('userId'), c.req.param('assistantId'));
     if (!assistant) return c.json({ error: 'Not found' }, 404);
     const body = await readWorkspaceBody<Partial<Omit<Assistant, 'take_messages'>> & { take_messages?: number | boolean }>(c.req);
+    if(managedWeb(c.env)&&body.voice!==undefined){
+      if(!managedVoiceCatalog(c.env).voices.some(v=>v.id===body.voice))return c.json({error:'Choose an available voice.'},400);
+      body.realtime_voice=body.voice;
+    }
     if (
       (body.name !== undefined && !body.name.trim()) ||
       (body.persona !== undefined && !body.persona.trim()) ||
@@ -1220,7 +1232,7 @@ export function registerStudioApi(app: StudioApp): void {
     const realtimeVoice = body.realtime_voice ?? assistant.realtime_voice;
     const realtimeProvider = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
       .bind(assistant.business_id).first<ProviderSettings>();
-    const incompatibility = assistantCompatibilityError(c.env, realtimeProvider,
+    const incompatibility = managedWeb(c.env) ? null : assistantCompatibilityError(c.env, realtimeProvider,
       { engine, realtime_model: realtimeModel, realtime_voice: realtimeVoice });
     if (incompatibility) return c.json({ error: incompatibility }, 400);
     const llmModel = body.llm_model ?? assistant.llm_model;
@@ -1300,7 +1312,7 @@ export function registerStudioApi(app: StudioApp): void {
     }
     const provider = await c.env.DB.prepare('SELECT * FROM provider_settings WHERE business_id = ?')
       .bind(assistant.business_id).first<ProviderSettings>();
-    const incompatibility = assistantCompatibilityError(c.env, provider, assistant);
+    const incompatibility = managedWeb(c.env) ? (managedVoiceCatalog(c.env).voices.some(v=>v.id===(assistant.realtime_voice||assistant.voice||managedVoiceCatalog(c.env).defaultVoice)) ? null : 'Choose an available voice before publishing.') : assistantCompatibilityError(c.env, provider, assistant);
     if (incompatibility) return c.json({ error: incompatibility }, 400);
     // Pin the checked configuration in the write itself. A concurrent provider
     // switch preserves draft fields; it must not race this activation check.
@@ -1405,7 +1417,8 @@ export function registerStudioApi(app: StudioApp): void {
          SELECT ?, ?, ?, 'web', ?, 'test', 'inbound', datetime(?, 'unixepoch'), 1
           WHERE (SELECT COUNT(*) FROM calls
                   WHERE business_id=? AND environment='test'
-                    AND started_at > datetime(?, 'unixepoch', '-1 day')) < ?`
+                    AND started_at > datetime(?, 'unixepoch', '-1 day')) < ?
+          ${managedWeb(c.env) ? "AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=?) AND NOT EXISTS(SELECT 1 FROM commercial_cancellations WHERE business_id=? AND julianday(term_end)<=julianday('now'))" : ''}`
       )
         .bind(
           callId,
@@ -1415,7 +1428,8 @@ export function registerStudioApi(app: StudioApp): void {
           rateLimitNow / 1000,
           assistant.business_id,
           rateLimitNow / 1000,
-          TEST_CALLS_PER_DAY
+          TEST_CALLS_PER_DAY,
+          ...(managedWeb(c.env) ? [assistant.business_id,assistant.business_id] : [])
         )
         .run();
     } catch (error) {
@@ -1424,6 +1438,7 @@ export function registerStudioApi(app: StudioApp): void {
     }
     if ((inserted.meta.changes ?? 0) !== 1) {
       await spend.refund();
+      if (managedWeb(c.env) && await c.env.DB.prepare("SELECT 1 FROM commercial_deletion_jobs WHERE business_id=? UNION ALL SELECT 1 FROM commercial_cancellations WHERE business_id=? AND julianday(term_end)<=julianday('now') LIMIT 1").bind(assistant.business_id,assistant.business_id).first()) return c.json({error:'Calls are unavailable because account deletion is in progress or your paid plan has ended. Check Account or Billing.'},409);
       const currentDay = await testCallDayState(c.env, assistant.business_id, rateLimitNow);
       return c.json({ error: 'Daily test-call limit reached. Try again tomorrow.' }, 429, {
         'Retry-After': String(rollingDayRetryAfter(currentDay.oldest_started_at ?? undefined, rateLimitNow)),
@@ -1457,6 +1472,7 @@ export function registerStudioApi(app: StudioApp): void {
     if (q.assistantId) (conditions.push('calls.assistant_id = ?'), args.push(q.assistantId));
     if (q.status) (conditions.push('calls.status = ?'), args.push(q.status));
     if (q.intent) (conditions.push('calls.intent = ?'), args.push(q.intent));
+    if (q.channel) (conditions.push('calls.channel = ?'), args.push(q.channel === 'phone' ? 'telnyx' : q.channel === 'business_phone' ? 'asterisk' : q.channel));
     if (q.direction === 'inbound' || q.direction === 'outbound') {
       conditions.push('calls.direction = ?');
       args.push(q.direction);
@@ -1977,7 +1993,13 @@ export function registerStudioApi(app: StudioApp): void {
   app.post('/api/me/assistants/:assistantId/voice-preview', async (c) => {
     const assistant = await ownedAssistant(c.env, c.get('userId'), c.req.param('assistantId'));
     if (!assistant) return c.json({ error: 'Assistant not found.' }, 404);
+    if (managedWeb(c.env) && await c.env.DB.prepare('SELECT 1 FROM commercial_deletion_jobs WHERE business_id=?').bind(assistant.business_id).first()) return c.json({error:'Account deletion is in progress.'},409);
     const body = await readWorkspaceBody<Record<string, unknown>>(c.req);
+    if(managedWeb(c.env)){
+      if(Object.keys(body).some(key=>!['voice','language'].includes(key))||typeof body.voice!=='string'||typeof body.language!=='string')return c.json({error:'Choose a voice and language.'},400);
+      if(!managedVoiceCatalog(c.env).voices.some(v=>v.id===body.voice))return c.json({error:'Choose an available voice.'},400);
+      body.realtime_voice=body.voice;body.engine='realtime';body.realtime_model='';
+    }
     const fields = ['engine', 'language', 'voice', 'realtime_model', 'realtime_voice'] as const;
     if (Object.keys(body).some(key => !fields.includes(key as typeof fields[number])) ||
         fields.some(key => typeof body[key] !== 'string' || (body[key] as string).length > 200) ||
@@ -1996,7 +2018,8 @@ export function registerStudioApi(app: StudioApp): void {
       try{settings=managedBrowserSettings(c.env,settings);}catch{return c.json({error:'This voice is unavailable for browser calls. Choose another voice or contact support.'},400);}
     }
     try {
-      if (settings.engine === 'realtime') resolveRealtime(c.env, settings);
+      if (managedWeb(c.env)) { /* Managed preview validates the operator route in its adapter. */ }
+      else if (settings.engine === 'realtime') resolveRealtime(c.env, settings);
       else if (speechConfig(c.env, settings).provider === 'browser') {
         return c.json({ error: 'Use the browser speech preview on this device.' }, 400);
       }
@@ -2013,7 +2036,9 @@ export function registerStudioApi(app: StudioApp): void {
         { 'Retry-After': String(fixedWindowRetryAfter(ip.blocked === 'minute' ? 60 : DAY_SECONDS, now)) });
     }
     try {
-      const audio = await generateVoicePreview(c.env, settings, c.req.raw.signal);
+      const audio = managedWeb(c.env)
+        ? await generateManagedVoicePreview(c.env,{voice:body.voice as string,language:body.language as string},c.req.raw.signal,{businessId:assistant.business_id,operationId:crypto.randomUUID()})
+        : await generateVoicePreview(c.env, settings, c.req.raw.signal);
       return new Response(audio, { headers: { 'Content-Type': 'audio/wav', 'Cache-Control': 'no-store' } });
     } catch { return c.json({ error: 'Voice preview failed. Check the model, voice and saved provider settings, then try again.' }, 502); }
   });

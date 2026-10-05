@@ -1,3 +1,6 @@
+import { configureSdkLogging } from './logging.js';
+import {UsageOutbox} from './usage-outbox.js';
+import {AzureUsageCapture} from './usage.js';
 import {defineAgent, voice, llm, AutoSubscribe, type JobContext} from '@livekit/agents';
 import {PendingTypedInput,submitTypedInput} from './typed-input.js';
 import {realtime} from '@livekit/agents-plugin-openai';
@@ -10,12 +13,13 @@ import {observeGeneration} from './stream-transcripts.js';
 import {ClockedGPTLiveSession} from './clocked-session.js';
 import {ToolClosure} from './tool-closure.js';
 import {FarewellPair,finishCurrentFarewell} from './farewell.js';
-import {acceptedEcho, modelOptions} from './config.js';
+import {acceptedEcho, modelOptions, operatorAzureConfig} from './config.js';
 import {VoiceDiagnostics} from './diagnostics.js';
 import {ProviderReadiness} from './provider-readiness.js';
 import {speechOutcome,successfulPlayout} from './playout.js';
 
 export default defineAgent({entry: async (ctx: JobContext) => {
+  configureSdkLogging();
   const metadata = JSON.parse(ctx.job.metadata || '{}') as {callId?: string};
   const control = new ControlClient(process.env.OPENFON_API_URL!, process.env.OPENFON_AGENT_SERVICE_TOKEN!, metadata.callId || '', ctx.job.room?.name || ctx.room.name || '', ctx.job.id);
   const context = await control.context();
@@ -56,19 +60,43 @@ export default defineAgent({entry: async (ctx: JobContext) => {
       if(!subscriptionsStopped)diagnostic('unsubscribe_already_closed');
       ctx.room.off(RoomEvent.TrackPublished, callerAudio.subscribe);
       try{session?.input.setAudioEnabled(false);}catch{if(ctx.room.isConnected)failed=true;diagnostic('input_already_closed');}
+      let mediaStopped = false;
       try {
         // Drain allows an already-spoken goodbye to finish. Transport/error shutdown interrupts.
         session?.shutdown({drain});
         await within(session?.close()??Promise.resolve(),6000);
+        mediaStopped = true;
         diagnostic('session_closed');
       } catch {
         failed = true;
         diagnostic('session_close_deadline');
         try{session?.output.setAudioEnabled(false);}catch{/* native output may already be closed */}
         void providerSession?.close().catch(()=>{});
+        // Muting alone is not proof of transport shutdown. Disconnect before ending service.
+        try {
+          await within(ctx.room.disconnect(),2000);
+          mediaStopped = true;
+          diagnostic('room_disconnected');
+        } catch { diagnostic('media_stop_unconfirmed'); }
       }
+      if (mediaStopped) {
+        try {
+          await control.post('events', {callback: context.callback, type: 'service_stopped'});
+        } catch { diagnostic('service_stop_unconfirmed'); }
+      }
+      usage.finish();
+      try { await within(outbox.flushPersistence(),7000); diagnostic('usage_journal_flushed'); }
+      catch { failed=true; diagnostic('usage_journal_unconfirmed'); }
+      try { await within(usage.flush(),7000); diagnostic('usage_flushed'); } catch { failed=true; diagnostic('usage_unconfirmed'); }
       try { await within(transcripts.flush(),7000); diagnostic('transcripts_flushed'); } catch { failed = true; diagnostic('transcripts_failed'); }
-      try { await control.post('events', {callback: context.callback, type: 'finished', failed}); diagnostic('finished_acknowledged'); }
+      try {
+        // Preserve server stale-call reconciliation when shutdown could not be confirmed.
+        // Neither a service cutoff nor finalized accounting may assert a fictitious end.
+        if (mediaStopped) {
+          await control.post('events', {callback: context.callback, type: 'finished', failed});
+          diagnostic('finished_acknowledged');
+        } else diagnostic('finished_deferred_media_uncertain');
+      }
       catch(error){diagnostic(error instanceof AdmissionError?'finished_rejected':'finished_unavailable');throw error;}
       finally {
         telemetry.snapshot(true);
@@ -79,6 +107,24 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   };
   const stopSafely = (failure = false, drain = false) => { void stop(failure, drain).catch(() => { console.error('Call shutdown did not confirm persistence'); }); };
   ctx.addShutdownCallback(async () => { await stop(); });
+  const outbox = new UsageOutbox(
+    process.env.OPENFON_USAGE_DIR!,
+    process.env.OPENFON_API_URL!,
+    process.env.OPENFON_AGENT_SERVICE_TOKEN!
+  );
+  const usage = new AzureUsageCapture(
+    context.callId,
+    ctx.job.id,
+    (observation) =>
+      outbox.send({
+        callId: context.callId,
+        room: context.room,
+        jobId: ctx.job.id,
+        callback: context.callback,
+        observation,
+      }),
+    () => stopSafely(true)
+  );
   const farewell=new FarewellPair(stillCurrent=>{
     diagnostic('paired_farewell');
     void (async()=>{
@@ -104,6 +150,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
       duplex.on('openai_client_event_queued',event=>telemetry.count(event.type));
       duplex.on('openai_server_event_received', event => {
         telemetry.count(event.type);
+        usage.observe(event);
         if(event.type==='session.started'){
           if(!acceptedEcho(event.session,context.voice))stopSafely(true);
           else if(!stopped){telemetry.phase('session_started');providerReady.accept();duplex.startInputClock();}
@@ -114,7 +161,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
       return duplex;
     }
   }
-  const model = new CheckedModel({...modelOptions(context, process.env.KATALEPTIC_API_KEY!), delegation: 'responses', connOptions: {timeoutMs: 10000, maxRetry: 0, retryIntervalMs: 1000}});
+  const model = new CheckedModel({...modelOptions(context, operatorAzureConfig()), delegation: 'responses', connOptions: {timeoutMs: 10000, maxRetry: 0, retryIntervalMs: 1000}});
   if (!(model instanceof llm.DuplexModel)) throw new Error('Incompatible conversation SDK');
   class TranscriptAdapter extends llm.DuplexRealtimeAdapter {
     override session() {
@@ -183,6 +230,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     if (!stopped) monitoring = setTimeout(() => void monitor(), 2000);
   };
   try {
+    await outbox.assertAvailable();
     diagnosticTimer=setInterval(()=>telemetry.snapshot(),10000);
     await ctx.connect(undefined, AutoSubscribe.SUBSCRIBE_NONE);
     if (stopped) { await ctx.room.disconnect(); return; }

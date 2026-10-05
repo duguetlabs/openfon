@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import worker from '../src/index';
 import { loadSummaryLlm, resolveSummary, type SummarySettings } from '../src/summary-settings';
@@ -44,6 +45,7 @@ it('saves summary-only credentials, returns no keys and isolates workspaces and 
   expect(await (await request(undefined, 's2')).json()).toMatchObject({ mode: 'legacy', revision: null });
   expect((await request(custom, '')).status).toBe(401);
   expect((await request(undefined, '')).status).toBe(401);
+  db.exec(readFileSync(new URL('../migrations/0026_business_actions.sql', import.meta.url), 'utf8'));
   const exported = await request(undefined, 's1', '/api/me/account/export'); expect(exported.status).toBe(200);
   const data = await exported.text();
   for (const hidden of ['summary-private', 'summary.example', 'reply-private', 'instance-private']) expect(data).not.toContain(hidden);

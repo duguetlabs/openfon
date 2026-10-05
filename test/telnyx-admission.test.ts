@@ -1,5 +1,6 @@
+import {readFileSync} from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { reserveTelnyxCall, telnyxLocalCallId } from '../src/telnyx-admission';
+import { reserveTelnyxCall, telnyxLocalCallId, telnyxMediaAllowed } from '../src/telnyx-admission';
 import { SqliteD1, applyMigrations } from './sqlite-d1';
 import { fakeEnv } from './fake-d1';
 import type { Env } from '../src/types';
@@ -116,5 +117,115 @@ describe('Telnyx checked admission snapshot',()=>{
       return (await db.batch(statements)).map(result=>({...result,meta:{changes:100}}));
     }} as unknown as D1Database;
     expect(await reserve()).toBe(false);expect(rows()).toEqual({calls:[],links:[]});
+  });
+});
+
+describe('operator-managed Azure carrier admission', () => {
+  beforeEach(() => {
+    db.exec(readFileSync('migrations/0027_commercial.sql', 'utf8'));
+    Object.assign(env, {
+      OPENFON_MANAGED_WEB: 'true',
+      AZURE_OPENAI_ENDPOINT: 'https://fixture.cognitiveservices.azure.com',
+      AZURE_OPENAI_API_KEY: 'synthetic-azure',
+    });
+    db.exec(
+      "UPDATE assistants SET engine='pipeline',realtime_model='legacy',realtime_voice='marin' WHERE id='assistant'; UPDATE provider_settings SET realtime_provider='custom',realtime_api_key='' WHERE business_id='biz'"
+    );
+  });
+  it('admits a compatible saved pipeline assistant without changing saved configuration', async () => {
+    const before = db.database
+      .prepare("SELECT * FROM assistants WHERE id='assistant'")
+      .get();
+    expect(await reserve()).toBe(true);
+    expect(
+      db.database.prepare("SELECT * FROM assistants WHERE id='assistant'").get()
+    ).toEqual(before);
+  });
+  it('does not borrow a customer credential when operator Azure is missing', async () => {
+    env.AZURE_OPENAI_API_KEY = '';
+    expect(await reserve()).toBe(false);
+    expect(rows()).toEqual({ calls: [], links: [] });
+  });
+  it('ignores unrelated saved provider changes but retains account and route identity', async () => {
+    holdBatch(() => db.exec('DELETE FROM provider_settings'));
+    expect(await reserve()).toBe(true);
+  });
+  it.each([
+    [
+      'voice',
+      "UPDATE assistants SET realtime_voice='cedar' WHERE id='assistant'",
+    ],
+    [
+      'foreign assistant',
+      "UPDATE telnyx_number_routes SET business_id='other-biz',assistant_id='cross'",
+    ],
+    ['route disabled', 'UPDATE telnyx_number_routes SET enabled=0'],
+  ])('refuses changed %s during reservation', async (_, sql) => {
+    holdBatch(() => db.exec(sql));
+    expect(await reserve()).toBe(false);
+    expect(rows()).toEqual({ calls: [], links: [] });
+  });
+  it('refuses a deletion marker committed at the reservation boundary', async () => {
+    holdBatch(() =>
+      db.exec(
+        "INSERT INTO commercial_deletion_jobs(business_id,requested_at) VALUES('biz','2026-10-05T00:00:00Z')"
+      )
+    );
+    expect(await reserve()).toBe(false);
+    expect(rows()).toEqual({ calls: [], links: [] });
+  });
+  it.each(['requested', 'confirmed', 'uncertain'])('refuses expired %s cancellation at the actual reservation INSERT', async state => {
+    const observation=holdBatch(()=>db.database.prepare(
+      "INSERT INTO commercial_cancellations VALUES('biz','2000-01-01T00:00:00Z',?,'2000-01-01T00:00:00Z')"
+    ).run(state));
+    expect(await reserve()).toBe(false);
+    expect(observation().delta).toBe(0);
+    expect(rows()).toEqual({calls:[],links:[]});
+  });
+  it('allows future cancellation, then blocks first media after expiry while preserving exact-link recovery', async () => {
+    db.exec("INSERT INTO commercial_cancellations VALUES('biz','2999-01-01T00:00:00Z','requested','2000-01-01T00:00:00Z')");
+    expect(await reserve()).toBe(true);
+    expect(await telnyxMediaAllowed(env,id)).toBe(true);
+    db.exec("UPDATE commercial_cancellations SET term_end='2000-01-01T00:00:00Z'");
+    expect(await telnyxMediaAllowed(env,id)).toBe(false);
+    const saved=rows(),start=changes();
+    expect(await reserve()).toBe(true);
+    expect(rows()).toEqual(saved);expect(changes()).toBe(start);
+    db.database.prepare("UPDATE calls SET connected_at='1999-12-31 23:59:59' WHERE id=?").run(id);
+    expect(await telnyxMediaAllowed(env,id)).toBe(true);
+  });
+  it('does not apply managed cancellation policy to self-hosted calls', async () => {
+    env.OPENFON_MANAGED_WEB='false';
+    db.exec("UPDATE assistants SET engine='realtime',realtime_model='gpt-realtime-2',realtime_voice='marin'; UPDATE provider_settings SET realtime_provider='kataleptic',realtime_api_key='synthetic'; INSERT INTO commercial_cancellations VALUES('biz','2000-01-01T00:00:00Z','requested','2000-01-01T00:00:00Z')");
+    expect(await reserve()).toBe(true);
+    expect(await telnyxMediaAllowed(env,id)).toBe(true);
+  });
+  it.each([' ', 'azure-only'])('rejects a legacy empty realtime selection with incompatible fallback %j', async voice => {
+    db.database.prepare("UPDATE assistants SET realtime_voice='',voice=? WHERE id='assistant'").run(voice);
+    expect(await reserve()).toBe(false);
+    expect(rows()).toEqual({calls:[],links:[]});
+  });
+  it('admits both blank saved voice fields with the released default and preserves their bytes', async () => {
+    db.exec("UPDATE assistants SET realtime_voice='',voice='' WHERE id='assistant'");
+    const saved=db.database.prepare("SELECT realtime_voice,voice FROM assistants WHERE id='assistant'").get();
+    expect(await reserve()).toBe(true);
+    expect(db.database.prepare("SELECT realtime_voice,voice FROM assistants WHERE id='assistant'").get()).toEqual(saved);
+  });
+  it('pins both saved voice fields even when an explicit realtime voice wins', async () => {
+    const observation=holdBatch(()=>db.exec("UPDATE assistants SET voice='cedar' WHERE id='assistant'"));
+    expect(await reserve()).toBe(false);expect(observation().delta).toBe(0);
+  });
+  it('uses a compatible legacy voice and pins it at reservation time', async () => {
+    db.exec("UPDATE assistants SET realtime_voice='',voice='cedar' WHERE id='assistant'");
+    const observation=holdBatch(()=>db.exec("UPDATE assistants SET voice='verse' WHERE id='assistant'"));
+    expect(await reserve()).toBe(false);expect(observation().delta).toBe(0);
+    env.DB=db as unknown as D1Database;
+    expect(await reserve()).toBe(true);
+  });
+  it('keeps managed quota enforcement atomic', async () => {
+    holdBatch(() =>
+      db.exec("UPDATE businesses SET max_concurrent_calls=0 WHERE id='biz'")
+    );
+    expect(await reserve()).toBe(false);
   });
 });

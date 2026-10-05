@@ -1,6 +1,22 @@
 # Production preflight
 
-## Current LiveKit deployment — 2026-10-03
+## Managed business / direct Azure candidate — 2026-10-05
+
+The candidate on `codex/managed-business-launch` introduces the managed dashboard, actionable inbox, complete call logs, business and assistant settings, gated phone setup and billing. It routes managed inference directly to Azure; it is **not yet a verified deployment**. The released deployment below remains the last independently verified production source until this section records exact new Worker/runtime identities.
+
+Canonical production deployment is `npm run deploy`, which uses the fully materialized `wrangler.production.json` and `scripts/deploy-managed.mjs`. Installed Wrangler has no `extends` schema support; the parsed D1/DO/migration/asset bindings are checked against the shared application configuration. The guard pins managed/Azure routing and reads migration/secret-name prerequisites before upload; it never applies remote migrations. `npm run deploy:check` and `node scripts/deploy-managed.mjs --dry-run` do not deploy. Naked `wrangler deploy` uses the legacy/local configuration and is not the production release command.
+
+Before rollout: obtain current-commit review/CI clearance, stage the exact source with `OPENFON_MANAGED_WEB=true`, configure the separate direct Azure voice, speech-preview and text-processing services, and validate that customer JSON/screens contain no routing configuration. Preserve existing assistants/credentials/public links; incompatible saved voices require an explicit new voice selection. New assistants store the default voice explicitly.
+
+Apply only additive migrations 0026 and 0027 after a restricted backup and restore/preservation rehearsal. Do not blanket-apply historical 0024 to staging. The managed schedule runs every minute for bounded cancellation reconciliation, retaining call cleanup. Atomic admission also refuses accounts whose paid cancellation term has ended, independent of schedule delivery.
+
+`COMMERCIAL_BILLING_VERIFIED` must remain unset until real invoice, meter and lifecycle acceptance passes. `COMMERCIAL_CHARGING_ENABLED` alone cannot enable checkout. Phone purchasing/activation requires the separate carrier verification and operator country/currency/budget settings; keep those gates off until actual carrier acceptance. A sandbox checkout is not proof of accurate recurring invoices or live charges. See [billing evidence](../commercial/billing-and-costs.md) and [managed product](../managed-web.md).
+
+Read-only production aggregation found one explicitly compatible active assistant and one active assistant with both saved voice fields blank. Exact released source already resolves the blank selection to Marin. The candidate preserves that known effective default on read/runtime, so no active public link requires a voice change in this aggregate. Stored values remain unchanged; nonempty incompatible voices still require an explicit compatible choice. This configuration check is not actual provider/audio acceptance.
+
+No physical microphone, real Azure audio, PSTN or paid deployment acceptance is inferred from unit tests or browser fixtures.
+
+## Last verified released deployment — 2026-10-03
 
 PR #42 is merged and deployed to staging and production. Cloudflare retains application and state authority; separate self-hosted Azure LiveKit and Node services carry audio to Kataleptic. The released interface, accounts, saved configurations and public links are preserved. This deployment does not include the separate editions/redesign prototype.
 

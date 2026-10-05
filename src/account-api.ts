@@ -1,3 +1,6 @@
+import { customerCall } from './managed-web';
+import { customerActionContentSql } from './managed-action-content';
+import { BillingError, prepareCommercialDeletion } from './commercial-dodo';
 import type { Hono, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
@@ -10,7 +13,7 @@ type RecordRow = Record<string, unknown>;
 
 // Explicit export columns prevent new credential fields from silently becoming portable.
 const EXPORT_COLUMNS: Record<string, string[]> = {
-  businesses: ['id', 'user_id', 'slug', 'name', 'description', 'address', 'phone', 'website', 'timezone', 'hours_json', 'services_json', 'faqs_json', 'created_at', 'closures_json', 'max_concurrent_calls', 'max_calls_per_day'],
+  businesses: ['id', 'user_id', 'slug', 'name', 'description', 'address', 'phone', 'website', 'timezone', 'hours_json', 'services_json', 'faqs_json', 'created_at', 'closures_json', 'max_concurrent_calls', 'max_calls_per_day', 'contact_email', 'default_language', 'shared_instructions'],
   assistants: ['id', 'business_id', 'public_slug', 'state', 'name', 'greeting', 'persona', 'language', 'voice', 'take_messages', 'custom_instructions', 'engine', 'realtime_model', 'realtime_voice', 'llm_model', 'created_at', 'updated_at', 'activated_at'],
   agent_settings: ['business_id', 'agent_name', 'greeting', 'persona', 'language', 'voice', 'take_messages', 'custom_instructions', 'llm_base_url', 'llm_model', 'engine', 'realtime_model', 'realtime_voice'],
   provider_settings: ['business_id', 'llm_base_url', 'llm_model', 'stt_provider', 'stt_base_url', 'stt_model', 'tts_provider', 'tts_model', 'realtime_provider', 'realtime_base_url', 'created_at', 'updated_at'],
@@ -92,7 +95,20 @@ export function registerAccountApi(app: App): void {
   app.get('/api/me/account/export', accountLimit('export'), async (c) => {
     const userId = c.get('userId');
     const data: Record<string, RecordRow[]> = {};
-    const tables = { users: ['id', 'email', 'created_at'], ...EXPORT_COLUMNS };
+    const tables: Record<string,string[]> = { users: ['id', 'email', 'created_at'], ...EXPORT_COLUMNS };
+    if(c.env.OPENFON_MANAGED_WEB==='true') {
+      Object.assign(tables, {
+        commercial_accounts: ['plan_id','cadence','status','anchor_at','activated_at','period_end'],
+        commercial_call_usage: ['call_id','connected_at_ms','ended_at_ms','duration_ms','recorded_at'],
+        commercial_usage_adjustments: ['call_id','delta_ms','reason','created_at'],
+        commercial_payment_events: ['event_type','amount_minor','currency','occurred_at'],
+        commercial_phone_orders: ['id','assistant_id','phone_number','state','created_at'],
+        commercial_cancellations: ['term_end','state','requested_at'],
+      });
+      tables.action_items=['id','business_id','call_id','source_key','kind','content','caller_name','caller_phone','status','urgent','due_at','created_at','updated_at'];
+      for(const name of ['provider_settings','engine_presets','engine_profiles','summary_settings'])delete tables[name];
+      for(const name of ['assistants','agent_settings'])tables[name]=tables[name].filter(key=>!['engine','realtime_model','llm_model','realtime_voice','llm_base_url'].includes(key));
+    }
     const ctes: string[] = [];
     const measurements: string[] = [];
     const rawMeasurements: string[] = [];
@@ -102,21 +118,22 @@ export function registerAccountApi(app: App): void {
     // Measure all rows before returning any payload; a global byte gate prevents
     // independently bounded tables from multiplying peak response memory.
     for (const [table, columns] of Object.entries(tables)) {
+      const columnSql = (column:string) => table === 'action_items' && column === 'content' ? customerActionContentSql('action_items') : c.env.OPENFON_MANAGED_WEB === 'true' && ['assistants','agent_settings'].includes(table) && column === 'voice' ? "COALESCE(NULLIF(realtime_voice,''),NULLIF(voice,''),'marin')" : column;
       const scope = table === 'users' ? 'id=?' : table === 'businesses' ? 'user_id=?'
         : table === 'call_turns' ? 'call_id IN (SELECT calls.id FROM calls JOIN businesses ON businesses.id=calls.business_id WHERE businesses.user_id=?)'
         : table === 'assistant_knowledge_collections' ? 'assistant_id IN (SELECT assistants.id FROM assistants JOIN businesses ON businesses.id=assistants.business_id WHERE businesses.user_id=?)'
         : 'business_id IN (SELECT id FROM businesses WHERE user_id=?)';
       // D1 permits at most 32 arguments per SQL function. json_set preserves
       // nullable fields (json_patch would remove them) while adding more keys.
-      let jsonRow = `json_object(${columns.slice(0, 16).map(column => `'${column}', ${column}`).join(', ')})`;
+      let jsonRow = `json_object(${columns.slice(0, 16).map(column => `'${column}', ${columnSql(column)}`).join(', ')})`;
       for (let offset = 16; offset < columns.length; offset += 15) {
-        jsonRow = `json_set(${jsonRow}, ${columns.slice(offset, offset + 15).map(column => `'$.${column}', ${column}`).join(', ')})`;
+        jsonRow = `json_set(${jsonRow}, ${columns.slice(offset, offset + 15).map(column => `'$.${column}', ${columnSql(column)}`).join(', ')})`;
       }
       const rowLimit = table === 'call_turns' ? 25000 : 10000;
       // JSON escaping may expand a byte to six characters. Refuse unusually
       // large legacy rows before constructing JSON, below D1's 2 MB string
       // limit even in that worst case. Normal API writes are capped at 128 KiB.
-      const rawBytes = columns.map(column => `COALESCE(length(CAST(${column} AS BLOB)), 0)`).join(' + ');
+      const rawBytes = columns.map(column => `COALESCE(length(CAST(${columnSql(column)} AS BLOB)), 0)`).join(' + ');
       // ASCII keys, punctuation and null values plus worst-case six-byte JSON
       // escaping per raw byte. This scalar upper bound is measured before any
       // json_object/json_set allocation, including across different tables.
@@ -145,14 +162,14 @@ export function registerAccountApi(app: App): void {
     }
     // D1 caps a compound SELECT at five terms. Materialized groups also
     // prevent the planner flattening these bounded unions into a larger one.
-    const groupedUnion = (name: string, queries: string[]) => {
+    const groupedUnion = (name: string, queries: string[]): string => {
       const groups: string[] = [];
       for (let offset=0; offset<queries.length; offset+=4) {
         const group = `${name}_${offset}`;
         ctes.push(`${group} AS MATERIALIZED (${queries.slice(offset,offset+4).join(' UNION ALL ')})`);
         groups.push(`SELECT * FROM ${group}`);
       }
-      return groups.join(' UNION ALL ');
+      return groups.length > 4 ? groupedUnion(name + '_outer', groups) : groups.join(' UNION ALL ');
     };
     const rawSql = groupedUnion('raw_group', rawMeasurements);
     ctes.push(`raw_budget AS MATERIALIZED (SELECT SUM(bytes) AS bytes, SUM(escaped_bound) AS escaped_bound, MAX(largest_row) AS largest_row,
@@ -177,10 +194,11 @@ export function registerAccountApi(app: App): void {
     let account: RecordRow | null = null;
     let outputBytes = 0;
     const encoder = new TextEncoder();
-    for (const table of Object.keys(EXPORT_COLUMNS)) data[table] = [];
+    for (const table of Object.keys(tables)) if (table !== "users") data[table] = [];
     for (const row of result.results) {
       if (row.table_name === null || row.payload === null) continue;
-      const item = JSON.parse(row.payload) as RecordRow;
+      let item = JSON.parse(row.payload) as RecordRow;
+      if(c.env.OPENFON_MANAGED_WEB === 'true' && row.table_name === 'calls') item = customerCall(item);
       for (const column of EXPORT_URL_COLUMNS[row.table_name] ?? []) {
         item[column] = exportedProviderUrl(item[column]);
       }
@@ -211,6 +229,22 @@ export function registerAccountApi(app: App): void {
       const userId = c.get('userId');
       const user = await c.env.DB.prepare('SELECT password_hash FROM users WHERE id=?').bind(userId).first<{ password_hash: string }>();
       if (!user || !await verifyPassword(body.currentPassword, user.password_hash)) return c.json({ error: 'Current password is incorrect.' }, 403);
+      if (c.env.OPENFON_MANAGED_WEB === 'true') {
+        // Revalidate ownership/session before any external cancellation. The final
+        // delete below repeats this guard after provider calls finish.
+        const eligible = await c.env.DB.prepare(`SELECT businesses.id FROM businesses
+          JOIN sessions ON sessions.user_id=businesses.user_id
+          WHERE businesses.user_id=? AND sessions.token=? AND sessions.expires_at>?
+          AND NOT EXISTS(SELECT 1 FROM calls WHERE calls.business_id=businesses.id AND
+            ((calls.status='active' AND (calls.channel!='web' OR calls.connected_at IS NOT NULL OR calls.browser_claim_required!=1
+              OR EXISTS(SELECT 1 FROM call_turns WHERE call_turns.call_id=calls.id)))
+              OR (calls.reserved_at IS NOT NULL AND calls.carrier_released_at IS NULL)))`)
+          .bind(userId, getCookie(c,'ofs') ?? '', new Date().toISOString()).first<{id:string}>();
+        const workspace = await c.env.DB.prepare('SELECT id FROM businesses WHERE user_id=?').bind(userId).first();
+        if (workspace && !eligible) return c.json({error:'Finish active calls and sign in again before deleting your account.'},409);
+        if (eligible) try { await prepareCommercialDeletion(c.env,eligible.id,{userId,passwordHash:user.password_hash,sessionToken:getCookie(c,'ofs') ?? ''}); }
+        catch (e) { return c.json({error:e instanceof BillingError ? e.message : 'Account deletion could not finish. Please retry.'},e instanceof BillingError?e.status:503); }
+      }
       // FK cascades remove sessions, workspaces, calls, transcripts, assistants,
       // presets and knowledge. Unclaimed browser tickets have no running owner.
       // Old workers can own NULL-connected rows before their first saved turn.

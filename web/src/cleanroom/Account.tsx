@@ -54,7 +54,7 @@ export function Account({ email, onDone, onDelete }: {
     </section>
     <section className="of-business-form">
       <h2>Export workspace data</h2>
-      <p>Download a JSON copy of your account and workspace, including receptionists, knowledge and call records. Passwords, API keys, session tokens and configured provider URLs are excluded.</p>
+      <p>Download a JSON copy of your account and workspace, including receptionists, knowledge and call records. Passwords and sign-in credentials are excluded.</p>
       <Button kind="line" disabled={Boolean(busy)} onClick={() => void run('export', async () => {
         const data = await api.exportAccount();
         if (!mounted.current) return;
@@ -69,7 +69,7 @@ export function Account({ email, onDone, onDelete }: {
     </section>
     <section className="of-business-form">
       <h2>Delete account</h2>
-      <p>Permanently delete your account and workspace, including receptionists, knowledge, call history and saved provider credentials. Export anything you want to keep first. End active calls before deleting. This cannot be undone.</p>
+      <p>Permanently delete your account and workspace, including receptionists, knowledge, call history and saved settings. Export anything you want to keep first. End active calls before deleting. This cannot be undone.</p>
       <form onSubmit={e => {
         e.preventDefault();
         if (confirmation !== 'DELETE' || !deletePassword) return;

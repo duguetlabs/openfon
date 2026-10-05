@@ -4,6 +4,7 @@ export interface Workspace {
   id: string; user_id: string; slug: string; name: string; description: string;
   address: string; phone: string; website: string; timezone: string;
   hours_json: string; services_json: string; faqs_json: string; closures_json: string;
+  contact_email?: string; default_language?: string; shared_instructions?: string;
   max_concurrent_calls: number; max_calls_per_day: number;
 }
 export type Engine = 'pipeline' | 'realtime';
@@ -51,7 +52,7 @@ export interface Turn { id: number; role: 'caller' | 'agent'; text: string; ts: 
 export interface CallDetail extends Call { turns: Turn[] }
 export interface CallFilters {
   environment?: 'test' | 'live' | 'all'; assistantId?: string; status?: string; intent?: string;
-  direction?: 'inbound' | 'outbound'; from?: string; to?: string; search?: string; cursor?: string; limit?: number;
+  channel?: string; direction?: 'inbound' | 'outbound'; from?: string; to?: string; search?: string; cursor?: string; limit?: number;
 }
 export interface Option { id: string; label: string }
 export interface TextPreset extends Option { baseUrl: string; model: string }

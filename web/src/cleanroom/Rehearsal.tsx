@@ -176,12 +176,13 @@ export function Rehearsal({
           </>
         )}
       </div>
+      {assistant && <p className="of-help">Private test calls count towards usage.</p>}
       {detail && (
         <div className="of-station-error" role="alert">
           {detail}
           {onConnections && (
             <button className="of-white-link" onClick={onConnections}>
-              Review connections <Icon name="arrow" size={16} />
+              Review settings <Icon name="arrow" size={16} />
             </button>
           )}
         </div>

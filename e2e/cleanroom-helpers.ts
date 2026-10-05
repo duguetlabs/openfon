@@ -28,6 +28,7 @@ export async function createWorkspace(page: Page, name = 'Browser validation wor
 }
 
 export async function workspaceMenu(page: Page, action: string) {
+  if(action === 'Connections & portability') { await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Call logs',exact:true}).click(); return; }
   const menu = page.getByRole('banner').locator('.of-workspace-menu');
   if (!(await menu.getByRole('button', { name: action, exact: true }).isVisible())) {
     await page.locator('.of-workspace-button').click();
@@ -38,7 +39,7 @@ export async function workspaceMenu(page: Page, action: string) {
 export async function signOut(page: Page) { await workspaceMenu(page, 'Sign out'); }
 export async function connections(page: Page) {
   await workspaceMenu(page, 'Connections & portability');
-  await expect(page.getByRole('button', { name: 'Save connections', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Call logs', exact: true })).toBeVisible();
 }
 export async function whoAnswers(page: Page) {
   const trigger = page.getByRole('button', { name: /Who answers/ });

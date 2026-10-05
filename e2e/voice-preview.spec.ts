@@ -1,109 +1,244 @@
-import { signup, createWorkspace, whoAnswers } from './cleanroom-helpers';
-import { test, expect } from './fixtures';
-import { pcmWav } from '../src/voice-preview';
+import { signup, createWorkspace, whoAnswers } from "./cleanroom-helpers";
+import { test, expect } from "./fixtures";
+import { pcmWav } from "../src/voice-preview";
 
-test('explicit samples preserve identity, cancel stale playback, bound audio and never save the draft', async ({ page }) => {
-  await signup(page, 'preview');
-  const { assistant } = await createWorkspace(page, 'Voice sample workshop');
-  const id = assistant.id;
-  expect((await page.request.put(`/api/me/assistants/${id}`, { data: {
-    name: 'Preview assistant', greeting:'Hello from the preview fixture.', persona:'Helpful', language:'en', engine: 'realtime', realtime_model: 'gpt-realtime-2.1-mini', realtime_voice: 'marin',
-  } })).ok()).toBe(true);
-  const baseline = await (await page.request.get(`/api/me/assistants/${id}`)).json();
+test("voice samples preserve selected identity, cancel stale audio, cache lazily and never save the draft", async ({
+  page,
+}) => {
+  await page.route("**/api/me/voices", (route) =>
+    route.fulfill({
+      json: {
+        voices: ["marin", "cedar", "ash"].map((id) => ({
+          id,
+          label: id[0].toUpperCase() + id.slice(1),
+        })),
+        defaultVoice: "marin",
+      },
+    }),
+  );
+  await page.addInitScript(() => {
+    const NativeAudio = window.Audio;
+    (window as any).sampleAudio = [];
+    window.Audio = class extends NativeAudio {
+      constructor(src?: string) {
+        super(src);
+        (window as any).sampleAudio.push(this);
+      }
+    };
+  });
+  await signup(page, "preview");
+  const { assistant } = await createWorkspace(page, "Voice sample workshop");
+  const baseline = await (
+    await page.request.get(`/api/me/assistants/${assistant.id}`)
+  ).json();
   const requests: any[] = [];
   let held: (() => Promise<void>) | undefined;
-  let mode = 'held';
-  const pcm = new Uint8Array(48000 * 4), view = new DataView(pcm.buffer);
-  for (let i = 0; i < pcm.length / 2; i++) view.setInt16(i * 2, Math.sin(i * 2 * Math.PI * 440 / 24000) * 200, true);
+  let mode = "held";
+  const pcm = new Uint8Array(48000 * 4),
+    view = new DataView(pcm.buffer);
+  for (let i = 0; i < pcm.length / 2; i++)
+    view.setInt16(i * 2, Math.sin((i * 2 * Math.PI * 440) / 24000) * 200, true);
   const wav = Buffer.from(pcmWav(pcm));
-  await page.route('**/voice-preview', async route => {
+  await page.route("**/voice-preview", async (route) => {
     requests.push(route.request().postDataJSON());
-    const fulfill = () => route.fulfill({ status: 200, contentType: 'audio/wav', body: wav }).catch(() => {});
-    if (mode === 'held') held = fulfill;
-    else if (mode === 'error') await route.fulfill({ status: 502, json: { error: 'Synthetic provider unavailable.' } });
-    else if (mode === 'oversize') await route.fulfill({ status: 200, contentType: 'audio/wav', body: Buffer.alloc(960045) });
+    const fulfill = () =>
+      route
+        .fulfill({ status: 200, contentType: "audio/wav", body: wav })
+        .catch(() => {});
+    if (mode === "held") held = fulfill;
+    else if (mode === "error")
+      await route.fulfill({
+        status: 502,
+        json: { error: "Sample temporarily unavailable." },
+      });
+    else if (mode === "oversize")
+      await route.fulfill({
+        status: 200,
+        contentType: "audio/wav",
+        body: Buffer.alloc(960045),
+      });
     else await fulfill();
   });
-  await page.goto(`/assistants/${id}`);
   await whoAnswers(page);
-  const voice = page.getByRole('combobox', {name:'Voice', exact:true});
-  const listen = page.getByRole('button', { name: 'Listen to a sample', exact: true });
-  const stop = page.getByRole('button', { name: 'Stop sample', exact: true });
-  const audio = page.locator('.of-sample-result audio');
-  await page.getByRole('combobox', {name:'Language', exact:true}).selectOption('de');
-  await voice.selectOption('marin');
-  // Paid previews are deliberately explicit in the remake. Visibility and
-  // changing a voice must not spend provider requests or start speech.
-  await page.setViewportSize({ width: 1100, height: 400 });
-  await page.getByRole('heading', { name: 'More time for your business.' }).scrollIntoViewIfNeeded();
-  await expect(listen).not.toBeInViewport();
-  await page.waitForTimeout(800);
-  expect(requests).toHaveLength(0);
-  await listen.scrollIntoViewIfNeeded();
-  await page.waitForTimeout(800);
-  expect(requests).toHaveLength(0);
-  await listen.click();
-  await expect.poll(() => requests.length).toBe(1);
-  expect(requests[0]).toEqual({ engine: 'realtime', language: 'de', voice: baseline.voice,
-    realtime_model: 'gpt-realtime-2.1-mini', realtime_voice: 'marin' });
-  await stop.click(); await held!();
-  await expect(listen).toBeEnabled(); await expect(audio).toHaveCount(0);
-
-  mode = 'success'; await listen.click();
-  await expect.poll(() => requests.length).toBe(2);
-  await expect(audio).toBeVisible(); await expect(audio).toHaveAttribute('controls', '');
-  await expect.poll(() => audio.evaluate((el: HTMLAudioElement) => el.readyState)).toBe(4);
-  expect(await audio.evaluate((el: HTMLAudioElement) => el.paused)).toBe(true);
-  await audio.evaluate((el: HTMLAudioElement) => el.play());
-  await expect.poll(() => audio.evaluate((el: HTMLAudioElement) => el.currentTime)).toBeGreaterThan(0);
-  const playing = await audio.elementHandle();
-  await voice.selectOption('cedar');
-  expect(await playing!.evaluate((el: HTMLAudioElement) => el.paused)).toBe(true);
-  await expect(audio).toHaveCount(0); expect(requests).toHaveLength(2);
-  await listen.click();
-  await expect.poll(() => requests.length).toBe(3);
-  await expect(audio).toBeVisible();
-  expect(requests[2].realtime_voice).toBe('cedar');
-  expect(await audio.evaluate((el: HTMLAudioElement) => el.paused)).toBe(true);
-
-  mode = 'held'; await voice.selectOption('ash'); await listen.click();
-  await expect.poll(() => requests.length).toBe(4);
-  const stale = held!;
-  await voice.selectOption('marin'); await stale();
-  await expect(audio).toHaveCount(0); await expect(listen).toBeEnabled();
-  mode = 'error'; await listen.click();
-  await expect(page.getByRole('alert')).toContainText('Synthetic provider unavailable');
-  expect(requests).toHaveLength(5);
-  await page.waitForTimeout(800); expect(requests).toHaveLength(5);
-  mode = 'oversize'; await listen.click();
-  await expect(page.getByRole('alert')).toContainText('Voice sample is too large');
-  expect(requests).toHaveLength(6); await expect(audio).toHaveCount(0);
-  mode = 'success'; await listen.click(); await expect(audio).toBeVisible();
-  await page.setViewportSize({ width: 390, height: 844 });
-  await listen.scrollIntoViewIfNeeded();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: test.info().outputPath('voice-sample-mobile.png'), fullPage: true });
-  expect(await (await page.request.get(`/api/me/assistants/${id}`)).json()).toEqual(baseline);
-  await expect(voice.locator('option[value="marin"]')).toHaveText('marin');
-  await expect(voice.locator('option[value="marin"]')).not.toHaveAttribute('aria-label');
-
-  // A new saved pipeline setup uses local speech only. No backend generation.
-  expect((await page.request.put(`/api/me/assistants/${id}`, { data: { engine: 'pipeline', language: 'de' } })).ok()).toBe(true);
-  page.on('dialog', dialog => dialog.accept());
-  await page.reload(); await whoAnswers(page);
-  const requestCount = requests.length;
-  await page.evaluate(() => {
-    const calls: { language?: string; text?: string; cancelled?: boolean } = {};
-    Object.assign(window, { previewSpeech: calls });
-    Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: {
-      speaking: false, pending: false, getVoices: () => [],
-      speak(item: SpeechSynthesisUtterance) { calls.language = item.lang; calls.text = item.text; },
-      cancel() { calls.cancelled = true; },
-    } });
+  const voice = page.getByRole("combobox", { name: "Voice", exact: true });
+  const play = page.getByRole("button", {
+    name: "Play voice sample",
+    exact: true,
   });
-  await listen.click();
-  expect(await page.evaluate(() => (window as any).previewSpeech)).toMatchObject({ language: 'de', text: expect.stringContaining('Guten Tag') });
-  await stop.click();
-  expect(await page.evaluate(() => (window as any).previewSpeech.cancelled)).toBe(true);
-  await expect(listen).toBeEnabled(); expect(requests.length).toBe(requestCount);
+  await page
+    .getByRole("combobox", { name: "Language", exact: true })
+    .selectOption("de");
+  await voice.selectOption("marin");
+  await page.waitForTimeout(300);
+  expect(requests).toHaveLength(0);
+  await play.click();
+  await expect.poll(() => requests.length).toBe(1);
+  expect(requests[0]).toEqual({ voice: "marin", language: "de" });
+  await page.getByRole("button", { name: "Cancel voice sample" }).click();
+  await held!();
+  await expect(play).toBeEnabled();
+  expect(await page.evaluate(() => (window as any).sampleAudio.length)).toBe(0);
+  mode = "success";
+  await play.click();
+  await expect.poll(() => requests.length).toBe(2);
+  await expect(
+    page.getByRole("button", { name: "Stop voice sample" }),
+  ).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as any).sampleAudio[0]?.currentTime || 0),
+    )
+    .toBeGreaterThan(0);
+  await voice.selectOption("cedar");
+  expect(await page.evaluate(() => (window as any).sampleAudio[0].paused)).toBe(
+    true,
+  );
+  await play.click();
+  await expect.poll(() => requests.length).toBe(3);
+  expect(requests[2]).toEqual({ voice: "cedar", language: "de" });
+  await page.getByRole("button", { name: "Stop voice sample" }).click();
+  await play.click();
+  await page.getByRole("button", { name: "Stop voice sample" }).click();
+  expect(requests).toHaveLength(3); // repeat playback reuses selected sample
+  mode = "held";
+  await voice.selectOption("ash");
+  await play.click();
+  await expect.poll(() => requests.length).toBe(4);
+  await voice.selectOption("marin");
+  await held!();
+  await expect(play).toBeEnabled();
+  expect(await page.evaluate(() => (window as any).sampleAudio[0].paused)).toBe(
+    true,
+  );
+  // A new language is a new sample; failures and oversized responses are never cached.
+  await page
+    .getByRole("combobox", { name: "Language", exact: true })
+    .selectOption("fr");
+  mode = "error";
+  await play.click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Sample temporarily unavailable",
+  );
+  mode = "oversize";
+  await play.click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Voice sample is too large",
+  );
+  mode = "success";
+  await play.click();
+  await expect(
+    page.getByRole("button", { name: "Stop voice sample" }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: test.info().outputPath("voice-sample-mobile.png"),
+    fullPage: true,
+  });
+  expect(
+    await (await page.request.get(`/api/me/assistants/${assistant.id}`)).json(),
+  ).toEqual(baseline);
+  await expect(voice.locator('option[value="marin"]')).toHaveText("Marin");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page
+    .getByRole("navigation", { name: "Main navigation" })
+    .getByRole("button", { name: "Call logs", exact: true })
+    .click();
+  expect(await page.evaluate(() => (window as any).sampleAudio[0].paused)).toBe(
+    true,
+  );
+});
+
+test("nonmanaged deployments retain provider-aware choices and full preview payload", async ({
+  page,
+}) => {
+  await page.route("**/api/me/voices", (r) =>
+    r.fulfill({ json: { native: [], azure: [], hdDefault: "" } }),
+  );
+  await page.route("**/api/me/provider/catalog", (r) =>
+    r.fulfill({
+      json: {
+        models: [],
+        live: false,
+        voices: {
+          native: [],
+          realtime: {},
+          cataloguedModels: [],
+          azure: [],
+          hdDefault: "",
+        },
+        backends: [],
+        routing: {},
+      },
+    }),
+  );
+  await signup(page, "legacy-preview");
+  const { assistant } = await createWorkspace(page, "Legacy preview");
+  expect(
+    (
+      await page.request.put(`/api/me/assistants/${assistant.id}`, {
+        data: {
+          name: "Legacy receptionist",
+          engine: "realtime",
+          realtime_model: "gpt-realtime-2.1-mini",
+          realtime_voice: "cedar",
+        },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page.reload();
+  await whoAnswers(page);
+  await expect(
+    page.getByRole("combobox", { name: "Voice", exact: true }),
+  ).toHaveValue("cedar");
+  let payload: any;
+  await page.route("**/voice-preview", (r) => {
+    payload = r.request().postDataJSON();
+    return r.fulfill({
+      status: 503,
+      json: { error: "Synthetic legacy preview boundary" },
+    });
+  });
+  await page
+    .getByRole("combobox", { name: "Voice", exact: true })
+    .selectOption("marin");
+  await page
+    .getByRole("button", { name: "Listen to a sample", exact: true })
+    .click();
+  await expect.poll(() => payload?.realtime_voice).toBe("marin");
+  expect(payload).toMatchObject({
+    engine: "realtime",
+    realtime_model: "gpt-realtime-2.1-mini",
+    realtime_voice: "marin",
+    language: "en",
+  });
+  expect(Object.keys(payload).sort()).toEqual([
+    "engine",
+    "language",
+    "realtime_model",
+    "realtime_voice",
+    "voice",
+  ]);
+  expect(
+    (
+      await (
+        await page.request.get(`/api/me/assistants/${assistant.id}`)
+      ).json()
+    ).realtime_voice,
+  ).toBe("cedar");
+  // A voice-only change must be admitted by dirty tracking and persist for calls.
+  const save = page.getByRole("button", { name: "Save changes", exact: true });
+  await expect(save).toBeEnabled();
+  const savedRequest = page.waitForRequest((request) =>
+    request.method() === "PUT" && request.url().endsWith(`/api/me/assistants/${assistant.id}`));
+  await save.click();
+  expect((await savedRequest).postDataJSON()).toEqual({ realtime_voice: "marin" });
+  await expect(page.getByText("Saved. Your next conversation will use this brief.")).toBeVisible();
+  await page.reload();
+  await whoAnswers(page);
+  await expect(page.getByRole("combobox", { name: "Voice", exact: true })).toHaveValue("marin");
 });

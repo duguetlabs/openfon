@@ -115,8 +115,8 @@ test('disposed native subscriptions cannot prevent the rest of call shutdown',()
 });
 test('managed routing uses exact duplex/delegation and rejects unsupported voice',()=>{
  const context={voice:'marin',instructions:'Business facts'} as Parameters<typeof modelOptions>[0];
- const options=modelOptions(context,'synthetic');assert.equal(options.model,'gpt-live-1');assert.equal(options.responsesOptions.model,'gpt-5.4-mini');assert.equal(options.responsesOptions.maxOutputTokens,512);
- assert.throws(()=>modelOptions({...context,voice:'azure-voice'},'synthetic'));
+ const options=modelOptions(context,{apiKey:'synthetic',baseURL:'https://fixture.openai.azure.com/openai/v1',apiKeyHeader:'api-key'});assert.equal(options.model,'gpt-live-1');assert.equal(options.responsesOptions.model,'gpt-5.4-mini');assert.equal(options.responsesOptions.maxOutputTokens,512);
+ assert.throws(()=>modelOptions({...context,voice:'azure-voice'},{apiKey:'synthetic',baseURL:'https://fixture.openai.azure.com/openai/v1',apiKeyHeader:'api-key'}));
  const echo={model:'gpt-live-1',audio:{format:{type:'audio/pcm',rate:24000},output:{voice:'marin'}},delegation:{responses:{model:'gpt-5.4-mini'}}};assert.equal(acceptedEcho(echo,'marin'),true);assert.equal(acceptedEcho(echo,'cedar'),false);assert.equal(acceptedEcho({...echo,model:'gpt-realtime-2'},'marin'),false);
 });
 test('shutdown waits are bounded without claiming underlying promise cancellation',async()=>{

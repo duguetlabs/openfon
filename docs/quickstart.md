@@ -31,10 +31,11 @@ npx wrangler secret put DEFAULT_STT_API_KEY
 # npx wrangler secret put AZURE_SPEECH_KEY
 npm run typecheck
 npm run build
-npm run deploy
+npx wrangler d1 migrations apply openfon --remote --config wrangler.jsonc
+npx wrangler deploy --config wrangler.jsonc
 ```
 
-Enter each credential at Wrangler’s prompt. `npm run deploy` builds, applies **remote D1 migrations**, then uploads the Worker; it is not a local preview. Verify the account and database first. If using an API token instead of interactive login, the deployment needs Workers Scripts and D1 edit permissions and an explicit `CLOUDFLARE_ACCOUNT_ID` to select the intended account. Use your credential manager; do not paste keys into commands or bug reports.
+Enter each credential at Wrangler’s prompt. These explicit self-hosted commands apply **remote D1 migrations** and upload to your configured account; they are not a local preview. Verify your own account/database first and review existing-installation migrations before applying them. The managed `openfon.ai` operator instead uses `npm run deploy`, which validates `wrangler.production.json` and already-applied migrations without applying any; see [production preflight](launch/production-preflight.md). If using an API token instead of interactive login, the deployment needs Workers Scripts and D1 edit permissions and an explicit `CLOUDFLARE_ACCOUNT_ID` to select the intended account. Use your credential manager; do not paste keys into commands or bug reports.
 
 For a final public domain, supply `OPENFON_PUBLIC_URL=https://your-domain.example` to the build/deploy environment after replacing the example with your actual HTTPS origin. Without it, preview builds omit canonical/sitemap metadata. This is metadata configuration, not domain provisioning.
 
@@ -42,7 +43,7 @@ For a final public domain, supply `OPENFON_PUBLIC_URL=https://your-domain.exampl
 
 1. Open the printed HTTPS Worker URL, create an account and complete onboarding with fictional business details. Keep the assistant in **draft**.
 2. Add a known answer (for example, Saturday hours) and approve its knowledge item. Leave another question deliberately unanswered.
-3. Choose the **Pipeline** engine for this first recipe, save, and open the private Test Studio.
+3. For this self-hosted recipe, configure the assistant with `engine: "pipeline"` through the [workspace settings API](providers.md#workspace-settings-contract), then open its private test. The managed business interface does not expose an engine selector.
 4. Allow the microphone. Ask the known question, then an unknown question and a callback request. Listen to the actual response. Text-only success does not prove transcription or audio output.
 5. Interrupt a response, end the call, then check the saved transcript, summary and captured details. Also test microphone denial and the text fallback. Record failures in the [evaluation template](launch/pilot-evaluation.md).
 6. Only after those checks pass, publish the assistant and test its browser call link while signed out. Pause it again if the public test fails. Publishing a browser link does not connect a phone number.

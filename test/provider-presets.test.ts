@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from '../src/index';
 import { transcribe } from '../src/providers';
@@ -52,6 +53,7 @@ it('persists separate capabilities and never returns credentials or crosses work
   const other = await (await request('/api/me/provider', undefined, 's2')).json() as any;
   expect(other).toMatchObject({ usesInstanceDefault: true, workspaceApiKeyConfigured: false, realtime_api_key_configured: true });
   expect((await request('/api/me/provider', {}, '')).status).toBe(401);
+  db.exec(readFileSync(new URL('../migrations/0026_business_actions.sql', import.meta.url), 'utf8'));
   const exportResponse = await request('/api/me/account/export');
   expect(exportResponse.status).toBe(200);
   const exported = await exportResponse.text();

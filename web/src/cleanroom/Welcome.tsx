@@ -9,6 +9,7 @@ import { useState, useRef } from "react";
 import type { ReactNode } from "react";
 import { Button } from "./ui";
 import { Icon } from "./icons";
+import { PublicPlans } from "./Plans";
 import "./welcome.css";
 
 const stages = [
@@ -248,6 +249,7 @@ export function Welcome({ brand, onCreate, onSignIn, onBack, inApp = false }: {
         {brand}
         <nav aria-label="Welcome navigation">
           <a href="#how-openfon-works">How it works</a>
+          <a href="#plans">Plans</a>
           <button className="of-welcome-signin" onClick={onSignIn}>Sign in</button>
         </nav>
       </header>}
@@ -268,9 +270,10 @@ export function Welcome({ brand, onCreate, onSignIn, onBack, inApp = false }: {
           <VisualStory />
           <p className="of-workshop-disclosure">AI-generated workshop scene and illustrative dialogue. No customer or live call is depicted.</p>
         </section>
+        {!inApp && <PublicPlans />}
         <section className="of-welcome-close">
           <div><p className="of-section-label">Set it up around the business</p><h2>Your business.<br />Your way of saying hello.</h2><p>Choose the welcome, add the information callers need, then try your receptionist before sharing its web call link.</p></div>
-          <div className="of-portable-note"><h3>Your setup comes with you.</h3><p>Choose compatible text and voice providers, including Kataleptic. Export your receptionist’s behavior and voice choices as a portable recipe.</p><button className="of-text-button" onClick={onCreate}>{inApp ? "Return to your receptionist" : "Get started"}<Icon name="arrow" size={18} /></button></div>
+          <div className="of-portable-note"><h3>Your business, your welcome.</h3><p>Choose a voice, add your business information and decide when your assistant is available. Review messages and calls in one place.</p><button className="of-text-button" onClick={onCreate}>{inApp ? "Return to your receptionist" : "Get started"}<Icon name="arrow" size={18} /></button></div>
         </section>
         {!inApp && <footer className="of-welcome-footer"><img className="of-brand" src="/brand/openfon-logo.svg" width="247" height="80" alt="OpenFon" /><span>A warm welcome. A clear next step.</span><button onClick={onSignIn}>Already have an account? Sign in<Icon name="arrow" size={16} /></button></footer>}
       </Content>

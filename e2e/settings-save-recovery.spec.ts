@@ -25,7 +25,7 @@ test('failed business save retains the draft and retries only the business mutat
   await expect(page.getByLabel('Business name',{exact:true})).toHaveValue('Confirmed business');
   expect(writes).toBe(1); expect(assistantWrites).toBe(0);
   await page.getByRole('button',{name:'Save business details',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Start browser conversation'})).toBeVisible();
+  await expect(page.getByText('Business details saved.',{exact:true})).toBeVisible();
   expect(writes).toBe(2); expect(assistantWrites).toBe(0);
   const persisted=await (await page.request.get('/api/me/business')).json();
   expect(persisted.name).toBe('Confirmed business');
@@ -41,7 +41,7 @@ test('acknowledged business save uses its confirmed baseline without a redundant
   await page.route(`**/api/me/business/${business.id}`,async route => { if(route.request().method()==='PUT') writes++; return route.continue(); });
   await page.getByLabel('Business name',{exact:true}).fill('Confirmed without refresh');
   await page.getByRole('button',{name:'Save business details',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Start browser conversation'})).toBeVisible();
+  await expect(page.getByText('Business details saved.',{exact:true})).toBeVisible();
   await workspaceMenu(page,'Business details');
   await expect(page.getByLabel('Business name',{exact:true})).toHaveValue('Confirmed without refresh');
   await expect(page.getByRole('button',{name:'Save business details',exact:true})).toBeDisabled();
@@ -64,7 +64,7 @@ for (const outcome of ['success','failure'] as const) test(`pending business ${o
     await expect(page.getByRole('button',{name:'Saving…',exact:true})).toBeDisabled();
     const dialog=page.waitForEvent('dialog'); const leave=workspaceMenu(page,'Connections & portability');
     await (await dialog).dismiss(); await leave;
-    await page.getByRole('button',{name:'Close menu',exact:true}).click();
+    if(await page.getByRole('button',{name:'Close menu',exact:true}).isVisible()) await page.getByRole('button',{name:'Close menu',exact:true}).click();
     release();
     if(outcome==='success') await expect(page.getByText('Business details saved.',{exact:true})).toBeVisible();
     else await expect(page.getByRole('alert')).toContainText('Synthetic pending refusal');
@@ -85,7 +85,7 @@ test('saving a contact edit preserves untouched historical business JSON and ass
   await page.reload(); await workspaceMenu(page,'Business details');
   await page.getByLabel('Address',{exact:true}).fill('One Test Street');
   await page.getByRole('button',{name:'Save business details',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Start browser conversation'})).toBeVisible();
+  await expect(page.getByText('Business details saved.',{exact:true})).toBeVisible();
   const after=await(await page.request.get('/api/me/business')).json();
   expect(after).toMatchObject({...rows,address:'One Test Street'}); expect(after.agent).toEqual(before.agent);
 });
