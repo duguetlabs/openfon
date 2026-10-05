@@ -52,7 +52,14 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     clearInterval(diagnosticTimer);
     diagnostic(failure?'failure_stop':'normal_stop');
     stopping = (async () => {
-      try{await control.post('events',{callback:context.callback,type:'service_stopped'});}catch{diagnostic('service_stop_unconfirmed');}
+      try {
+        await control.post('events', {
+          callback: context.callback,
+          type: 'service_stopped',
+        });
+      } catch {
+        diagnostic('service_stop_unconfirmed');
+      }
       clearTimeout(monitoring); clearTimeout(deadline);
       providerSession?.stopInputClock();
       const subscriptionsStopped=callerAudio.stop();
@@ -84,8 +91,24 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   };
   const stopSafely = (failure = false, drain = false) => { void stop(failure, drain).catch(() => { console.error('Call shutdown did not confirm persistence'); }); };
   ctx.addShutdownCallback(async () => { await stop(); });
-  const outbox=new UsageOutbox(process.env.OPENFON_USAGE_DIR!,process.env.OPENFON_API_URL!,process.env.OPENFON_AGENT_SERVICE_TOKEN!);
-  const usage=new AzureUsageCapture(context.callId,ctx.job.id,observation=>outbox.send({callId:context.callId,room:context.room,jobId:ctx.job.id,callback:context.callback,observation}),()=>stopSafely(true));
+  const outbox = new UsageOutbox(
+    process.env.OPENFON_USAGE_DIR!,
+    process.env.OPENFON_API_URL!,
+    process.env.OPENFON_AGENT_SERVICE_TOKEN!
+  );
+  const usage = new AzureUsageCapture(
+    context.callId,
+    ctx.job.id,
+    (observation) =>
+      outbox.send({
+        callId: context.callId,
+        room: context.room,
+        jobId: ctx.job.id,
+        callback: context.callback,
+        observation,
+      }),
+    () => stopSafely(true)
+  );
   const farewell=new FarewellPair(stillCurrent=>{
     diagnostic('paired_farewell');
     void (async()=>{

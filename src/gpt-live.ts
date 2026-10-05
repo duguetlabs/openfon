@@ -317,9 +317,12 @@ export class GptLiveEngine {
     } catch { return false; }
   }
 
-  private closeWaiters:Array<()=>void>=[];
-  async closeAndDrain():Promise<void>{this.close();if(!this.ws)return;await new Promise<void>(resolve=>this.closeWaiters.push(resolve));}
-
+  private closeWaiters: Array<() => void> = [];
+  async closeAndDrain(): Promise<void> {
+    this.close();
+    if (!this.ws) return;
+    await new Promise<void>((resolve) => this.closeWaiters.push(resolve));
+  }
   private detach(): void {
     if (this.keepalive !== undefined) clearTimeout(this.keepalive);
     this.keepalive = undefined;

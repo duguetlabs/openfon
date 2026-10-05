@@ -327,7 +327,16 @@ export class CallSession implements DurableObject {
   }
 
   private send(obj: unknown): void {
-    if(managedWeb(this.env)&&obj&&typeof obj==='object'&&(obj as {type?:unknown}).type==='error')obj={type:'error',message:'Sorry — this call ran into a problem. Please try again.'};
+    if (
+      managedWeb(this.env) &&
+      obj &&
+      typeof obj === 'object' &&
+      (obj as { type?: unknown }).type === 'error'
+    )
+      obj = {
+        type: 'error',
+        message: 'Sorry — this call ran into a problem. Please try again.',
+      };
     try {
       this.ws?.send(JSON.stringify(obj));
       if (this.debug) {
@@ -343,7 +352,12 @@ export class CallSession implements DurableObject {
   // thrown error goes through failInternally instead.
   private sendError(message: string): void {
     console.error('call error:', message);
-    this.send({ type: 'error', message:managedWeb(this.env)?'Sorry — this call ran into a problem. Please try again.':message });
+    this.send({
+      type: 'error',
+      message: managedWeb(this.env)
+        ? 'Sorry — this call ran into a problem. Please try again.'
+        : message,
+    });
   }
 
   // The disclosure boundary for the public call socket. Thrown errors quote
@@ -433,7 +447,15 @@ export class CallSession implements DurableObject {
       .bind(this.callId)
       .first<CallRow>();
     if (!call || call.status !== 'active') throw new Error('call not found or not active');
-    if(managedWeb(this.env)&&await this.env.DB.prepare('SELECT 1 FROM commercial_deletion_jobs WHERE business_id=?').bind(call.business_id).first())throw new Error('Calling is unavailable while account deletion is pending.');
+    if (
+      managedWeb(this.env) &&
+      (await this.env.DB.prepare(
+        'SELECT 1 FROM commercial_deletion_jobs WHERE business_id=?'
+      )
+        .bind(call.business_id)
+        .first())
+    )
+      throw new Error('Calling is unavailable while account deletion is pending.');
     const budget = await this.env.DB.prepare('SELECT COALESCE(SUM(length(CAST(text AS BLOB))), 0) AS bytes FROM call_turns WHERE call_id = ?')
       .bind(this.callId).first<{ bytes: number }>();
     this.persistedTranscriptBytes = budget?.bytes ?? 0;
@@ -551,7 +573,9 @@ export class CallSession implements DurableObject {
     livekitConfig(this.env);
     const selected=this.settings!.engine==='realtime'?this.settings!.realtime_voice:this.settings!.voice;
     if(managedWeb(this.env))azureConfig(this.env);
-    const voice=managedWeb(this.env)?managedVoice(this.settings!.realtime_voice||this.settings!.voice):gptLiveVoice(selected||'marin');
+    const voice = managedWeb(this.env)
+      ? managedVoice(this.settings!.realtime_voice || this.settings!.voice)
+      : gptLiveVoice(selected || 'marin');
     this.lang=this.settings!.language in SUPPORTED_LANGUAGES?this.settings!.language:'en';
     const instructions=buildSystemPrompt(this.biz!,this.settings!,new Date(),this.knowledge);
     const media:LivekitSession={callId:this.callId,room:'openfon-'+this.callId,caller:'caller-'+this.callId,callback:crypto.randomUUID()+crypto.randomUUID(),instructions,greeting:defaultGreeting(this.biz!,this.settings!),voice,language:this.lang,startupDeadline:Date.now()+CallSession.START_CEILING_MS};
@@ -580,7 +604,15 @@ export class CallSession implements DurableObject {
     const active=await this.env.DB.prepare("SELECT 1 FROM calls WHERE id=? AND status='active' AND channel='web' AND connected_at IS NOT NULL").bind(media.callId).first();
     if(url.pathname==='/livekit/context') {
       if(!active||media.closing||this.ended)return new Response(null,{status:410});
-      if(managedWeb(this.env)&&await this.env.DB.prepare('SELECT 1 FROM commercial_deletion_jobs WHERE business_id=(SELECT business_id FROM calls WHERE id=?)').bind(media.callId).first())return new Response(null,{status:410});
+      if (
+        managedWeb(this.env) &&
+        (await this.env.DB.prepare(
+          'SELECT 1 FROM commercial_deletion_jobs WHERE business_id=(SELECT business_id FROM calls WHERE id=?)'
+        )
+          .bind(media.callId)
+          .first())
+      )
+        return new Response(null, { status: 410 });
       if(typeof body.jobId!=='string'||body.jobId.length>128||!body.jobId)return new Response(null,{status:400});
       if(media.jobId&&media.jobId!==body.jobId)return new Response(null,{status:409});
       if(await this.expireLivekitStartup(media))return new Response(null,{status:410});
@@ -588,15 +620,33 @@ export class CallSession implements DurableObject {
       return Response.json({callId:media.callId,room:media.room,caller:media.caller,callback:media.callback,instructions:media.instructions,greeting:media.greeting,voice:media.voice,language:media.language,commands:media.commands??[]});
     }
     if(body.jobId!==media.jobId||!secureEqual(typeof body.callback==='string'?body.callback:'',media.callback))return new Response(null,{status:403});
-    if(body.type==='usage'&&managedWeb(this.env)){
-      const call=await this.env.DB.prepare('SELECT business_id FROM calls WHERE id=?').bind(media.callId).first<{business_id:string}>();
-      if(!call)return new Response(null,{status:410});
-      try{await ingestProviderUsage(this.env,{callId:media.callId,jobId:media.jobId!,businessId:call.business_id},body.observation as UsageObservation);}
-      catch(error){if(error instanceof UsageError)return new Response(null,{status:400});throw error;}
-      return Response.json({ok:true});
+    if (body.type === 'usage' && managedWeb(this.env)) {
+      const call = await this.env.DB.prepare(
+        'SELECT business_id FROM calls WHERE id=?'
+      )
+        .bind(media.callId)
+        .first<{ business_id: string }>();
+      if (!call) return new Response(null, { status: 410 });
+      try {
+        await ingestProviderUsage(
+          this.env,
+          {
+            callId: media.callId,
+            jobId: media.jobId!,
+            businessId: call.business_id,
+          },
+          body.observation as UsageObservation
+        );
+      } catch (error) {
+        if (error instanceof UsageError) return new Response(null, { status: 400 });
+        throw error;
+      }
+      return Response.json({ ok: true });
     }
-    if(body.type==='service_stopped'){
-      media.serviceEndedAtMs??=Date.now();await this.state.storage.put('livekit',media);return Response.json({ok:true});
+    if (body.type === 'service_stopped') {
+      media.serviceEndedAtMs ??= Date.now();
+      await this.state.storage.put('livekit', media);
+      return Response.json({ ok: true });
     }
     if(body.type==='ready') {
       if(!active||media.closing||media.finished||this.ended)return new Response(null,{status:410});
@@ -684,7 +734,19 @@ export class CallSession implements DurableObject {
     await this.state.storage.put('startedAt', Date.now());
     await this.loadCall();
     if (this.ended) return; // hung up while we were loading
-    if(managedWeb(this.env)){const cfg=azureConfig(this.env);this.settings={...this.settings!,language:this.settings!.language||this.biz?.default_language||'en',engine:'realtime',realtime_model:cfg.liveModel,realtime_voice:managedVoice(this.settings!.realtime_voice||this.settings!.voice),realtime_provider:'instance'};}
+    if (managedWeb(this.env)) {
+      const cfg = azureConfig(this.env);
+      this.settings = {
+        ...this.settings!,
+        language: this.settings!.language || this.biz?.default_language || 'en',
+        engine: 'realtime',
+        realtime_model: cfg.liveModel,
+        realtime_voice: managedVoice(
+          this.settings!.realtime_voice || this.settings!.voice
+        ),
+        realtime_provider: 'instance',
+      };
+    }
     if(livekitEnabled(this.env) && !this.requiresCarrierAudio) {
       // Validate the selected summary route, not an unused conversation text route.
       try { await loadSummaryLlm(this.env,this.biz!.id,this.settings); }
@@ -1988,42 +2050,91 @@ export class CallSession implements DurableObject {
     };
   }
 
-  private queueCarrierWrite(write:()=>Promise<void>):void{
-    if(this.carrierPendingWrites.size>=1000){this.failInternally(new Error('Call accounting is unavailable'));return;}
-    const sequence=++this.carrierWriteSequence;this.carrierPendingWrites.set(sequence,write);
+  private queueCarrierWrite(write: () => Promise<void>): void {
+    if (this.carrierPendingWrites.size >= 1000) {
+      this.failInternally(new Error('Call accounting is unavailable'));
+      return;
+    }
+    const sequence = ++this.carrierWriteSequence;
+    this.carrierPendingWrites.set(sequence, write);
     // One failed write must not poison later writes. Keep the failed task for finalization retry.
-    this.carrierUsageWrites=this.carrierUsageWrites.then(async()=>{
-      try{await write();this.carrierPendingWrites.delete(sequence);}
-      catch{if(!this.ended)this.failInternally(new Error('Call accounting is unavailable'));}
+    this.carrierUsageWrites = this.carrierUsageWrites.then(async () => {
+      try {
+        await write();
+        this.carrierPendingWrites.delete(sequence);
+      } catch {
+        if (!this.ended)
+          this.failInternally(new Error('Call accounting is unavailable'));
+      }
     });
     this.state.waitUntil(this.carrierUsageWrites);
   }
 
-  private captureCarrierUsage(event:Record<string,unknown>,sessionId=this.carrierProviderSession):void{
-    if(!managedWeb(this.env))return;
-    if(event.type==='session.started'){
-      const id=(event.session as {id?:unknown}|undefined)?.id;if(azureIdentifier(id)){this.carrierProviderSession=id;this.carrierOpenSessions.add(id);}return;
+  private captureCarrierUsage(
+    event: Record<string, unknown>,
+    sessionId = this.carrierProviderSession
+  ): void {
+    if (!managedWeb(this.env)) return;
+    if (event.type === 'session.started') {
+      const id = (event.session as { id?: unknown } | undefined)?.id;
+      if (azureIdentifier(id)) {
+        this.carrierProviderSession = id;
+        this.carrierOpenSessions.add(id);
+      }
+      return;
     }
     // Never queue PCM, transcript, or tool argument events behind storage operations.
-    if(!sessionId||!['session.usage.updated','session.closed','response.event','openfon.usage.unreported'].includes(String(event.type)))return;
-    if(event.type==='response.event'&&!['response.completed','response.failed','response.incomplete'].includes(String((event.event as {type?:unknown}|undefined)?.type)))return;
-    if(event.type==='session.closed')this.carrierOpenSessions.delete(sessionId);
-    this.queueCarrierWrite(async()=>{
-      const observation=await azureUsageObservation(this.callId,'carrier_'+this.callId,sessionId,event);if(!observation)return;
-      const key='azure-usage:'+observation.eventId;
-      if(await this.state.storage.get(key))return;
-      const existing=await this.state.storage.list({prefix:'azure-usage:',limit:1001});if(existing.size>=1000)throw Error('Usage evidence capacity exceeded');
-      await this.state.storage.put(key,{observation,acknowledged:false});
+    if (
+      !sessionId ||
+      ![
+        'session.usage.updated',
+        'session.closed',
+        'response.event',
+        'openfon.usage.unreported',
+      ].includes(String(event.type))
+    )
+      return;
+    if (
+      event.type === 'response.event' &&
+      ![
+        'response.completed',
+        'response.failed',
+        'response.incomplete',
+      ].includes(String((event.event as { type?: unknown } | undefined)?.type))
+    )
+      return;
+    if (event.type === 'session.closed')
+      this.carrierOpenSessions.delete(sessionId);
+    this.queueCarrierWrite(async () => {
+      const observation = await azureUsageObservation(
+        this.callId,
+        'carrier_' + this.callId,
+        sessionId,
+        event
+      );
+      if (!observation) return;
+      const key = 'azure-usage:' + observation.eventId;
+      if (await this.state.storage.get(key)) return;
+      const existing = await this.state.storage.list({
+        prefix: 'azure-usage:',
+        limit: 1001,
+      });
+      if (existing.size >= 1000)
+        throw Error('Usage evidence capacity exceeded');
+      await this.state.storage.put(key, { observation, acknowledged: false });
     });
   }
 
-  private async flushCarrierUsage():Promise<void>{
-    for(const sessionId of this.carrierOpenSessions)this.captureCarrierUsage({type:'openfon.usage.unreported'},sessionId);
+  private async flushCarrierUsage(): Promise<void> {
+    for (const sessionId of this.carrierOpenSessions)
+      this.captureCarrierUsage({ type: 'openfon.usage.unreported' }, sessionId);
     this.carrierOpenSessions.clear();
     await this.carrierUsageWrites;
-    for(const [sequence,write] of this.carrierPendingWrites){await write();this.carrierPendingWrites.delete(sequence);}
+    for (const [sequence, write] of this.carrierPendingWrites) {
+      await write();
+      this.carrierPendingWrites.delete(sequence);
+    }
   }
-
   // One replacement session per drop, briefed with the conversation so far,
   // within the same whole-call ceiling as realtime rotations. A session lasts
   // an hour and a call at most thirty minutes, so there is no expiry rotation.
@@ -2636,7 +2747,10 @@ export class CallSession implements DurableObject {
     this.transcriptionAbort?.abort();
     this.speechAbort.abort();
     this.closeUpstream();
-    if(managedWeb(this.env)){await this.gptLive?.closeAndDrain();await this.flushCarrierUsage();}
+    if (managedWeb(this.env)) {
+      await this.gptLive?.closeAndDrain();
+      await this.flushCarrierUsage();
+    }
     // Anything still attached has to be told, and then actually closed. Leaving
     // it open means `ended` silently drops every later message and the caller
     // just hears the agent stop, with no error and no hangup.
@@ -2682,21 +2796,52 @@ export class CallSession implements DurableObject {
     // summarization for a call whose row simply failed to write is waste.
     if (this.summarized) {
       ({ summary, intent, messageJson } = this.summarized);
-    } else if(this.history.length>2&&managedWeb(this.env)){
-      let cached=await this.state.storage.get<{summary:ManagedSummary;observation:UsageObservation}>('managed-summary');
-      if(!cached&&!await this.state.storage.get('managed-summary-attempted')){
+    } else if (this.history.length > 2 && managedWeb(this.env)) {
+      let cached = await this.state.storage.get<{
+        summary: ManagedSummary;
+        observation: UsageObservation;
+      }>('managed-summary');
+      if (!cached && !(await this.state.storage.get('managed-summary-attempted'))) {
         // A crash or network uncertainty must not replay paid post-call inference automatically.
-        await this.state.storage.put('managed-summary-attempted',true);
-        try{
-          const rows=await this.env.DB.prepare('SELECT id,source_id,role,text FROM call_turns WHERE call_id=? AND source_final=1 ORDER BY id LIMIT 200').bind(this.callId).all<{id:number;source_id:string|null;role:string;text:string}>();
-          const result=await processManagedCall(this.env,rows.results.map(row=>({id:String(row.id),role:row.role,text:row.text})),this.settings?.language||this.biz?.default_language||'en');
-          cached={summary:result,observation:managedTextObservation(result)};
+        await this.state.storage.put('managed-summary-attempted', true);
+        try {
+          const rows = await this.env.DB.prepare(
+            'SELECT id,source_id,role,text FROM call_turns WHERE call_id=? AND source_final=1 ORDER BY id LIMIT 200'
+          )
+            .bind(this.callId)
+            .all<{
+              id: number;
+              source_id: string | null;
+              role: string;
+              text: string;
+            }>();
+          const result = await processManagedCall(
+            this.env,
+            rows.results.map((row) => ({
+              id: String(row.id),
+              role: row.role,
+              text: row.text,
+            })),
+            this.settings?.language || this.biz?.default_language || 'en'
+          );
+          cached = { summary: result, observation: managedTextObservation(result) };
           // Cache before ledger/actions writes so their retries never repeat paid inference.
-          await this.state.storage.put('managed-summary',cached);
-        }catch{console.error('Managed call notes unavailable');}
+          await this.state.storage.put('managed-summary', cached);
+        } catch {
+          console.error('Managed call notes unavailable');
+        }
       }
-      if(cached){summary=cached.summary.summary;intent=cached.summary.intent;const callerPhone=normalizeCallerPhone(cached.summary.caller_phone);
-        if(cached.summary.caller_name||callerPhone||cached.summary.message)messageJson=JSON.stringify({caller_name:cached.summary.caller_name,caller_phone:callerPhone,message:cached.summary.message});}
+      if (cached) {
+        summary = cached.summary.summary;
+        intent = cached.summary.intent;
+        const callerPhone = normalizeCallerPhone(cached.summary.caller_phone);
+        if (cached.summary.caller_name || callerPhone || cached.summary.message)
+          messageJson = JSON.stringify({
+            caller_name: cached.summary.caller_name,
+            caller_phone: callerPhone,
+            message: cached.summary.message,
+          });
+      }
     } else if (this.history.length > 2) {
       try {
         const transcript = this.history
@@ -2807,27 +2952,75 @@ export class CallSession implements DurableObject {
     await this.clearWatchdog();
   }
 
-  private async finishManagedAccounting(endedAt:number):Promise<void>{
-    if(!managedWeb(this.env))return;
-    const media=await this.state.storage.get<LivekitSession>('livekit');
-    const end=Math.min(endedAt,media?.serviceEndedAtMs??endedAt);
-    const serviceStart=media?.serviceStartedAtMs??await this.state.storage.get<number>('managed-service-start');
-    const call=await this.env.DB.prepare('SELECT business_id,status,connected_at FROM calls WHERE id=?').bind(this.callId).first<{business_id:string;status:string;connected_at:string|null}>();
+  private async finishManagedAccounting(endedAt: number): Promise<void> {
+    if (!managedWeb(this.env)) return;
+    const media = await this.state.storage.get<LivekitSession>('livekit');
+    const end = Math.min(endedAt, media?.serviceEndedAtMs ?? endedAt);
+    const serviceStart =
+      media?.serviceStartedAtMs ??
+      (await this.state.storage.get<number>('managed-service-start'));
+    const call = await this.env.DB.prepare(
+      'SELECT business_id,status,connected_at FROM calls WHERE id=?'
+    )
+      .bind(this.callId)
+      .first<{
+        business_id: string;
+        status: string;
+        connected_at: string | null;
+      }>();
     // Setup-only failures have no confirmed service interval; they must still finish and preserve any provider observations.
-    if(call?.connected_at&&['completed','failed'].includes(call.status))await recordCompletedCallUsage(this.env,{callId:this.callId,connectedAtMs:Math.min(end,serviceStart??end),endedAtMs:end});
-    if(call){const entries=await this.state.storage.list<{observation:UsageObservation;acknowledged:boolean}>({prefix:'azure-usage:',limit:1000});
-      for(const [key,value] of entries)if(!value.acknowledged){await ingestProviderUsage(this.env,{callId:this.callId,jobId:'carrier_'+this.callId,businessId:call.business_id},value.observation);await this.state.storage.put(key,{...value,acknowledged:true});}
+    if (call?.connected_at && ['completed', 'failed'].includes(call.status))
+      await recordCompletedCallUsage(this.env, {
+        callId: this.callId,
+        connectedAtMs: Math.min(end, serviceStart ?? end),
+        endedAtMs: end,
+      });
+    if (call) {
+      const entries = await this.state.storage.list<{
+        observation: UsageObservation;
+        acknowledged: boolean;
+      }>({ prefix: 'azure-usage:', limit: 1000 });
+      for (const [key, value] of entries)
+        if (!value.acknowledged) {
+          await ingestProviderUsage(
+            this.env,
+            {
+              callId: this.callId,
+              jobId: 'carrier_' + this.callId,
+              businessId: call.business_id,
+            },
+            value.observation
+          );
+          await this.state.storage.put(key, { ...value, acknowledged: true });
+        }
     }
     await this.persistManagedNotes();
   }
 
-  private async persistManagedNotes():Promise<void>{
-    if(!managedWeb(this.env))return;
-    const cached=await this.state.storage.get<{summary:ManagedSummary;observation:UsageObservation}>('managed-summary');
-    if(!cached)return;
-    const call=await this.env.DB.prepare('SELECT business_id FROM calls WHERE id=?').bind(this.callId).first<{business_id:string}>();
-    if(!call)return;
-    await recordTextUsage(this.env,{businessId:call.business_id,operationId:this.callId+':summary-v1',callId:this.callId},cached.observation);
-    if(!cached.summary.processingFailed)await persistCallActions(this.env,this.callId,cached.summary.actions);
+  private async persistManagedNotes(): Promise<void> {
+    if (!managedWeb(this.env)) return;
+    const cached = await this.state.storage.get<{
+      summary: ManagedSummary;
+      observation: UsageObservation;
+    }>('managed-summary');
+    if (!cached) return;
+    const call = await this.env.DB.prepare(
+      'SELECT business_id FROM calls WHERE id=?'
+    )
+      .bind(this.callId)
+      .first<{ business_id: string }>();
+    if (!call) return;
+    await recordTextUsage(
+      this.env,
+      {
+        businessId: call.business_id,
+        operationId: this.callId + ':summary-v1',
+        callId: this.callId,
+      },
+      cached.observation
+    );
+    if (!cached.summary.processingFailed)
+      await persistCallActions(this.env, this.callId, cached.summary.actions);
   }
+
 }

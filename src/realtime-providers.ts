@@ -50,7 +50,17 @@ export function defaultGatewayModel(baseUrl: string): string {
 // Explicit workspace providers never borrow an operator credential. The instance
 // option alone preserves the legacy gateway URL/key/model defaults.
 export function resolveRealtime(env: Env & { REALTIME_PROVIDER?: RealtimeProvider }, settings: (AgentSettings & RealtimeSettings) | null): RealtimeConfig {
-  if(managedWeb(env)){const cfg=azureConfig(env);return {provider:'custom',protocol:'gateway',azure:true,baseUrl:cfg.baseURL.replace(/^https:/,'wss:')+'/realtime',apiKey:cfg.apiKey,model:cfg.liveModel};}
+  if (managedWeb(env)) {
+    const cfg = azureConfig(env);
+    return {
+      provider: 'custom',
+      protocol: 'gateway',
+      azure: true,
+      baseUrl: cfg.baseURL.replace(/^https:/, 'wss:') + '/realtime',
+      apiKey: cfg.apiKey,
+      model: cfg.liveModel,
+    };
+  }
   const selection = settings?.realtime_provider || 'instance';
   const instance = selection === 'instance';
   const provider = instance ? env.REALTIME_PROVIDER || 'kataleptic' : selection;

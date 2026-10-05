@@ -14,7 +14,10 @@ export interface SummarySettings {
 }
 
 export function resolveSummary(env: Env, config: SummarySettings | null, provider: ProviderSettings | null, assistant: AgentSettings | null): LlmConfig {
-  if(managedWeb(env)){const cfg=azureConfig(env);return {baseUrl:cfg.baseURL,apiKey:cfg.apiKey,model:cfg.textModel};}
+  if (managedWeb(env)) {
+    const cfg = azureConfig(env);
+    return { baseUrl: cfg.baseURL, apiKey: cfg.apiKey, model: cfg.textModel };
+  }
   if (!config || config.mode === 'legacy') return resolveLlm(env, assistant);
   if (config.mode === 'workspace') {
     return resolveLlm(env, { ...provider, llm_model: config.model || provider?.llm_model || '' } as AgentSettings);
