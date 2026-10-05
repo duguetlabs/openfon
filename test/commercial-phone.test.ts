@@ -206,3 +206,56 @@ it("distinguishes owned rental availability from actual answering enablement", a
   await assignPhoneNumber(env, "b", "order", "asst", false);
   expect((await getPhoneView(env, "b")).numbers[0].enabled).toBe(false);
 });
+it.each(["pending", "failed", "released", "review"])(
+  "preserves %s rental history when an eligible assistant is deleted",
+  async (state) => {
+    order(state);
+    db.exec("DELETE FROM assistants WHERE id='asst'");
+    expect(
+      db.database
+        .prepare("SELECT assistant_id,state FROM commercial_phone_orders")
+        .get(),
+    ).toEqual({ assistant_id: "asst", state });
+    if (state !== "released")
+      expect((await getPhoneView(env, "b")).numbers[0].assistantId).toBeNull();
+  },
+);
+it("recovers and reassigns a rental after its historical assistant was deleted", async () => {
+  order("review");
+  db.exec(
+    "DELETE FROM assistants WHERE id='asst'; INSERT INTO assistants(id,business_id,public_slug,name) VALUES('replacement','b','replacement','New');",
+  );
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) =>
+      url.includes("/number_orders/")
+        ? Response.json({
+            data: {
+              id: "remoteorder",
+              status: "success",
+              customer_reference: "order",
+            },
+          })
+        : Response.json({
+            data: [
+              {
+                id: "number",
+                phone_number: "+431234567",
+                connection_id: "connection",
+                status: "active",
+              },
+            ],
+          }),
+    ),
+  );
+  await reconcilePhoneOrder(env, "b", "order");
+  expect(
+    db.database.prepare("SELECT count(*) n FROM telnyx_number_routes").get(),
+  ).toEqual({ n: 0 });
+  await assignPhoneNumber(env, "b", "order", "replacement", false);
+  expect(
+    db.database
+      .prepare("SELECT assistant_id,enabled FROM telnyx_number_routes")
+      .get(),
+  ).toEqual({ assistant_id: "replacement", enabled: 0 });
+});

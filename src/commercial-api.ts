@@ -21,7 +21,11 @@ import {
   type PlanId,
   type BillingCadence,
 } from "./commercial-types";
-import { retailOverage, markOperatorQaCall } from "./commercial-usage";
+import {
+  retailOverage,
+  markOperatorQaCall,
+  coveredRetailMilliseconds,
+} from "./commercial-usage";
 import {
   BillingError,
   chargingReady,
@@ -136,14 +140,10 @@ export async function getBillingView(
         Date.parse(cycle.end),
         now,
         account.retail_stopped_at ? Date.parse(account.retail_stopped_at) : now,
+        account.paid_through ? Date.parse(account.paid_through) : now,
+        cancellation ? Date.parse(cancellation.termEnd) : now,
       );
-    const total = await env.DB.prepare(
-      `SELECT COALESCE(SUM(MAX(0,MIN(u.ended_at_ms,?)-MAX(u.connected_at_ms,?))),0) AS ms
-   FROM commercial_call_usage u WHERE u.business_id=? AND u.ended_at_ms>? AND u.connected_at_ms<?
-   AND NOT EXISTS(SELECT 1 FROM commercial_qa_calls q WHERE q.call_id=u.call_id)`,
-    )
-      .bind(end, start, businessId, start, end)
-      .first<{ ms: number }>();
+    const total = await coveredRetailMilliseconds(env, businessId, start, end);
     const adjustment = await env.DB.prepare(
       "SELECT COALESCE(SUM(delta_ms),0) AS ms FROM commercial_usage_adjustments WHERE business_id=? AND cycle_start=? AND cycle_end=?",
     )
@@ -151,7 +151,7 @@ export async function getBillingView(
       .first<{ ms: number }>();
     usage = {
       ...retailOverage(
-        Math.max(0, (total?.ms ?? 0) + (adjustment?.ms ?? 0)),
+        Math.max(0, total + (adjustment?.ms ?? 0)),
         account.plan_id,
         account.cadence,
       ),

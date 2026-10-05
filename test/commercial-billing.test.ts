@@ -574,3 +574,140 @@ it("does not confirm a renewed annual entitlement from only a new monthly usage 
   expect(account().status).toBe("active");
   expect(account().paid_through).toBe("2027-11-05T00:08:42.107Z");
 });
+
+it.each(["on_hold", "past_due", "pending"])(
+  "restores verified coverage after %s without charging the unavailable gap",
+  async (status) => {
+    await reconcileSubscription(env, "base", at);
+    await reconcileSubscription(env, "usage", at);
+    const initial = Date.parse(at),
+      failAt = new Date(initial + 60000).toISOString(),
+      recoverAt = new Date(initial + 120000).toISOString();
+    vi.setSystemTime(failAt);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json(sub("usage", { status }))),
+    );
+    await reconcileSubscription(env, "usage", failAt);
+    expect(account().retail_stopped_at).toBeNull();
+    vi.setSystemTime(recoverAt);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json(sub("usage"))),
+    );
+    await reconcileSubscription(env, "usage", recoverAt);
+    expect(account().status).toBe("active");
+    db.database
+      .prepare(
+        "INSERT INTO calls(id,business_id,status,connected_at,ended_at) VALUES('recovery','b','completed',?,?)",
+      )
+      .run(
+        new Date(initial + 30000).toISOString(),
+        new Date(initial + 150000).toISOString(),
+      );
+    db.database
+      .prepare("INSERT INTO commercial_call_usage VALUES(?,?,?,?,?,?)")
+      .run(
+        "recovery",
+        "b",
+        initial + 30000,
+        initial + 150000,
+        120000,
+        recoverAt,
+      );
+    expect(
+      (await getBillingView(env, "b", initial + 180000)).usage.durationMs,
+    ).toBe(60000);
+    vi.setSystemTime("2026-11-05T00:08:43Z");
+    const settled = await prepareUsageSettlement(
+      env,
+      "b",
+      "2026-10-05T00:08:12.128Z",
+    );
+    expect(settled.overageMinor).toBe(15);
+  },
+);
+it.each(["paid", "cancellation", "permanent"])(
+  "clips customer estimates to the same %s boundary as settlement",
+  async (boundary) => {
+    await reconcileSubscription(env, "base", at);
+    await reconcileSubscription(env, "usage", at);
+    const initial = Date.parse(at),
+      end = new Date(initial + 60000).toISOString();
+    if (boundary === "paid")
+      db.database
+        .prepare("UPDATE commercial_accounts SET paid_through=?")
+        .run(end);
+    if (boundary === "permanent")
+      db.database
+        .prepare("UPDATE commercial_accounts SET retail_stopped_at=?")
+        .run(end);
+    if (boundary === "cancellation")
+      db.database
+        .prepare(
+          "INSERT INTO commercial_cancellations VALUES('b',?,'scheduled',?)",
+        )
+        .run(end, at);
+    db.database
+      .prepare(
+        "INSERT INTO calls(id,business_id,status,connected_at,ended_at) VALUES('bounded','b','completed',?,?)",
+      )
+      .run(at, new Date(initial + 180000).toISOString());
+    db.database
+      .prepare("INSERT INTO commercial_call_usage VALUES(?,?,?,?,?,?)")
+      .run("bounded", "b", initial, initial + 180000, 180000, at);
+    expect(
+      (await getBillingView(env, "b", initial + 240000)).usage.durationMs,
+    ).toBe(60000);
+    vi.setSystemTime("2026-11-05T00:08:43Z");
+    expect(
+      (await prepareUsageSettlement(env, "b", "2026-10-05T00:08:12.128Z"))
+        .overageMinor,
+    ).toBe(15);
+  },
+);
+it("closes expired coverage before recovering the next paid month", async () => {
+  await reconcileSubscription(env, "base", at);
+  await reconcileSubscription(env, "usage", at);
+  const expiry = Date.parse("2026-11-05T00:08:42.107Z"),
+    recovered = expiry + 120000;
+  vi.setSystemTime(recovered);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      Response.json(
+        sub("usage", {
+          previous_billing_date: new Date(expiry).toISOString(),
+          next_billing_date: "2026-12-05T00:08:42.107Z",
+        }),
+      ),
+    ),
+  );
+  await reconcileSubscription(env, "usage", new Date(recovered).toISOString());
+  db.database
+    .prepare(
+      "INSERT INTO calls(id,business_id,status,connected_at,ended_at) VALUES('renewal','b','completed',?,?)",
+    )
+    .run(
+      new Date(expiry).toISOString(),
+      new Date(recovered + 60000).toISOString(),
+    );
+  db.database
+    .prepare("INSERT INTO commercial_call_usage VALUES(?,?,?,?,?,?)")
+    .run(
+      "renewal",
+      "b",
+      expiry,
+      recovered + 60000,
+      180000,
+      new Date(recovered).toISOString(),
+    );
+  expect(
+    (await getBillingView(env, "b", recovered + 120000)).usage.durationMs,
+  ).toBe(60000);
+  expect(
+    db.database
+      .prepare("SELECT count(*) n FROM commercial_billing_periods")
+      .get(),
+  ).toEqual({ n: 2 });
+});

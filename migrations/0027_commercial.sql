@@ -11,6 +11,7 @@ CREATE TABLE commercial_accounts (
  activated_at TEXT,
  retail_stopped_at TEXT,
  paid_through TEXT,
+ coverage_checked_at TEXT,
  period_end TEXT,
  updated_event_at TEXT,
  UNIQUE(provider_mode,customer_id),
@@ -133,6 +134,8 @@ CREATE TABLE commercial_phone_quotes (
 CREATE TABLE commercial_phone_orders (
  id TEXT PRIMARY KEY,
  business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+ -- Historical identity; ownership is enforced at order/route writes.
+ -- It must survive deletion of an otherwise eligible assistant.
  assistant_id TEXT NOT NULL,
  quote_id TEXT NOT NULL UNIQUE REFERENCES commercial_phone_quotes(id),
  provider_order_id TEXT UNIQUE,
@@ -140,8 +143,7 @@ CREATE TABLE commercial_phone_orders (
  connection_id TEXT,
  phone_number TEXT NOT NULL,
  state TEXT NOT NULL DEFAULT 'pending',
- created_at TEXT NOT NULL,
- FOREIGN KEY(assistant_id,business_id) REFERENCES assistants(id,business_id)
+ created_at TEXT NOT NULL
 );
 
 CREATE TABLE commercial_subscription_components (
@@ -201,3 +203,34 @@ CREATE TABLE commercial_payment_writers (
  state TEXT NOT NULL CHECK(state IN ('active','uncertain')),
  created_at TEXT NOT NULL
 );
+
+-- Positive verified coverage, distinct from permanent cancellation. Recovery
+-- starts when verified, leaving temporary unpaid/unverified gaps nonbillable.
+CREATE TABLE commercial_paid_coverage (
+ id INTEGER PRIMARY KEY,
+ business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+ started_at TEXT NOT NULL,
+ verified_until TEXT NOT NULL,
+ closed_at TEXT
+);
+CREATE UNIQUE INDEX commercial_one_open_coverage ON commercial_paid_coverage(business_id) WHERE closed_at IS NULL;
+CREATE INDEX commercial_coverage_period ON commercial_paid_coverage(business_id,started_at,verified_until);
+CREATE TRIGGER commercial_coverage_insert AFTER INSERT ON commercial_accounts
+WHEN NEW.status='active' AND NEW.coverage_checked_at IS NOT NULL AND NEW.paid_through>NEW.coverage_checked_at AND NEW.retail_stopped_at IS NULL
+BEGIN
+ INSERT INTO commercial_paid_coverage(business_id,started_at,verified_until)
+ VALUES(NEW.business_id,MAX(NEW.activated_at,NEW.coverage_checked_at),NEW.paid_through);
+END;
+CREATE TRIGGER commercial_coverage_update AFTER UPDATE OF status,paid_through,coverage_checked_at ON commercial_accounts
+WHEN NEW.coverage_checked_at IS NOT NULL
+BEGIN
+ UPDATE commercial_paid_coverage SET closed_at=MAX(started_at,MIN(verified_until,NEW.coverage_checked_at,COALESCE(NEW.retail_stopped_at,verified_until)))
+ WHERE business_id=NEW.business_id AND closed_at IS NULL
+ AND (NEW.status<>'active' OR verified_until<NEW.coverage_checked_at OR NEW.retail_stopped_at IS NOT NULL);
+ UPDATE commercial_paid_coverage SET verified_until=NEW.paid_through
+ WHERE business_id=NEW.business_id AND closed_at IS NULL AND NEW.status='active' AND NEW.paid_through>NEW.coverage_checked_at AND NEW.retail_stopped_at IS NULL;
+ INSERT INTO commercial_paid_coverage(business_id,started_at,verified_until)
+ SELECT NEW.business_id,MAX(NEW.activated_at,NEW.coverage_checked_at),NEW.paid_through
+ WHERE NEW.status='active' AND NEW.paid_through>NEW.coverage_checked_at AND NEW.retail_stopped_at IS NULL
+ AND NOT EXISTS(SELECT 1 FROM commercial_paid_coverage WHERE business_id=NEW.business_id AND closed_at IS NULL);
+END;

@@ -69,8 +69,9 @@ export function quotedMinor(value: unknown): number {
 }
 export async function getPhoneView(env: CommercialEnv, businessId: string) {
   const { results } = await env.DB.prepare(
-    `SELECT o.id,o.phone_number AS number,COALESCE(r.assistant_id,o.assistant_id) AS assistantId,o.state AS status,COALESCE(r.enabled,0) AS enabled
+    `SELECT o.id,o.phone_number AS number,COALESCE(r.assistant_id,a.id) AS assistantId,o.state AS status,COALESCE(r.enabled,0) AS enabled
     FROM commercial_phone_orders o LEFT JOIN telnyx_number_routes r ON r.connection_id=o.connection_id AND r.phone_number=o.phone_number AND r.business_id=o.business_id
+    LEFT JOIN assistants a ON a.id=o.assistant_id AND a.business_id=o.business_id
     WHERE o.business_id=? AND o.state<>'released' ORDER BY o.created_at`,
   )
     .bind(businessId)
@@ -310,14 +311,21 @@ export async function assignPhoneNumber(
   if (!order) throw new BillingError("This number is not active yet.", 409);
   const statements = [
     env.DB.prepare(
-      `UPDATE telnyx_number_routes SET assistant_id=?,enabled=? WHERE connection_id=? AND phone_number=? AND business_id=? AND EXISTS(SELECT 1 FROM assistants WHERE id=? AND business_id=?) AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=?)`,
+      `INSERT INTO telnyx_number_routes(connection_id,phone_number,business_id,assistant_id,enabled)
+      SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM assistants WHERE id=? AND business_id=?)
+      AND EXISTS(SELECT 1 FROM commercial_phone_orders WHERE id=? AND business_id=? AND state='active' AND provider_number_id IS NOT NULL)
+      AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=?)
+      ON CONFLICT(connection_id,phone_number) DO UPDATE SET assistant_id=excluded.assistant_id,enabled=excluded.enabled
+      WHERE telnyx_number_routes.business_id=excluded.business_id`,
     ).bind(
-      assistantId,
-      enabled ? 1 : 0,
       order.connection_id,
       order.phone_number,
       businessId,
       assistantId,
+      enabled ? 1 : 0,
+      assistantId,
+      businessId,
+      id,
       businessId,
       businessId,
     ),
@@ -501,6 +509,7 @@ export async function reconcilePhoneOrder(
     env.DB.prepare(
       `INSERT INTO telnyx_number_routes(connection_id,phone_number,business_id,assistant_id,enabled)
     SELECT ?,?,?,?,0 WHERE NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=?)
+    AND EXISTS(SELECT 1 FROM assistants WHERE id=? AND business_id=?)
     ON CONFLICT(connection_id,phone_number) DO NOTHING`,
     ).bind(
       order.connection_id,
@@ -508,17 +517,22 @@ export async function reconcilePhoneOrder(
       businessId,
       order.assistant_id,
       businessId,
+      order.assistant_id,
+      businessId,
     ),
     env.DB.prepare(
       `UPDATE commercial_phone_orders SET provider_number_id=?,state='active' WHERE id=? AND business_id=? AND state IN ('pending','review')
     AND (EXISTS(SELECT 1 FROM telnyx_number_routes WHERE connection_id=? AND phone_number=? AND business_id=? AND assistant_id=?)
-    OR EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=?))`,
+    OR EXISTS(SELECT 1 FROM commercial_deletion_jobs WHERE business_id=?)
+    OR NOT EXISTS(SELECT 1 FROM assistants WHERE id=? AND business_id=?))`,
     ).bind(
       matches[0].id,
       id,
       businessId,
       order.connection_id,
       order.phone_number,
+      businessId,
+      order.assistant_id,
       businessId,
       order.assistant_id,
       businessId,

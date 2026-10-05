@@ -1,6 +1,10 @@
 import type { CommercialEnv } from "./commercial-dodo";
 import { BillingError, dodoRequest, chargingReady } from "./commercial-dodo";
-import { retailOverage, usageHash } from "./commercial-usage";
+import {
+  retailOverage,
+  usageHash,
+  coveredRetailMilliseconds,
+} from "./commercial-usage";
 import type { PlanId, BillingCadence } from "./commercial-types";
 
 /** Recompute an immutable billing interval, never the month an adjustment arrived. */
@@ -51,18 +55,14 @@ export async function prepareUsageSettlement(
       "Call usage is still being reconciled for this period.",
       409,
     );
-  const raw = await env.DB.prepare(
-    `SELECT COALESCE(SUM(MAX(0,MIN(ended_at_ms,?)-MAX(connected_at_ms,?))),0) ms FROM commercial_call_usage u WHERE business_id=? AND ended_at_ms>? AND connected_at_ms<? AND NOT EXISTS(SELECT 1 FROM commercial_qa_calls q WHERE q.call_id=u.call_id)`,
-  )
-    .bind(end, start, businessId, start, end)
-    .first<{ ms: number }>();
+  const raw = await coveredRetailMilliseconds(env, businessId, start, end);
   const adjustments = await env.DB.prepare(
     "SELECT COALESCE(SUM(delta_ms),0) ms FROM commercial_usage_adjustments WHERE business_id=? AND cycle_start=? AND cycle_end=?",
   )
     .bind(businessId, period.period_start, period.period_end)
     .first<{ ms: number }>();
   const total = retailOverage(
-    Math.max(0, (raw?.ms ?? 0) + (adjustments?.ms ?? 0)),
+    Math.max(0, raw + (adjustments?.ms ?? 0)),
     period.plan_id,
     period.cadence,
   );

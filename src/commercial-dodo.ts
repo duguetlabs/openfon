@@ -646,13 +646,13 @@ export async function reconcileSubscription(
        WHEN u.status='past_due' OR b.status='past_due' THEN 'past_due' ELSE 'pending' END status
     FROM businesses owner LEFT JOIN commercial_subscription_components u ON u.business_id=owner.id AND u.role='usage'
     LEFT JOIN commercial_subscription_components b ON b.business_id=owner.id AND b.role='base' WHERE owner.id=?
-  ) INSERT INTO commercial_accounts(business_id,provider_mode,customer_id,subscription_id,plan_id,cadence,status,anchor_at,activated_at,period_end,paid_through,updated_event_at)
-    SELECT ?,?,customer_id,?,?,?,status,CASE WHEN status='active' THEN period_start END,CASE WHEN status='active' THEN ? END,period_end,paid_through,?
+  ) INSERT INTO commercial_accounts(business_id,provider_mode,customer_id,subscription_id,plan_id,cadence,status,anchor_at,activated_at,period_end,paid_through,updated_event_at,coverage_checked_at)
+    SELECT ?,?,customer_id,?,?,?,status,CASE WHEN status='active' THEN period_start END,CASE WHEN status='active' THEN ? END,period_end,paid_through,?,?
     FROM current_components WHERE customer_id IS NOT NULL
-    ON CONFLICT(business_id) DO UPDATE SET status=excluded.status,period_end=excluded.period_end,paid_through=excluded.paid_through,
+    ON CONFLICT(business_id) DO UPDATE SET status=excluded.status,period_end=excluded.period_end,paid_through=excluded.paid_through,coverage_checked_at=MAX(COALESCE(commercial_accounts.coverage_checked_at,''),excluded.coverage_checked_at),
       updated_event_at=MAX(COALESCE(commercial_accounts.updated_event_at,''),excluded.updated_event_at),
       activated_at=COALESCE(commercial_accounts.activated_at,excluded.activated_at),anchor_at=COALESCE(commercial_accounts.anchor_at,excluded.anchor_at),
-      retail_stopped_at=CASE WHEN commercial_accounts.activated_at IS NOT NULL AND excluded.status IN ('canceled','unpaid','past_due') THEN COALESCE(commercial_accounts.retail_stopped_at,?) ELSE commercial_accounts.retail_stopped_at END
+      retail_stopped_at=CASE WHEN commercial_accounts.activated_at IS NOT NULL AND excluded.status='canceled' THEN COALESCE(commercial_accounts.retail_stopped_at,?) ELSE commercial_accounts.retail_stopped_at END
     WHERE commercial_accounts.customer_id=excluded.customer_id`,
   )
     .bind(
@@ -669,6 +669,7 @@ export async function reconcileSubscription(
       intent.cadence,
       now,
       eventAt,
+      now,
       now,
     )
     .run();
