@@ -1,14 +1,18 @@
 # Release checklist
 
-## Current managed product candidate — 2026-10-05
+## Current managed release — 2026-10-05
 
-The managed Web restructure and direct Azure replacement are under integration, not yet a production acceptance claim. Customer-facing backend/model controls are removed and server-rejected. Dashboard and inbox use stored calls/actions; booking requests are not confirmed appointments. Voice changes do not alter post-call processing. Accounts, data and historical routing remain preserved.
+The managed Web restructure and direct Azure implementation are merged through `24ab5b7` and deployed to staging. Production remains on its prior release. Customer routing controls are hidden and server-rejected; booking requests remain requests, and voice choices do not change post-call processing. Existing data, public links, credentials and historical routing columns are preserved.
 
-Current bounded evidence: 124 selected Worker API/privacy/commercial tests passed. Both TypeScript projects and the additive migration-through-0027 restore/preservation rehearsal passed. Complete retained browser run: 95 passed, two language-preview fixtures failed because they had not selected a compatible voice; the corrected fixture-only follow-up passed both cases. Managed browser: three passed, including real local ownership/routing restrictions and synthetic billing lifecycle recovery. A new-workspace explicit default/retry-preservation regression passed. These checks use synthetic inference/audio where applicable. Final suite/build, review/CI, exact staging and production readbacks are pending. A native iOS decoder/source compatibility check is not a newly installed-app test.
+Latest reviewed application evidence: 2,316 Worker tests/101 files, 60 Node tests, both typechecks/builds and migration/restore checks passed. PR-Agent security/major clearance, local Codex clearance, and all five current PR/merged-main CI jobs passed. The exact staging Worker/Node/configuration identities and data-preservation readbacks are recorded in [production preflight](production-preflight.md#current-deployment--2026-10-05).
 
-Commercial sandbox subscription payment and lifecycle evidence is tracked in [billing and costs](../commercial/billing-and-costs.md). Verification gates remain off until actual usage invoice/minimum/cancellation acceptance passes; usage ledger correctness is distinct from a successful card checkout. Phone provisioning remains gated pending authorized geography, rental/call budget and real carrier validation. Local direct-Azure wiring still needs actual provider/audio acceptance, and restaurant-noise behavior requires consented physical testing.
+Native in-app browser checks passed for the deployed navigation, stored inbox/history, business/assistant/privacy sections, compatible voice labels, and the specified monthly/annual prices. These were read-only; no voice sample, conversation, save, payment or carrier operation was invoked. A separate disposable-account HTTP smoke was blocked before account creation by Cloudflare 403/error 1010; staged account-create/save/delete API acceptance is therefore still unverified. No test account remains to clean up. Two remote query-path migration failures were retained; the separately rehearsed supported file-import path succeeded with full old-data preservation and only the two intended ledger additions.
 
-The remainder records historical evidence. Older Kataleptic and voice defaults describe those dated releases, not the new managed candidate's routing.
+Production direct-Azure routing is held until separately authorized actual authentication/transport/audio acceptance demonstrates nonzero audible output, selected voice, persisted transcript, summary/actions and clean closure. Health 200, zero rooms and synthetic audio fixtures do not establish these properties. Physical microphone/restaurant-noise and carrier acceptance remain separate.
+
+Commercial sandbox evidence is tracked in [billing and costs](../commercial/billing-and-costs.md). Billing verification/new checkout remain off until actual usage aggregation, invoices and lifecycle acceptance pass. Phone provisioning remains gated pending authorized geography/budget and actual carrier validation. The latest two read-only sandbox usage-history checks remained empty; that does not prove zero usage or a failed charge. No new metering or invoice claim is made.
+
+The remainder records historical evidence. Older Kataleptic and voice defaults describe those dated releases, not the current managed staging release's routing.
 
 
 The browser application is launched at https://openfon.ai. Production deployment
