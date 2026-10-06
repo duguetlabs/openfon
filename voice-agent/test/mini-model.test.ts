@@ -12,6 +12,8 @@ import {
 import { BoundedStream } from "../src/mini-stream.js";
 import { PendingTypedInput, submitTypedInput } from "../src/typed-input.js";
 import { ResponseUnavailable, successfulPlayout } from "../src/playout.js";
+import {beginMiniClosure} from '../src/worker.js';
+import {ToolClosure} from '../src/tool-closure.js';
 import { AzureUsageCapture } from "../src/usage.js";
 initializeLogger({ pretty: false, level: "silent" });
 const tick = () => new Promise<void>((r) => setImmediate(r));
@@ -1337,5 +1339,40 @@ test('claimed closure interruption release is exact and cannot release a later r
   const next=await generation(f,'new-closure');f.socket.message({type:'response.done',response:{id:next.responseId,status:'completed',output:[{type:'function_call',name:'end_call',call_id:'new-claim',arguments:'{}'}]}});
   const releaseNew=f.session.prepareClosure('new-claim')!;assert.equal(typeof releaseNew,'function');
   assert.equal(releaseOld(),false);assert.equal(f.session.hasPendingWork,true);assert.equal(releaseNew(),true);assert.equal(releaseNew(),false);
+ }finally{await f.session.close();}
+});
+for(const mode of ['aborted','interrupted'] as const)test(`Worker rejects ${mode} closure execution without a ticket or obsolete reservation`,async()=>{
+ const f=await fixture();const speech=voice.SpeechHandle.create({allowInterruptions:true});
+ try{
+  const g=await generation(f);f.socket.message({type:'response.done',response:{id:g.responseId,status:'completed',output:[{type:'function_call',name:'end_call',call_id:'obsolete-entry',arguments:'{}'}]}});
+  const controller=new AbortController();if(mode==='aborted')controller.abort();else speech.interrupt();
+  const ticket=beginMiniClosure(f.session,{toolCallId:'obsolete-entry',abortSignal:controller.signal,ctx:{speechHandle:speech}},new ToolClosure());
+  assert.equal(ticket,undefined,'interrupted entry must not schedule farewell or stop');
+  assert.equal(f.session.hasPendingWork,false);
+  const next=await generation(f,'later-entry');f.socket.message({type:'response.done',response:{id:next.responseId,status:'completed',output:[{type:'function_call',name:'end_call',call_id:'later-entry',arguments:'{}'}]}});
+  assert.equal(typeof f.session.prepareClosure('later-entry'),'function');
+ }finally{speech._markDone();await f.session.close();}
+});
+for(const kind of ['think','end_call'] as const)for(const delayed of [false,true])test(`old ${kind} completion after correction is ignored with ${delayed?'delayed':'admitted'} response`,async()=>{
+ let reasoning=0;const f=await fixture(async()=>{reasoning++;return 'obsolete';});
+ try{
+  const reply=f.session.generateReply();await tick();const request=f.socket.sent.at(-1);
+  if(!delayed)f.socket.message({type:'response.created',response:{id:'old-generation',metadata:request.response.metadata}});
+  const chat=new llm.ChatContext();chat.addMessage({id:'correction',role:'user',content:'Use the corrected request.'});await f.session.updateChatCtx(chat);
+  if(delayed)f.socket.message({type:'response.created',response:{id:'old-generation',metadata:request.response.metadata}});
+  await reply;
+  f.socket.message({type:'response.done',response:{id:'old-generation',status:'completed',output:[{type:'function_call',name:kind,call_id:'old-tool',arguments:kind==='think'?'{"request":"old"}':'{}'}]}});
+  assert.equal(reasoning,0);assert.equal(f.session.closureAllowed,false);assert.equal(f.session.hasPendingWork,false);
+ }finally{await f.session.close();}
+});
+for(const kind of ['think','end_call'] as const)test(`obsolete automatic ${kind} cannot execute after correction`,async()=>{
+ let reasoning=0;const f=await fixture(async()=>{reasoning++;return 'answer';});
+ try{
+  const first=await generation(f);f.socket.message({type:'response.done',response:{id:first.responseId,status:'completed',output:[{type:'function_call',name:'think',call_id:'first-think',arguments:'{"request":"first"}'}]}});
+  await tick();const automatic=f.socket.sent.at(-1);
+  const chat=new llm.ChatContext();chat.addMessage({id:'new-correction',role:'user',content:'Use my correction instead.'});await f.session.updateChatCtx(chat);
+  f.socket.message({type:'response.created',response:{id:'obsolete-auto',metadata:automatic.response.metadata}});
+  f.socket.message({type:'response.done',response:{id:'obsolete-auto',status:'completed',output:[{type:'function_call',name:kind,call_id:'obsolete-auto-tool',arguments:kind==='think'?'{"request":"obsolete"}':'{}'}]}});
+  assert.equal(reasoning,1);assert.equal(f.session.closureAllowed,false);assert.equal(f.session.hasPendingWork,false);
  }finally{await f.session.close();}
 });

@@ -117,6 +117,7 @@ interface Generation {
   functions: BoundedStream<llm.FunctionCall>;
   discarded: boolean;
   automatic: boolean;
+  toolEpoch: number;
 }
 interface Request {
   id: string;
@@ -130,6 +131,7 @@ interface Request {
   queuedUntil: number;
   admissionRetries: number;
   automatic?: boolean;
+  toolEpoch: number;
   competingResponse?: { id: string; completed: boolean };
 }
 /** Application-owned GA protocol boundary. SDK still owns room I/O, speech handles and tools.
@@ -242,6 +244,13 @@ export class MiniSession extends llm.RealtimeSession {
     return this.closurePermission && !this.reasoningPending;
   }
   /** Consume valid tool closure without interrupting the speech that authorized it. */
+  rejectClosure(callId: string): void {
+    const tool = this.externalTools.get(callId);
+    if (tool && !tool.started) {
+      this.externalTools.delete(callId);
+      this.closurePermission = false;
+    }
+  }
   prepareClosure(callId: string): (() => boolean) | undefined {
     const tool = this.externalTools.get(callId);
     if (!this.closureAllowed || !tool || tool.started || tool.generation.discarded) return;
@@ -485,7 +494,7 @@ export class MiniSession extends llm.RealtimeSession {
     if (!this.pending.length && this.answerPending) {
       this.answerPending = false;
       const automatic: Request = {
-        id: randomUUID(), automatic: true, queuedUntil: Date.now() + 60000,
+        id: randomUUID(), automatic: true, toolEpoch: this.reasoningEpoch, queuedUntil: Date.now() + 60000,
         admissionRetries: 0, resolve: () => {}, reject: () => this.warn("response_unavailable"),
         abort: () => {},
         timer: setTimeout(() => {
@@ -605,6 +614,7 @@ export class MiniSession extends llm.RealtimeSession {
   private generation(response: any) {
     if (!id(response?.id)) throw Error();
     const requested = response.metadata?.openfon_request;
+    const originating = this.sent;
     const automatic = !!this.sent?.automatic && requested === this.sent.id;
     if (
       (requested && this.retiredRequests.has(requested)) ||
@@ -648,6 +658,7 @@ export class MiniSession extends llm.RealtimeSession {
       ),
       discarded: false,
       automatic,
+      toolEpoch: requested && originating && originating.id === requested ? originating.toolEpoch : this.reasoningEpoch,
     };
     this.active = generation;
     this.generationProgress();
@@ -963,7 +974,7 @@ export class MiniSession extends llm.RealtimeSession {
         (a, b) =>
           (a?.name === "think" ? -1 : 0) - (b?.name === "think" ? -1 : 0),
       )) {
-        if (call.type !== "function_call") continue;
+        if (call.type !== "function_call" || generation.toolEpoch !== this.reasoningEpoch) continue;
         if (
           !id(call.call_id) ||
           typeof call.arguments !== "string" ||
@@ -1248,6 +1259,7 @@ export class MiniSession extends llm.RealtimeSession {
         id: randomUUID(),
         queuedUntil: Date.now() + 60000,
         admissionRetries: 0,
+        toolEpoch: this.reasoningEpoch,
         instructions,
         toolChoice: this.toolChoice,
         resolve,

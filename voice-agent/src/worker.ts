@@ -19,6 +19,25 @@ import {ProviderReadiness} from './provider-readiness.js';
 import {MiniModel,MiniSession} from './mini-model.js';
 import {speechOutcome,successfulPlayout,responseUnavailable} from './playout.js';
 
+export function beginMiniClosure(
+  miniSession: Pick<MiniSession, 'prepareClosure' | 'rejectClosure'>,
+  options: {toolCallId:string;abortSignal:AbortSignal;ctx:{speechHandle:voice.SpeechHandle}},
+  toolClosure: ToolClosure,
+) {
+  if(options.abortSignal.aborted||options.ctx.speechHandle.interrupted){
+    miniSession.rejectClosure(options.toolCallId);
+    return;
+  }
+  const releaseInterrupted=miniSession.prepareClosure(options.toolCallId);
+  if(!releaseInterrupted)return;
+  watchClosureInterruption(options.abortSignal,options.ctx.speechHandle,()=>{if(releaseInterrupted())toolClosure.cancel();});
+  if(options.abortSignal.aborted||options.ctx.speechHandle.interrupted){
+    if(releaseInterrupted())toolClosure.cancel();
+    return;
+  }
+  return toolClosure.begin();
+}
+
 export default defineAgent({entry: async (ctx: JobContext) => {
   configureSdkLogging();
   const metadata = JSON.parse(ctx.job.metadata || '{}') as {callId?: string};
@@ -215,10 +234,8 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     parameters: {type: 'object', properties: {}, additionalProperties: false},
     execute: async (_args, options) => {
       // Return from the function before draining the activity that owns this function.
-      const releaseInterrupted=miniSession?.prepareClosure(options.toolCallId);
-      if(miniSession&&!releaseInterrupted)return 'Finish the pending caller request before ending the call.';
-      if(releaseInterrupted)watchClosureInterruption(options.abortSignal,options.ctx.speechHandle,()=>{if(releaseInterrupted())toolClosure.cancel();});
-      const ticket=toolClosure.begin();
+      const ticket=miniSession?beginMiniClosure(miniSession,options,toolClosure):toolClosure.begin();
+      if(miniSession&&!ticket)return 'Finish the pending caller request before ending the call.';
       if(ticket){
         diagnostic('end_call_requested');
         setTimeout(()=>{void (async()=>{
