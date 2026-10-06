@@ -213,9 +213,9 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   });
   const endCall = llm.tool({name: 'end_call', description: 'End a completed conversation by scheduling a brief spoken goodbye, then disconnecting after it plays.',
     parameters: {type: 'object', properties: {}, additionalProperties: false},
-    execute: async () => {
+    execute: async (_args, options) => {
       // Return from the function before draining the activity that owns this function.
-      if(miniSession&&!miniSession.prepareClosure())return 'Finish the pending caller request before ending the call.';
+      if(miniSession&&!miniSession.prepareClosure(options.toolCallId))return 'Finish the pending caller request before ending the call.';
       const ticket=toolClosure.begin();
       if(ticket){
         diagnostic('end_call_requested');

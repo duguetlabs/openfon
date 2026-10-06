@@ -219,7 +219,7 @@ export class MiniSession extends llm.RealtimeSession {
   private terminalError?: Error;
   private providerSession = "";
   private responseFailures = 0;
-  private externalTools = new Set<string>();
+  private externalTools = new Map<string, { generation: Generation; started: boolean }>();
   private closurePermission = false;
   constructor(model: MiniModel) {
     super(model);
@@ -242,8 +242,10 @@ export class MiniSession extends llm.RealtimeSession {
     return this.closurePermission && !this.reasoningPending;
   }
   /** Consume valid tool closure without interrupting the speech that authorized it. */
-  prepareClosure(): boolean {
-    if (!this.closureAllowed) return false;
+  prepareClosure(callId: string): boolean {
+    const tool = this.externalTools.get(callId);
+    if (!this.closureAllowed || !tool || tool.started || tool.generation.discarded) return false;
+    tool.started = true;
     this.invalidate();
     this.reasoningEpoch++;
     return true;
@@ -517,6 +519,10 @@ export class MiniSession extends llm.RealtimeSession {
 
   private invalidate() {
     this.closurePermission = false;
+    // A correction can discard an SDK-unconsumed tool or revoke one dequeued but
+    // not yet executed. Only execution claims survive until their actual output.
+    for (const [callId, tool] of this.externalTools)
+      if (!tool.started) this.externalTools.delete(callId);
     for (const [callId, job] of this.jobs)
       if (!job.done) {
         job.controller.abort();
@@ -555,6 +561,8 @@ export class MiniSession extends llm.RealtimeSession {
     clearTimeout(this.generationTimer);
     for (const generation of this.generations) {
       generation.discarded = true;
+      for (const [callId, tool] of this.externalTools)
+        if (tool.generation === generation && !tool.started) this.externalTools.delete(callId);
       for (const message of generation.messages.values()) {
         message.audio.discard();
         message.text.end();
@@ -960,7 +968,7 @@ export class MiniSession extends llm.RealtimeSession {
         else if (call.name === "end_call" && !this.hasPendingWork) {
           this.invalidate();
           this.reasoningEpoch++;
-          this.externalTools.add(call.call_id);
+          this.externalTools.set(call.call_id, { generation, started: false });
           this.closurePermission = true;
           generation.functions.push(
             llm.FunctionCall.create({

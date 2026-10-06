@@ -1268,8 +1268,7 @@ test('valid automatic closure preparation preserves authorizing playback',async(
   f.socket.message({type:'response.output_audio_transcript.delta',response_id:'automatic',item_id:'valid',delta:'Your answer is thirty.'});
   f.socket.message({type:'response.done',response:{id:'automatic',status:'completed',output:[{type:'function_call',name:'end_call',call_id:'complete',arguments:'{}'}]}});
   assert.equal(f.session.closureAllowed,true);let interrupted=0;f.session.on('interrupted',()=>interrupted++);
-  const api=f.session as MiniSession & {prepareClosure?:()=>boolean};
-  if(api.prepareClosure)assert.equal(api.prepareClosure(),true);else f.session.invalidateReasoning();
+  assert.equal(f.session.prepareClosure("complete"),true);
   assert.equal(interrupted,0,'valid end_call must preserve authorizing speech');
   assert.equal(f.session.closureAllowed,false,'closure permission is consumed once');
  }finally{await f.session.close();}
@@ -1281,6 +1280,31 @@ test('new caller correction revokes closure before tool execution',async()=>{
   f.socket.message({type:'response.done',response:{id:g.responseId,status:'completed',output:[{type:'function_call',name:'end_call',call_id:'closure',arguments:'{}'}]}});
   assert.equal(f.session.closureAllowed,true);
   const chat=new llm.ChatContext();chat.addMessage({id:'new-request',role:'user',content:'Wait, I have one more question.'});await f.session.updateChatCtx(chat);
-  assert.equal(f.session.prepareClosure(),false);
+  assert.equal(f.session.prepareClosure("closure"),false);
+ }finally{await f.session.close();}
+});
+test('correction releases an unexecuted closure reservation and permits a later valid closure',async()=>{
+ const f=await fixture();
+ try{
+  const g=await generation(f);f.socket.message({type:'response.done',response:{id:g.responseId,status:'completed',output:[{type:'function_call',name:'end_call',call_id:'discarded',arguments:'{}'}]}});
+  const chat=new llm.ChatContext();chat.addMessage({id:'correction-before-tool',role:'user',content:'Wait, another question.'});await f.session.updateChatCtx(chat);
+  assert.equal(f.session.hasPendingWork,false,'unexecuted obsolete tool reservation must be released');
+  const next=await generation(f,'later');f.socket.message({type:'response.done',response:{id:next.responseId,status:'completed',output:[{type:'function_call',name:'end_call',call_id:'valid-later',arguments:'{}'}]}});
+  assert.equal(f.session.closureAllowed,true);
+  assert.equal(f.session.prepareClosure("discarded"),false);
+  assert.equal(f.session.prepareClosure("valid-later"),true);
+ }finally{await f.session.close();}
+});
+test('only the exact closure tool can claim execution and its reservation lasts until output',async()=>{
+ const f=await fixture();
+ try{
+  const g=await generation(f);f.socket.message({type:'response.done',response:{id:g.responseId,status:'completed',output:[{type:'function_call',name:'end_call',call_id:'claimed',arguments:'{}'}]}});
+  assert.equal(f.session.prepareClosure('unrelated'),false);
+  assert.equal(f.session.prepareClosure('claimed'),true);
+  assert.equal(f.session.prepareClosure('claimed'),false);
+  f.session.invalidateReasoning();
+  assert.equal(f.session.hasPendingWork,true,'started tool remains reserved until its completion');
+  const chat=f.session.chatCtx.copy();chat.insert(llm.FunctionCallOutput.create({callId:'claimed',name:'end_call',output:'scheduled',isError:false}));
+  await f.session.updateChatCtx(chat);assert.equal(f.session.hasPendingWork,false);
  }finally{await f.session.close();}
 });
