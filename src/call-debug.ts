@@ -45,14 +45,12 @@ export class CallDebug {
     if (body.sequence !== this.uploadSequence) return 409;
     const failures = this.writeFailures;
     // Keep default-partial durable until a producer explicitly seals all batches.
-    const wasPartial = this.meta.partial;
-    this.meta.partial = this.producerPartial;
+    this.meta.partial = true;
     for (const record of records) {
       if (record.kind === 'audio') this.event('audio', {...record, frame: this.seq, offset: 0, total: (record.data as string).length / 4 * 3 - ((record.data as string).endsWith('==') ? 2 : (record.data as string).endsWith('=') ? 1 : 0)});
       else this.event('capture', record);
     }
-    this.producerPartial ||= this.meta.partial || body.partial === true;
-    this.meta.partial = wasPartial || this.producerPartial;
+    this.producerPartial ||= body.partial === true;
     this.flush(); await this.chain;
     if (this.writeFailures !== failures) { this.producerPartial = this.meta.partial = true; this.stopped = true; return 503; }
     this.producerPartial ||= this.writeFailures > 0;

@@ -158,3 +158,18 @@ it('service recordings exclude legacy outgoing transcripts and errors from the r
  const bundle=await (await debugResponse(state,new Request('https://internal/debug/download'),recorder)).text();
  expect(bundle).not.toContain('sentinel');expect(bundle).not.toContain('caller_event');
 });
+
+it('automatic upload flush persists partial before an unsealed producer can crash',async()=>{
+ const {state,storage,data}=fixture();(storage as any).sync=async()=>{};
+ const recorder=(await CallDebug.start(state,'call',true))!;
+ recorder.event('pending',{synthetic:'x'.repeat(47000)});
+ const original=storage.put.getMockImplementation()!;let release!:()=>void;let entered!:()=>void;
+ const writing=new Promise<void>(resolve=>entered=resolve);
+ storage.put.mockImplementationOnce(async(key,value)=>{
+  await original(key,value);entered();await new Promise<void>(resolve=>release=resolve);
+ });
+ const upload=recorder.upload({sequence:0,complete:false,partial:false,records:[{kind:'audio',track:'caller',format:'pcm_s16le_24000',data:'AAAA'.repeat(1000),sourceMs:0}]});
+ await writing;expect((data.get('debug:meta') as any).partial).toBe(true);
+ expect((data.get('debug:meta') as any).finishedAt).toBeUndefined();
+ release();expect(await upload).toBe(200);await recorder.finish();expect(recorder.meta.partial).toBe(true);
+});
