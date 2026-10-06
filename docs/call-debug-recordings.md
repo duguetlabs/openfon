@@ -12,7 +12,7 @@ Legacy transport recordings can contain private audio, transcript text, the gene
 | --- | --- |
 | LiveKit caller PCM | Mini: mono 24 kHz samples admitted to the conversation service after resampling. GPT-Live: microphone frames admitted to the input clock; synthetic idle frames are excluded. These are not a raw physical microphone recording. |
 | LiveKit assistant PCM | Generated speech pulled by the SDK before RTC output. Playback events describe SDK output, not proof of sound from a physical speaker. Supported mono sample rates are preserved: 16, 24 or 48 kHz; unsupported formats mark the recording partial. |
-| LiveKit timeline | Relative worker capture time (`sourceMs`), storage arrival time (`ms`), speech boundaries, interruption, cancel/truncate, SDK playback start/end and terminal events. Raw provider details are excluded. |
+| LiveKit timeline | Relative worker capture time (`sourceMs`), storage arrival time (`ms`), speech boundaries, interruption, cancel/truncate, SDK playback start/end and terminal events. Raw provider details and response/item identifiers are excluded. |
 | Legacy Realtime caller PCM | Mono 24 kHz signed 16-bit PCM received after browser microphone processing, including whether it was forwarded upstream. |
 | Pipeline utterances | Original encoded microphone packets and whether the application admitted them. |
 | Pipeline continuous microphone | An additional diagnostic PCM track, including input ignored while its half-duplex VAD waits. It adds upload/CPU overhead only in debug mode. |
@@ -34,7 +34,7 @@ Download the bundle from the call detail page, then run with Node 22.13+:
 node scripts/call-debug-replay.mjs /private/path/call.debug.ndjson --out /private/path/call-audio
 ```
 
-This creates available `caller.wav`, `microphone.wav`, `agent.wav`, encoded utterance files, and `timeline.json`. Files are private by default. LiveKit WAV tracks use relative worker capture timing; legacy tracks use arrival timing. Neither is a synchronized physical microphone/speaker recording. Rate-specific files use `-16000` or `-48000` suffixes; 24 kHz keeps the original filenames. PCM plays sequentially when arrivals overlap. Keep the bundle as the authoritative packet/event record. Incomplete bundles are rejected; `--allow-partial` allows inspection of known partial captures but does not reconstruct missing audio.
+This creates available `caller.wav`, `microphone.wav`, `agent.wav`, encoded utterance files, and `timeline.json`. Files are private by default. LiveKit WAV tracks use relative worker capture timing; legacy tracks use arrival timing. Worker capture and browser/DO clocks are not aligned. The timeline cannot identify an individual model cancellation or exact browser playback from these events alone. Neither is a synchronized physical microphone/speaker recording. Rate-specific files use `-16000` or `-48000` suffixes; 24 kHz keeps the original filenames. PCM plays sequentially when arrivals overlap. Keep the bundle as the authoritative packet/event record. Incomplete bundles are rejected; `--allow-partial` allows inspection of known partial captures but does not reconstruct missing audio.
 
 ## Compare settings with the same recorded input
 
