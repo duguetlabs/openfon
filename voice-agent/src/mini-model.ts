@@ -950,6 +950,7 @@ export class MiniSession extends llm.RealtimeSession {
             code === "invalid_api_key"
               ? "authentication_failed"
               : "quota_unavailable",
+            event.response.status_details.error,
           );
         this.responseFailures++;
         this.answerPending = false;
