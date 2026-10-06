@@ -95,3 +95,9 @@ export function acceptedEcho(value: unknown, voice: string): boolean {
 }
 
 export function operatorVoiceModel(env:NodeJS.ProcessEnv=process.env){return env.AZURE_OPENAI_LIVE_DEPLOYMENT||'gpt-live-1';}
+
+/** Authenticated Worker routing must match the operator's Node deployment before inference. */
+export function assertVoicePairing(context:Pick<CallContext,'voiceModel'>,env:NodeJS.ProcessEnv=process.env) {
+  const declared=context.voiceModel??'gpt-live-1';
+  if(!['gpt-live-1','gpt-realtime-2.1-mini'].includes(declared)||declared!==operatorVoiceModel(env))throw Error('Voice service configuration mismatch');
+}

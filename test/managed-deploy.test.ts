@@ -85,3 +85,11 @@ describe("managed production deployment contract", () => {
     expect(sql).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|ALTER|CREATE)\b/);
   });
 });
+it('canonical candidate selects Mini while only the explicit supported rollback remains valid',()=>{
+ const candidate=parsed();expect(candidate.vars.AZURE_OPENAI_LIVE_DEPLOYMENT).toBe('gpt-realtime-2.1-mini');
+ const stage=unstable_readConfig({config:'wrangler.staging.json'},{hideWarnings:true});
+ expect(stage.vars.AZURE_OPENAI_LIVE_DEPLOYMENT).toBe(candidate.vars.AZURE_OPENAI_LIVE_DEPLOYMENT);expect(stage.name).toBe('openfon-staging');expect(stage.d1_databases[0].database_id).toBe('e1d93b7d-9024-447a-ae25-6b1e5ed298b3');expect(stage.triggers.crons).toEqual([]);expect(stage.vars.LIVEKIT_URL).toBe('wss://voice-staging.openfon.ai');
+ for(const config of [candidate,stage])for(const flag of ['COMMERCIAL_CHARGING_ENABLED','TELNYX_PURCHASES_ENABLED','TELNYX_ENABLED','ASTERISK_ENABLED'])expect(config.vars[flag]).toBe('false');
+ candidate.vars.AZURE_OPENAI_LIVE_DEPLOYMENT='gpt-live-1';expect(()=>validateManagedDeployment(candidate,baseline())).not.toThrow();
+ candidate.vars.AZURE_OPENAI_LIVE_DEPLOYMENT='custom';expect(()=>validateManagedDeployment(candidate,baseline())).toThrow();
+});

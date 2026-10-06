@@ -12,7 +12,12 @@ assistant configurations. Set `AZURE_OPENAI_LIVE_DEPLOYMENT` to
 `gpt-realtime-2.1-mini` on **both** the Worker and the Node voice agent when a
 separately approved rollout is ready. The existing `gpt-live-1` setting and its
 transport remain available for rollback. Unset configuration preserves that
-released default. `AZURE_OPENAI_TEXT_DEPLOYMENT` remains `gpt-5.4-mini`.
+released runtime default. The reviewed `wrangler.production.json` and
+`wrangler.staging.json` candidates explicitly select Mini for rollout. The Node
+renderer accepts `--voice-model gpt-realtime-2.1-mini`; omitting that option
+preserves GPT-Live for rollback. Authenticated internal admission includes the
+Worker voice model and Node rejects a mismatch before opening provider transport.
+`AZURE_OPENAI_TEXT_DEPLOYMENT` remains `gpt-5.4-mini`.
 
 The Mini connection uses the resource's `/openai/v1/realtime?model=...` WebSocket
 with the `api-key` header. It uses GA `session.update` and nested PCM audio
@@ -62,7 +67,18 @@ Queued replies may wait up to 60 seconds for current output/caller speech; expir
 is response-local and does not consume transport retries. It keeps the caller
 room, clears obsolete speech state, discards outage input,
 uses at most twelve historical turns/12,000 characters as untrusted context, and
-asks the caller to repeat. This is bounded recovery, not seamless continuity.
+asks the caller to repeat. Completed generated text is not proof of playback:
+only a non-interrupted SDK post-playout event confirms assistant history.
+Interrupted entries and unconfirmed buffered output are conservatively omitted
+on recovery; caller and typed facts remain. SDK confirmation is not browser or
+physical-hearing evidence. This is bounded recovery, not seamless continuity.
+
+Server voice detection reserves response admission through its automatic reply,
+so queued typed replies cannot compete with it. An exactly correlated
+already-active rejection may requeue only the unadmitted response once within
+its original waiting deadline, without resending caller text. Unknown errors
+remain terminal; server-response waiting has a 15-second bound and is cleared
+on new speech, disconnection and closure.
 
 Provider output is pulled in 20 ms frames. Pending PCM is bounded below 60 seconds
 (2.88 MB at this format), reserving space for the configured 100 ms native queue

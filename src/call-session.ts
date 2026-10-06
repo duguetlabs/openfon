@@ -635,7 +635,7 @@ export class CallSession implements DurableObject {
       ).bind(media.callId).first()) return new Response(null,{status:410});
       if(await this.expireLivekitStartup(media))return new Response(null,{status:410});
       media.jobId=body.jobId;await this.state.storage.put('livekit',media);
-      return Response.json({callId:media.callId,room:media.room,caller:media.caller,callback:media.callback,instructions:media.instructions,greeting:media.greeting,voice:media.voice,language:media.language,commands:media.commands??[]});
+      return Response.json({callId:media.callId,room:media.room,caller:media.caller,callback:media.callback,instructions:media.instructions,greeting:media.greeting,voice:media.voice,language:media.language,...(managedWeb(this.env)?{voiceModel:azureConfig(this.env).liveModel}:{}),commands:media.commands??[]});
     }
     if(body.jobId!==media.jobId||!secureEqual(typeof body.callback==='string'?body.callback:'',media.callback))return new Response(null,{status:403});
     if (body.type === 'usage' && managedWeb(this.env)) {

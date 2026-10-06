@@ -1,3 +1,4 @@
+import {readFileSync} from 'node:fs';
 import {fakeCtx} from './fake-d1';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {SqliteD1,applyMigrations} from './sqlite-d1';
@@ -220,4 +221,10 @@ it('authenticated response warning retains active call and excludes raw backend 
  expect((await request('events',{callback:'scoped-capability',type:'warning',code:'response_filtered',message:'private Azure details'})).status).toBe(200);
  expect((await request('events',{callback:'scoped-capability',type:'warning',code:'arbitrary-provider-error'})).status).toBe(400);
  expect(db.database.prepare("SELECT status FROM calls WHERE id='call'").get()).toEqual({status:'active'});expect(data.get('livekit').finished).toBeUndefined();
+});
+it('selected voice routing is returned only on the authenticated internal context',async()=>{
+ db.exec(readFileSync('migrations/0027_commercial.sql','utf8'));
+ env.OPENFON_MANAGED_WEB='true';env.AZURE_OPENAI_ENDPOINT='https://fixture.openai.azure.com/';env.AZURE_OPENAI_API_KEY='synthetic';env.AZURE_OPENAI_LIVE_DEPLOYMENT='gpt-realtime-2.1-mini';
+ expect((await request('context',{},'wrong')).status).toBe(404);
+ expect(await (await request('context')).json()).toMatchObject({voiceModel:'gpt-realtime-2.1-mini',voice:'marin'});
 });

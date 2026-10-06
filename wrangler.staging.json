@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "openfon",
+  "name": "openfon-staging",
   "main": "src/index.ts",
   "compatibility_date": "2026-05-01",
   "assets": {
@@ -18,8 +18,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "openfon",
-      "database_id": "c45afdaa-c04e-4401-af5c-801bb79fc88c",
+      "database_name": "openfon-staging",
+      "database_id": "e1d93b7d-9024-447a-ae25-6b1e5ed298b3",
       "migrations_dir": "migrations"
     }
   ],
@@ -60,9 +60,7 @@
     }
   ],
   "triggers": {
-    "crons": [
-      "* * * * *"
-    ]
+    "crons": []
   },
   "vars": {
     "OPENFON_MANAGED_WEB": "true",
@@ -70,7 +68,7 @@
     "AZURE_OPENAI_ENDPOINT": "https://duguet-labs-eu.cognitiveservices.azure.com/",
     "AZURE_OPENAI_LIVE_DEPLOYMENT": "gpt-realtime-2.1-mini",
     "AZURE_OPENAI_TEXT_DEPLOYMENT": "gpt-5.4-mini",
-    "LIVEKIT_URL": "wss://voice.openfon.ai",
+    "LIVEKIT_URL": "wss://voice-staging.openfon.ai",
     "TELNYX_ENABLED": "false",
     "ASTERISK_ENABLED": "false",
     "TELNYX_PURCHASES_ENABLED": "false",

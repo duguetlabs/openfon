@@ -13,7 +13,7 @@ import {observeGeneration} from './stream-transcripts.js';
 import {ClockedGPTLiveSession} from './clocked-session.js';
 import {ToolClosure} from './tool-closure.js';
 import {FarewellPair,finishCurrentFarewell} from './farewell.js';
-import {acceptedEcho, modelOptions, operatorAzureConfig, operatorVoiceModel} from './config.js';
+import {acceptedEcho, modelOptions, operatorAzureConfig, operatorVoiceModel, assertVoicePairing} from './config.js';
 import {VoiceDiagnostics} from './diagnostics.js';
 import {ProviderReadiness} from './provider-readiness.js';
 import {MiniModel,MiniSession} from './mini-model.js';
@@ -24,6 +24,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   const metadata = JSON.parse(ctx.job.metadata || '{}') as {callId?: string};
   const control = new ControlClient(process.env.OPENFON_API_URL!, process.env.OPENFON_AGENT_SERVICE_TOKEN!, metadata.callId || '', ctx.job.room?.name || ctx.room.name || '', ctx.job.id);
   const context = await control.context();
+  assertVoicePairing(context);
   const telemetry=new VoiceDiagnostics(context.callId,record=>console.info(JSON.stringify(record)));
   telemetry.phase('startup');
   let diagnosticTimer:ReturnType<typeof setInterval>|undefined;
@@ -206,6 +207,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     const item = event.item;
     if (item.type !== 'message' || !['user', 'assistant'].includes(item.role) || !item.textContent) return;
     if(item.role==='user')toolClosure.observe(item.id,item.textContent,true);
+    else if(!item.interrupted)miniSession?.confirmPlayback(item.id,item.textContent);
     farewell.record(item.role==='user'?'caller':'assistant',item.id,item.textContent,true);
     void transcripts.record({id: item.id, role: item.role === 'user' ? 'caller' : 'assistant', text: item.textContent, final: true, createdAt: item.createdAt}).catch(() => stopSafely(true));
   });

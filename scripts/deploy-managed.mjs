@@ -17,7 +17,6 @@ export function validateManagedDeployment(config, baseline) {
   const expected = {
     OPENFON_MANAGED_WEB: "true",
     WEB_VOICE_TRANSPORT: "livekit",
-    AZURE_OPENAI_LIVE_DEPLOYMENT: "gpt-live-1",
     AZURE_OPENAI_TEXT_DEPLOYMENT: "gpt-5.4-mini",
     LIVEKIT_URL: "wss://voice.openfon.ai",
   };
@@ -25,6 +24,7 @@ export function validateManagedDeployment(config, baseline) {
     if (config.vars?.[name] !== value)
       throw Error(`Production requires ${name}=${value}.`);
   }
+  if(!["gpt-live-1","gpt-realtime-2.1-mini"].includes(config.vars?.AZURE_OPENAI_LIVE_DEPLOYMENT))throw Error("Unsupported production voice deployment.");
   const endpoint = new URL(config.vars.AZURE_OPENAI_ENDPOINT || "");
   if (
     endpoint.origin !== "https://duguet-labs-eu.cognitiveservices.azure.com" ||

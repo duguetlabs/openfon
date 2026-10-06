@@ -804,6 +804,14 @@ test("queued replies wait through long active output and caller speech without c
     );
     assert.equal(f.sockets.length, 1);
     f.socket.message({ type: "input_audio_buffer.speech_stopped" });
+    f.socket.message({
+      type: "response.created",
+      response: { id: "vad_before_queued" },
+    });
+    f.socket.message({
+      type: "response.done",
+      response: { id: "vad_before_queued", status: "completed", output: [] },
+    });
     const request = f.socket.sent.at(-1);
     assert.equal(request.type, "response.create");
     f.socket.message({
@@ -865,12 +873,206 @@ test("queued reply expiry is local while dispatched acknowledgment timeout uses 
       false,
     );
     f.socket.message({ type: "input_audio_buffer.speech_stopped" });
+    f.socket.message({
+      type: "response.created",
+      response: { id: "vad_before_dispatch" },
+    });
+    f.socket.message({
+      type: "response.done",
+      response: { id: "vad_before_dispatch", status: "completed", output: [] },
+    });
     const dispatched = f.session.generateReply().catch((e) => e);
     await tick();
     mock.timers.tick(15000);
     await tick();
     assert.ok((await dispatched) instanceof ResponseUnavailable);
     assert.equal(f.warnings.includes("reconnecting"), true);
+  } finally {
+    await f.session.close();
+    mock.timers.reset();
+  }
+});
+test("server VAD response reserves admission before a queued typed reply", async () => {
+  const f = await fixture();
+  const controller = new AbortController();
+  try {
+    f.socket.message({ type: "input_audio_buffer.speech_started" });
+    const queued = f.session
+      .generateReply("typed", { signal: controller.signal })
+      .catch((e) => e);
+    await tick();
+    f.socket.message({ type: "input_audio_buffer.speech_stopped" });
+    assert.equal(
+      f.socket.sent.some((x) => x.type === "response.create"),
+      false,
+    );
+    f.socket.message({
+      type: "response.created",
+      response: { id: "server_vad" },
+    });
+    assert.equal(
+      f.socket.sent.some((x) => x.type === "response.create"),
+      false,
+    );
+    f.socket.message({
+      type: "response.done",
+      response: { id: "server_vad", status: "completed", output: [] },
+    });
+    const request = f.socket.sent.at(-1);
+    assert.equal(request.type, "response.create");
+    f.socket.message({
+      type: "response.created",
+      response: { id: "typed", metadata: request.response.metadata },
+    });
+    assert.equal((await queued).responseId, "typed");
+    assert.equal(f.errors.length, 0);
+  } finally {
+    controller.abort();
+    await f.session.close();
+  }
+});
+for (const transcript of ["Heard prefix", undefined])
+  test(`reconnect history omits unheard assistant suffix with ${transcript ? "known" : "unknown"} playback transcript`, async () => {
+    const f = await fixture();
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      const g = await generation(f);
+      f.socket.message({
+        type: "response.output_audio_transcript.delta",
+        response_id: g.responseId,
+        item_id: "answer",
+        delta: "Heard prefix. Unheard private suffix.",
+      });
+      f.socket.message({
+        type: "response.output_audio.delta",
+        response_id: g.responseId,
+        item_id: "answer",
+        delta: Buffer.alloc(960).toString("base64"),
+      });
+      f.socket.message({
+        type: "response.done",
+        response: { id: g.responseId, status: "completed", output: [] },
+      });
+      await f.session.truncate({
+        messageId: "answer",
+        audioEndMs: 10,
+        audioTranscript: transcript,
+      });
+      f.socket.emit("close", 1006);
+      mock.timers.tick(500);
+      await tick();
+      f.sockets[1].emit("open");
+      const prompt = f.sockets[1].sent[0].session.instructions;
+      assert.equal(prompt.includes("Unheard private suffix"), false);
+      assert.equal(prompt.includes("Heard prefix"), false);
+    } finally {
+      await f.session.close();
+      mock.timers.reset();
+    }
+  });
+test("server response can arrive before the typed request and a correlated active rejection retries only admission", async () => {
+  const f = await fixture();
+  const controller = new AbortController();
+  try {
+    const reply = f.session
+      .generateReply("typed", { signal: controller.signal })
+      .catch((e) => e);
+    await tick();
+    const rejected = f.socket.sent.at(-1);
+    f.socket.message({
+      type: "error",
+      error: {
+        code: "conversation_already_has_active_response",
+        event_id: rejected.event_id,
+      },
+    });
+    assert.equal(f.errors.length, 0);
+    f.socket.message({
+      type: "response.created",
+      response: { id: "server_first" },
+    });
+    assert.equal(
+      f.socket.sent.filter((x) => x.type === "response.create").length,
+      1,
+    );
+    f.socket.message({
+      type: "response.done",
+      response: { id: "server_first", status: "completed", output: [] },
+    });
+    const dispatched = f.socket.sent.at(-1);
+    assert.equal(dispatched.type, "response.create");
+    assert.deepEqual(dispatched.response.metadata, rejected.response.metadata);
+    f.socket.message({
+      type: "response.created",
+      response: {
+        id: "typed_after_server",
+        metadata: dispatched.response.metadata,
+      },
+    });
+    assert.equal((await reply).responseId, "typed_after_server");
+    assert.equal(
+      f.socket.sent.some((x) => x.type === "conversation.item.create"),
+      false,
+    );
+  } finally {
+    controller.abort();
+    await f.session.close();
+  }
+});
+test("server-response reservation cleans up on a new turn, timeout and stop", async () => {
+  const f = await fixture();
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    f.socket.message({ type: "input_audio_buffer.speech_stopped" });
+    mock.timers.tick(14000);
+    f.socket.message({ type: "input_audio_buffer.speech_started" });
+    mock.timers.tick(2000);
+    assert.equal(f.warnings.includes("reconnecting"), false);
+    f.socket.message({ type: "input_audio_buffer.speech_stopped" });
+    mock.timers.tick(15000);
+    assert.equal(f.warnings.includes("reconnecting"), true);
+    await f.session.close();
+    mock.timers.tick(60000);
+    assert.equal(f.sockets.length, 1);
+  } finally {
+    await f.session.close();
+    mock.timers.reset();
+  }
+});
+test("reconnection retains SDK-confirmed assistant and typed context but omits completed buffered output", async () => {
+  const f = await fixture();
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const chat = new llm.ChatContext();
+    chat.addMessage({ id: "typed", role: "user", content: "Caller fact" });
+    await f.session.updateChatCtx(chat);
+    for (const [rid, text] of [
+      ["confirmed", "Played answer"],
+      ["buffered", "Unconfirmed answer"],
+    ]) {
+      const g = await generation(f, rid);
+      f.socket.message({
+        type: "response.output_audio_transcript.delta",
+        response_id: g.responseId,
+        item_id: rid,
+        delta: text,
+      });
+      f.socket.message({
+        type: "response.done",
+        response: { id: g.responseId, status: "completed", output: [] },
+      });
+    }
+    f.session.confirmPlayback("confirmed", "Played answer");
+    f.socket.emit("close", 1006);
+    f.session.confirmPlayback("buffered", "Unconfirmed answer");
+    mock.timers.tick(500);
+    await tick();
+    f.sockets[1].emit("open");
+    const prompt = f.sockets[1].sent[0].session.instructions;
+    assert.match(prompt, /Caller fact/);
+    assert.match(prompt, /Played answer/);
+    assert.equal(prompt.includes("Unconfirmed answer"), false);
+    assert.equal(f.session.chatCtx.getById("buffered"), undefined);
   } finally {
     await f.session.close();
     mock.timers.reset();
