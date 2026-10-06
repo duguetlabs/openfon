@@ -128,6 +128,7 @@ interface Request {
   abort: () => void;
   queuedUntil: number;
   admissionRetries: number;
+  competingResponse?: { id: string; completed: boolean };
 }
 /** Application-owned GA protocol boundary. SDK still owns room I/O, speech handles and tools.
  * We intentionally do not inherit its independent reconnect or uncorrelated error policy. */
@@ -178,7 +179,7 @@ export class MiniSession extends llm.RealtimeSession {
   private generations = new Set<Generation>();
   private requests = new Map<
     string,
-    { type: string; at: number; requestId?: string }
+    { type: string; at: number; requestId?: string; admissionRejected?: boolean }
   >();
   private automaticRequest?: string;
   private automaticTimer?: ReturnType<typeof setTimeout>;
@@ -588,6 +589,8 @@ export class MiniSession extends llm.RealtimeSession {
       discarded: false,
     };
     this.active = generation;
+    if (!requested && this.sent)
+      this.sent.competingResponse = { id: response.id, completed: false };
     this.generations.add(generation);
     const request = this.sent;
     const matches =
@@ -720,6 +723,10 @@ export class MiniSession extends llm.RealtimeSession {
       const code = event.error?.code;
       if (
         code === "conversation_already_has_active_response" &&
+        correlated?.admissionRejected
+      ) return;
+      if (
+        code === "conversation_already_has_active_response" &&
         correlated?.type === "response.create" &&
         this.sent &&
         correlated.requestId === this.sent.id &&
@@ -727,6 +734,7 @@ export class MiniSession extends llm.RealtimeSession {
         Date.now() < this.sent.queuedUntil
       ) {
         const request = this.sent;
+        correlated.admissionRejected = true;
         this.sent = undefined;
         request.admissionRetries++;
         clearTimeout(request.timer);
@@ -738,7 +746,7 @@ export class MiniSession extends llm.RealtimeSession {
           Math.max(1, request.queuedUntil - Date.now()),
         );
         this.pending.unshift(request);
-        if (!this.active) {
+        if (!this.active && !request.competingResponse?.completed) {
           this.serverResponsePending = true;
           clearTimeout(this.serverResponseTimer);
           this.serverResponseTimer = setTimeout(
@@ -746,6 +754,7 @@ export class MiniSession extends llm.RealtimeSession {
             15000,
           );
         }
+        this.pump();
         return;
       }
       if (
@@ -814,6 +823,9 @@ export class MiniSession extends llm.RealtimeSession {
       return;
     }
     if (event.type === "response.done") {
+      const competitor = this.sent?.competingResponse;
+      if (competitor && competitor.id === event.response?.id)
+        competitor.completed = true;
       const generation = this.active;
       if (!generation || generation.id !== event.response?.id) return;
       const completed = event.response.status === "completed";

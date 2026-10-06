@@ -1078,3 +1078,37 @@ test("reconnection retains SDK-confirmed assistant and typed context but omits c
     mock.timers.reset();
   }
 });
+for (const rejectionAfterDone of [true, false]) {
+  test(`correlated active rejection ${rejectionAfterDone ? "after" : "before"} competing response completion requeues without phantom wait`, async () => {
+    const f = await fixture();
+    const controller = new AbortController();
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      const reply = f.session.generateReply("typed", { signal: controller.signal }).catch(e => e);
+      await tick();
+      const original = f.socket.sent.at(-1);
+      const rejection = {
+        type: "error",
+        error: { code: "conversation_already_has_active_response", event_id: original.event_id },
+      };
+      f.socket.message({ type: "response.created", response: { id: "competing" } });
+      if (!rejectionAfterDone) f.socket.message(rejection);
+      f.socket.message({ type: "response.done", response: { id: "competing", status: "completed", output: [] } });
+      if (rejectionAfterDone) f.socket.message(rejection);
+      assert.equal(f.socket.sent.filter(x => x.type === "response.create").length, 2,
+        "completed competitor must not reserve a nonexistent next server response");
+      const next = f.socket.sent.at(-1);
+      f.socket.message({ type: "response.created", response: { id: "admitted", metadata: next.response.metadata } });
+      assert.equal((await reply).responseId, "admitted");
+      f.socket.message(rejection);
+      assert.equal(f.errors.length, 0, "exact duplicate rejected admission must not terminate the accepted retry");
+      mock.timers.tick(16000);
+      assert.equal(f.warnings.includes("reconnecting"), false);
+      assert.equal(f.socket.sent.some(x => x.type === "conversation.item.create"), false);
+    } finally {
+      controller.abort();
+      await f.session.close();
+      mock.timers.reset();
+    }
+  });
+}
