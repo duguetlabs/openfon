@@ -2,6 +2,16 @@ import { describe, it, expect } from "vitest";
 import { customerRecording } from "../src/customer-recording";
 
 describe("customer recording export", () => {
+  it("preserves unavailable JSON after deletion or expiry for customer middleware", async () => {
+    const source = Response.json({ available: false }, { headers: { "Cache-Control": "no-store" } });
+    const result = customerRecording(source);
+    expect(result.status).toBe(200);
+    expect(result.headers.get("content-type")).toContain("application/json");
+    expect(result.headers.get("cache-control")).toBe("no-store");
+    expect(result.headers.has("content-disposition")).toBe(false);
+    expect(await result.clone().json()).toEqual({ available: false });
+    expect(await result.json()).toEqual({ available: false });
+  });
   it("keeps historical audio and retention facts while dropping operator settings and protocol events", async () => {
     const source = [
       { kind: "manifest", callId: "owned", partial: true, provider: "private" },
