@@ -1,3 +1,5 @@
+import {miniVoicePreview} from './mini-voice-preview';
+import type {UsageMetrics} from './commercial-types';
 import type { Env } from './types';
 import { azureConfig, managedVoice } from './managed-azure';
 import { PREVIEW_TEXT } from './voice-preview-text';
@@ -7,6 +9,9 @@ import { pcmWav } from './voice-preview';
 import { azureSeconds } from './azure-usage';
 export interface PreviewUsage {
   sessionId: string;
+  realtime?:boolean;
+  responseId?:string;
+  metrics?:UsageMetrics;
   seconds?: number;
   final: boolean;
 }
@@ -17,6 +22,7 @@ export async function azureVoicePreview(
   signal: AbortSignal,
   onUsage: (value: PreviewUsage) => Promise<void> = async () => {}
 ): Promise<ArrayBuffer> {
+  if(env.AZURE_OPENAI_LIVE_DEPLOYMENT==='gpt-realtime-2.1-mini')return miniVoicePreview(env,selection,signal,onUsage);
   const cfg = azureConfig(env),
     voice = managedVoice(selection.voice),
     text = PREVIEW_TEXT[selection.language];

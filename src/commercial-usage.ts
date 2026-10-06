@@ -13,6 +13,13 @@ const int = (v: unknown): v is number =>
   typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
 const tokenFields = [
   "inputTokens",
+  "inputAudioTokens",
+  "inputTextTokens",
+  "cachedAudioTokens",
+  "cachedTextTokens",
+  "outputAudioTokens",
+  "outputTextTokens",
+
   "cachedInputTokens",
   "cacheWriteInputTokens",
   "outputTokens",
@@ -36,7 +43,7 @@ export function normalizeUsage(
     !observation ||
     !ident(observation.eventId) ||
     !ident(observation.providerSessionId) ||
-    !["azure_voice", "azure_reasoning", "azure_text"].includes(
+    !["azure_voice", "azure_reasoning", "azure_text", "azure_realtime", "azure_realtime_session", "azure_transcription"].includes(
       observation.source,
     ) ||
     typeof observation.final !== "boolean" ||
@@ -47,7 +54,7 @@ export function normalizeUsage(
   )
     throw new UsageError("Invalid usage observation");
   if (
-    observation.source !== "azure_voice" &&
+    !["azure_voice","azure_realtime_session","azure_transcription"].includes(observation.source) &&
     !ident(observation.providerResponseId)
   )
     throw new UsageError("Missing response identity");
@@ -56,6 +63,14 @@ export function normalizeUsage(
     !ident(observation.providerResponseId)
   )
     throw new UsageError("Invalid response identity");
+  if (observation.source === "azure_transcription") {
+    if (!ident(observation.providerItemId) || observation.providerResponseId !== undefined)
+      throw new UsageError("Invalid transcription identity");
+    if(observation.providerContentIndex!==undefined&&(!int(observation.providerContentIndex)||observation.providerContentIndex>1024))
+      throw new UsageError("Invalid transcription content index");
+  } else if (observation.providerItemId!==undefined||observation.providerContentIndex!==undefined) {
+    throw new UsageError("Unexpected transcription identity");
+  }
   if (
     observation.model !== undefined &&
     (typeof observation.model !== "string" || observation.model.length > 200)
@@ -63,7 +78,9 @@ export function normalizeUsage(
     throw new UsageError("Invalid model");
   const output: Record<string, number> = {};
   for (const [key, value] of Object.entries(observation.metrics)) {
-    if (key === "voiceSessionSeconds") {
+    if (key === "voiceSessionSeconds" || key === "transcriptionSeconds") {
+      if(key==="transcriptionSeconds"&&observation.source!=="azure_transcription")throw new UsageError("Invalid transcription metric source");
+      if(key==="voiceSessionSeconds"&&observation.source==="azure_transcription")throw new UsageError("Invalid transcription metric");
       if (typeof value !== "string" || !/^\d{1,10}(\.\d{1,9})?$/.test(value))
         throw new UsageError("Invalid provider seconds");
       const [whole, fraction = ""] = value.split(".");
@@ -71,7 +88,7 @@ export function normalizeUsage(
       if (ns > BigInt(Number.MAX_SAFE_INTEGER))
         throw new UsageError("Invalid provider seconds");
       // Preserve sub-millisecond provider precision exactly; never round cost units.
-      output.voiceSessionNanoseconds = Number(ns);
+      output[key==="transcriptionSeconds"?"transcriptionNanoseconds":"voiceSessionNanoseconds"] = Number(ns);
     } else if (
       tokenFields.includes(key as (typeof tokenFields)[number]) &&
       int(value)
@@ -91,6 +108,9 @@ export function normalizeUsage(
     output.reasoningTokens > output.outputTokens
   )
     throw new UsageError("Invalid reasoning usage");
+  for(const [subset,parent] of [['inputAudioTokens','inputTokens'],['inputTextTokens','inputTokens'],['cachedAudioTokens','cachedInputTokens'],['cachedTextTokens','cachedInputTokens'],['outputAudioTokens','outputTokens'],['outputTextTokens','outputTokens']]) {
+    if(output[subset]!==undefined&&output[parent]!==undefined&&output[subset]>output[parent])throw new UsageError('Invalid token subset');
+  }
   return output;
 }
 
@@ -103,9 +123,10 @@ async function record(
     throw new UsageError("Invalid operation");
   const metrics = normalizeUsage(observation);
   const usageKey =
-    observation.source === "azure_voice"
+    ["azure_voice","azure_realtime_session"].includes(observation.source)
       ? observation.providerSessionId
-      : observation.providerResponseId!;
+      : observation.source === "azure_transcription" ? JSON.stringify([observation.providerSessionId,observation.providerItemId,observation.providerContentIndex??null,observation.model??null])
+      : observation.source === "azure_realtime" ? observation.providerSessionId+":"+observation.providerResponseId! : observation.providerResponseId!;
   // Observation time is provenance, not usage identity: providers may repeat
   // an identical cumulative snapshot in a later message.
   const canonical = JSON.stringify({

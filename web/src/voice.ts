@@ -313,6 +313,9 @@ export class VoiceCall {
             // Realtime transcripts describe audio already streamed by the provider.
             if (this.mode === 'pipeline' && this.ttsMode === 'browser' && msg.text) this.speakLocally(msg.text);
             break;
+          case 'warning':
+            this.emit({type:'status',status:'live',detail:msg.message});
+            break;
           case 'error':
             this.emit({ type: 'status', status: 'error', detail: msg.message });
             this.teardown('ended');

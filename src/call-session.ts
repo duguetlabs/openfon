@@ -1,3 +1,4 @@
+import {processingDiagnostic,type ProcessingStage} from './managed-processing-diagnostics';
 import {azureIdentifier,azureUsageObservation} from './azure-usage';
 import {managedWeb,azureConfig,savedManagedVoice} from './managed-azure';
 import {processManagedCall,managedTextObservation,type ManagedSummary} from './managed-processing';
@@ -585,7 +586,7 @@ export class CallSession implements DurableObject {
     const selected=this.settings!.engine==='realtime'?this.settings!.realtime_voice:this.settings!.voice;
     if(managedWeb(this.env))azureConfig(this.env);
     const voice = managedWeb(this.env)
-      ? savedManagedVoice(this.settings!)
+      ? savedManagedVoice(this.settings!,this.env)
       : gptLiveVoice(selected || 'marin');
     this.lang=this.settings!.language in SUPPORTED_LANGUAGES?this.settings!.language:'en';
     const instructions=buildSystemPrompt(this.biz!,this.settings!,new Date(),this.knowledge);
@@ -634,7 +635,7 @@ export class CallSession implements DurableObject {
       ).bind(media.callId).first()) return new Response(null,{status:410});
       if(await this.expireLivekitStartup(media))return new Response(null,{status:410});
       media.jobId=body.jobId;await this.state.storage.put('livekit',media);
-      return Response.json({callId:media.callId,room:media.room,caller:media.caller,callback:media.callback,instructions:media.instructions,greeting:media.greeting,voice:media.voice,language:media.language,commands:media.commands??[]});
+      return Response.json({callId:media.callId,room:media.room,caller:media.caller,callback:media.callback,instructions:media.instructions,greeting:media.greeting,voice:media.voice,language:media.language,...(managedWeb(this.env)?{voiceModel:azureConfig(this.env).liveModel}:{}),commands:media.commands??[]});
     }
     if(body.jobId!==media.jobId||!secureEqual(typeof body.callback==='string'?body.callback:'',media.callback))return new Response(null,{status:403});
     if (body.type === 'usage' && managedWeb(this.env)) {
@@ -659,6 +660,12 @@ export class CallSession implements DurableObject {
         throw error;
       }
       return Response.json({ ok: true });
+    }
+    if(body.type==='warning'){
+      if(!active||media.closing||media.finished)return new Response(null,{status:410});
+      const warnings:Record<string,string>={response_filtered:'I could not finish that answer. Please try asking another way.',response_unavailable:'That answer was interrupted. You can keep talking.',output_limit:'That answer was too long. Please ask for a shorter response.',truncation_rejected:'The interruption could not be fully synchronized. You can keep talking.',reconnecting:'The call connection was interrupted. Reconnecting; please wait.',reconnected:'The connection is back. Please repeat your latest request.',transcription_unavailable:'Your last words could not be transcribed. Please repeat them.'};
+      if(typeof body.code!=='string'||!warnings[body.code])return new Response(null,{status:400});
+      this.send({type:'warning',message:warnings[body.code]});return Response.json({ok:true});
     }
     if (body.type === 'service_stopped') {
       media.serviceEndedAtMs ??= Date.now();
@@ -758,7 +765,7 @@ export class CallSession implements DurableObject {
         language: this.settings!.language || this.biz?.default_language || 'en',
         engine: 'realtime',
         realtime_model: cfg.liveModel,
-        realtime_voice: savedManagedVoice(this.settings!),
+        realtime_voice: savedManagedVoice(this.settings!,this.env),
         realtime_provider: 'instance',
       };
     }
@@ -2819,6 +2826,8 @@ export class CallSession implements DurableObject {
       if (!cached && !(await this.state.storage.get('managed-summary-attempted'))) {
         // A crash or network uncertainty must not replay paid post-call inference automatically.
         await this.state.storage.put('managed-summary-attempted', true);
+        let processingStage:ProcessingStage='transcript_read';
+        const processingStarted=Date.now();
         try {
           const rows = await this.env.DB.prepare(
             'SELECT id,source_id,role,text FROM call_turns WHERE call_id=? AND source_final=1 ORDER BY id LIMIT 201'
@@ -2843,9 +2852,10 @@ export class CallSession implements DurableObject {
           );
           cached = { summary: result, observation: managedTextObservation(result) };
           // Cache before ledger/actions writes so their retries never repeat paid inference.
+          processingStage='cache_write';
           await this.state.storage.put('managed-summary', cached);
-        } catch {
-          console.error('Managed call notes unavailable');
+        } catch(error) {
+          console.error(JSON.stringify({event:'managed_call_notes_unavailable',callId:this.callId,...processingDiagnostic(error,processingStage,processingStarted)}));
         }
       }
       if (!cached) {

@@ -11,24 +11,47 @@ import {within} from './deadline.js';
 import {ControlClient, AdmissionError} from './control.js';
 import {observeGeneration} from './stream-transcripts.js';
 import {ClockedGPTLiveSession} from './clocked-session.js';
-import {ToolClosure} from './tool-closure.js';
+import {ToolClosure,watchClosureInterruption} from './tool-closure.js';
 import {FarewellPair,finishCurrentFarewell} from './farewell.js';
-import {acceptedEcho, modelOptions, operatorAzureConfig} from './config.js';
+import {acceptedEcho, modelOptions, operatorAzureConfig, operatorVoiceModel, assertVoicePairing} from './config.js';
 import {VoiceDiagnostics} from './diagnostics.js';
 import {ProviderReadiness} from './provider-readiness.js';
-import {speechOutcome,successfulPlayout} from './playout.js';
+import {MiniModel,MiniSession} from './mini-model.js';
+import {speechOutcome,successfulPlayout,responseUnavailable} from './playout.js';
+
+export function beginMiniClosure(
+  miniSession: Pick<MiniSession, 'prepareClosure' | 'rejectClosure'>,
+  options: {toolCallId:string;abortSignal:AbortSignal;ctx:{speechHandle:voice.SpeechHandle}},
+  toolClosure: ToolClosure,
+) {
+  if(options.abortSignal.aborted||options.ctx.speechHandle.interrupted){
+    miniSession.rejectClosure(options.toolCallId);
+    return;
+  }
+  const releaseInterrupted=miniSession.prepareClosure(options.toolCallId);
+  if(!releaseInterrupted)return;
+  watchClosureInterruption(options.abortSignal,options.ctx.speechHandle,()=>{if(releaseInterrupted())toolClosure.cancel();});
+  if(options.abortSignal.aborted||options.ctx.speechHandle.interrupted){
+    if(releaseInterrupted())toolClosure.cancel();
+    return;
+  }
+  return toolClosure.begin();
+}
 
 export default defineAgent({entry: async (ctx: JobContext) => {
   configureSdkLogging();
   const metadata = JSON.parse(ctx.job.metadata || '{}') as {callId?: string};
   const control = new ControlClient(process.env.OPENFON_API_URL!, process.env.OPENFON_AGENT_SERVICE_TOKEN!, metadata.callId || '', ctx.job.room?.name || ctx.room.name || '', ctx.job.id);
   const context = await control.context();
+  assertVoicePairing(context);
   const telemetry=new VoiceDiagnostics(context.callId,record=>console.info(JSON.stringify(record)));
   telemetry.phase('startup');
   let diagnosticTimer:ReturnType<typeof setInterval>|undefined;
   let session: voice.AgentSession | undefined;
   let latestSpeech:voice.SpeechHandle|undefined;
   let providerSession:ClockedGPTLiveSession|undefined;
+  let miniSession:MiniSession|undefined;
+  const mini=operatorVoiceModel()==='gpt-realtime-2.1-mini';
   const toolClosure=new ToolClosure();
   const pendingTyped=new PendingTypedInput();
   const providerReady=new ProviderReadiness();
@@ -48,6 +71,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     failed ||= failure;
     if (stopping) return stopping;
     stopped = true;
+    miniSession?.invalidateReasoning();
     pendingTyped.close();
     providerReady.close();
     firstSpeech.close();
@@ -123,17 +147,18 @@ export default defineAgent({entry: async (ctx: JobContext) => {
         callback: context.callback,
         observation,
       }),
-    () => stopSafely(true)
+    () => stopSafely(true), mini
   );
   const farewell=new FarewellPair(stillCurrent=>{
     diagnostic('paired_farewell');
     void (async()=>{
-      if(!await pendingTyped.waitUntilIdle()||stopped||!stillCurrent())return;
+      if(!await pendingTyped.waitUntilIdle()||stopped||!stillCurrent()||miniSession?.reasoningPending)return;
+      const responseRevision=miniSession?.failureRevision;
       await finishCurrentFarewell(async()=>{
         const speech=latestSpeech;
         if(!speech)throw Error('Farewell playout unavailable');
-        return await within(successfulPlayout(speech),15000);
-      },()=>!stopped&&pendingTyped.idle&&stillCurrent(),()=>stopSafely(false,true),()=>stopSafely(true));
+        return await within(successfulPlayout(speech),15000)&&responseRevision===miniSession?.failureRevision;
+      },()=>!stopped&&pendingTyped.idle&&!miniSession?.reasoningPending&&stillCurrent(),()=>stopSafely(false,true),()=>stopSafely(true));
     })();
   });
   class CheckedModel extends realtime.GPTLiveModel {
@@ -161,8 +186,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
       return duplex;
     }
   }
-  const model = new CheckedModel({...modelOptions(context, operatorAzureConfig()), delegation: 'responses', connOptions: {timeoutMs: 10000, maxRetry: 0, retryIntervalMs: 1000}});
-  if (!(model instanceof llm.DuplexModel)) throw new Error('Incompatible conversation SDK');
+  const legacyModel = () => new CheckedModel({...modelOptions(context, operatorAzureConfig()), delegation: 'responses', connOptions: {timeoutMs: 10000, maxRetry: 0, retryIntervalMs: 1000}});
   class TranscriptAdapter extends llm.DuplexRealtimeAdapter {
     override session() {
       const adapted=super.session();
@@ -173,30 +197,54 @@ export default defineAgent({entry: async (ctx: JobContext) => {
       return adapted;
     }
   }
-  session = new voice.AgentSession({llm: new TranscriptAdapter(model)});
+  class CheckedMini extends MiniModel {
+    override session(){
+      const current=super.session();miniSession=current;
+      current.on('ready',()=>{telemetry.phase('session_started');providerReady.accept();});
+      current.on('provider_event',event=>usage.observe(event));
+      current.on('usage_unreported',()=>usage.finish());
+      current.on('reasoning_usage',({sessionId,response})=>usage.observe({type:'response.event',providerSessionId:sessionId,event:{type:'response.'+response.status,response}}));
+      current.on('input_audio_transcription_completed',event=>{
+        toolClosure.observe(event.itemId,event.transcript,event.isFinal);farewell.record('caller',event.itemId,event.transcript,event.isFinal);
+        void transcripts.record({id:event.itemId,role:'caller',text:event.transcript,final:event.isFinal}).catch(()=>stopSafely(true));
+      });
+      current.on('generation_created',event=>observeGeneration(event,(id,text)=>{void transcripts.record({id,role:'assistant',text,final:false}).catch(()=>stopSafely(true));},()=>{if(!stopped&&firstSpeech.accept())telemetry.phase('first_speech');}));
+      current.on('input_speech_started',()=>{toolClosure.cancel();farewell.invalidate();});
+      current.on('interrupted',()=>{toolClosure.cancel();farewell.invalidate();if(!stopped)void session?.interrupt().await.catch(()=>stopSafely(true));});
+      current.on('warning',code=>{if(!stopped)void control.post('events',{callback:context.callback,type:'warning',code}).catch(()=>diagnostic('warning_unconfirmed'));});
+      current.on('diagnostic',code=>console.info(JSON.stringify({event:'openfon_voice_lifecycle',callId:context.callId,phase:code})));
+      current.on('error',()=>stopSafely(true));
+      return current;
+    }
+  }
+  const configuredModel=mini?new CheckedMini({...operatorAzureConfig(),context}):new TranscriptAdapter(legacyModel());
+  session = new voice.AgentSession({llm: configuredModel,...(mini?{vad:null,turnDetection:'realtime_llm' as const}: {})});
   session.on(voice.AgentSessionEventTypes.SpeechCreated,event=>{telemetry.phase('speech_created');latestSpeech=event.speechHandle;});
-  session.on(voice.AgentSessionEventTypes.Error, () => stopSafely(true));
+  session.on(voice.AgentSessionEventTypes.Error, event => {if(!mini||!responseUnavailable(event.error))stopSafely(true);});
   session.on(voice.AgentSessionEventTypes.Close, () => { if (!stopped) stopSafely(true); });
   session.on(voice.AgentSessionEventTypes.ConversationItemAdded, event => {
     const item = event.item;
     if (item.type !== 'message' || !['user', 'assistant'].includes(item.role) || !item.textContent) return;
     if(item.role==='user')toolClosure.observe(item.id,item.textContent,true);
+    else if(!item.interrupted)miniSession?.confirmPlayback(item.id,item.textContent);
     farewell.record(item.role==='user'?'caller':'assistant',item.id,item.textContent,true);
     void transcripts.record({id: item.id, role: item.role === 'user' ? 'caller' : 'assistant', text: item.textContent, final: true, createdAt: item.createdAt}).catch(() => stopSafely(true));
   });
   const endCall = llm.tool({name: 'end_call', description: 'End a completed conversation by scheduling a brief spoken goodbye, then disconnecting after it plays.',
     parameters: {type: 'object', properties: {}, additionalProperties: false},
-    execute: async () => {
+    execute: async (_args, options) => {
       // Return from the function before draining the activity that owns this function.
-      const ticket=toolClosure.begin();
+      const ticket=miniSession?beginMiniClosure(miniSession,options,toolClosure):toolClosure.begin();
+      if(miniSession&&!ticket)return 'Finish the pending caller request before ending the call.';
       if(ticket){
         diagnostic('end_call_requested');
         setTimeout(()=>{void (async()=>{
           try{
             if(!await pendingTyped.waitUntilIdle()||stopped||!toolClosure.current(ticket))return;
             // A control acknowledgement is not a spoken goodbye. Request and drain actual speech.
-            const played=await within(successfulPlayout(session!.generateReply({instructions:'The conversation is complete. Say one brief polite goodbye in the caller’s language, without questions, new business facts or tools.'})),15000);
-            if(played&&!stopped&&pendingTyped.idle&&toolClosure.current(ticket))await stop(false,true);
+            const responseRevision=miniSession?.failureRevision;
+            const played=await within(successfulPlayout(session!.generateReply({...(mini?{toolChoice:'none' as const}:{}),instructions:'The conversation is complete. Say one brief polite goodbye in the caller’s language, without questions, new business facts or tools.'})),15000);
+            if(played&&responseRevision===miniSession?.failureRevision&&!stopped&&pendingTyped.idle&&toolClosure.current(ticket))await stop(false,true);
           }catch{if(!stopped&&pendingTyped.idle&&toolClosure.current(ticket))stopSafely(true);}
           finally{toolClosure.release(ticket);}
         })();},0);
@@ -216,6 +264,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
       for(const command of current.commands??[]){
         if(stopped)break;
         // New admitted text cancels a pending goodbye before its fallible acknowledgement.
+        miniSession?.invalidateReasoning();
         toolClosure.observe(command.id,command.text,true);
         farewell.record('caller',command.id,command.text,false);
         // Admit once before generation. Ambiguous delivery ends the call, never replays inference.
@@ -245,7 +294,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     await within(ctx.waitForParticipant(context.caller),15000);
     if(stopped)return;
     telemetry.phase('session_starting');
-    await within(session.start({agent, room: ctx.room, record: false, inputOptions: {closeOnDisconnect: false, deleteRoomOnClose: false, textEnabled: false, participantIdentity: context.caller}}),15000);
+    await within(session.start({agent, room: ctx.room, record: false, ...(mini?{outputOptions:{audioSampleRate:24000,queueSizeMs:100}}:{}), inputOptions: {closeOnDisconnect: false, deleteRoomOnClose: false, textEnabled: false, participantIdentity: context.caller}}),15000);
     telemetry.phase('agent_session_started');
     if (stopped) { await session.close(); return; }
     if(!await providerReady.wait(15000)||stopped)return;

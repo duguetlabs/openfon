@@ -62,10 +62,10 @@ export async function phoneRequest(
   }
 }
 export function quotedMinor(value: unknown): number {
-  if (typeof value !== "string" || !/^\d{1,7}(\.\d{1,2})?$/.test(value))
+  if (typeof value !== "string" || value.length > 32 || !/^\d{1,7}(\.\d{1,2}0*)?$/.test(value))
     throw new BillingError("This number needs a new price quote.");
   const [w, f = ""] = value.split(".");
-  return Number(w) * 100 + Number(f.padEnd(2, "0"));
+  return Number(w) * 100 + Number(f.slice(0, 2).padEnd(2, "0"));
 }
 export async function getPhoneView(env: CommercialEnv, businessId: string) {
   const { results } = await env.DB.prepare(

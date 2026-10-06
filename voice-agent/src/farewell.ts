@@ -23,6 +23,7 @@ export class FarewellPair {
   private agent:{revision:number;text:string}|undefined;
   private requested:number|undefined;
   constructor(private closeAfterPlayout:(stillCurrent:()=>boolean)=>void){}
+  invalidate():void{this.revision++;this.candidate=undefined;}
   record(role:'caller'|'assistant',id:string,text:string,final:boolean):void{
     if(!text.trim()||this.finalIds.has(id))return;
     if(role==='caller'&&id!==this.currentCaller){this.currentCaller=id;this.revision++;this.candidate=undefined;}

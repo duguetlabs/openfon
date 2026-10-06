@@ -1,3 +1,4 @@
+import {readFileSync} from 'node:fs';
 import {fakeCtx} from './fake-d1';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {SqliteD1,applyMigrations} from './sqlite-d1';
@@ -213,4 +214,17 @@ it('frozen normal ending survives an alarm before the closing flag was saved',as
  vi.stubGlobal('fetch',vi.fn(async()=>{data.set('livekit',{...data.get('livekit'),finished:true});return Response.json({});}));
  await session.alarm();
  expect(db.database.prepare('SELECT status,summary FROM calls').get()).toEqual({status:'completed',summary:null});
+});
+it('authenticated response warning retains active call and excludes raw backend details',async()=>{
+ expect((await request('context')).status).toBe(200);
+ expect((await request('events',{callback:'wrong',type:'warning',code:'response_filtered'})).status).toBe(403);
+ expect((await request('events',{callback:'scoped-capability',type:'warning',code:'response_filtered',message:'private Azure details'})).status).toBe(200);
+ expect((await request('events',{callback:'scoped-capability',type:'warning',code:'arbitrary-provider-error'})).status).toBe(400);
+ expect(db.database.prepare("SELECT status FROM calls WHERE id='call'").get()).toEqual({status:'active'});expect(data.get('livekit').finished).toBeUndefined();
+});
+it('selected voice routing is returned only on the authenticated internal context',async()=>{
+ db.exec(readFileSync('migrations/0027_commercial.sql','utf8'));
+ env.OPENFON_MANAGED_WEB='true';env.AZURE_OPENAI_ENDPOINT='https://fixture.openai.azure.com/';env.AZURE_OPENAI_API_KEY='synthetic';env.AZURE_OPENAI_LIVE_DEPLOYMENT='gpt-realtime-2.1-mini';
+ expect((await request('context',{},'wrong')).status).toBe(404);
+ expect(await (await request('context')).json()).toMatchObject({voiceModel:'gpt-realtime-2.1-mini',voice:'marin'});
 });

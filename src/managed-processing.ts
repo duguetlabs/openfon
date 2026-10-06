@@ -1,3 +1,4 @@
+import {ManagedProcessingError, processingDiagnostic, requestProvenance, rejectedResponseDiagnostic, type ProcessingDiagnostic} from './managed-processing-diagnostics';
 import type { UsageMetrics, UsageObservation } from './commercial-types';
 import type { Env } from './types';
 import { azureConfig } from './managed-azure';
@@ -39,13 +40,23 @@ export async function processManagedCall(
   turns: ManagedTurn[],
   language: string
 ): Promise<ManagedSummary> {
+  const started=Date.now();
+  const diagnostic:ProcessingDiagnostic={stage:'configuration',inputTurns:Math.min(turns.length,1000000),inputCharacters:Math.min(turns.reduce((n,t)=>n+t.text.length,0),10000000)};
+  try { return await processManagedCallInner(env,turns,language,diagnostic); }
+  catch(error) {
+    throw new ManagedProcessingError({...diagnostic,...processingDiagnostic(error,diagnostic.stage,started)});
+  }
+}
+async function processManagedCallInner(env:Env,turns:ManagedTurn[],language:string,diagnostic:ProcessingDiagnostic):Promise<ManagedSummary> {
   const cfg = azureConfig(env);
+  diagnostic.stage='input';
   if (
     !turns.length ||
     turns.length > 200 ||
     turns.reduce((n, t) => n + t.text.length, 0) > 100000
   )
     throw Error('Call notes could not be prepared.');
+  diagnostic.stage='request';
   const response = await fetch(cfg.baseURL + '/responses', {
     method: 'POST',
     headers: { 'api-key': cfg.apiKey, 'Content-Type': 'application/json' },
@@ -61,10 +72,13 @@ export async function processManagedCall(
       text: { format: { type: 'json_object' } },
     }),
   });
+  diagnostic.stage='response_status';
+  await requestProvenance(response,diagnostic);
   if (!response.ok) {
-    await response.body?.cancel();
+    await rejectedResponseDiagnostic(response,diagnostic);
     throw Error('Call notes could not be prepared.');
   }
+  diagnostic.stage='response_body';
   // Bound untrusted output before parsing; avoid logging any provider body.
   const reader = response.body?.getReader();
   if (!reader) throw Error('Call notes could not be prepared.');
@@ -80,8 +94,9 @@ export async function processManagedCall(
       text += decoder.decode(part.value, { stream: true });
     }
   } finally {
-    await reader.cancel().catch(() => {});
+    void reader.cancel().catch(() => {});
   }
+  diagnostic.stage='response_parse';
   const body = object(JSON.parse(text));
   if (!body) throw Error('Call notes could not be prepared.');
   const output = Array.isArray(body.output) ? body.output : [];
@@ -173,6 +188,7 @@ export async function processManagedCall(
     if (!actions.some((previous) => previous.source_key === key))
       actions.push(action);
   }
+  diagnostic.stage='response_identity';
   const responseId = str(body.id, 200),
     model = str(body.model, 100);
   if (!responseId || !model) throw Error('Call notes could not be prepared.');

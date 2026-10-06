@@ -16,6 +16,7 @@ export class ToolClosure {
     this.revision++;
     this.pending=undefined;
   }
+  cancel():void{this.revision++;this.pending=undefined;}
   begin():ClosureTicket|undefined {
     if(this.pending)return;
     return this.pending={inputRevision:this.revision,attempt:++this.attempt};
@@ -24,4 +25,22 @@ export class ToolClosure {
     return this.pending===ticket&&ticket.inputRevision===this.revision;
   }
   release(ticket:ClosureTicket):void {if(this.pending===ticket)this.pending=undefined;}
+}
+
+/** SDK interruption can omit already-returned tool output. Normal completion does not release its reservation. */
+export function watchClosureInterruption(
+  signal: AbortSignal,
+  speech: Pick<import('@livekit/agents').voice.SpeechHandle, 'interrupted' | 'addDoneCallback' | 'removeDoneCallback'>,
+  release: () => void,
+): void {
+  let finished=false;
+  const cleanup=()=>{signal.removeEventListener('abort',interrupted);speech.removeDoneCallback(done);};
+  const interrupted=()=>{if(finished)return;finished=true;cleanup();release();};
+  const done=(handle:import('@livekit/agents').voice.SpeechHandle)=>{
+    if(handle.interrupted){interrupted();return;}
+    if(finished)return;finished=true;cleanup();
+  };
+  if(signal.aborted||speech.interrupted){interrupted();return;}
+  signal.addEventListener('abort',interrupted,{once:true});
+  speech.addDoneCallback(done);
 }

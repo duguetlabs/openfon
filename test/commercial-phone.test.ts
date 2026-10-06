@@ -381,3 +381,7 @@ it.each(["failure", "pending", "allocated", "wrong_reference"])(
     ).toBe(false);
   },
 );
+it("accepts carrier decimal padding without rounding sub-cent charges",()=>{
+ for(const [quote,cents] of [["1.0000000",100],["7.2500000",725],["1.00000",100],["2.0000000",200],["0.0100000",1],["9999999.99000",999999999]] as const)expect(quotedMinor(quote)).toBe(cents);
+ for(const quote of ["1.0000001","7.2510000","10000000.00","1.2e1","-1.00","+1.00","1,00"," 1.00","1.","Infinity","0."+"0".repeat(100),1.00,null])expect(()=>quotedMinor(quote)).toThrow();
+});

@@ -13,12 +13,13 @@ export async function generateManagedVoicePreview(
       metrics = seconds === undefined ? {} : { voiceSessionSeconds: seconds };
     await recordPreviewUsage(env, context, {
       eventId: 'preview_' + context.operationId,
-      source: 'azure_voice',
+      source: usage.realtime?(usage.responseId?'azure_realtime':'azure_realtime_session'):'azure_voice',
+      ...(usage.responseId?{providerResponseId:usage.responseId}:{}),
       providerSessionId: usage.sessionId,
       observedAt: new Date().toISOString(),
       final: usage.final,
-      metrics,
-      model: 'gpt-live-1',
+      metrics:usage.realtime?usage.metrics??{}:metrics,
+      model:usage.realtime?'gpt-realtime-2.1-mini':'gpt-live-1',
     });
   });
 }

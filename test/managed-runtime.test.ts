@@ -401,3 +401,16 @@ describe('complete managed transcript extraction boundary', () => {
     }finally{db.close();}
   });
 });
+it('summary cache-write diagnostics omit secret canaries and keep attempted inference non-replayable',async()=>{
+ const {SqliteD1,applyMigrations}=await import('./sqlite-d1');const db=new SqliteD1();const logs=vi.spyOn(console,'error').mockImplementation(()=>{});
+ try{
+  applyMigrations(db);db.exec(readFileSync('migrations/0026_business_actions.sql','utf8'));db.exec(readFileSync('migrations/0027_commercial.sql','utf8'));
+  db.exec("INSERT INTO users(id,email,password_hash)VALUES('u','u@example.invalid','x');INSERT INTO businesses(id,user_id,slug,name)VALUES('b','u','b','B');INSERT INTO calls(id,business_id,channel)VALUES('c','b','web');INSERT INTO call_turns(call_id,role,text,source_final)VALUES('c','caller','Please call me back',1)");
+  const fetcher=vi.fn(async()=>Response.json({id:'response',model:'gpt-5.4-mini',status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({summary:'Notes',actions:[]})}]}],usage:{input_tokens:7}}));vi.stubGlobal('fetch',fetcher);
+  const values=new Map<string,unknown>();const storage={get:async(k:string)=>values.get(k),put:async(k:string,v:unknown)=>{if(k==='managed-summary')throw Error('synthetic-private-cache-canary');values.set(k,v)},list:async()=>new Map(),deleteAlarm:async()=>{},deleteAll:async()=>{}};
+  const make=()=>{const s=new CallSession({storage} as unknown as DurableObjectState,{...env,DB:db as unknown as D1Database}) as any;s.callId='c';s.history=[{role:'system',content:''},{role:'user',content:'Please call'},{role:'assistant',content:'Goodbye'}];s.settings={language:'en'};return s;};
+  await make().finalize();await make().finalize();
+  expect(fetcher).toHaveBeenCalledTimes(1);expect(values.get('managed-summary-attempted')).toBe(true);
+  const rendered=logs.mock.calls.map(args=>args.join(' ')).join('\n');expect(rendered).toContain('cache_write');expect(rendered).not.toContain('synthetic-private-cache-canary');
+ }finally{logs.mockRestore();db.close();}
+});

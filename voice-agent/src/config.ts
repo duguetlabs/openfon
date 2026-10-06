@@ -44,7 +44,7 @@ export function operatorAzureConfig(env: NodeJS.ProcessEnv = process.env) {
     throw new Error('Invalid operator Azure configuration');
   if (
     env.AZURE_OPENAI_LIVE_DEPLOYMENT &&
-    env.AZURE_OPENAI_LIVE_DEPLOYMENT !== INFERENCE.model
+    !['gpt-live-1','gpt-realtime-2.1-mini'].includes(env.AZURE_OPENAI_LIVE_DEPLOYMENT)
   )
     throw new Error('Unsupported operator voice deployment');
   if (
@@ -92,4 +92,12 @@ export function acceptedEcho(value: unknown, voice: string): boolean {
     echo.audio.output?.voice === voice &&
     echo.delegation?.responses?.model === INFERENCE.delegationModel
   );
+}
+
+export function operatorVoiceModel(env:NodeJS.ProcessEnv=process.env){return env.AZURE_OPENAI_LIVE_DEPLOYMENT||'gpt-live-1';}
+
+/** Authenticated Worker routing must match the operator's Node deployment before inference. */
+export function assertVoicePairing(context:Pick<CallContext,'voiceModel'>,env:NodeJS.ProcessEnv=process.env) {
+  const declared=context.voiceModel??'gpt-live-1';
+  if(!['gpt-live-1','gpt-realtime-2.1-mini'].includes(declared)||declared!==operatorVoiceModel(env))throw Error('Voice service configuration mismatch');
 }

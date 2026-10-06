@@ -24,26 +24,28 @@ export const MANAGED_VOICES = Object.freeze([
   'vale',
   'verse',
 ]);
-export function managedVoiceCatalog(_env?: Env) {
+export const MINI_VOICES=Object.freeze(['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar']);
+export const managedMini=(env?:Pick<Env,'AZURE_OPENAI_LIVE_DEPLOYMENT'>)=>env?.AZURE_OPENAI_LIVE_DEPLOYMENT==='gpt-realtime-2.1-mini';
+export function managedVoiceCatalog(env?: Env) {
   return {
-    voices: MANAGED_VOICES.map((id) => ({
+    voices: (managedMini(env)?MINI_VOICES:MANAGED_VOICES).map((id) => ({
       id,
       label: id[0]!.toUpperCase() + id.slice(1),
     })),
     defaultVoice: 'marin',
   };
 }
-export function managedVoice(value: string): string {
+export function managedVoice(value: string,env?:Env): string {
   const selected = value;
-  if (!MANAGED_VOICES.includes(selected))
+  if (!(managedMini(env)?MINI_VOICES:MANAGED_VOICES).includes(selected))
     throw new Error('Choose an available voice before calling.');
   return selected;
 }
 /** Preserve the released saved default without accepting blank customer input. */
 export function savedManagedVoice(
-  settings: Pick<AgentSettings, 'realtime_voice' | 'voice'>
+  settings: Pick<AgentSettings, 'realtime_voice' | 'voice'>, env?:Env
 ): string {
-  return managedVoice(settings.realtime_voice || settings.voice || 'marin');
+  return managedVoice(settings.realtime_voice || settings.voice || 'marin',env);
 }
 export function azureConfig(
   env: Pick<
@@ -76,7 +78,7 @@ export function azureConfig(
     throw new Error('Calling is not available yet. Please try again later.');
   const live = env.AZURE_OPENAI_LIVE_DEPLOYMENT || 'gpt-live-1',
     text = env.AZURE_OPENAI_TEXT_DEPLOYMENT || 'gpt-5.4-mini';
-  if (live !== 'gpt-live-1' || text !== 'gpt-5.4-mini')
+  if (!['gpt-live-1','gpt-realtime-2.1-mini'].includes(live) || text !== 'gpt-5.4-mini')
     throw new Error('Calling is not available yet. Please try again later.');
   return {
     baseURL: endpoint.origin + '/openai/v1',
