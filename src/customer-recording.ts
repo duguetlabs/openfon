@@ -1,6 +1,9 @@
 /** Public recordings contain audio, never an operator's configuration or events. */
 export function customerRecording(response: Response): Response {
   if (!response.ok || !response.body) return response;
+  // Missing, deleted and expired recordings return JSON availability, not a
+  // bundle. Preserve it so the customer middleware can still read valid JSON.
+  if (response.headers.get("content-type")?.split(";")[0].trim() === "application/json") return response;
   const headers = new Headers(response.headers);
   headers.delete("content-length");
   headers.set("cache-control", "no-store");
