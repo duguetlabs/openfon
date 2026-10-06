@@ -1,3 +1,4 @@
+import type {EventEmitter} from 'node:events';
 import {ReadableStream} from 'node:stream/web';
 import type {AudioFrame} from '@livekit/rtc-node';
 
@@ -75,4 +76,11 @@ export function observeAudio(source:ReadableStream<AudioFrame>,observe:(frame:Au
     },
     async cancel(reason){try{await reader.cancel(reason);}finally{reader.releaseLock();}},
   },{highWaterMark:0});
+}
+
+/** GPT-Live derives speech boundaries in the SDK rather than the Mini wire protocol. */
+export function observeSpeechBoundaries(source:Pick<EventEmitter,'on'>,recording:DebugRecording|undefined):void {
+  if(!recording)return;
+  source.on('input_speech_started',()=>recording.event('speech_start'));
+  source.on('input_speech_stopped',()=>recording.event('speech_end'));
 }

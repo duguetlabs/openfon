@@ -340,7 +340,7 @@ export class CallSession implements DurableObject {
       };
     try {
       this.ws?.send(JSON.stringify(obj));
-      if (this.debug) {
+      if (this.debug && !this.debug.serviceCapture) {
         const v = obj as { type?: string; text?: string; message?: string };
         if (v.type) this.debug.event('caller_event', { type: v.type, text: v.text, message: v.message });
       }
@@ -975,7 +975,7 @@ export class CallSession implements DurableObject {
     try {
       if (!target) return false;
       target.send(JSON.stringify(obj));
-      if (this.debug) {
+      if (this.debug && !this.debug.serviceCapture) {
         const v = obj as { type: string; session?: { instructions?: string; audio?: unknown } };
         if (v.type === 'session.update') this.debug.event('session', { socket: this.debug.socket(target), session: v.session });
         else if (v.type !== 'input_audio_buffer.append') this.debug.event('upstream_send', { type: v.type, socket: this.debug.socket(target) });

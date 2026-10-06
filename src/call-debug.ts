@@ -62,7 +62,7 @@ export class CallDebug {
     this.uploadSequence++; this.uploadDigest = digest;
     return 200;
   }
-  private constructor(private state: DurableObjectState, public meta: DebugMeta) {}
+  private constructor(private state: DurableObjectState, public meta: DebugMeta, readonly serviceCapture = false) {}
 
   static async start(state: DurableObjectState, callId: string, producer = false): Promise<CallDebug | null> {
     try {
@@ -72,7 +72,7 @@ export class CallDebug {
       const meta: DebugMeta = { version: 1, callId, startedAt: now, expiresAt: now + DEBUG_RETENTION_MS,
         chunks: 0, records: 0, bytes: 0, partial: producer };
       await state.storage.put(META, meta, { allowUnconfirmed: true });
-      return new CallDebug(state, meta);
+      return new CallDebug(state, meta, producer);
     } catch { return null; }
   }
   socket(value: object): number {

@@ -1,4 +1,4 @@
-import {DebugRecording,observeAudio} from './debug-recording.js';
+import {DebugRecording,observeAudio,observeSpeechBoundaries} from './debug-recording.js';
 import { configureSdkLogging } from './logging.js';
 import {UsageOutbox} from './usage-outbox.js';
 import {AzureUsageCapture} from './usage.js';
@@ -172,6 +172,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
         inputFrame:frame=>recording?.audio('caller',frame),idleFrame:()=>telemetry.count('idle_frame_forwarded'),replyAuthorized:()=>telemetry.phase('reply_authorized'),
       });
       providerSession=duplex;
+      observeSpeechBoundaries(duplex,recording);
       duplex.on('input_audio_transcription_completed', event => {
         if(event.itemId){toolClosure.observe(event.itemId,event.transcript,event.isFinal);farewell.record('caller',event.itemId,event.transcript,event.isFinal);}
         if (event.itemId) void transcripts.record({id: event.itemId, role: 'caller', text: event.transcript, final: event.isFinal, createdAt: event.turnStartedAt}).catch(() => stopSafely(true));

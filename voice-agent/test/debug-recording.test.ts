@@ -1,8 +1,9 @@
+import {EventEmitter} from 'node:events';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {ReadableStream} from 'node:stream/web';
 import {AudioFrame} from '@livekit/rtc-node';
-import {DebugRecording,observeAudio} from '../src/debug-recording.js';
+import {DebugRecording,observeAudio,observeSpeechBoundaries} from '../src/debug-recording.js';
 const frame=()=>new AudioFrame(Int16Array.from([1,-2,3,-4]),24000,1,4);
 test('records distinct caller and generated audio with bounded ordered uploads and final seal',async()=>{
   const sent:any[]=[];const recorder=new DebugRecording(async body=>{sent.push(body);});
@@ -38,4 +39,12 @@ test('observer preserves frame identity, backpressure, cancellation and ignores 
   await Promise.resolve();assert.equal(pulls,0);
   const reader=wrapped.getReader(),result=await reader.read();assert.equal(result.value,observed);assert.equal(pulls,1);
   await reader.cancel();assert.equal(cancelled,true);assert.equal(source.locked,false);
+});
+
+test('GPT-Live SDK boundary events are captured without their transcript fields',async()=>{
+ const sent:any[]=[];const recorder=new DebugRecording(async body=>{sent.push(body);});
+ const sdk=new EventEmitter();observeSpeechBoundaries(sdk,recorder);
+ sdk.emit('input_speech_started',{transcript:'private sentinel'});sdk.emit('input_speech_stopped',{transcript:'private sentinel'});
+ await recorder.finish();assert.deepEqual(sent[0].records.map((r:any)=>r.name),['speech_start','speech_end','stopped']);
+ assert.ok(!JSON.stringify(sent).includes('sentinel'));
 });

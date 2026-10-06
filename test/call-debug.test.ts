@@ -147,3 +147,14 @@ describe('bounded service recording uploads',()=>{
     await recorder.finish();expect(recorder.meta.partial).toBe(true);
   });
 });
+
+it('service recordings exclude legacy outgoing transcripts and errors from the raw bundle',async()=>{
+ const {state}=fixture(),recorder=(await CallDebug.start(state,'call',true))!;
+ const session=new CallSession(state,{} as any) as any;session.debug=recorder;session.ws={send:vi.fn()};
+ session.send({type:'transcript',text:'private transcript sentinel'});
+ session.send({type:'agent_text',text:'private reply sentinel'});
+ session.send({type:'warning',message:'private warning sentinel'});
+ expect(session.ws.send).toHaveBeenCalledTimes(3);await recorder.finish();
+ const bundle=await (await debugResponse(state,new Request('https://internal/debug/download'),recorder)).text();
+ expect(bundle).not.toContain('sentinel');expect(bundle).not.toContain('caller_event');
+});
