@@ -1183,3 +1183,66 @@ for (const phase of ['awaiting-ack','completed-buffered'] as const) {
     }finally{controller.abort();await f.session.close();}
   });
 }
+for (const rejectFirst of [false,true])test(`retired competitor completion with rejection ${rejectFirst?'first':'last'} releases successor`,async()=>{
+ const f=await fixture();const a=new AbortController(),b=new AbortController();mock.timers.enable({apis:['setTimeout']});
+ try{
+  const first=f.session.generateReply('first',{signal:a.signal}).catch(e=>e);await tick();const request=f.socket.sent.at(-1);
+  f.socket.message({type:'response.created',response:{id:'competitor'}});
+  await f.session.interrupt();await first;
+  const second=f.session.generateReply('second',{signal:b.signal}).catch(e=>e);await tick();
+  const rejection={type:'error',error:{code:'conversation_already_has_active_response',event_id:request.event_id}};
+  if(rejectFirst)f.socket.message(rejection);
+  f.socket.message({type:'response.done',response:{id:'competitor',status:'cancelled',output:[]}});
+  if(!rejectFirst)f.socket.message(rejection);
+  assert.equal(f.socket.sent.filter(e=>e.type==='response.create').length,2);
+  const next=f.socket.sent.at(-1);f.socket.message({type:'response.created',response:{id:'next',metadata:next.response.metadata}});
+  assert.equal((await second).responseId,'next');mock.timers.tick(16000);assert.equal(f.warnings.includes('reconnecting'),false);
+ }finally{a.abort();b.abort();await f.session.close();mock.timers.reset();}
+});
+test('automatic admission uses bounded correlated retry after a competing response',async()=>{
+ let complete!:(s:string)=>void;const f=await fixture(()=>new Promise<string>(r=>complete=r));
+ try{
+  const g=await generation(f);f.socket.message({type:'response.done',response:{id:g.responseId,status:'completed',output:[{type:'function_call',name:'think',call_id:'reason',arguments:'{"request":"old"}'}]}});
+  complete('answer');await tick();const request=f.socket.sent.at(-1);
+  f.socket.message({type:'response.created',response:{id:'competitor'}});
+  f.socket.message({type:'response.done',response:{id:'competitor',status:'completed',output:[]}});
+  f.socket.message({type:'error',error:{code:'conversation_already_has_active_response',event_id:request.event_id}});
+  assert.equal(f.errors.length,0);const retry=f.socket.sent.at(-1);assert.equal(retry.type,'response.create');assert.equal(retry.response.metadata.openfon_request,request.response.metadata.openfon_request);
+  assert.equal(f.socket.sent.filter(e=>e.type==='response.create').length,3);
+  assert.equal(f.socket.sent.filter(e=>e.item?.output==='answer').length,1);
+ }finally{await f.session.close();}
+});
+test('accepted generation inactivity triggers bounded recovery and useful output resets the deadline',async()=>{
+ const f=await fixture();mock.timers.enable({apis:['setTimeout']});
+ try{
+  const g=await generation(f);mock.timers.tick(29000);
+  f.socket.message({type:'response.output_audio_transcript.delta',response_id:g.responseId,item_id:'text',delta:'Useful output'});
+  mock.timers.tick(29000);assert.equal(f.warnings.includes('reconnecting'),false);
+  mock.timers.tick(1001);assert.equal(f.warnings.includes('reconnecting'),true);
+ }finally{await f.session.close();mock.timers.reset();}
+});
+test('disconnect clears all old automatic and manual retirement blockers before recovery',async()=>{
+ let complete!:(s:string)=>void;const f=await fixture(()=>new Promise<string>(r=>complete=r));const controller=new AbortController();mock.timers.enable({apis:['setTimeout']});
+ try{
+  const g=await generation(f);f.socket.message({type:'response.done',response:{id:g.responseId,status:'completed',output:[{type:'function_call',name:'think',call_id:'reason',arguments:'{"request":"old"}'}]}});
+  complete('answer');await tick();const automatic=f.socket.sent.at(-1);
+  f.socket.message({type:'response.created',response:{id:'automatic',metadata:automatic.response.metadata}});
+  f.socket.message({type:'response.output_audio_transcript.delta',response_id:'automatic',item_id:'buffered',delta:'unplayed'});
+  f.socket.message({type:'response.done',response:{id:'automatic',status:'completed',output:[]}});
+  const queued=f.session.generateReply('next',{signal:controller.signal}).catch(e=>e);await tick();
+  f.socket.emit('close',1006);await queued;mock.timers.tick(500);await tick();
+  f.sockets[1].emit('open');f.sockets[1].message({type:'session.updated',session:{...miniSessionConfig(context),id:'new-session'}});
+  assert.equal(f.sockets[1].sent.filter(e=>e.type==='response.create').length,1,'recovery reminder must not wait on dead socket retirement');
+  const retry=f.sockets[1].sent.at(-1);f.sockets[1].message({type:'response.created',response:{id:'reminder',metadata:retry.response.metadata}});
+  f.sockets[1].message({type:'response.done',response:{id:'reminder',status:'completed',output:[]}});
+  mock.timers.tick(16000);assert.equal(f.warnings.filter(x=>x==='reconnecting').length,1);
+ }finally{controller.abort();await f.session.close();mock.timers.reset();}
+});
+test('synchronous response send failure starts the single recovery owner immediately',async()=>{
+ const f=await fixture();mock.timers.enable({apis:['setTimeout']});
+ try{
+  f.socket.send=()=>{throw Error('synthetic send failure');};
+  const result=await f.session.generateReply().catch(e=>e);assert.ok(result instanceof ResponseUnavailable);
+  assert.equal(f.warnings.filter(x=>x==='reconnecting').length,1);
+ }finally{await f.session.close();mock.timers.reset();}
+});
