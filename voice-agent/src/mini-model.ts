@@ -10,6 +10,7 @@ import {
   type ReasoningConnection,
 } from "./mini-reasoning.js";
 import type { CallContext } from "./control.js";
+import {reportFailure} from './failure-diagnostics.js';
 export const MINI_MODEL = "gpt-realtime-2.1-mini";
 export const MINI_VOICES = [
   "alloy",
@@ -285,9 +286,10 @@ export class MiniSession extends llm.RealtimeSession {
       this.emit("warning", code);
     }
   }
-  private emitFatal(code: string) {
+  private emitFatal(code: string, detail?: unknown) {
     if (this.closed) return;
     this.terminalError = Error(code);
+    reportFailure('mini_terminal',this.terminalError,record=>this.emit('failure_diagnostic',record),{category:code,error:detail??{code}});
     this.emit("error", {
       type: "realtime_model_error",
       timestamp: Date.now(),
@@ -336,8 +338,8 @@ export class MiniSession extends llm.RealtimeSession {
           followRedirects: false,
         },
       );
-    } catch {
-      this.emitFatal("configuration_invalid");
+    } catch (error) {
+      this.emitFatal("configuration_invalid",error);
       return;
     }
     this.socket = ws;
@@ -373,8 +375,8 @@ export class MiniSession extends llm.RealtimeSession {
       if (!current()) return;
       try {
         this.receive(JSON.parse(data.toString()));
-      } catch {
-        this.emitFatal("protocol_invalid");
+      } catch (error) {
+        this.emitFatal("protocol_invalid",error);
       }
     });
     ws.on("unexpected-response", (_req, res) => {
@@ -387,13 +389,14 @@ export class MiniSession extends llm.RealtimeSession {
             : [401, 403].includes(res.statusCode!)
               ? "authentication_failed"
               : "configuration_invalid",
+          {status:res.statusCode},
         );
       else this.transportLost();
     });
     ws.on("error", (error: Error & { code?: string }) => {
       if (!current()) return;
       if (error.code?.startsWith("WS_ERR_"))
-        this.emitFatal("protocol_rejected");
+        this.emitFatal("protocol_rejected",error);
       else this.transportLost();
     });
     ws.on("close", (code) => {
@@ -876,6 +879,7 @@ export class MiniSession extends llm.RealtimeSession {
           : ["insufficient_quota", "rate_limit_exceeded"].includes(code)
             ? "quota_unavailable"
             : "protocol_rejected",
+        event.error,
       );
     }
     if (!this.ready) return;
@@ -946,6 +950,7 @@ export class MiniSession extends llm.RealtimeSession {
             code === "invalid_api_key"
               ? "authentication_failed"
               : "quota_unavailable",
+            event.response.status_details.error,
           );
         this.responseFailures++;
         this.answerPending = false;
