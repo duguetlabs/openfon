@@ -241,13 +241,20 @@ export class MiniSession extends llm.RealtimeSession {
   get closureAllowed() {
     return this.closurePermission && !this.reasoningPending;
   }
+  /** Consume valid tool closure without interrupting the speech that authorized it. */
+  prepareClosure(): boolean {
+    if (!this.closureAllowed) return false;
+    this.invalidate();
+    this.reasoningEpoch++;
+    return true;
+  }
   get reasoningPending() {
-    return [...this.jobs.values()].some((j) => !j.done) || this.answerPending;
+    return [...this.jobs.values()].some((j) => !j.done) || this.answerPending ||
+      !!this.sent?.automatic || this.pending.some(request => request.automatic);
   }
   get hasPendingWork() {
     return (
-      [...this.jobs.values()].some((j) => !j.done) ||
-      this.answerPending ||
+      this.reasoningPending ||
       this.externalTools.size > 0
     );
   }

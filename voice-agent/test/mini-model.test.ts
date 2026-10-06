@@ -1246,3 +1246,41 @@ test('synchronous response send failure starts the single recovery owner immedia
   assert.equal(f.warnings.filter(x=>x==='reconnecting').length,1);
  }finally{await f.session.close();mock.timers.reset();}
 });
+for(const phase of ['dispatched','retry-queued'] as const)test(`automatic ${phase} reasoning prevents competing end_call`,async()=>{
+ let complete!:(s:string)=>void;const f=await fixture(()=>new Promise<string>(r=>complete=r));
+ try{
+  const g=await generation(f);f.socket.message({type:'response.done',response:{id:g.responseId,status:'completed',output:[{type:'function_call',name:'think',call_id:'reason',arguments:'{"request":"calculate"}'}]}});
+  complete('answer');await tick();const request=f.socket.sent.at(-1);
+  f.socket.message({type:'response.created',response:{id:'competitor'}});
+  if(phase==='retry-queued')f.socket.message({type:'error',error:{code:'conversation_already_has_active_response',event_id:request.event_id}});
+  assert.equal(f.session.reasoningPending,true);
+  f.socket.message({type:'response.done',response:{id:'competitor',status:'completed',output:[{type:'function_call',name:'end_call',call_id:'premature',arguments:'{}'}]}});
+  assert.equal(f.session.closureAllowed,false);
+  assert.equal(f.socket.sent.some(e=>e.item?.call_id==='premature'&&e.item.output==='Finish the pending request before ending the call.'),true);
+ }finally{await f.session.close();}
+});
+test('valid automatic closure preparation preserves authorizing playback',async()=>{
+ let complete!:(s:string)=>void;const f=await fixture(()=>new Promise<string>(r=>complete=r));
+ try{
+  const g=await generation(f);f.socket.message({type:'response.done',response:{id:g.responseId,status:'completed',output:[{type:'function_call',name:'think',call_id:'reason',arguments:'{"request":"calculate"}'}]}});
+  complete('answer');await tick();const request=f.socket.sent.at(-1);
+  f.socket.message({type:'response.created',response:{id:'automatic',metadata:request.response.metadata}});
+  f.socket.message({type:'response.output_audio_transcript.delta',response_id:'automatic',item_id:'valid',delta:'Your answer is thirty.'});
+  f.socket.message({type:'response.done',response:{id:'automatic',status:'completed',output:[{type:'function_call',name:'end_call',call_id:'complete',arguments:'{}'}]}});
+  assert.equal(f.session.closureAllowed,true);let interrupted=0;f.session.on('interrupted',()=>interrupted++);
+  const api=f.session as MiniSession & {prepareClosure?:()=>boolean};
+  if(api.prepareClosure)assert.equal(api.prepareClosure(),true);else f.session.invalidateReasoning();
+  assert.equal(interrupted,0,'valid end_call must preserve authorizing speech');
+  assert.equal(f.session.closureAllowed,false,'closure permission is consumed once');
+ }finally{await f.session.close();}
+});
+test('new caller correction revokes closure before tool execution',async()=>{
+ const f=await fixture();
+ try{
+  const g=await generation(f);
+  f.socket.message({type:'response.done',response:{id:g.responseId,status:'completed',output:[{type:'function_call',name:'end_call',call_id:'closure',arguments:'{}'}]}});
+  assert.equal(f.session.closureAllowed,true);
+  const chat=new llm.ChatContext();chat.addMessage({id:'new-request',role:'user',content:'Wait, I have one more question.'});await f.session.updateChatCtx(chat);
+  assert.equal(f.session.prepareClosure(),false);
+ }finally{await f.session.close();}
+});

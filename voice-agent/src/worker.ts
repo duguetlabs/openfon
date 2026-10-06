@@ -215,8 +215,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     parameters: {type: 'object', properties: {}, additionalProperties: false},
     execute: async () => {
       // Return from the function before draining the activity that owns this function.
-      if(miniSession&&!miniSession.closureAllowed)return 'Finish the pending caller request before ending the call.';
-      miniSession?.invalidateReasoning();
+      if(miniSession&&!miniSession.prepareClosure())return 'Finish the pending caller request before ending the call.';
       const ticket=toolClosure.begin();
       if(ticket){
         diagnostic('end_call_requested');
