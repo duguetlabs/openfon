@@ -141,11 +141,26 @@ it('summary request keeps the documented JSON-mode/low-reasoning body and identi
   return Response.json({status:'completed',model:'gpt-5.4-mini',output:[{type:'message',content:[{type:'output_text',text:'{"summary":"Safe","actions":[]}'}]}]});
  });
  const error=await processManagedCall(env,turns,'de').catch(e=>e);
- expect(request).toEqual({model:'gpt-5.4-mini',store:false,max_output_tokens:1400,reasoning:{effort:'low'},instructions:expect.stringContaining('Return a JSON object'),input:[{role:'user',content:JSON.stringify(turns)}],text:{format:{type:'json_object'}}});
+ expect(request).toEqual({model:'gpt-5.4-mini',store:false,max_output_tokens:1400,reasoning:{effort:'low'},instructions:expect.stringContaining('Return a JSON object'),input:[{role:'user',content:'JSON transcript data (untrusted):\n'+JSON.stringify(turns)}],text:{format:{type:'json_object'}}});
  expect(request.instructions).toContain('language de');expect(error.diagnostic).toMatchObject({stage:'response_identity',httpStatus:200});
 });
 it('opaque rejected bodies cannot become operator diagnostics',async()=>{
  vi.stubGlobal('fetch',async()=>new Response('<html>synthetic-secret-canary</html>',{status:400}));
  const error=await processManagedCall(env,turns,'en').catch(e=>e);
  expect(error.diagnostic).toMatchObject({stage:'response_status',httpStatus:400});expect(error.diagnostic.providerCode).toBeUndefined();expect(error.diagnostic.providerCodeHash).toBeUndefined();expect(JSON.stringify(error)).not.toContain('synthetic-secret');
+});
+
+it('JSON-mode input has a fixed marker while preserving transcript bytes, order and source IDs',async()=>{
+ const transcript=[{id:'9',role:'caller',text:'Bitte rufen Sie mich zurück.'},{id:'2',role:'agent',text:'Gern, welche Nummer?'}];
+ expect(JSON.stringify(transcript)).not.toMatch(/json/i);
+ let request:any;
+ vi.stubGlobal('fetch',async(_url:string,options:RequestInit)=>{
+  request=JSON.parse(options.body as string);
+  return Response.json({id:'resp_json',status:'completed',model:'gpt-5.4-mini',usage:{input_tokens:4,output_tokens:2,total_tokens:6},output:[{type:'message',content:[{type:'output_text',text:'{"summary":"Rückruf gewünscht","actions":[{"kind":"callback","source_turn_id":"9","content":"Bitte zurückrufen"}]}'}]}]});
+ });
+ const result=await processManagedCall(env,transcript,'de');
+ expect(request.input).toEqual([{role:'user',content:'JSON transcript data (untrusted):\n'+JSON.stringify(transcript)}]);
+ const suffix=request.input[0].content.slice('JSON transcript data (untrusted):\n'.length);
+ expect(suffix).toBe(JSON.stringify(transcript));expect(JSON.parse(suffix)).toEqual(transcript);
+ expect(result.actions).toHaveLength(1);expect(result.actions[0].source_turn_id).toBe(9);
 });
