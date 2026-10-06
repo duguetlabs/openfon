@@ -248,6 +248,9 @@ export default defineAgent({entry: async (ctx: JobContext) => {
           }catch{if(!stopped&&pendingTyped.idle&&toolClosure.current(ticket))stopSafely(true);}
           finally{toolClosure.release(ticket);}
         })();},0);
+        // Mini's SDK schedules another reply for a defined tool result. The
+        // app owns the farewell; undefined still commits the tool completion.
+        if(miniSession)return;
       }
       return 'Closure is scheduled after a brief spoken goodbye. Do not request another tool or start a new conversation.';
     },
