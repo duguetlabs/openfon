@@ -1,6 +1,50 @@
 # Production preflight
 
-## Current release candidate — 2026-10-07
+## Current production deployment — 2026-10-07
+
+The managed OpenFon Web application is deployed at **https://openfon.ai** for owner testing, using direct Azure through the existing LiveKit/Node transport. Production deployment is complete; payment, phone provisioning and unrestricted physical-call acceptance are separate unfinished gates. This section supersedes the pending-production statements in the dated pre-rollout checkpoint below.
+
+| Item | Production | Staging |
+| --- | --- | --- |
+| Application source | `02e867cc76d8d1d9744877fca96e679c9a3f8933` | `963dc4b1e8cf8096418a3c36bb7843446495c967` |
+| Worker version at 100% | `6557299d-198a-420b-a38b-356d682a6ee3` | `14e2d64f-b96e-480e-a784-e319c4b62ccf` |
+| Node image, both environments | `sha256:8bfde55695150b015a811c408c5f74b87d50e1bdd0ca13ee87c5e7b711336227` | Same |
+| Reviewed Node source | `314215780f52ea55bf005a3618791ca2b0c8000e` | Same |
+| Inference | Azure `gpt-realtime-2.1-mini`; delegated/post-call `gpt-5.4-mini` | Same |
+| Signaling | `wss://voice.openfon.ai` | `wss://voice-staging.openfon.ai` |
+| D1 migrations | 0001–0027, preserving historical 0024 | 0001–0023, 0025–0027; no 0024 |
+| Schedule | Every minute | Disabled |
+| Billing verification / new charging / phone purchases / carrier ingress | Disabled | Disabled |
+
+Production source is documentation-only above the reviewed application/runtime candidate. PRs 48–52 are merged. PR52's genuine PR-Agent and local Codex reviews cleared the exact reviewed tree; CI `37540236040` passed all five jobs. Application validation remains attributed to PR51: 2,334 Worker tests/103 files, 143 Node tests, types, builds and migration rehearsal. This documentation closeout does not redeploy or repeat provider calls.
+
+### Deployment and preservation verification
+
+Production's fresh restricted backup restored with integrity `ok` and zero foreign-key violations. Exact migrations 0026/0027 plus their normal ledger insertions passed local rehearsal, then the supported remote file import and independent post-import export. All old columns/rows across 20 tables were preserved, apart from the two intended migration-ledger additions; both projection triggers were present and booking-projection mismatches were zero. Existing 0024 was preserved, not replayed. Backup SHA256: `620d5baa26745a5329ef638894248b4f826f8e923b4b8814d9d960dd258f4323`; reviewed import: `6dacb1d1d906b37e8484fd63da8c3aa268b810e555a65e0f7ed077131ed8bab7`; post-import export: `cd7ccfc5efa2bf24a1a3a870e0d9df69bcba21401b0513accce5d0f9910db5a9`.
+
+Canonical `npm run deploy` and the immutable Node image were deployed as a pair after fresh vacancy. The first Worker version `7cb9d482-4979-4dff-9ff6-8faa4a7d1375` omitted public metadata because `OPENFON_PUBLIC_URL` was absent. Its log remains retained; a canonical redeployment with `OPENFON_PUBLIC_URL=https://openfon.ai` produced the current version without repeating migrations or Node preparation.
+
+Actual readbacks verified the fixed production D1 ID, all three unchanged Durable Object namespace IDs, preserved legacy secret names, managed/Azure settings and disabled commercial/carrier flags. The running Node's image/revision, voice/text pins, production callback and signaling, credential-file identity, UID 1000, writable persistent usage mount/mode 0700, no diagnostic overlay and health 200 all passed. Both environments ended with zero calls/rooms and zero restarts; production usage had no queued or dead observations.
+
+The served HTML matched built bytes, with the correct canonical URL, sitemap and robots entry. Landing, sign-in and health returned 200; signed-out account access returned 401. The coordinator's native in-app browser separately rendered the current public landing and sign-in pages, including monthly/annual plan wording. No authenticated browser save, preview or conversation was performed in that inspection.
+
+### Qualified production callback acceptance
+
+The one authorized English production call completed in 57 seconds through actual Azure/RTC with synthetic prerecorded input. It persisted the correct caller name/phone, an open callback action, summary and transcript; all six final transcript events matched saved turns. Measured final observations covered realtime, transcription, delegated reasoning and post-call text. Post-input output contained 720,240 PCM samples with peak 21,554; the final caller phase had one goodbye and no repeated opening greeting. The owned test account was deleted, safe collection succeeded and the service stopped normally.
+
+The original harness **exited 1** because the requested arithmetic answer was missing; it remains a failed probe. Independent offline source review found that this arithmetic expectation conflicted with the fixture's explicit “Take callback messages only” instruction and the compiled business-only/unrelated-question restrictions. The missing answer therefore does not establish a callback-service regression, but arithmetic correctness is not claimed and the model's actual reason remains unknown. Callback-service evidence was assessed separately; the original result was not relabeled. A timed follow-up preceded a shortened final readback; interruption is plausible, but exact provider causality was not captured.
+
+Two earlier staging greeting-stage failures remain unexplained. A later interrupted-greeting call succeeded, which does not prove those failures repaired. The German staging fixture also contained an English reasoning acknowledgement. Software-received PCM does not prove physical audibility, subjective voice identity, smart-glasses restaurant-noise robustness, repeated device calls, all voices or PSTN readiness. LiveKit debug audio recording is not implemented.
+
+### Operating limits and rollback
+
+Keep Dodo billing verification/checkout/charging disabled until usage-to-invoice and subscription lifecycle acceptance is complete. Phone provisioning remains disabled pending the business-country/server-derived eligibility workflow and actual carrier acceptance; no number purchase or PSTN charge occurred. See [billing and costs](../commercial/billing-and-costs.md) and [readiness](readiness.md).
+
+Rollback material retains the prior Worker `a2787074-d3e2-42c7-a862-19c30033bff2`, legacy Node image `sha256:dbdbde5cde5c5f9282fa4d45e6d20120440e3e3c4bfd7bd3b059e161eebdce4f` and original per-environment configuration. After fresh vacancy, restore a compatible Worker/Node/configuration pair; do not overwrite current usage/outbox data or restore the whole configuration backup over the live usage directory. Retain additive D1 data and separate credentials. Wrangler rollback may require explicit confirmation after the Azure secret was added; preserved legacy secret names and backed original Node credentials support the old pair, but rollback has not been executed. `WEB_VOICE_TRANSPORT` is not an admission-off fence in managed Web.
+
+Restricted backups, original failed probes, usage ledgers, provider audio and safe diagnostics are retained outside Git. No additional paid requests or production changes were made during this documentation closeout.
+
+## Historical pre-rollout checkpoint — 2026-10-07
 
 The managed business application and direct Azure Mini voice path are merged through `963dc4b1e8cf8096418a3c36bb7843446495c967`. Bounded actual staging acceptance supports the authorized **owner-testing** production rollout. Production is still on the previous release at this preflight checkpoint; deployment and the separately authorized production smoke remain to be verified.
 
