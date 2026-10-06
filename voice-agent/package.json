@@ -15,11 +15,13 @@
   "dependencies": {
     "@livekit/agents": "1.9.1",
     "@livekit/agents-plugin-openai": "1.9.1",
-    "@livekit/rtc-node": "1.1.0"
+    "@livekit/rtc-node": "1.1.0",
+    "ws": "8.22.0"
   },
   "devDependencies": {
     "@types/node": "22.18.6",
-    "typescript": "5.9.3",
-    "tsx": "4.20.6"
+    "@types/ws": "8.18.1",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3"
   }
 }

@@ -16,6 +16,7 @@ export class ToolClosure {
     this.revision++;
     this.pending=undefined;
   }
+  cancel():void{this.revision++;this.pending=undefined;}
   begin():ClosureTicket|undefined {
     if(this.pending)return;
     return this.pending={inputRevision:this.revision,attempt:++this.attempt};

@@ -53,6 +53,7 @@ export async function azureUsageObservation(
         'response.completed',
         'response.failed',
         'response.incomplete',
+          'response.cancelled',
       ].includes(String(nested.type))
     )
       return;
@@ -81,4 +82,10 @@ export async function azureUsageObservation(
     metrics,
     ...(model ? { model } : {}),
   };
+}
+
+export function realtimeTokenMetrics(value:unknown):UsageMetrics {
+ const usage=obj(value),input=obj(usage?.input_token_details),cached=obj(input?.cached_tokens_details),output=obj(usage?.output_token_details);const result:UsageMetrics={};
+ for(const [key,value] of Object.entries({inputTokens:usage?.input_tokens,outputTokens:usage?.output_tokens,totalTokens:usage?.total_tokens,cachedInputTokens:input?.cached_tokens,inputAudioTokens:input?.audio_tokens,inputTextTokens:input?.text_tokens,cachedAudioTokens:cached?.audio_tokens,cachedTextTokens:cached?.text_tokens,outputAudioTokens:output?.audio_tokens,outputTextTokens:output?.text_tokens}))if(typeof value==='number'&&Number.isSafeInteger(value)&&value>=0)(result as Record<string,number>)[key]=value;
+ return result;
 }

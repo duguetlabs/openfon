@@ -214,3 +214,10 @@ it('frozen normal ending survives an alarm before the closing flag was saved',as
  await session.alarm();
  expect(db.database.prepare('SELECT status,summary FROM calls').get()).toEqual({status:'completed',summary:null});
 });
+it('authenticated response warning retains active call and excludes raw backend details',async()=>{
+ expect((await request('context')).status).toBe(200);
+ expect((await request('events',{callback:'wrong',type:'warning',code:'response_filtered'})).status).toBe(403);
+ expect((await request('events',{callback:'scoped-capability',type:'warning',code:'response_filtered',message:'private Azure details'})).status).toBe(200);
+ expect((await request('events',{callback:'scoped-capability',type:'warning',code:'arbitrary-provider-error'})).status).toBe(400);
+ expect(db.database.prepare("SELECT status FROM calls WHERE id='call'").get()).toEqual({status:'active'});expect(data.get('livekit').finished).toBeUndefined();
+});

@@ -585,7 +585,7 @@ export class CallSession implements DurableObject {
     const selected=this.settings!.engine==='realtime'?this.settings!.realtime_voice:this.settings!.voice;
     if(managedWeb(this.env))azureConfig(this.env);
     const voice = managedWeb(this.env)
-      ? savedManagedVoice(this.settings!)
+      ? savedManagedVoice(this.settings!,this.env)
       : gptLiveVoice(selected || 'marin');
     this.lang=this.settings!.language in SUPPORTED_LANGUAGES?this.settings!.language:'en';
     const instructions=buildSystemPrompt(this.biz!,this.settings!,new Date(),this.knowledge);
@@ -659,6 +659,12 @@ export class CallSession implements DurableObject {
         throw error;
       }
       return Response.json({ ok: true });
+    }
+    if(body.type==='warning'){
+      if(!active||media.closing||media.finished)return new Response(null,{status:410});
+      const warnings:Record<string,string>={response_filtered:'I could not finish that answer. Please try asking another way.',response_unavailable:'That answer was interrupted. You can keep talking.',output_limit:'That answer was too long. Please ask for a shorter response.',truncation_rejected:'The interruption could not be fully synchronized. You can keep talking.',reconnecting:'The call connection was interrupted. Reconnecting; please wait.',reconnected:'The connection is back. Please repeat your latest request.',transcription_unavailable:'Your last words could not be transcribed. Please repeat them.'};
+      if(typeof body.code!=='string'||!warnings[body.code])return new Response(null,{status:400});
+      this.send({type:'warning',message:warnings[body.code]});return Response.json({ok:true});
     }
     if (body.type === 'service_stopped') {
       media.serviceEndedAtMs ??= Date.now();
@@ -758,7 +764,7 @@ export class CallSession implements DurableObject {
         language: this.settings!.language || this.biz?.default_language || 'en',
         engine: 'realtime',
         realtime_model: cfg.liveModel,
-        realtime_voice: savedManagedVoice(this.settings!),
+        realtime_voice: savedManagedVoice(this.settings!,this.env),
         realtime_provider: 'instance',
       };
     }

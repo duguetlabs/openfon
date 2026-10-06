@@ -40,7 +40,7 @@ export async function reserveTelnyxCall(
   ).bind(call.connectionId, to).first<AgentSettings & ProviderSettings & { assistant_id: string; provider_present: number }>();
   if(!settings)return false;
   const managed=managedWeb(env);
-  if(managed){try{azureConfig(env);savedManagedVoice(settings);}catch{return false;}}
+  if(managed){try{azureConfig(env);savedManagedVoice(settings,env);}catch{return false;}}
   else if(!telephoneRealtimeAvailable(env,settings)||assistantCompatibilityError(env,settings,settings))return false;
   // Admission linearizes at the conditional INSERT, using the same route and
   // compatibility snapshot that passed readiness. Pickup still loads current

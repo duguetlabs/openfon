@@ -55,6 +55,13 @@ export interface UsageMetrics {
   /** Decimal seconds from provider usage, not browser or local wall time. */
   voiceSessionSeconds?: string;
   inputTokens?: number;
+    inputAudioTokens?: number;
+    inputTextTokens?: number;
+    cachedAudioTokens?: number;
+    cachedTextTokens?: number;
+    outputAudioTokens?: number;
+    outputTextTokens?: number;
+
   cachedInputTokens?: number;
   cacheWriteInputTokens?: number;
   outputTokens?: number;
@@ -65,7 +72,7 @@ export interface UsageObservation {
   eventId: string;
   callId?: string;
   jobId?: string;
-  source: "azure_voice" | "azure_reasoning" | "azure_text";
+  source: "azure_voice" | "azure_reasoning" | "azure_text" | "azure_realtime" | "azure_realtime_session";
   providerSessionId: string;
   providerResponseId?: string;
   observedAt: string;

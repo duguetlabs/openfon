@@ -3,7 +3,7 @@ export interface UsageObservation {
   eventId: string;
   callId: string;
   jobId: string;
-  source: 'azure_voice' | 'azure_reasoning';
+  source: 'azure_voice' | 'azure_reasoning' | 'azure_realtime' | 'azure_realtime_session';
   providerSessionId: string;
   providerResponseId?: string;
   observedAt: string;
@@ -11,6 +11,13 @@ export interface UsageObservation {
   metrics: {
     voiceSessionSeconds?: string;
     inputTokens?: number;
+    inputAudioTokens?: number;
+    inputTextTokens?: number;
+    cachedAudioTokens?: number;
+    cachedTextTokens?: number;
+    outputAudioTokens?: number;
+    outputTextTokens?: number;
+
     cachedInputTokens?: number;
     cacheWriteInputTokens?: number;
     outputTokens?: number;
@@ -49,12 +56,14 @@ export class AzureUsageCapture {
     private callId: string,
     private jobId: string,
     private send: (o: UsageObservation) => Promise<unknown>,
-    private fail: () => void
+    private fail: () => void,
+    private mini = false
   ) {}
   observe(value: unknown): void {
     const event = record(value);
     if (!event) return;
-    if (event.type === 'session.started') {
+    if (event.type === 'session.started' || (this.mini && event.type==='session.updated')) {
+      if(this.sessionId===id(record(event.session)?.id))return;
       if (this.sessionId && !this.terminal)
         this.observe({ type: 'openfon.usage.unreported' });
       this.sessionId = id(record(event.session)?.id);
@@ -72,13 +81,16 @@ export class AzureUsageCapture {
       event.type === 'session.closed' ||
       event.type === 'openfon.usage.unreported'
     ) {
-      source = 'azure_voice';
+      source = this.mini?'azure_realtime_session':'azure_voice';
       final = event.type === 'session.closed';
       if (final) this.terminal = true;
-      model = 'gpt-live-1';
+      model = this.mini?'gpt-realtime-2.1-mini':'gpt-live-1';
       const decimal = seconds(record(event.usage)?.seconds);
       if (decimal !== undefined) metrics.voiceSessionSeconds = decimal;
       else if (!final && event.type !== 'openfon.usage.unreported') return; // Missing terminal usage is explicitly retained as unknown, never zero.
+    } else if(this.mini && event.type==='response.done') {
+      const response=record(event.response);responseId=id(response?.id);if(!responseId)return;
+      source='azure_realtime';final=true;model='gpt-realtime-2.1-mini';metrics=realtimeMetrics(response?.usage);
     } else if (event.type === 'response.event') {
       const nested = record(event.event);
       if (
@@ -87,6 +99,7 @@ export class AzureUsageCapture {
           'response.completed',
           'response.failed',
           'response.incomplete',
+          'response.cancelled',
         ].includes(String(nested.type))
       )
         return;
@@ -117,7 +130,7 @@ export class AzureUsageCapture {
     } else return;
     const canonical = JSON.stringify({
       source,
-      session: this.sessionId,
+      session: id(event.providerSessionId)||this.sessionId,
       responseId,
       final,
       metrics,
@@ -127,7 +140,7 @@ export class AzureUsageCapture {
       callId: this.callId,
       jobId: this.jobId,
       source,
-      providerSessionId: this.sessionId,
+      providerSessionId: id(event.providerSessionId)||this.sessionId,
       ...(responseId ? { providerResponseId: responseId } : {}),
       observedAt: new Date().toISOString(),
       final,
@@ -169,4 +182,12 @@ export class AzureUsageCapture {
     await this.pending;
     if (this.failure) throw Error('Usage delivery unconfirmed');
   }
+}
+
+/** Realtime response counters are per response, unlike GPT-Live's session seconds. */
+export function realtimeMetrics(value:unknown):UsageObservation['metrics'] {
+ const usage=record(value),input=record(usage?.input_token_details),cached=record(input?.cached_tokens_details),output=record(usage?.output_token_details);
+ const result:UsageObservation['metrics']={};
+ for(const [key,value] of Object.entries({inputTokens:usage?.input_tokens,outputTokens:usage?.output_tokens,totalTokens:usage?.total_tokens,cachedInputTokens:input?.cached_tokens,inputAudioTokens:input?.audio_tokens,inputTextTokens:input?.text_tokens,cachedAudioTokens:cached?.audio_tokens,cachedTextTokens:cached?.text_tokens,outputAudioTokens:output?.audio_tokens,outputTextTokens:output?.text_tokens}))if(typeof value==='number'&&Number.isSafeInteger(value)&&value>=0)(result as Record<string,number>)[key]=value;
+ return result;
 }

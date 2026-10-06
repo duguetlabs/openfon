@@ -5,7 +5,7 @@ import {gptLiveVoice} from './gpt-live';
 export function managedBrowserSettings(env:Env,settings:AgentSettings):AgentSettings {
   if(managedWeb(env)){
     const cfg=azureConfig(env);
-    return {...settings,engine:'realtime',realtime_model:cfg.liveModel,realtime_voice:savedManagedVoice(settings),realtime_provider:'instance',realtime_base_url:'',realtime_api_key:''};
+    return {...settings,engine:'realtime',realtime_model:cfg.liveModel,realtime_voice:savedManagedVoice(settings,env),realtime_provider:'instance',realtime_base_url:'',realtime_api_key:''};
   }
   if(!env.REALTIME_API_KEY)throw new Error('Calling service is not configured');
   const selected=settings.engine==='realtime'?settings.realtime_voice:settings.voice;
