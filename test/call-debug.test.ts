@@ -92,3 +92,58 @@ describe('test call debug recordings',()=>{
     expect(debugClientEvent({name:'steal',value:'SECRET'})).toBeNull();
   });
 });
+
+describe('bounded service recording uploads',()=>{
+  const batch=(sequence=0,extra:Record<string,unknown>={})=>({sequence,complete:false,partial:false,records:[{kind:'audio',track:'caller',format:'pcm_s16le_24000',data:'AQACAA==',sourceMs:10}],...extra});
+  async function setup(){const f=fixture();(f.storage as any).sync=vi.fn(async()=>{});return {...f,recorder:(await CallDebug.start(f.state,'call',true))!};}
+  it('defaults partial until durable completion, deduplicates retry and rejects skipped/conflicting sequences',async()=>{
+    const {recorder,state}=await setup();
+    expect((await debugMeta(state.storage))?.partial).toBe(true);
+    expect(await recorder.upload(batch())).toBe(200);
+    const count=recorder.meta.records;
+    expect(await recorder.upload(batch())).toBe(200);expect(recorder.meta.records).toBe(count);
+    expect(await recorder.upload(batch(0,{partial:true}))).toBe(409);
+    expect(await recorder.upload(batch(2))).toBe(409);
+    const complete=batch(1,{records:[],complete:true});
+    expect(await recorder.upload(complete)).toBe(200);expect(await recorder.upload(complete)).toBe(200);
+    expect(await recorder.upload(batch(2))).toBe(410);
+    await recorder.finish();expect((await debugMeta(state.storage))?.partial).toBe(false);
+    const rows=(await (await debugResponse(state,new Request('https://internal/debug/download'),recorder)).text()).trim().split('\n').map(line=>JSON.parse(line));
+    expect(rows.filter(r=>r.kind==='audio')).toMatchObject([{track:'caller',total:4,offset:0,data:'AQACAA==',sourceMs:10}]);
+  });
+  it('a failed write is not acknowledged or retried into duplicate data',async()=>{
+    const {recorder,storage}=await setup();storage.put.mockRejectedValueOnce(Error('disk'));
+    expect(await recorder.upload(batch())).toBe(503);
+    expect(await recorder.upload(batch())).toBe(410);
+    await recorder.finish();expect(recorder.meta.partial).toBe(true);
+  });
+  it('waits for durable synchronization before acknowledgement',async()=>{
+    const {recorder,storage}=await setup();let release!:()=>void;
+    (storage as any).sync=()=>new Promise<void>(r=>release=r);
+    let done=false;const result=recorder.upload(batch()).then(()=>done=true);
+    for(let i=0;i<10;i++)await new Promise(r=>setTimeout(r,0));
+    expect(done).toBe(false);release();await result;await recorder.finish();
+  });
+  it('refuses deletion, expiration, finished recordings and restart resurrection',async()=>{
+    for(const stop of ['delete','expire','finish']){
+      const {recorder,state}=await setup();
+      if(stop==='delete')await recorder.remove();
+      if(stop==='expire')recorder.meta.expiresAt=0;
+      if(stop==='finish')await recorder.finish();
+      expect(await recorder.upload(batch())).toBe(410);
+      expect(await CallDebug.start(state,'call',true)).toBeNull();
+    }
+  });
+  it('rejects invalid formats, oversize packets, negative times and arbitrary events before writing',async()=>{
+    const {recorder}=await setup();
+    for(const records of [[{kind:'audio',track:'caller',format:'pcm_s16le_24000',data:'AA==',sourceMs:0}],[{kind:'capture',name:'secret_model',sourceMs:0}],[{kind:'capture',name:'gap',sourceMs:-1}],Array(33).fill({kind:'capture',name:'gap',sourceMs:0})]){
+      expect(await recorder.upload(batch(0,{records}))).toBe(400);
+    }
+    expect(recorder.meta.records).toBe(0);await recorder.finish();
+  });
+  it('producer drop notification remains partial after completion',async()=>{
+    const {recorder}=await setup();expect(await recorder.upload(batch(0,{partial:true}))).toBe(200);
+    expect(await recorder.upload(batch(1,{records:[],complete:true}))).toBe(200);
+    await recorder.finish();expect(recorder.meta.partial).toBe(true);
+  });
+});

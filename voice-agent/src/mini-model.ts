@@ -101,6 +101,8 @@ export function acceptedMiniEcho(
 }
 export interface MiniOptions extends ReasoningConnection {
   context: CallContext;
+  observeInput?: (frame: AudioFrame) => void;
+  observeControl?: (type: unknown) => void;
   transcriptionModel?: string;
   socketFactory?: (url: string, options: WebSocket.ClientOptions) => WebSocket;
   reason?: typeof reasonMini;
@@ -317,6 +319,7 @@ export class MiniSession extends llm.RealtimeSession {
         this.requests.delete(this.requests.keys().next().value!);
     }
     this.socket.send(JSON.stringify({ ...value, event_id }));
+    try { this.options.observeControl?.(value.type); } catch { /* recording cannot fail a control */ }
     return event_id;
   }
   private connect() {
@@ -1249,6 +1252,7 @@ export class MiniSession extends llm.RealtimeSession {
         type: "input_audio_buffer.append",
         audio: bytes.toString("base64"),
       });
+      try { this.options.observeInput?.(frame); } catch { /* diagnostics never interrupt input */ }
     } catch {
       this.transportLost();
     }

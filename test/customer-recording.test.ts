@@ -28,7 +28,7 @@ describe("customer recording export", () => {
         .split("\n")
         .map((s) => JSON.parse(s)),
     ).toEqual([
-      { kind: "manifest", callId: "owned", partial: true },
+      { kind: "manifest", projection: "recording-only", callId: "owned", partial: true },
       {
         kind: "audio",
         seq: 1,
@@ -37,7 +37,7 @@ describe("customer recording export", () => {
         format: "pcm_s16le_24000",
         data: "AA==",
       },
-      { kind: "end" },
+      { kind: "end", chunks: 5 },
     ]);
   });
   it("handles split records without buffering the complete recording", async () => {

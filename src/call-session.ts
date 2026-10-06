@@ -471,8 +471,8 @@ export class CallSession implements DurableObject {
     const budget = await this.env.DB.prepare('SELECT COALESCE(SUM(length(CAST(text AS BLOB))), 0) AS bytes FROM call_turns WHERE call_id = ?')
       .bind(this.callId).first<{ bytes: number }>();
     this.persistedTranscriptBytes = budget?.bytes ?? 0;
-    if (!this.debug && !livekitEnabled(this.env) && this.env.TEST_CALL_DEBUG === 'true' && (call as CallRow & { environment?: string }).environment === 'test' && call.channel === 'web') {
-      this.debug = await CallDebug.start(this.state, this.callId);
+    if (!this.debug && this.env.TEST_CALL_DEBUG === 'true' && (call as CallRow & { environment?: string }).environment === 'test' && call.channel === 'web') {
+      this.debug = await CallDebug.start(this.state, this.callId, livekitEnabled(this.env));
       this.debug?.event('start', { release: this.env.OPENFON_RELEASE_SHA || 'development' });
     }
     // Persisted admission decides capabilities; a client cannot opt into another
@@ -514,7 +514,7 @@ export class CallSession implements DurableObject {
       case 'debug': {
         const event = debugClientEvent(msg.event);
         if (this.debug && event) {
-          if (event.name === 'capture_gap') this.debug.meta.partial = true;
+          if (event.name === 'capture_gap') this.debug.markPartial();
           this.debug.event('browser', event);
         }
         break;
@@ -635,9 +635,16 @@ export class CallSession implements DurableObject {
       ).bind(media.callId).first()) return new Response(null,{status:410});
       if(await this.expireLivekitStartup(media))return new Response(null,{status:410});
       media.jobId=body.jobId;await this.state.storage.put('livekit',media);
-      return Response.json({callId:media.callId,room:media.room,caller:media.caller,callback:media.callback,instructions:media.instructions,greeting:media.greeting,voice:media.voice,language:media.language,...(managedWeb(this.env)?{voiceModel:azureConfig(this.env).liveModel}:{}),commands:media.commands??[]});
+      return Response.json({callId:media.callId,room:media.room,caller:media.caller,callback:media.callback,instructions:media.instructions,greeting:media.greeting,voice:media.voice,language:media.language,...(managedWeb(this.env)?{voiceModel:azureConfig(this.env).liveModel}:{}),commands:media.commands??[],debugRecording:Boolean(this.debug?.accepting)});
     }
     if(body.jobId!==media.jobId||!secureEqual(typeof body.callback==='string'?body.callback:'',media.callback))return new Response(null,{status:403});
+    if (body.type === 'debug_upload') {
+      const permitted = this.env.TEST_CALL_DEBUG === 'true' && active && !media.finished && !this.finalized && this.debug?.accepting &&
+        await this.env.DB.prepare("SELECT 1 FROM calls WHERE id=? AND environment='test' AND channel='web'").bind(media.callId).first();
+      if (!permitted || !this.debug || (managedWeb(this.env) && await this.env.DB.prepare('SELECT 1 FROM commercial_deletion_jobs WHERE business_id=(SELECT business_id FROM calls WHERE id=?)').bind(media.callId).first())) return new Response(null,{status:410});
+      const status = await this.debug.upload(body);
+      return Response.json({ok:status===200},{status});
+    }
     if (body.type === 'usage' && managedWeb(this.env)) {
       const call = await this.env.DB.prepare(
         'SELECT business_id FROM calls WHERE id=?'

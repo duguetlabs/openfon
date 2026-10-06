@@ -28,15 +28,49 @@ export class CallDebug {
   private seq = 0;
   private socketIds = new WeakMap<object, number>();
   private sockets = 0;
+  private uploadSequence = 0;
+  private uploadDigest = '';
+  private writeFailures = 0;
+  private producerComplete = false;
+  private producerPartial = false;
+  markPartial(): void { this.meta.partial = true; this.producerPartial = true; }
+  get accepting(): boolean { return !this.stopped && !this.meta.deleted && !this.meta.finishedAt && this.meta.expiresAt > Date.now(); }
+  async upload(body: Record<string, unknown>): Promise<number> {
+    if (!this.accepting) return 410;
+    const records = parseDebugUpload(body);
+    if (!records) return 400;
+    const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(JSON.stringify(body))))).map(n=>n.toString(16).padStart(2,'0')).join('');
+    if (body.sequence === this.uploadSequence - 1) return digest === this.uploadDigest ? 200 : 409;
+    if (this.producerComplete) return 410;
+    if (body.sequence !== this.uploadSequence) return 409;
+    const failures = this.writeFailures;
+    // Keep default-partial durable until a producer explicitly seals all batches.
+    const wasPartial = this.meta.partial;
+    this.meta.partial = this.producerPartial;
+    for (const record of records) {
+      if (record.kind === 'audio') this.event('audio', {...record, frame: this.seq, offset: 0, total: (record.data as string).length / 4 * 3 - ((record.data as string).endsWith('==') ? 2 : (record.data as string).endsWith('=') ? 1 : 0)});
+      else this.event('capture', record);
+    }
+    this.producerPartial ||= this.meta.partial || body.partial === true;
+    this.meta.partial = wasPartial || this.producerPartial;
+    this.flush(); await this.chain;
+    if (this.writeFailures !== failures) { this.producerPartial = this.meta.partial = true; this.stopped = true; return 503; }
+    this.producerPartial ||= this.writeFailures > 0;
+    if (body.complete === true) { this.producerComplete = true; this.meta.partial = this.producerPartial; }
+    try { await this.state.storage.put(META, this.meta); await this.state.storage.sync(); }
+    catch { this.producerPartial = this.meta.partial = true; this.producerComplete = false; this.stopped = true; return 503; }
+    this.uploadSequence++; this.uploadDigest = digest;
+    return 200;
+  }
   private constructor(private state: DurableObjectState, public meta: DebugMeta) {}
 
-  static async start(state: DurableObjectState, callId: string): Promise<CallDebug | null> {
+  static async start(state: DurableObjectState, callId: string, producer = false): Promise<CallDebug | null> {
     try {
       // Never overwrite evidence after a restart or an owner's deletion.
       if (await state.storage.get(META)) return null;
       const now = Date.now();
       const meta: DebugMeta = { version: 1, callId, startedAt: now, expiresAt: now + DEBUG_RETENTION_MS,
-        chunks: 0, records: 0, bytes: 0, partial: false };
+        chunks: 0, records: 0, bytes: 0, partial: producer };
       await state.storage.put(META, meta, { allowUnconfirmed: true });
       return new CallDebug(state, meta);
     } catch { return null; }
@@ -53,21 +87,21 @@ export class CallDebug {
     const bytes = encoder.encode(JSON.stringify(record)).length;
     if (bytes > 96_000 || this.meta.records >= MAX_RECORDS || this.meta.bytes + bytes > MAX_BYTES ||
         this.pendingBytes + this.batchBytes + bytes > MAX_PENDING) {
-      this.meta.partial = true;
+      this.markPartial();
       return;
     }
     if (this.batchBytes + bytes > 48_000) this.flush();
     this.batch.push(record); this.batchBytes += bytes;
     this.meta.records++; this.meta.bytes += bytes;
     if (!this.timer) this.timer = setTimeout(() => this.flush(), 1000);
-    } catch { this.meta.partial = true; }
+    } catch { this.markPartial(); }
   }
   audio(track: string, buffer: ArrayBuffer, format: string, fields: Record<string, unknown> = {}): void {
     if (this.stopped || !buffer.byteLength) return;
     const frame = this.seq;
     // Preserve packet boundaries for utterance replay; large packets use parts.
     for (let offset = 0; offset < buffer.byteLength; offset += 24_000) {
-      if (this.meta.records >= MAX_RECORDS || this.meta.bytes >= MAX_BYTES - 33_000 || this.pendingBytes + this.batchBytes >= MAX_PENDING - 33_000) { this.meta.partial = true; break; }
+      if (this.meta.records >= MAX_RECORDS || this.meta.bytes >= MAX_BYTES - 33_000 || this.pendingBytes + this.batchBytes >= MAX_PENDING - 33_000) { this.markPartial(); break; }
       this.event('audio', { ...fields, track, format, frame, offset, total: buffer.byteLength,
         data: b64encode(buffer.slice(offset, offset + 24_000)) });
     }
@@ -82,7 +116,7 @@ export class CallDebug {
     this.chain = this.chain.then(async () => {
       try {
         await this.state.storage.put({ [key]: batch, [META]: snapshot }, { allowUnconfirmed: true });
-      } catch { this.meta.partial = true; }
+      } catch { this.markPartial(); this.writeFailures++; }
       finally { this.pendingBytes -= bytes; }
     });
     this.state.waitUntil(this.chain);
@@ -161,4 +195,22 @@ export function debugClientEvent(value: unknown): Record<string, unknown> | null
     'speech_error', 'capture_gap', 'vad_start', 'vad_end', 'socket_error', 'socket_close', 'teardown', 'capture'].includes(v.name)) return null;
   return { name: v.name, clientMs: typeof v.ms === 'number' && Number.isFinite(v.ms) ? v.ms : undefined,
     value: typeof v.value === 'string' ? code(v.value) : typeof v.value === 'number' && Number.isFinite(v.value) ? v.value : undefined };
+}
+
+// An allowlist at the trusted service boundary still excludes raw provider payloads.
+export function parseDebugUpload(body: Record<string, unknown>): Record<string, unknown>[] | null {
+  if (!Number.isSafeInteger(body.sequence) || (body.sequence as number)<0 || typeof body.partial!=='boolean' || typeof body.complete!=='boolean' || !Array.isArray(body.records) || body.records.length>32 || encoder.encode(JSON.stringify(body)).length>48_000) return null;
+  const result:Record<string,unknown>[]=[];
+  for (const value of body.records) {
+    if (!value || typeof value!=='object' || Array.isArray(value)) return null;
+    const r=value as Record<string,unknown>;
+    if(typeof r.sourceMs!=='number'||!Number.isFinite(r.sourceMs)||r.sourceMs<0||r.sourceMs>3_600_000)return null;
+    if(r.kind==='audio') {
+      if(!['caller','agent'].includes(String(r.track))||!['pcm_s16le_16000','pcm_s16le_24000','pcm_s16le_48000'].includes(String(r.format))||typeof r.data!=='string'||!r.data.length||r.data.length>16_000||r.data.length%4!==0||! /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(r.data))return null;
+      const bytes=atob(r.data).length;if(bytes%2)return null;
+      result.push({kind:'audio',track:r.track,format:r.format,data:r.data,sourceMs:r.sourceMs});
+    } else if(r.kind==='capture'&&['speech_start','speech_end','interrupted','cancel','truncate','playback_start','playback_end','error','stopped','gap'].includes(String(r.name))) result.push({kind:'capture',name:r.name,sourceMs:r.sourceMs});
+    else return null;
+  }
+  return result;
 }

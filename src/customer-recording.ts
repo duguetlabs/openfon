@@ -15,8 +15,10 @@ export function customerRecording(response: Response): Response {
     if (!line) return "";
     const row = JSON.parse(line) as Record<string, unknown>;
     let keys: string[];
-    if (row.kind === "manifest")
+    if (row.kind === "manifest") {
+      row.projection = "recording-only";
       keys = [
+        "projection", "chunks",
         "kind",
         "version",
         "callId",
@@ -26,11 +28,12 @@ export function customerRecording(response: Response): Response {
         "partial",
         "interrupted",
       ];
+    }
     else if (row.kind === "audio")
       keys = [
         "kind",
         "seq",
-        "ms",
+        "ms", "sourceMs",
         "track",
         "format",
         "frame",
@@ -38,7 +41,8 @@ export function customerRecording(response: Response): Response {
         "total",
         "data",
       ];
-    else if (row.kind === "end") keys = ["kind"];
+    else if (row.kind === "capture" && ["speech_start","speech_end","interrupted","cancel","truncate","playback_start","playback_end","error","stopped","gap"].includes(String(row.name))) keys = ["kind", "seq", "ms", "sourceMs", "name"];
+    else if (row.kind === "end") keys = ["kind", "chunks"];
     else return "";
     return (
       JSON.stringify(

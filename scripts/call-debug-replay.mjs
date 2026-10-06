@@ -12,7 +12,7 @@ if ((await stat(args[0])).size > 140 * 1024 * 1024) throw Error('Bundle exceeds 
 const lines = (await readFile(args[0], 'utf8')).trim().split('\n').map(line => JSON.parse(line));
 const manifest = lines.shift(), end = lines.pop();
 if (manifest.kind !== 'manifest' || manifest.version !== 1 || end?.kind !== 'end' || end.chunks !== manifest.chunks) throw Error('Incomplete or unsupported bundle');
-if ((manifest.partial || manifest.interrupted || lines.length !== manifest.records) && !args.includes('--allow-partial')) throw Error('Partial recording: pass --allow-partial to inspect it; never treat missing audio as silence');
+if ((manifest.partial || manifest.interrupted || (manifest.projection !== 'recording-only' && lines.length !== manifest.records)) && !args.includes('--allow-partial')) throw Error('Partial recording: pass --allow-partial to inspect it; never treat missing audio as silence');
 let lastSeq = -1;
 for (const r of lines) {
   if (!Number.isSafeInteger(r.seq) || r.seq <= lastSeq || !Number.isFinite(r.ms) || r.ms < 0 || r.ms > 3_600_000) throw Error('Invalid record sequence or time');
@@ -36,26 +36,29 @@ const packets = [...frames.values()].filter(f => {
 }).map(f => {
   return { ...f, data: Buffer.concat(f.parts), parts: undefined };
 }).sort((a,b) => a.seq-b.seq);
-const wave = b => { const h = Buffer.alloc(44); h.write('RIFF');h.writeUInt32LE(b.length+36,4);h.write('WAVEfmt ',8);h.writeUInt32LE(16,16);h.writeUInt16LE(1,20);h.writeUInt16LE(1,22);h.writeUInt32LE(24000,24);h.writeUInt32LE(48000,28);h.writeUInt16LE(2,32);h.writeUInt16LE(16,34);h.write('data',36);h.writeUInt32LE(b.length,40);return Buffer.concat([h,b]); };
-for (const track of ['caller','microphone','agent']) {
-  const group = packets.filter(p => p.track === track && p.format === 'pcm_s16le_24000');
+const wave = (b,rate) => { const h = Buffer.alloc(44); h.write('RIFF');h.writeUInt32LE(b.length+36,4);h.write('WAVEfmt ',8);h.writeUInt32LE(16,16);h.writeUInt16LE(1,20);h.writeUInt16LE(1,22);h.writeUInt32LE(rate,24);h.writeUInt32LE(rate*2,28);h.writeUInt16LE(2,32);h.writeUInt16LE(16,34);h.write('data',36);h.writeUInt32LE(b.length,40);return Buffer.concat([h,b]); };
+for (const track of ['caller','microphone','agent']) for (const rate of [16000,24000,48000]) {
+  const group = packets.filter(p => p.track === track && p.format === `pcm_s16le_${rate}`);
   if (!group.length) continue;
   const chunks = [];let position = 0;
   for (const p of group) {
-    const offset = Math.floor(p.ms * 24)*2;
+    const captureMs=p.sourceMs??p.ms;
+    if(!Number.isFinite(captureMs)||captureMs<0||captureMs>3600000)throw Error('Invalid capture time');
+    const offset = Math.floor(captureMs * rate/1000)*2;
     if (offset > position) { chunks.push(Buffer.alloc(offset-position));position=offset; }
     chunks.push(p.data);position+=p.data.length;
   }
-  await writeFile(resolve(out,track+'.wav'), wave(Buffer.concat(chunks)), { mode: 0o600 });
+  await writeFile(resolve(out,track+(rate===24000?'':'-'+rate)+'.wav'), wave(Buffer.concat(chunks),rate), { mode: 0o600 });
 }
-for (const p of packets.filter(p => p.format !== 'pcm_s16le_24000')) {
+for (const p of packets.filter(p => !/^pcm_s16le_(16000|24000|48000)$/.test(p.format))) {
   const ext = p.format.includes('mpeg')?'mp3':p.format.includes('mp4')?'mp4':p.format.includes('wav')?'wav':'webm';
   await writeFile(resolve(out,`packet-${p.seq}.${ext}`),p.data,{mode:0o600});
 }
 await writeFile(resolve(out,'timeline.json'),JSON.stringify({manifest,events:lines.map(({data,...r})=>r)},null,2),{mode:0o600});
-console.log('Extracted audio and timeline to',out,'(arrival timing; agent track includes delivered audio that playback may have flushed).');
+console.log('Extracted audio and timeline to',out,'(capture/arrival timing; generated agent audio is not proof of physical playback).');
 if (args.includes('--live')) {
   if (manifest.partial || manifest.interrupted) throw Error('Live replay requires a complete recording');
+  if (manifest.projection === 'recording-only' || lines.some(r=>r.sourceMs!==undefined)) throw Error('These recordings support offline extraction only; current live replay compatibility is not established');
   const url = new URL(value('--url') || '');
   if (url.protocol !== 'wss:' && !(url.protocol === 'ws:' && ['127.0.0.1','localhost','[::1]'].includes(url.hostname))) throw Error('Use wss, or ws on loopback only');
   if (url.username || url.password) throw Error('Use the environment key, not URL credentials');

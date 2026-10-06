@@ -1376,3 +1376,13 @@ for(const kind of ['think','end_call'] as const)test(`obsolete automatic ${kind}
   assert.equal(reasoning,1);assert.equal(f.session.closureAllowed,false);assert.equal(f.session.hasPendingWork,false);
  }finally{await f.session.close();}
 });
+
+test('debug input observes exact admitted PCM once and observer exceptions never break input',async()=>{
+  const f=await fixture();const observed:AudioFrame[]=[];
+  f.model.options.observeInput=frame=>{observed.push(frame);throw Error('debug disk');};
+  const frame=new AudioFrame(Int16Array.from([1,-2,3,-4]),24000,1,4);
+  f.session.pushAudio(frame);
+  assert.equal(observed.length,1);assert.equal(observed[0],frame);
+  assert.equal(f.socket.sent.at(-1).type,'input_audio_buffer.append');assert.equal(f.errors.length,0);
+  await f.session.close();
+});
