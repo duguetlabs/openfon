@@ -40,7 +40,7 @@ class Socket extends EventEmitter {
     this.emit("message", Buffer.from(JSON.stringify(s)));
   }
 }
-async function fixture(reason?: any) {
+async function fixture(reason?: any, initiallyReady = true) {
   const sockets: Socket[] = [];
   const model = new MiniModel({
     baseURL: "https://unit.openai.azure.com/openai/v1",
@@ -71,7 +71,7 @@ async function fixture(reason?: any) {
       type: "session.updated",
       session: { ...miniSessionConfig(context), id: sid },
     });
-  ready();
+  if(initiallyReady)ready();
   return { model, session, socket, sockets, ready, errors, warnings };
 }
 async function generation(
@@ -1268,7 +1268,7 @@ test('valid automatic closure preparation preserves authorizing playback',async(
   f.socket.message({type:'response.output_audio_transcript.delta',response_id:'automatic',item_id:'valid',delta:'Your answer is thirty.'});
   f.socket.message({type:'response.done',response:{id:'automatic',status:'completed',output:[{type:'function_call',name:'end_call',call_id:'complete',arguments:'{}'}]}});
   assert.equal(f.session.closureAllowed,true);let interrupted=0;f.session.on('interrupted',()=>interrupted++);
-  assert.equal(f.session.prepareClosure("complete"),true);
+  assert.equal(typeof f.session.prepareClosure("complete"),"function");
   assert.equal(interrupted,0,'valid end_call must preserve authorizing speech');
   assert.equal(f.session.closureAllowed,false,'closure permission is consumed once');
  }finally{await f.session.close();}
@@ -1280,7 +1280,7 @@ test('new caller correction revokes closure before tool execution',async()=>{
   f.socket.message({type:'response.done',response:{id:g.responseId,status:'completed',output:[{type:'function_call',name:'end_call',call_id:'closure',arguments:'{}'}]}});
   assert.equal(f.session.closureAllowed,true);
   const chat=new llm.ChatContext();chat.addMessage({id:'new-request',role:'user',content:'Wait, I have one more question.'});await f.session.updateChatCtx(chat);
-  assert.equal(f.session.prepareClosure("closure"),false);
+  assert.equal(f.session.prepareClosure("closure"),undefined);
  }finally{await f.session.close();}
 });
 test('correction releases an unexecuted closure reservation and permits a later valid closure',async()=>{
@@ -1291,20 +1291,51 @@ test('correction releases an unexecuted closure reservation and permits a later 
   assert.equal(f.session.hasPendingWork,false,'unexecuted obsolete tool reservation must be released');
   const next=await generation(f,'later');f.socket.message({type:'response.done',response:{id:next.responseId,status:'completed',output:[{type:'function_call',name:'end_call',call_id:'valid-later',arguments:'{}'}]}});
   assert.equal(f.session.closureAllowed,true);
-  assert.equal(f.session.prepareClosure("discarded"),false);
-  assert.equal(f.session.prepareClosure("valid-later"),true);
+  assert.equal(f.session.prepareClosure("discarded"),undefined);
+  assert.equal(typeof f.session.prepareClosure("valid-later"),"function");
  }finally{await f.session.close();}
 });
 test('only the exact closure tool can claim execution and its reservation lasts until output',async()=>{
  const f=await fixture();
  try{
   const g=await generation(f);f.socket.message({type:'response.done',response:{id:g.responseId,status:'completed',output:[{type:'function_call',name:'end_call',call_id:'claimed',arguments:'{}'}]}});
-  assert.equal(f.session.prepareClosure('unrelated'),false);
-  assert.equal(f.session.prepareClosure('claimed'),true);
-  assert.equal(f.session.prepareClosure('claimed'),false);
+  assert.equal(f.session.prepareClosure('unrelated'),undefined);
+  assert.equal(typeof f.session.prepareClosure('claimed'),"function");
+  assert.equal(f.session.prepareClosure('claimed'),undefined);
   f.session.invalidateReasoning();
   assert.equal(f.session.hasPendingWork,true,'started tool remains reserved until its completion');
   const chat=f.session.chatCtx.copy();chat.insert(llm.FunctionCallOutput.create({callId:'claimed',name:'end_call',output:'scheduled',isError:false}));
   await f.session.updateChatCtx(chat);assert.equal(f.session.hasPendingWork,false);
+ }finally{await f.session.close();}
+});
+test('manual response created during caller speech settles locally without recovery',async()=>{
+ const f=await fixture();let settled=false;mock.timers.enable({apis:['setTimeout']});
+ try{
+  const reply=f.session.generateReply().catch(e=>{settled=true;return e;});await tick();const request=f.socket.sent.at(-1);
+  f.socket.message({type:'input_audio_buffer.speech_started'});
+  f.socket.message({type:'response.created',response:{id:'late-caller',metadata:request.response.metadata}});await tick();
+  assert.equal(settled,true);assert.ok((await reply) instanceof ResponseUnavailable);
+  f.socket.message({type:'response.done',response:{id:'late-caller',status:'cancelled',output:[]}});
+  mock.timers.tick(16000);assert.equal(f.warnings.includes('reconnecting'),false);
+ }finally{await f.session.close();mock.timers.reset();}
+});
+test('instructions updated while waiting for readiness send the latest context',async()=>{
+ const f=await fixture(undefined,false);
+ try{
+  const first=f.session.updateInstructions('Old pending update');const last=f.session.updateInstructions('Latest business rules');
+  f.ready();await Promise.all([first,last]);
+  const update=f.socket.sent.filter(e=>e.type==='session.update').at(-1);
+  assert.match(update.session.instructions,/Latest business rules/);assert.doesNotMatch(update.session.instructions,/Old pending update/);
+ }finally{await f.session.close();}
+});
+test('claimed closure interruption release is exact and cannot release a later reservation',async()=>{
+ const f=await fixture();
+ try{
+  const first=await generation(f);f.socket.message({type:'response.done',response:{id:first.responseId,status:'completed',output:[{type:'function_call',name:'end_call',call_id:'old-claim',arguments:'{}'}]}});
+  const releaseOld=f.session.prepareClosure('old-claim')!;assert.equal(typeof releaseOld,'function');
+  f.session.invalidateReasoning();assert.equal(releaseOld(),true);assert.equal(f.session.hasPendingWork,false);
+  const next=await generation(f,'new-closure');f.socket.message({type:'response.done',response:{id:next.responseId,status:'completed',output:[{type:'function_call',name:'end_call',call_id:'new-claim',arguments:'{}'}]}});
+  const releaseNew=f.session.prepareClosure('new-claim')!;assert.equal(typeof releaseNew,'function');
+  assert.equal(releaseOld(),false);assert.equal(f.session.hasPendingWork,true);assert.equal(releaseNew(),true);assert.equal(releaseNew(),false);
  }finally{await f.session.close();}
 });

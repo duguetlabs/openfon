@@ -242,13 +242,17 @@ export class MiniSession extends llm.RealtimeSession {
     return this.closurePermission && !this.reasoningPending;
   }
   /** Consume valid tool closure without interrupting the speech that authorized it. */
-  prepareClosure(callId: string): boolean {
+  prepareClosure(callId: string): (() => boolean) | undefined {
     const tool = this.externalTools.get(callId);
-    if (!this.closureAllowed || !tool || tool.started || tool.generation.discarded) return false;
+    if (!this.closureAllowed || !tool || tool.started || tool.generation.discarded) return;
     tool.started = true;
     this.invalidate();
     this.reasoningEpoch++;
-    return true;
+    return () => {
+      if (this.externalTools.get(callId) !== tool) return false;
+      this.externalTools.delete(callId);
+      return true;
+    };
   }
   get reasoningPending() {
     return [...this.jobs.values()].some((j) => !j.done) || this.answerPending ||
@@ -606,6 +610,8 @@ export class MiniSession extends llm.RealtimeSession {
       (requested && this.retiredRequests.has(requested)) ||
       this.callerSpeaking
     ) {
+      const sent = this.sent;
+      if (requested && sent && sent.id === requested) this.retireSent(sent);
       if (requested && requested === this.retiringRequest?.id) {
         this.retiringRequest = undefined;
         this.retiringResponses.add(response.id);
@@ -1147,17 +1153,19 @@ export class MiniSession extends llm.RealtimeSession {
         job.done = true;
       });
   }
+  private instructionsRevision = 0;
   async updateInstructions(instructions: string) {
+    const revision = ++this.instructionsRevision;
     this.instructions = miniInstructions({
       ...this.options.context,
       instructions,
     });
-    if (this.ready)
-      this.send({
-        type: "session.update",
-        session: { type: "realtime", instructions: this.instructions },
-      });
-    else await this.waitReady();
+    while (!this.ready) await this.waitReady();
+    if (revision !== this.instructionsRevision) return;
+    this.send({
+      type: "session.update",
+      session: { type: "realtime", instructions: this.instructions },
+    });
   }
   async updateTools(tools: llm.ToolContext) {
     this._tools = tools;

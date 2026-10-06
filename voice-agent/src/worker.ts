@@ -11,7 +11,7 @@ import {within} from './deadline.js';
 import {ControlClient, AdmissionError} from './control.js';
 import {observeGeneration} from './stream-transcripts.js';
 import {ClockedGPTLiveSession} from './clocked-session.js';
-import {ToolClosure} from './tool-closure.js';
+import {ToolClosure,watchClosureInterruption} from './tool-closure.js';
 import {FarewellPair,finishCurrentFarewell} from './farewell.js';
 import {acceptedEcho, modelOptions, operatorAzureConfig, operatorVoiceModel, assertVoicePairing} from './config.js';
 import {VoiceDiagnostics} from './diagnostics.js';
@@ -215,7 +215,9 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     parameters: {type: 'object', properties: {}, additionalProperties: false},
     execute: async (_args, options) => {
       // Return from the function before draining the activity that owns this function.
-      if(miniSession&&!miniSession.prepareClosure(options.toolCallId))return 'Finish the pending caller request before ending the call.';
+      const releaseInterrupted=miniSession?.prepareClosure(options.toolCallId);
+      if(miniSession&&!releaseInterrupted)return 'Finish the pending caller request before ending the call.';
+      if(releaseInterrupted)watchClosureInterruption(options.abortSignal,options.ctx.speechHandle,()=>{if(releaseInterrupted())toolClosure.cancel();});
       const ticket=toolClosure.begin();
       if(ticket){
         diagnostic('end_call_requested');
