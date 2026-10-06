@@ -251,7 +251,7 @@ export class VoiceCall {
           case 'ready':
             if(msg.mode==='livekit') {
               this.mode='realtime';this.ttsMode='server';
-              this.emit({type:'debug',recording:false});
+              this.emit({type:'debug',recording:msg.debugRecording===true});
               if(typeof msg.serverUrl!=='string'||typeof msg.participantToken!=='string')throw new Error('Invalid call admission');
               const url=msg.serverUrl,token=msg.participantToken;
               void import('./livekit-media').then(async({LivekitMedia})=>{

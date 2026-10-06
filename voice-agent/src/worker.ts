@@ -1,3 +1,4 @@
+import {DebugRecording,observeAudio,observeSpeechBoundaries} from './debug-recording.js';
 import { configureSdkLogging } from './logging.js';
 import {UsageOutbox} from './usage-outbox.js';
 import {AzureUsageCapture} from './usage.js';
@@ -46,6 +47,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   const control = new ControlClient(process.env.OPENFON_API_URL!, process.env.OPENFON_AGENT_SERVICE_TOKEN!, metadata.callId || '', ctx.job.room?.name || ctx.room.name || '', ctx.job.id,failureDiagnostic);
   const context = await control.context();
   assertVoicePairing(context);
+  const recording=context.debugRecording===true?new DebugRecording(body=>control.post('events',{...body,callback:context.callback})):undefined;
   const telemetry=new VoiceDiagnostics(context.callId,record=>console.info(JSON.stringify(record)));
   telemetry.phase('startup');
   let diagnosticTimer:ReturnType<typeof setInterval>|undefined;
@@ -115,6 +117,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
       catch { failed=true; diagnostic('usage_journal_unconfirmed'); }
       try { await within(usage.flush(),7000); diagnostic('usage_flushed'); } catch { failed=true; diagnostic('usage_unconfirmed'); }
       try { await within(transcripts.flush(),7000); diagnostic('transcripts_flushed'); } catch { failed = true; diagnostic('transcripts_failed'); }
+      try { await within(recording?.finish()??Promise.resolve(),3000); } catch { diagnostic('recording_partial'); }
       try {
         // Preserve server stale-call reconciliation when shutdown could not be confirmed.
         // Neither a service cutoff nor finalized accounting may assert a fictitious end.
@@ -166,17 +169,19 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   class CheckedModel extends realtime.GPTLiveModel {
     override session(): realtime.GPTLiveSession {
       const duplex = new ClockedGPTLiveSession(this,()=>stopSafely(true),{
-        idleFrame:()=>telemetry.count('idle_frame_forwarded'),replyAuthorized:()=>telemetry.phase('reply_authorized'),
+        inputFrame:frame=>recording?.audio('caller',frame),idleFrame:()=>telemetry.count('idle_frame_forwarded'),replyAuthorized:()=>telemetry.phase('reply_authorized'),
       });
       providerSession=duplex;
+      observeSpeechBoundaries(duplex,recording);
       duplex.on('input_audio_transcription_completed', event => {
         if(event.itemId){toolClosure.observe(event.itemId,event.transcript,event.isFinal);farewell.record('caller',event.itemId,event.transcript,event.isFinal);}
         if (event.itemId) void transcripts.record({id: event.itemId, role: 'caller', text: event.transcript, final: event.isFinal, createdAt: event.turnStartedAt}).catch(() => stopSafely(true));
       });
       duplex.on('error', () => stopSafely(true));
-      duplex.on('openai_client_event_queued',event=>telemetry.count(event.type));
+      duplex.on('openai_client_event_queued',event=>{telemetry.count(event.type);recording?.protocol(event.type);});
       duplex.on('openai_server_event_received', event => {
         telemetry.count(event.type);
+        recording?.protocol(event.type);
         usage.observe(event);
         if(event.type==='session.started'){
           if(!acceptedEcho(event.session,context.voice))stopSafely(true);
@@ -203,7 +208,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     override session(){
       const current=super.session();miniSession=current;
       current.on('ready',()=>{telemetry.phase('session_started');providerReady.accept();});
-      current.on('provider_event',event=>usage.observe(event));
+      current.on('provider_event',event=>{usage.observe(event);recording?.protocol(event.type);});
       current.on('usage_unreported',()=>usage.finish());
       current.on('reasoning_usage',({sessionId,response})=>usage.observe({type:'response.event',providerSessionId:sessionId,event:{type:'response.'+response.status,response}}));
       current.on('input_audio_transcription_completed',event=>{
@@ -212,7 +217,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
       });
       current.on('generation_created',event=>observeGeneration(event,(id,text)=>{void transcripts.record({id,role:'assistant',text,final:false}).catch(()=>stopSafely(true));},()=>{if(!stopped&&firstSpeech.accept())telemetry.phase('first_speech');}));
       current.on('input_speech_started',()=>{toolClosure.cancel();farewell.invalidate();});
-      current.on('interrupted',()=>{toolClosure.cancel();farewell.invalidate();if(!stopped)void session?.interrupt().await.catch(()=>stopSafely(true));});
+      current.on('interrupted',()=>{recording?.event('interrupted');toolClosure.cancel();farewell.invalidate();if(!stopped)void session?.interrupt().await.catch(()=>stopSafely(true));});
       current.on('warning',code=>{if(!stopped)void control.post('events',{callback:context.callback,type:'warning',code}).catch(()=>diagnostic('warning_unconfirmed'));});
       current.on('diagnostic',code=>console.info(JSON.stringify({event:'openfon_voice_lifecycle',callId:context.callId,phase:code})));
       current.on('failure_diagnostic',failureDiagnostic);
@@ -220,7 +225,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
       return current;
     }
   }
-  const configuredModel=mini?new CheckedMini({...operatorAzureConfig(),context}):new TranscriptAdapter(legacyModel());
+  const configuredModel=mini?new CheckedMini({...operatorAzureConfig(),context,observeInput:frame=>recording?.audio('caller',frame),observeControl:type=>recording?.protocol(type)}):new TranscriptAdapter(legacyModel());
   session = new voice.AgentSession({llm: configuredModel,...(mini?{vad:null,turnDetection:'realtime_llm' as const}: {})});
   session.on(voice.AgentSessionEventTypes.SpeechCreated,event=>{telemetry.phase('speech_created');latestSpeech=event.speechHandle;});
   session.on(voice.AgentSessionEventTypes.Error, event => {if(!mini||!responseUnavailable(event.error)){reportFailure('sdk_session',event.error,failureDiagnostic);stopSafely(true);}});
@@ -258,7 +263,13 @@ export default defineAgent({entry: async (ctx: JobContext) => {
       return 'Closure is scheduled after a brief spoken goodbye. Do not request another tool or start a new conversation.';
     },
   });
-  const agent = new voice.Agent({instructions: `${context.instructions}\n\nSpeak ${context.language}. Start by greeting the caller: ${context.greeting}\nWhen the caller clearly ends the conversation, delegate end_call. It schedules a brief polite goodbye before disconnecting. Do not simply say goodbye and leave the call open. Never announce internal technology.`, tools: new llm.ToolContext([endCall])});
+  class RecordedAgent extends voice.Agent {
+    override async realtimeAudioOutputNode(...args:Parameters<voice.Agent['realtimeAudioOutputNode']>) {
+      const audio=await super.realtimeAudioOutputNode(...args);
+      return audio&&recording?observeAudio(audio,frame=>recording.audio('agent',frame)):audio;
+    }
+  }
+  const agent = new RecordedAgent({instructions: `${context.instructions}\n\nSpeak ${context.language}. Start by greeting the caller: ${context.greeting}\nWhen the caller clearly ends the conversation, delegate end_call. It schedules a brief polite goodbye before disconnecting. Do not simply say goodbye and leave the call open. Never announce internal technology.`, tools: new llm.ToolContext([endCall])});
   const sentCommands=new Set<string>();
   const monitor = async () => {
     if (stopped) return;
@@ -301,6 +312,10 @@ export default defineAgent({entry: async (ctx: JobContext) => {
     if(stopped)return;
     telemetry.phase('session_starting');
     await within(session.start({agent, room: ctx.room, record: false, ...(mini?{outputOptions:{audioSampleRate:24000,queueSizeMs:100}}:{}), inputOptions: {closeOnDisconnect: false, deleteRoomOnClose: false, textEnabled: false, participantIdentity: context.caller}}),15000);
+    if(recording) {
+      session.output.audio?.on('playbackStarted',()=>recording.event('playback_start'));
+      session.output.audio?.on('playbackFinished',()=>recording.event('playback_end'));
+    }
     telemetry.phase('agent_session_started');
     if (stopped) { await session.close(); return; }
     if(!await providerReady.wait(15000)||stopped)return;

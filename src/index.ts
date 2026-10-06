@@ -771,7 +771,7 @@ app.get('/api/me/business/:id/calls', async (c) => {
   return c.json(results);
 });
 
-app.get('/api/me/debug-config', c => c.json({ testCalls: c.env.TEST_CALL_DEBUG === 'true' && !livekitEnabled(c.env), retentionDays: 7 }));
+app.get('/api/me/debug-config', c => c.json({ testCalls: c.env.TEST_CALL_DEBUG === 'true', retentionDays: 7 }));
 for (const path of ['/api/me/calls/:callId/debug', '/api/me/calls/:callId/debug/download']) {
   app.on(['GET', 'DELETE'], path, async c => {
     const owned = await c.env.DB.prepare(`SELECT calls.id FROM calls JOIN businesses ON businesses.id=calls.business_id

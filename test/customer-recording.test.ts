@@ -28,7 +28,7 @@ describe("customer recording export", () => {
         .split("\n")
         .map((s) => JSON.parse(s)),
     ).toEqual([
-      { kind: "manifest", callId: "owned", partial: true },
+      { kind: "manifest", projection: "recording-only", callId: "owned", partial: true },
       {
         kind: "audio",
         seq: 1,
@@ -37,7 +37,7 @@ describe("customer recording export", () => {
         format: "pcm_s16le_24000",
         data: "AA==",
       },
-      { kind: "end" },
+      { kind: "end", chunks: 5, records: 1 },
     ]);
   });
   it("handles split records without buffering the complete recording", async () => {
@@ -53,7 +53,7 @@ describe("customer recording export", () => {
       },
     });
     expect(await customerRecording(new Response(source)).text()).toBe(
-      '{"kind":"audio","data":"AA=="}\n{"kind":"end"}\n',
+      '{"kind":"audio","data":"AA=="}\n{"kind":"end","records":1}\n',
     );
   });
   it("fails closed on oversized or malformed entries", async () => {

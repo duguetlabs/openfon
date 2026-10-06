@@ -311,3 +311,7 @@ PR #42 is merged and deployed to staging and production. It preserves the releas
 - Carrier acceptance remains separate; Telnyx and Asterisk ingress stay disabled. Anonymous public-link calling and arbitrary custom providers are not covered by the owner test-call probes.
 
 Debug audio recording is not implemented for the new LiveKit transport; transcript persistence remains. The historical composed local 91-partial/seven-final call used a different credential source from the personal product credential used for these Azure tests. Earlier greeting-silence and farewell failures remain retained with their original outcomes. No synthetic check establishes all-model, all-voice, physical microphone or PSTN acceptance.
+
+### Private LiveKit recording follow-up
+
+LiveKit debug recording source adds owned test/web-only capture using existing seven-day storage and deletion. Production recording remains disabled pending exact staging rollout and bounded actual audio capture/download/deletion validation. Synthetic capture/queue/authorization checks are not physical audio acceptance, and the extraction CLI does not establish current Mini live replay compatibility.

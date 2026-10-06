@@ -3,6 +3,7 @@ import {reportFailure} from './failure-diagnostics.js';
 export interface CallContext {
   callId: string; room: string; caller: string; callback: string;
   voiceModel?:'gpt-live-1'|'gpt-realtime-2.1-mini';
+  debugRecording?:boolean;
   commands?:Array<{id:string;text:string}>;
   instructions: string; greeting: string; voice: string; language: string;
 }
@@ -46,6 +47,7 @@ export class ControlClient {
     if (value.callId !== this.callId || value.room !== this.room || typeof value.caller !== 'string' || !value.caller ||
         typeof value.callback !== 'string' || !value.callback || typeof value.instructions !== 'string' ||
         typeof value.greeting !== 'string' || typeof value.voice !== 'string' || typeof value.language !== 'string') throw new AdmissionError();
+    if(value.debugRecording!==undefined&&typeof value.debugRecording!=='boolean')throw new AdmissionError();
     if(value.voiceModel!==undefined&&!['gpt-live-1','gpt-realtime-2.1-mini'].includes(value.voiceModel))throw new AdmissionError();
     if(value.commands!==undefined&&(!Array.isArray(value.commands)||value.commands.length>16||value.commands.some(c=>!c||typeof c.id!=='string'||!/^typed_[a-zA-Z0-9-]{1,100}$/.test(c.id)||typeof c.text!=='string'||c.text.length>30000)))throw new AdmissionError();
     return value;

@@ -2,6 +2,7 @@ import {readFileSync} from 'node:fs';
 import {fakeCtx} from './fake-d1';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {SqliteD1,applyMigrations} from './sqlite-d1';
+import {CallDebug} from '../src/call-debug';
 import {CallSession} from '../src/call-session';
 import app from '../src/index';
 import type {Env} from '../src/types';
@@ -11,7 +12,7 @@ beforeEach(()=>{
  db.exec("INSERT INTO users(id,email,password_hash) VALUES('owner','owner@example.invalid','fixture');INSERT INTO businesses(id,user_id,slug,name) VALUES('biz','owner','biz','Business');INSERT INTO agent_settings(business_id) VALUES('biz');INSERT INTO calls(id,business_id,connected_at) VALUES('call','biz',CURRENT_TIMESTAMP);");
  data=new Map([['livekit',{room:'room',callId:'call',caller:'caller',callback:'scoped-capability',voice:'marin',instructions:'Facts',greeting:'Hello',language:'en'}]]);pending=[];
  let lock=Promise.resolve();
- const storage={get:async(k:string)=>structuredClone(data.get(k)),put:async(k:string,v:any)=>{data.set(k,structuredClone(v));},delete:async()=>{},deleteAll:async()=>data.clear(),deleteAlarm:async()=>{},setAlarm:async()=>{},transaction:async(fn:Function)=>fn(storage)};
+ const storage={get:async(k:string)=>structuredClone(data.get(k)),put:async(k:string|Record<string,unknown>,v:any)=>{if(typeof k==='string')data.set(k,structuredClone(v));else for(const [key,value]of Object.entries(k))data.set(key,structuredClone(value));},sync:async()=>{},delete:async()=>{},deleteAll:async()=>data.clear(),deleteAlarm:async()=>{},setAlarm:async()=>{},transaction:async(fn:Function)=>fn(storage)};
  const state={storage,blockConcurrencyWhile:(fn:()=>Promise<any>)=>{const work=lock.then(fn);lock=work.catch(()=>{});return work;},waitUntil:(p:Promise<any>)=>pending.push(p)};
  env={DB:db,WEB_VOICE_TRANSPORT:'livekit',LIVEKIT_URL:'ws://127.0.0.1:7880',LIVEKIT_API_KEY:'fixture',LIVEKIT_API_SECRET:'fixture-secret',LIVEKIT_AGENT_SERVICE_TOKEN:'service-key'} as unknown as Env;
  session=new CallSession(state as unknown as DurableObjectState,env);
@@ -227,4 +228,24 @@ it('selected voice routing is returned only on the authenticated internal contex
  env.OPENFON_MANAGED_WEB='true';env.AZURE_OPENAI_ENDPOINT='https://fixture.openai.azure.com/';env.AZURE_OPENAI_API_KEY='synthetic';env.AZURE_OPENAI_LIVE_DEPLOYMENT='gpt-realtime-2.1-mini';
  expect((await request('context',{},'wrong')).status).toBe(404);
  expect(await (await request('context')).json()).toMatchObject({voiceModel:'gpt-realtime-2.1-mini',voice:'marin'});
+});
+
+it('recording upload needs operator, pinned job, private test persistence and active recorder',async()=>{
+ env.TEST_CALL_DEBUG='true';db.exec("UPDATE calls SET environment='test'");
+ const recorder=(await CallDebug.start((session as any).state,'call',true))!;(session as any).debug=recorder;
+ const context=await request('context');expect((await context.json() as any).debugRecording).toBe(true);
+ const body={callback:'scoped-capability',type:'debug_upload',sequence:0,complete:false,partial:false,records:[{kind:'audio',track:'agent',sourceMs:0,format:'pcm_s16le_24000',data:'AAAA'}]};
+ // Three bytes are not a complete signed PCM sample.
+ expect((await request('events',body)).status).toBe(400);
+ body.records[0].data='AAA=';
+ expect((await request('events',{...body,callback:'wrong'})).status).toBe(403);
+ expect((await request('events',{...body,jobId:'other'})).status).toBe(403);
+ expect((await request('events',body,'wrong')).status).toBe(404);
+ for(const change of ["environment='live'", "environment='test',channel='telnyx'", "channel='web',status='completed'"]){db.exec('UPDATE calls SET '+change);expect((await request('events',body)).status).toBe(410);}
+ db.exec("UPDATE calls SET status='active',environment='test',channel='web'");
+ env.TEST_CALL_DEBUG='false';expect((await request('events',body)).status).toBe(410);env.TEST_CALL_DEBUG='true';
+ expect((await request('events',body)).status).toBe(200);
+ expect(recorder.meta.records).toBe(1);
+ (session as any).debug=null;expect((await request('events',{...body,sequence:1})).status).toBe(410);
+ await recorder.finish();
 });
