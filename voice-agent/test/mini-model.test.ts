@@ -1112,3 +1112,74 @@ for (const rejectionAfterDone of [true, false]) {
     }
   });
 }
+for (const order of ['cancelled-done', 'competing-rejection'] as const) {
+  test(`aborted dispatched request releases queued successor after ${order}`, async () => {
+    const f = await fixture(); const a = new AbortController(); const b = new AbortController();
+    mock.timers.enable({apis:['setTimeout']});
+    try {
+      const first = f.session.generateReply('first',{signal:a.signal}).catch(e=>e); await tick();
+      const request = f.socket.sent.at(-1);
+      const second = f.session.generateReply('second',{signal:b.signal}).catch(e=>e); await tick();
+      a.abort(); await first;
+      assert.equal(f.socket.sent.filter(e=>e.type==='response.create').length,1);
+      if(order==='cancelled-done') {
+        f.socket.message({type:'response.created',response:{id:'cancelled',metadata:request.response.metadata}});
+        assert.equal(f.socket.sent.filter(e=>e.type==='response.create').length,1);
+        f.socket.message({type:'response.done',response:{id:'cancelled',status:'cancelled',output:[]}});
+      } else {
+        f.socket.message({type:'response.created',response:{id:'competitor'}});
+        f.socket.message({type:'error',error:{code:'conversation_already_has_active_response',event_id:request.event_id}});
+        f.socket.message({type:'response.done',response:{id:'competitor',status:'completed',output:[]}});
+      }
+      assert.equal(f.socket.sent.filter(e=>e.type==='response.create').length,2,'queued successor dispatched once after reconciliation');
+      const next=f.socket.sent.at(-1);f.socket.message({type:'response.created',response:{id:'second',metadata:next.response.metadata}});
+      assert.equal((await second).responseId,'second');
+      f.socket.message({type:'response.done',response:{id:'cancelled',status:'cancelled',output:[]}});
+      mock.timers.tick(16000);assert.equal(f.warnings.includes('reconnecting'),false);assert.equal(f.errors.length,0);
+    } finally {a.abort();b.abort();await f.session.close();mock.timers.reset();}
+  });
+}
+test('typed correction cancels already admitted reasoning reply and pending audio',async()=>{
+  let complete!:(value:string)=>void;const f=await fixture(()=>new Promise<string>(r=>complete=r));
+  try {
+    const g=await generation(f);
+    f.socket.message({type:'response.done',response:{id:g.responseId,status:'completed',output:[{type:'function_call',name:'think',call_id:'reason',arguments:'{"request":"old"}'}]}});
+    complete('obsolete answer');await tick();const request=f.socket.sent.at(-1);
+    f.socket.message({type:'response.created',response:{id:'reasoned',metadata:request.response.metadata}});
+    let interrupted=0;f.session.on('interrupted',()=>interrupted++);
+    f.session.invalidateReasoning();
+    assert.equal(f.socket.sent.some(e=>e.type==='response.cancel'&&e.response_id==='reasoned'),true);
+    assert.equal(interrupted,1);
+  }finally{await f.session.close();}
+});
+for (const phase of ['awaiting-ack','completed-buffered'] as const) {
+  test(`typed correction retires ${phase} reasoning without stale history or successor loss`,async()=>{
+    let complete!:(value:string)=>void;const f=await fixture(()=>new Promise<string>(r=>complete=r));
+    const controller=new AbortController();
+    try {
+      const g=await generation(f);
+      f.socket.message({type:'response.done',response:{id:g.responseId,status:'completed',output:[{type:'function_call',name:'think',call_id:'reason',arguments:'{"request":"old"}'}]}});
+      complete('obsolete');await tick();const request=f.socket.sent.at(-1);
+      if(phase==='completed-buffered') {
+        f.socket.message({type:'response.created',response:{id:'obsolete',metadata:request.response.metadata}});
+        f.socket.message({type:'response.output_audio_transcript.delta',response_id:'obsolete',item_id:'old-item',delta:'Obsolete answer'});
+        f.socket.message({type:'response.done',response:{id:'obsolete',status:'completed',output:[]}});
+      }
+      let interrupted=0;f.session.on('interrupted',()=>interrupted++);
+      const chat=new llm.ChatContext();chat.addMessage({id:'correction',role:'user',content:'Use my corrected request'});
+      await f.session.updateChatCtx(chat);
+      const next=f.session.generateReply('corrected',{signal:controller.signal}).catch(e=>e);await tick();
+      if(phase==='awaiting-ack') {
+        f.socket.message({type:'response.created',response:{id:'obsolete',metadata:request.response.metadata}});
+        f.socket.message({type:'response.done',response:{id:'obsolete',status:'cancelled',output:[{type:'function_call',name:'end_call',call_id:'late',arguments:'{}'}]}});
+      } else assert.equal(interrupted,1);
+      const dispatched=f.socket.sent.findLast(e=>e.type==='response.create');
+      assert.notEqual(dispatched.response.metadata.openfon_request,request.response.metadata.openfon_request);
+      f.socket.message({type:'response.created',response:{id:'corrected',metadata:dispatched.response.metadata}});
+      assert.equal((await next).responseId,'corrected');
+      assert.equal(f.session.chatCtx.getById('old-item'),undefined);
+      assert.equal(f.session.closureAllowed,false);
+      assert.equal(f.errors.length,0);
+    }finally{controller.abort();await f.session.close();}
+  });
+}

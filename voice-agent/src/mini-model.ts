@@ -116,6 +116,7 @@ interface Generation {
   items: BoundedStream<llm.MessageGeneration>;
   functions: BoundedStream<llm.FunctionCall>;
   discarded: boolean;
+  automatic: boolean;
 }
 interface Request {
   id: string;
@@ -187,6 +188,10 @@ export class MiniSession extends llm.RealtimeSession {
   private outputBytes = new Map<string, number>();
   private pending: Request[] = [];
   private sent?: Request;
+  private retiringRequest?: Pick<Request, "id" | "competingResponse">;
+  private automaticOutputs = new Set<string>();
+  private retiringResponses = new Set<string>();
+  private retiringTimer?: ReturnType<typeof setTimeout>;
   private readyWaiters: Array<{
     resolve: () => void;
     reject: (e: Error) => void;
@@ -384,6 +389,7 @@ export class MiniSession extends llm.RealtimeSession {
     this.socket = undefined;
     old?.terminate();
     this.ready = false;
+    this.clearRetiring();
     this.callerSpeaking = false;
     this.serverResponsePending = false;
     clearTimeout(this.serverResponseTimer);
@@ -430,12 +436,39 @@ export class MiniSession extends llm.RealtimeSession {
     this.pending = this.pending.filter((x) => x !== request);
     error ? request.reject(error) : request.resolve(event!);
   }
+  private clearRetiring() {
+    this.retiringRequest = undefined;
+    this.retiringResponses.clear();
+    clearTimeout(this.retiringTimer);
+    this.retiringTimer = undefined;
+  }
+  private boundRetiring() {
+    if (!this.retiringTimer)
+      this.retiringTimer = setTimeout(() => this.transportLost(), 15000);
+  }
+  private retireSent(request: Request) {
+    if (this.sent === request) {
+      this.retiringRequest = request;
+      this.boundRetiring();
+    }
+    this.retireRequest(request.id);
+    this.settle(request, new ResponseUnavailable());
+  }
+  private retirementProgress() {
+    if (!this.retiringRequest && !this.retiringResponses.size) {
+      clearTimeout(this.retiringTimer);
+      this.retiringTimer = undefined;
+      this.pump();
+    }
+  }
   private pump() {
     if (
       !this.ready ||
       this.closed ||
       this.active ||
       this.sent ||
+      this.retiringRequest ||
+      this.retiringResponses.size ||
       this.automaticRequest ||
       this.serverResponsePending ||
       this.callerSpeaking
@@ -497,9 +530,16 @@ export class MiniSession extends llm.RealtimeSession {
   invalidateReasoning() {
     this.invalidate();
     if (this.automaticRequest) {
+      this.retiringRequest = { id: this.automaticRequest };
+      this.boundRetiring();
       this.retireRequest(this.automaticRequest);
       this.automaticRequest = undefined;
       clearTimeout(this.automaticTimer);
+    }
+    if (this.automaticOutputs.size || [...this.generations].some(g => g.automatic && !g.discarded)) {
+      for (const item of this.automaticOutputs) this.forgetAssistant(item);
+      this.automaticOutputs.clear();
+      this.cancelOutput();
     }
     this.reasoningEpoch++;
   }
@@ -526,15 +566,18 @@ export class MiniSession extends llm.RealtimeSession {
   private cancelOutput(notify = true) {
     clearTimeout(this.automaticTimer);
     if (this.automaticRequest) {
+      this.retiringRequest = { id: this.automaticRequest };
+      this.boundRetiring();
       this.retireRequest(this.automaticRequest);
       this.automaticRequest = undefined;
     }
     if (this.sent) {
-      this.retireRequest(this.sent.id);
-      this.settle(this.sent, new ResponseUnavailable());
+      this.retireSent(this.sent);
     }
     const active = this.active;
     if (active && this.ready) {
+      this.retiringResponses.add(active.id);
+      this.boundRetiring();
       try {
         this.send({ type: "response.cancel", response_id: active.id });
       } catch {}
@@ -549,10 +592,16 @@ export class MiniSession extends llm.RealtimeSession {
   private generation(response: any) {
     if (!id(response?.id)) throw Error();
     const requested = response.metadata?.openfon_request;
+    const automatic = !!requested && requested === this.automaticRequest;
     if (
       (requested && this.retiredRequests.has(requested)) ||
       this.callerSpeaking
     ) {
+      if (requested && requested === this.retiringRequest?.id) {
+        this.retiringRequest = undefined;
+        this.retiringResponses.add(response.id);
+        this.boundRetiring();
+      }
       this.send({ type: "response.cancel", response_id: response.id });
       return;
     }
@@ -587,10 +636,13 @@ export class MiniSession extends llm.RealtimeSession {
         () => this.emitFatal("protocol_limit"),
       ),
       discarded: false,
+      automatic,
     };
     this.active = generation;
-    if (!requested && this.sent)
-      this.sent.competingResponse = { id: response.id, completed: false };
+    if (!requested) {
+      const waiting = this.sent ?? this.retiringRequest;
+      if (waiting) waiting.competingResponse = { id: response.id, completed: false };
+    }
     this.generations.add(generation);
     const request = this.sent;
     const matches =
@@ -607,6 +659,11 @@ export class MiniSession extends llm.RealtimeSession {
   private message(itemId: string): Message {
     const generation = this.active;
     if (!generation || generation.discarded || !id(itemId)) throw Error();
+    if (generation.automatic) {
+      this.automaticOutputs.add(itemId);
+      if (this.automaticOutputs.size > 128)
+        this.automaticOutputs.delete(this.automaticOutputs.values().next().value!);
+    }
     const existing = generation.messages.get(itemId);
     if (existing) return existing;
     const audio = new BoundedStream<AudioFrame>(
@@ -667,6 +724,7 @@ export class MiniSession extends llm.RealtimeSession {
   }
   /** Only the SDK's non-interrupted post-playout conversation event confirms delivery. */
   confirmPlayback(itemId: string, text: string) {
+    this.automaticOutputs.delete(itemId);
     const item = this.history.find(
       (item) => item.id === itemId && item.role === "assistant",
     );
@@ -725,6 +783,20 @@ export class MiniSession extends llm.RealtimeSession {
         code === "conversation_already_has_active_response" &&
         correlated?.admissionRejected
       ) return;
+      if (code === "conversation_already_has_active_response" &&
+          correlated?.type === "response.create" && this.retiringRequest &&
+          correlated.requestId === this.retiringRequest.id) {
+        const request = this.retiringRequest;
+        correlated.admissionRejected = true;
+        this.retiringRequest = undefined;
+        if (!this.active && !request.competingResponse?.completed) {
+          this.serverResponsePending = true;
+          clearTimeout(this.serverResponseTimer);
+          this.serverResponseTimer = setTimeout(() => this.transportLost(), 15000);
+        }
+        this.retirementProgress();
+        return;
+      }
       if (
         code === "conversation_already_has_active_response" &&
         correlated?.type === "response.create" &&
@@ -823,7 +895,11 @@ export class MiniSession extends llm.RealtimeSession {
       return;
     }
     if (event.type === "response.done") {
-      const competitor = this.sent?.competingResponse;
+      if (this.retiringResponses.delete(event.response?.id)) {
+        this.retirementProgress();
+        return;
+      }
+      const competitor = (this.sent ?? this.retiringRequest)?.competingResponse;
       if (competitor && competitor.id === event.response?.id)
         competitor.completed = true;
       const generation = this.active;
@@ -859,6 +935,7 @@ export class MiniSession extends llm.RealtimeSession {
             ? "response_filtered"
             : "response_unavailable",
         );
+        this.active = undefined;
         this.cancelOutput();
         this.pump();
         return;
@@ -878,7 +955,8 @@ export class MiniSession extends llm.RealtimeSession {
           throw Error();
         if (call.name === "think") this.think(call);
         else if (call.name === "end_call" && !this.hasPendingWork) {
-          this.invalidateReasoning();
+          this.invalidate();
+          this.reasoningEpoch++;
           this.externalTools.add(call.call_id);
           this.closurePermission = true;
           generation.functions.push(
@@ -1160,8 +1238,8 @@ export class MiniSession extends llm.RealtimeSession {
           this.pump();
         }, 60000),
         abort: () => {
-          this.retireRequest(request.id);
-          this.settle(request, new ResponseUnavailable());
+          this.retireSent(request);
+          this.pump();
         },
       };
       if (options?.signal?.aborted) {
@@ -1220,6 +1298,7 @@ export class MiniSession extends llm.RealtimeSession {
     clearTimeout(this.startup);
     clearTimeout(this.automaticTimer);
     clearTimeout(this.serverResponseTimer);
+    this.clearRetiring();
     this.socket?.terminate();
     this.discardOutput();
     for (const r of [...this.pending, ...(this.sent ? [this.sent] : [])])
