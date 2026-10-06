@@ -18,6 +18,7 @@ import {VoiceDiagnostics} from './diagnostics.js';
 import {ProviderReadiness} from './provider-readiness.js';
 import {MiniModel,MiniSession} from './mini-model.js';
 import {speechOutcome,successfulPlayout,responseUnavailable} from './playout.js';
+import {reportFailure} from './failure-diagnostics.js';
 
 export function beginMiniClosure(
   miniSession: Pick<MiniSession, 'prepareClosure' | 'rejectClosure'>,
@@ -41,7 +42,8 @@ export function beginMiniClosure(
 export default defineAgent({entry: async (ctx: JobContext) => {
   configureSdkLogging();
   const metadata = JSON.parse(ctx.job.metadata || '{}') as {callId?: string};
-  const control = new ControlClient(process.env.OPENFON_API_URL!, process.env.OPENFON_AGENT_SERVICE_TOKEN!, metadata.callId || '', ctx.job.room?.name || ctx.room.name || '', ctx.job.id);
+  const failureDiagnostic=(record:Record<string,string|number>)=>console.info(JSON.stringify({event:'openfon_voice_failure',callId:metadata.callId,...record}));
+  const control = new ControlClient(process.env.OPENFON_API_URL!, process.env.OPENFON_AGENT_SERVICE_TOKEN!, metadata.callId || '', ctx.job.room?.name || ctx.room.name || '', ctx.job.id,failureDiagnostic);
   const context = await control.context();
   assertVoicePairing(context);
   const telemetry=new VoiceDiagnostics(context.callId,record=>console.info(JSON.stringify(record)));
@@ -213,6 +215,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
       current.on('interrupted',()=>{toolClosure.cancel();farewell.invalidate();if(!stopped)void session?.interrupt().await.catch(()=>stopSafely(true));});
       current.on('warning',code=>{if(!stopped)void control.post('events',{callback:context.callback,type:'warning',code}).catch(()=>diagnostic('warning_unconfirmed'));});
       current.on('diagnostic',code=>console.info(JSON.stringify({event:'openfon_voice_lifecycle',callId:context.callId,phase:code})));
+      current.on('failure_diagnostic',failureDiagnostic);
       current.on('error',()=>stopSafely(true));
       return current;
     }
@@ -220,7 +223,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
   const configuredModel=mini?new CheckedMini({...operatorAzureConfig(),context}):new TranscriptAdapter(legacyModel());
   session = new voice.AgentSession({llm: configuredModel,...(mini?{vad:null,turnDetection:'realtime_llm' as const}: {})});
   session.on(voice.AgentSessionEventTypes.SpeechCreated,event=>{telemetry.phase('speech_created');latestSpeech=event.speechHandle;});
-  session.on(voice.AgentSessionEventTypes.Error, event => {if(!mini||!responseUnavailable(event.error))stopSafely(true);});
+  session.on(voice.AgentSessionEventTypes.Error, event => {if(!mini||!responseUnavailable(event.error)){reportFailure('sdk_session',event.error,failureDiagnostic);stopSafely(true);}});
   session.on(voice.AgentSessionEventTypes.Close, () => { if (!stopped) stopSafely(true); });
   session.on(voice.AgentSessionEventTypes.ConversationItemAdded, event => {
     const item = event.item;
@@ -278,7 +281,7 @@ export default defineAgent({entry: async (ctx: JobContext) => {
         // It appends the command when its own queued generation is authorized.
         if(!stopped)pendingTyped.track(command.id,submitTypedInput(session!,command),()=>stopSafely(true));
       }
-    } catch (error) { stopSafely(!(error instanceof AdmissionError && [404,410].includes(error.status))); return; }
+    } catch (error) { reportFailure('control_monitor',error,failureDiagnostic);stopSafely(!(error instanceof AdmissionError && [404,410].includes(error.status))); return; }
     if (!stopped) monitoring = setTimeout(() => void monitor(), 2000);
   };
   try {

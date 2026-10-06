@@ -25,11 +25,13 @@ class Sink extends voice.AudioOutput {
   clearBuffer(){super.flush();if(this.pendingPlayoutSegments)this.onPlaybackFinished({playbackPosition:this.duration,interrupted:true});this.duration=0;}
 }
 
-for(const outcome of ['completed','interrupted','unavailable','denied'] as const)test(`actual worker and SDK own one Mini farewell: ${outcome}`,{timeout:10000},async()=>{
+for(const outcome of ['completed','interrupted','unavailable','denied','provider-error'] as const)test(`actual worker and SDK own one Mini farewell: ${outcome}`,{timeout:10000},async()=>{
   const saved={...process.env};
   Object.assign(process.env,{OPENFON_API_URL:'https://control.invalid',OPENFON_AGENT_SERVICE_TOKEN:'synthetic',OPENFON_USAGE_DIR:'/synthetic/unused',AZURE_OPENAI_ENDPOINT:'https://synthetic.openai.azure.com',AZURE_OPENAI_API_KEY:'synthetic',AZURE_OPENAI_LIVE_DEPLOYMENT:'gpt-realtime-2.1-mini'});
   const socket=new Socket();let current!:MiniSession;let shutdown!:()=>Promise<void>;let entry:Promise<void>|undefined;
   const events:any[]=[];const replies:any[]=[];const sink=new Sink(24000);
+  const failureRecords:any[]=[];
+  mock.method(console,'info',(value:string)=>{const record=JSON.parse(value);if(record.event==='openfon_voice_failure')failureRecords.push(record);});
   const originalStart=voice.AgentSession.prototype.start;
   const originalGenerate=voice.AgentSession.prototype.generateReply;
   mock.method(UsageOutbox.prototype,'assertAvailable',async()=>{});
@@ -54,6 +56,15 @@ for(const outcome of ['completed','interrupted','unavailable','denied'] as const
   try{
     entry=worker.entry(ctx as never);
     await wait(()=>requests().length===1);admit('greeting');finish('greeting','Hello');await entry;
+    if(outcome==='provider-error'){
+      socket.message({type:'error',error:{code:'invalid_value',param:'audio_end_ms',message:'private key and transcript'}});
+      await wait(()=>events.some(e=>e.type==='finished'));
+      assert.equal(events.find(e=>e.type==='finished').failed,true,'same terminal handling');
+      assert.equal(failureRecords.length,1,'SDK re-emission must not duplicate the initiating diagnostic');
+      assert.equal(failureRecords[0].stage,'mini_terminal');assert.equal(failureRecords[0].code,'invalid_value');assert.equal(failureRecords[0].parameter,'audio_end_ms');
+      assert.ok(!JSON.stringify(failureRecords).includes('private'));
+      return;
+    }
     if(outcome==='denied')mock.method(current,'prepareClosure',()=>undefined);
     // A native response asks to close; the real SDK executes the actual worker tool.
     socket.message({type:'response.created',response:{id:'closure'}});

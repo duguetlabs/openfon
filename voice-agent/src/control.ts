@@ -1,4 +1,5 @@
 /** Operator-only callbacks. Keys and response bodies never appear in errors. */
+import {reportFailure} from './failure-diagnostics.js';
 export interface CallContext {
   callId: string; room: string; caller: string; callback: string;
   voiceModel?:'gpt-live-1'|'gpt-realtime-2.1-mini';
@@ -7,7 +8,7 @@ export interface CallContext {
 }
 export class ControlClient {
   private base: string;
-  constructor(base: string, private key: string, readonly callId: string, readonly room: string, readonly jobId: string) {
+  constructor(base: string, private key: string, readonly callId: string, readonly room: string, readonly jobId: string,private diagnostic?:(record:Record<string,string|number>)=>void) {
     const url = new URL(base);
     if (url.username || url.password || url.search || url.hash ||
         (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)))) throw new Error('Invalid control address');
@@ -15,6 +16,7 @@ export class ControlClient {
     if (!key || !/^[a-zA-Z0-9_-]{1,100}$/.test(callId) || !jobId) throw new Error('Invalid admission');
   }
   async post(operation: 'context' | 'events', body: Record<string, unknown>): Promise<unknown> {
+    let lastFailure:unknown;
     // Same event/revision on retries: an ambiguous response cannot duplicate a turn.
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
@@ -24,11 +26,20 @@ export class ControlClient {
         });
         if (response.ok) return await response.json();
         await response.body?.cancel();
+        lastFailure={status:response.status};
         if (response.status < 500) throw new AdmissionError(response.status);
-      } catch (error) { if (error instanceof AdmissionError) throw error; }
+      } catch (error) {
+        if(error instanceof AdmissionError){this.report(error,operation);throw error;}
+        lastFailure=error;
+      }
       if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
     }
-    throw new Error('Call control unavailable');
+    const error=new Error('Call control unavailable');
+    this.report(error,operation,lastFailure);
+    throw error;
+  }
+  private report(error:unknown,operation:'context'|'events',detail?:unknown){
+    if(this.diagnostic)reportFailure('control_request',error,record=>this.diagnostic!({...record,operation}),detail);
   }
   async context(): Promise<CallContext> {
     const value = await this.post('context', {}) as CallContext;
