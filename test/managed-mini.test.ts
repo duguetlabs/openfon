@@ -224,3 +224,139 @@ for (const status of ["completed", "incomplete"])
       db.close();
     }
   });
+it("transcription usage aggregates per session/item/content independently of Realtime, with scoped replay and no retail interval", async () => {
+  const db = new SqliteD1();
+  try {
+    applyMigrations(db);
+    db.exec(readFileSync("migrations/0027_commercial.sql", "utf8"));
+    db.exec(
+      "INSERT INTO users(id,email,password_hash)VALUES('u','u@example.invalid','x');INSERT INTO businesses(id,user_id,slug,name)VALUES('b','u','b','B');INSERT INTO calls(id,business_id,connected_at)VALUES('c','b',CURRENT_TIMESTAMP)",
+    );
+    const e = { ...env, DB: db } as unknown as Env,
+      scope = { callId: "c", jobId: "j", businessId: "b" };
+    const usage = {
+      ...scope,
+      eventId: "asr1",
+      source: "azure_transcription" as const,
+      providerSessionId: "s1",
+      providerItemId: "i1",
+      providerContentIndex: 0,
+      model: "gpt-4o-mini-transcribe",
+      observedAt: "2026-10-06T12:00:00Z",
+      final: true,
+      metrics: {
+        inputTokens: 15,
+        inputAudioTokens: 12,
+        inputTextTokens: 3,
+        outputTokens: 4,
+        totalTokens: 19,
+      },
+    };
+    await ingestProviderUsage(e, scope, usage);
+    await ingestProviderUsage(e, scope, usage);
+    await ingestProviderUsage(e, scope, { ...usage, eventId: "asr-repeat" });
+    await ingestProviderUsage(e, scope, {
+      ...usage,
+      eventId: "asr2",
+      providerItemId: "i2",
+    });
+    await ingestProviderUsage(e, scope, {
+      ...usage,
+      eventId: "asr-content",
+      providerContentIndex: 1,
+    });
+    await ingestProviderUsage(e, scope, {
+      ...usage,
+      eventId: "asr-reconnect",
+      providerSessionId: "s2",
+    });
+    await ingestProviderUsage(e, scope, {
+      ...usage,
+      eventId: "asr-unknown",
+      providerItemId: "unknown",
+      metrics: {},
+    });
+    await ingestProviderUsage(e, scope, {
+      ...usage,
+      eventId: "asr-duration",
+      providerItemId: "duration",
+      metrics: { transcriptionSeconds: "1.125000001" },
+    });
+    await ingestProviderUsage(e, scope, {
+      ...usage,
+      eventId: "conversation",
+      source: "azure_realtime",
+      providerItemId: undefined,
+      providerContentIndex: undefined,
+      providerResponseId: "i1",
+      model: "gpt-realtime-2.1-mini",
+      metrics: { totalTokens: 60 },
+    });
+    expect(
+      db.database
+        .prepare(
+          "SELECT source,SUM(value) n FROM commercial_provider_metrics WHERE metric='totalTokens' GROUP BY source ORDER BY source",
+        )
+        .all(),
+    ).toEqual([
+      { source: "azure_realtime", n: 60 },
+      { source: "azure_transcription", n: 76 },
+    ]);
+    expect(
+      db.database
+        .prepare(
+          "SELECT value FROM commercial_provider_metrics WHERE metric='transcriptionNanoseconds'",
+        )
+        .get(),
+    ).toEqual({ value: 1125000001 });
+    expect(
+      db.database
+        .prepare(
+          "SELECT count(*) n FROM commercial_provider_metrics WHERE usage_key LIKE '%unknown%'",
+        )
+        .get(),
+    ).toEqual({ n: 0 });
+    expect(
+      db.database.prepare("SELECT count(*) n FROM commercial_call_usage").get(),
+    ).toEqual({ n: 0 });
+    const row = db.database
+      .prepare(
+        "SELECT source,model,usage_key FROM commercial_provider_observations WHERE event_id='asr1'",
+      )
+      .get() as any;
+    expect(row).toEqual({
+      source: "azure_transcription",
+      model: "gpt-4o-mini-transcribe",
+      usage_key: JSON.stringify(["s1", "i1", 0, "gpt-4o-mini-transcribe"]),
+    });
+    await expect(
+      ingestProviderUsage(e, { ...scope, businessId: "foreign" }, usage),
+    ).rejects.toThrow();
+    await expect(
+      ingestProviderUsage(e, scope, { ...usage, jobId: "foreign" }),
+    ).rejects.toThrow();
+    await expect(
+      ingestProviderUsage(e, scope, { ...usage, callId: "foreign" }),
+    ).rejects.toThrow();
+    await expect(
+      ingestProviderUsage(e, scope, { ...usage, metrics: { totalTokens: 99 } }),
+    ).rejects.toThrow("Conflicting");
+    for (const invalid of [
+      { providerResponseId: "fake" },
+      { providerItemId: undefined },
+      { providerContentIndex: -1 },
+      { metrics: { inputTokens: 1, inputAudioTokens: 2 } },
+      { metrics: { voiceSessionSeconds: "1" } },
+    ])
+      expect(() => normalizeUsage({ ...usage, ...invalid })).toThrow();
+    expect(() =>
+      normalizeUsage({
+        ...usage,
+        source: "azure_realtime",
+        providerResponseId: "r",
+      }),
+    ).toThrow();
+  } finally {
+    db.close();
+  }
+});

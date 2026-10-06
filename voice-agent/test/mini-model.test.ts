@@ -778,3 +778,101 @@ test("installed native output keeps a new segment when an old native capture com
     await dispose();
   }
 });
+test("queued replies wait through long active output and caller speech without consuming transport recovery", async () => {
+  const f = await fixture();
+  const controller = new AbortController();
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const active = await generation(f);
+    const pending = f.session
+      .generateReply("queued", { signal: controller.signal })
+      .catch((e) => e);
+    await tick();
+    mock.timers.tick(16000);
+    await tick();
+    assert.equal(f.warnings.includes("reconnecting"), false);
+    f.socket.message({ type: "input_audio_buffer.speech_started" });
+    f.socket.message({
+      type: "response.done",
+      response: { id: active.responseId, status: "completed", output: [] },
+    });
+    mock.timers.tick(16000);
+    await tick();
+    assert.equal(
+      f.socket.sent.filter((x) => x.type === "response.create").length,
+      1,
+    );
+    assert.equal(f.sockets.length, 1);
+    f.socket.message({ type: "input_audio_buffer.speech_stopped" });
+    const request = f.socket.sent.at(-1);
+    assert.equal(request.type, "response.create");
+    f.socket.message({
+      type: "response.created",
+      response: { id: "queued", metadata: request.response.metadata },
+    });
+    assert.equal((await pending).responseId, "queued");
+    assert.equal(f.errors.length, 0);
+  } finally {
+    controller.abort();
+    await f.session.close();
+    mock.timers.reset();
+  }
+});
+test("typed facts enter bounded reconnect history once, without replaying input", async () => {
+  const f = await fixture();
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const chat = new llm.ChatContext();
+    chat.addMessage({
+      id: "typed_fact",
+      role: "user",
+      content: "The requested appointment is Tuesday at ten.",
+    });
+    await f.session.updateChatCtx(chat);
+    await f.session.updateChatCtx(chat);
+    f.socket.emit("close", 1006);
+    mock.timers.tick(500);
+    await tick();
+    f.sockets[1].emit("open");
+    const config = f.sockets[1].sent[0].session;
+    assert.equal(
+      config.instructions.split("The requested appointment is Tuesday at ten.")
+        .length - 1,
+      1,
+    );
+    assert.equal(
+      f.sockets[1].sent.some((x) => x.type === "conversation.item.create"),
+      false,
+    );
+  } finally {
+    await f.session.close();
+    mock.timers.reset();
+  }
+});
+test("queued reply expiry is local while dispatched acknowledgment timeout uses recovery", async () => {
+  const f = await fixture();
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    f.socket.message({ type: "input_audio_buffer.speech_started" });
+    const queued = f.session.generateReply().catch((e) => e);
+    await tick();
+    mock.timers.tick(60000);
+    await tick();
+    assert.ok((await queued) instanceof ResponseUnavailable);
+    assert.equal(f.warnings.includes("reconnecting"), false);
+    assert.equal(
+      f.socket.sent.some((x) => x.type === "response.create"),
+      false,
+    );
+    f.socket.message({ type: "input_audio_buffer.speech_stopped" });
+    const dispatched = f.session.generateReply().catch((e) => e);
+    await tick();
+    mock.timers.tick(15000);
+    await tick();
+    assert.ok((await dispatched) instanceof ResponseUnavailable);
+    assert.equal(f.warnings.includes("reconnecting"), true);
+  } finally {
+    await f.session.close();
+    mock.timers.reset();
+  }
+});

@@ -60,8 +60,10 @@ The operator-selected Mini adapter records Azure Realtime per-response tokens,
 including separate audio/text/cache subsets, rather than GPT-Live cumulative
 seconds. Session plus response identities deduplicate retransmitted observations;
 independent reasoning usage remains separate. Missing counters are unknown, not
-zero. Separate transcription usage and actual Azure meter/rate reconciliation
-remain unverified. These provider observations do not change retail call-duration
+zero. Separate transcription observations retain provider item/content identity,
+the accepted transcription model and reported tokens or precise duration. They
+are independent of conversation responses and never affect customer call minutes.
+Actual Azure meter/rate and invoice reconciliation remain unverified. These provider observations do not change retail call-duration
 aggregation or establish invoice costs. See [the adapter contract](../managed-mini-voice.md).
 
 Telnyx's published Voice API fee is $0.002/min **plus** applicable inbound/outbound SIP fees. Its current billing article describes 60/60 increments and explicitly says six-second increments are no longer offered. Country/rate-deck terms can differ. Retail OpenFon rounding is independent of carrier rounding. Number setup/rental prices require actual `cost_information` quotes and regulatory review.

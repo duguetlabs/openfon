@@ -1,3 +1,4 @@
+import {processingDiagnostic,type ProcessingStage} from './managed-processing-diagnostics';
 import {azureIdentifier,azureUsageObservation} from './azure-usage';
 import {managedWeb,azureConfig,savedManagedVoice} from './managed-azure';
 import {processManagedCall,managedTextObservation,type ManagedSummary} from './managed-processing';
@@ -2825,6 +2826,8 @@ export class CallSession implements DurableObject {
       if (!cached && !(await this.state.storage.get('managed-summary-attempted'))) {
         // A crash or network uncertainty must not replay paid post-call inference automatically.
         await this.state.storage.put('managed-summary-attempted', true);
+        let processingStage:ProcessingStage='transcript_read';
+        const processingStarted=Date.now();
         try {
           const rows = await this.env.DB.prepare(
             'SELECT id,source_id,role,text FROM call_turns WHERE call_id=? AND source_final=1 ORDER BY id LIMIT 201'
@@ -2849,9 +2852,10 @@ export class CallSession implements DurableObject {
           );
           cached = { summary: result, observation: managedTextObservation(result) };
           // Cache before ledger/actions writes so their retries never repeat paid inference.
+          processingStage='cache_write';
           await this.state.storage.put('managed-summary', cached);
-        } catch {
-          console.error('Managed call notes unavailable');
+        } catch(error) {
+          console.error(JSON.stringify({event:'managed_call_notes_unavailable',callId:this.callId,...processingDiagnostic(error,processingStage,processingStarted)}));
         }
       }
       if (!cached) {

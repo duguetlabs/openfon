@@ -54,6 +54,7 @@ export const PLANS = [
 export interface UsageMetrics {
   /** Decimal seconds from provider usage, not browser or local wall time. */
   voiceSessionSeconds?: string;
+  transcriptionSeconds?: string;
   inputTokens?: number;
     inputAudioTokens?: number;
     inputTextTokens?: number;
@@ -72,9 +73,11 @@ export interface UsageObservation {
   eventId: string;
   callId?: string;
   jobId?: string;
-  source: "azure_voice" | "azure_reasoning" | "azure_text" | "azure_realtime" | "azure_realtime_session";
+  source: "azure_voice" | "azure_reasoning" | "azure_text" | "azure_realtime" | "azure_realtime_session" | "azure_transcription";
   providerSessionId: string;
   providerResponseId?: string;
+  providerItemId?: string;
+  providerContentIndex?: number;
   observedAt: string;
   final: boolean;
   metrics: UsageMetrics;

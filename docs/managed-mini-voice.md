@@ -57,7 +57,9 @@ a filtered or interrupted goodbye is not successful closure.
 Recovery has one owner: the application adapter. It permits the initial
 connection plus at most two reconnections for the whole call, at 500 and 1,000 ms.
 Success does not reset the budget. Initial readiness and response admission each
-have a 15-second deadline under the same recovery controller. It keeps the caller
+have a 15-second deadline under the same recovery controller once dispatched.
+Queued replies may wait up to 60 seconds for current output/caller speech; expiry
+is response-local and does not consume transport retries. It keeps the caller
 room, clears obsolete speech state, discards outage input,
 uses at most twelve historical turns/12,000 characters as untrusted context, and
 asks the caller to repeat. This is bounded recovery, not seamless continuity.
@@ -76,9 +78,13 @@ session and response. This avoids applying GPT-Live's cumulative seconds maximum
 to independent response counters. Cached/audio/text token subsets are recorded
 separately and are not added again to totals. Failed/incomplete response usage is
 retained; missing usage remains absent, never zero. An unreported session ending
-is recorded separately. Separate transcription-event usage is not yet collected;
-complete provider costing remains an explicit acceptance gap. Known canceled
-reasoning usage is retained; an aborted
+is recorded separately. Transcription final events use `azure_transcription` with
+provider session, item, content index and the accepted transcription model; they
+never masquerade as response IDs or add their tokens to conversation counters.
+Token totals/audio-text subsets and duration units, when reported, stay separate.
+Absent usage remains unknown. Exact replay deduplicates and the existing durable
+outbox preserves those identities. Provider rate/invoice reconciliation remains
+unverified. Known canceled reasoning usage is retained; an aborted
 request with no received usage does not establish its cost.
 
 Durable usage delivery, account isolation, public links, business/assistant
@@ -100,7 +106,12 @@ synthetic; this is not remote room/receiver or physical playout evidence. These
 checks do not establish real Azure audio, voice identity or noise robustness.
 
 The previously observed staging summary fallback remains unresolved; the
-correlated Azure HTTP 400 has not been attributed to a specific parameter.
+correlated Azure HTTP 400 has not been attributed to a specific parameter. New
+operator diagnostics retain fixed processing stage, status, bounded input counts
+and timing, allowlisted provider code/parameter or their hashes, and a hash of
+the response request ID. They omit provider messages, bodies, transcripts and
+credentials. Rejected-body inspection stops at 8 KiB or one second. The attempted
+marker and no-automatic-reprocessing rule remain unchanged.
 No automatic historical reprocessing is included. Actual Azure session/audio,
 transcription and provider usage acceptance, summary/action persistence, injected
 recovery, billing invoices and PSTN/carrier acceptance remain rollout gates.

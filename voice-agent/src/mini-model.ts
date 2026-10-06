@@ -419,6 +419,12 @@ export class MiniSession extends llm.RealtimeSession {
     const request = this.pending.shift();
     if (request) {
       this.sent = request;
+      clearTimeout(request.timer);
+      request.timer = setTimeout(() => {
+        this.retireRequest(request.id);
+        this.settle(request, new ResponseUnavailable());
+        this.transportLost();
+      }, 15000);
       this.send({
         type: "response.create",
         response: {
@@ -625,7 +631,6 @@ export class MiniSession extends llm.RealtimeSession {
         this.generations.delete(g);
       }
     if (!event || typeof event.type !== "string") throw Error();
-    this.emit("provider_event", event);
     if (event.type === "session.updated") {
       if (
         !acceptedMiniEcho(
@@ -637,6 +642,7 @@ export class MiniSession extends llm.RealtimeSession {
         return this.emitFatal("configuration_invalid");
       if (this.providerSession && this.providerSession !== event.session.id)
         return this.emitFatal("session_identity_changed");
+      this.emit("provider_event", event);
       this.providerSession = event.session.id;
       if (!this.ready) {
         this.ready = true;
@@ -651,6 +657,7 @@ export class MiniSession extends llm.RealtimeSession {
       }
       return;
     }
+    this.emit("provider_event", event);
     if (event.type === "error") {
       const correlated = this.requests.get(event.error?.event_id);
       const code = event.error?.code;
@@ -978,7 +985,7 @@ export class MiniSession extends llm.RealtimeSession {
             content: [{ type: "input_text", text: item.textContent }],
           },
         });
-        this.known.add(item.id);
+        this.remember("caller", item.id, item.textContent);
       } else if (
         item.type === "function_call_output" &&
         this.externalTools.has(item.callId)
@@ -1041,10 +1048,11 @@ export class MiniSession extends llm.RealtimeSession {
         resolve,
         reject,
         signal: options?.signal,
+        // Caller/active-output waiting is not a provider acknowledgment failure.
         timer: setTimeout(() => {
           this.settle(request, new ResponseUnavailable());
-          this.transportLost();
-        }, 15000),
+          this.pump();
+        }, 60000),
         abort: () => {
           this.retireRequest(request.id);
           this.settle(request, new ResponseUnavailable());
