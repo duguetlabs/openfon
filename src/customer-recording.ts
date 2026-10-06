@@ -11,6 +11,7 @@ export function customerRecording(response: Response): Response {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   let pending = "";
+  let projectedRecords = 0;
   const project = (line: string): string => {
     if (!line) return "";
     const row = JSON.parse(line) as Record<string, unknown>;
@@ -42,8 +43,12 @@ export function customerRecording(response: Response): Response {
         "data",
       ];
     else if (row.kind === "capture" && ["speech_start","speech_end","interrupted","cancel","truncate","playback_start","playback_end","error","stopped","gap"].includes(String(row.name))) keys = ["kind", "seq", "ms", "sourceMs", "name"];
-    else if (row.kind === "end") keys = ["kind", "chunks"];
+    else if (row.kind === "end") {
+      row.records = projectedRecords;
+      keys = ["kind", "chunks", "records"];
+    }
     else return "";
+    if (row.kind !== "manifest" && row.kind !== "end") projectedRecords++;
     return (
       JSON.stringify(
         Object.fromEntries(

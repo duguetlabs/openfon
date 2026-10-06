@@ -12,7 +12,8 @@ if ((await stat(args[0])).size > 140 * 1024 * 1024) throw Error('Bundle exceeds 
 const lines = (await readFile(args[0], 'utf8')).trim().split('\n').map(line => JSON.parse(line));
 const manifest = lines.shift(), end = lines.pop();
 if (manifest.kind !== 'manifest' || manifest.version !== 1 || end?.kind !== 'end' || end.chunks !== manifest.chunks) throw Error('Incomplete or unsupported bundle');
-if ((manifest.partial || manifest.interrupted || (manifest.projection !== 'recording-only' && lines.length !== manifest.records)) && !args.includes('--allow-partial')) throw Error('Partial recording: pass --allow-partial to inspect it; never treat missing audio as silence');
+if (manifest.projection === 'recording-only' && (!Number.isSafeInteger(end.records) || end.records < 0)) throw Error('Incomplete projected bundle');
+if ((manifest.partial || manifest.interrupted || lines.length !== (manifest.projection === 'recording-only' ? end.records : manifest.records)) && !args.includes('--allow-partial')) throw Error('Partial recording: pass --allow-partial to inspect it; never treat missing audio as silence');
 let lastSeq = -1;
 for (const r of lines) {
   if (!Number.isSafeInteger(r.seq) || r.seq <= lastSeq || !Number.isFinite(r.ms) || r.ms < 0 || r.ms > 3_600_000) throw Error('Invalid record sequence or time');

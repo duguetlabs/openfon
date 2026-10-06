@@ -21,6 +21,10 @@ it('extracts sanitized caller/output tracks at their actual rates without permit
   const caller=readFileSync(join(dir,'audio/caller.wav')),agent=readFileSync(join(dir,'audio/agent-48000.wav'));
   expect(caller.readUInt32LE(24)).toBe(24000);expect(agent.readUInt32LE(24)).toBe(48000);
   expect(caller.subarray(44)).toEqual(Buffer.from([1,0,2,0]));expect(agent.subarray(44)).toEqual(Buffer.from([3,0,4,0]));
+  const damaged=projected.trim().split('\n').filter(line=>JSON.parse(line).track!=='caller').join('\n');
+  writeFileSync(path,damaged);
+  const missing=spawnSync(process.execPath,args,{encoding:'utf8'});expect(missing.status).not.toBe(0);expect(missing.stderr).toContain('Partial recording');
+  writeFileSync(path,projected);
   const live=spawnSync(process.execPath,[...args,'--live'],{encoding:'utf8'});expect(live.status).not.toBe(0);expect(live.stderr).toContain('offline extraction only');
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
