@@ -34,7 +34,7 @@ Require one changed row and read the result back. Material edits automatically i
 
 ## Quote and order boundaries
 
-Quotes pin the exact approval ID/revision, area and business identity after inventory returns. Explicit carrier country/type/area mismatches are rejected; an area-specific approval requires the carrier to return that destination code. A changed approval or identity during the inventory request produces a conflict rather than an executable stale quote.
+Quotes pin the exact approval ID/revision, area and business identity after inventory returns. Explicit carrier country/type contradictions are rejected. Telnyx does not return a destination-code field: for any area-filtered request, the application requires a matching country in `region_information` and the documented `best_effort: false` response asserting an exact match to the submitted search criteria. Missing, true or malformed match flags cannot authorize an area quote. This relies on the carrier’s exact-match assertion, not independent numbering-plan parsing. The application does not send the US/Canada-only best-effort query option for other markets. A changed approval or identity during the inventory request produces a conflict rather than an executable stale quote.
 
 Ordering checks the same pins on initial read, reservation and immediately before the provider request. Existing price, expiry, subscription coverage, assistant, account deletion, cancellation and spending controls remain. The last database admission is the boundary: an operator change after the provider request has already been dispatched cannot retract it. This is not a distributed cancellation guarantee.
 

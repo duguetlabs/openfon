@@ -125,14 +125,15 @@ export async function quotePhoneNumbers(
   const quotes = [];
   for (const n of response.data.slice(0, 5)) {
     if (!e164(n.phone_number) || !n.cost_information) continue;
-    // Reject explicit mismatches. Area-scoped reviews additionally require the
-    // carrier to identify the returned destination code; a filter is not proof.
-    const country = n.country_code ?? n.region_information?.find((r:any)=>r.region_type==='country_code')?.region_name;
-    const numberType = n.phone_number_type;
-    const destination = n.national_destination_code;
-    if ((country !== undefined && country !== input.country) || (numberType !== undefined && numberType !== input.type) ||
-        (approval.area_code !== null && String(destination ?? '') !== approval.area_code) ||
-        (destination !== undefined && area !== null && String(destination) !== area)) continue;
+    // Telnyx does not return a destination-code field. For an area-filtered
+    // request, its explicit best_effort=false asserts an exact criteria match.
+    const regions = Array.isArray(n.region_information) ? n.region_information : [];
+    const regionCountries = regions.filter((r:any) => r?.region_type === 'country_code').map((r:any) => r.region_name);
+    if ((n.country_code !== undefined && n.country_code !== input.country) ||
+        regionCountries.some((country:unknown) => country !== input.country) ||
+        (n.phone_number_type !== undefined && n.phone_number_type !== input.type) ||
+        n.best_effort === true ||
+        (area !== null && (n.best_effort !== false || !regionCountries.length))) continue;
     const setupMinor = quotedMinor(n.cost_information.upfront_cost),
       monthlyMinor = quotedMinor(n.cost_information.monthly_cost),
       currency = n.cost_information.currency;

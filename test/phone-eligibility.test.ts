@@ -8,7 +8,7 @@ beforeEach(()=>{
  db=new SqliteD1();applyMigrations(db);for(const name of ['0027_commercial','0028_business_country','0029_phone_eligibility'])db.exec(readFileSync('migrations/'+name+'.sql','utf8'));
  db.exec("INSERT INTO users(id,email,password_hash)VALUES('u','u@example.invalid','hash'),('v','v@example.invalid','hash');INSERT INTO businesses(id,user_id,slug,name,address,country)VALUES('b','u','b','Business','Reviewed street','CL'),('foreign','v','foreign','Foreign','Other street','AT');INSERT INTO assistants(id,business_id,public_slug,name)VALUES('assistant','b','assistant','Assistant');INSERT INTO commercial_accounts(business_id,provider_mode,customer_id,status,activated_at,paid_through)VALUES('b','test','customer','active','2026-01-01','2999-01-01');");
  env={DB:db,TELNYX_PURCHASES_ENABLED:'true',TELNYX_CARRIER_VERIFIED:'true',TELNYX_ENABLED:'true',TELNYX_API_KEY:'synthetic',TELNYX_CONNECTION_ID:'connection',TELNYX_PURCHASE_COUNTRY:'AT',TELNYX_MAX_SETUP_MINOR:'100',TELNYX_MAX_MONTHLY_MINOR:'100',TELNYX_PURCHASE_CURRENCY:'USD'} as unknown as CommercialEnv;
- vi.stubGlobal('fetch',vi.fn(async(_url:string,init:RequestInit)=>init.method==='POST'?Response.json({data:{id:'remote'}}):Response.json({data:[{phone_number:'+431234567',country_code:'AT',phone_number_type:'local',national_destination_code:'1',cost_information:{upfront_cost:'1.00000',monthly_cost:'1.00000',currency:'USD'}}]})));
+ vi.stubGlobal('fetch',vi.fn(async(_url:string,init:RequestInit)=>init.method==='POST'?Response.json({data:{id:'remote'}}):Response.json({data:[{phone_number:'+431234567',region_information:[{region_type:'country_code',region_name:'AT'}],phone_number_type:'local',best_effort:false,cost_information:{upfront_cost:'1.00000',monthly_cost:'1.00000',currency:'USD'}}]})));
 });
 afterEach(()=>{db.close();vi.unstubAllGlobals();});
 function approve(business='b',area:string|null=null){db.database.prepare("INSERT INTO commercial_phone_approvals(id,business_id,country,number_type,area_code,status,business_name,business_address,business_country,reviewed_at,expires_at) SELECT ?,id,'AT','local',?,'approved',name,address,country,'2026-01-01','2999-01-01' FROM businesses WHERE id=?").run('approval-'+business,area,business);}
@@ -28,11 +28,31 @@ it.each(['pending','rejected','revoked','expired','name','address','country','mi
  await expect(quote()).rejects.toThrow();expect(fetch).not.toHaveBeenCalled();
 });
 it('distinguishes regulatory approval from operator purchase availability',async()=>{approve();env.TELNYX_PURCHASES_ENABLED='false';const view=await getPhoneView(env,'b');expect(view.offers[0]).toMatchObject({status:'approved',canSearch:false});expect(view.provisioningAvailable).toBe(false);});
-it('requires the exact reviewed area and rejects missing or mismatched carrier scope',async()=>{
- approve('b','1');await expect(quote()).rejects.toThrow();await expect(quote('2')).rejects.toThrow();expect(fetch).not.toHaveBeenCalled();expect((await quote('1')).quotes).toHaveLength(1);
- for(const data of [{country_code:'DE',phone_number_type:'local',national_destination_code:'1'},{country_code:'AT',phone_number_type:'toll_free',national_destination_code:'1'},{country_code:'AT',phone_number_type:'local',national_destination_code:'2'},{country_code:'AT',phone_number_type:'local'}]){
+it('requires the reviewed area and documented exact-match response rather than a nonexistent destination field',async()=>{
+ approve('b','1');await expect(quote()).rejects.toThrow();await expect(quote('2')).rejects.toThrow();expect(fetch).not.toHaveBeenCalled();
+ expect((await quote('1')).quotes).toHaveLength(1);
+ const url=new URL(String(vi.mocked(fetch).mock.calls[0][0]));
+ expect(url.searchParams.get('filter[national_destination_code]')).toBe('1');
+ expect(url.searchParams.has('filter[best_effort]')).toBe(false);
+ for(const data of [
+  {region_information:[{region_type:'country_code',region_name:'DE'}],best_effort:false},
+  {region_information:[{region_type:'country_code',region_name:'AT'},{region_type:'country_code',region_name:'DE'}],best_effort:false},
+  {region_information:[{region_type:'country_code',region_name:'AT'}],country_code:'DE',best_effort:false},
+  {region_information:[{region_type:'country_code',region_name:'AT'}],phone_number_type:'toll_free',best_effort:false},
+  {region_information:[{region_type:'country_code',region_name:'AT'}],best_effort:true},
+  {region_information:[{region_type:'country_code',region_name:'AT'}]},
+  {region_information:[{region_type:'country_code',region_name:'AT'}],best_effort:'false'},
+  {region_information:{region_type:'country_code',region_name:'AT'},best_effort:false},
+  {region_information:[null],best_effort:false},
+  {best_effort:false},
+ ]){
   vi.mocked(fetch).mockResolvedValueOnce(Response.json({data:[{...data,phone_number:'+431234567',cost_information:{upfront_cost:'1',monthly_cost:'1',currency:'USD'}}]}));expect((await quote('1')).quotes).toHaveLength(0);
  }
+});
+it('requires an exact response for optional area filters under a country-wide approval too',async()=>{
+ approve();vi.mocked(fetch).mockResolvedValueOnce(Response.json({data:[{phone_number:'+431234567',region_information:[{region_type:'country_code',region_name:'AT'}],cost_information:{upfront_cost:'1',monthly_cost:'1',currency:'USD'}}]}));
+ expect((await quote('1')).quotes).toHaveLength(0);
+ expect((await quote('1')).quotes).toHaveLength(1);
 });
 it.each(['country','approval'])('rejects a %s change after inventory but before quote insertion',async kind=>{
  approve();vi.mocked(fetch).mockImplementationOnce(async()=>{db.exec(kind==='country'?"UPDATE businesses SET country='DE' WHERE id='b'":"UPDATE commercial_phone_approvals SET status='revoked'");return Response.json({data:[{phone_number:'+431234567',cost_information:{upfront_cost:'1',monthly_cost:'1',currency:'USD'}}]});});
