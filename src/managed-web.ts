@@ -49,6 +49,7 @@ const workspaceFields = [
   "name",
   "description",
   "address",
+  "country",
   "phone",
   "website",
   "timezone",

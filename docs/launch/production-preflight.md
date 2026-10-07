@@ -1,6 +1,33 @@
 # Production preflight
 
-## Current production deployment — 2026-10-07
+## Current production deployment — private recording, 2026-10-07
+
+OpenFon Web is deployed at **https://openfon.ai** for owner testing. PRs 54 and 55 added private-test recording and repaired deleted-recording availability responses. Business-country/phone-review changes and saved-voice guidance in this branch are not yet deployed; migrations 0028/0029 remain pending.
+
+| Item | Production | Staging |
+| --- | --- | --- |
+| Application source | `6499e349f16c4b361421945e086a9c6e553ffd6d` | Same |
+| Worker version, 100% | `d005e405-6037-4a78-869e-b60b8913aa55` | `0531d3b8-d8de-4962-88a1-bb2bda28e4fe` |
+| Node image | `sha256:932c493f119592eb4b8152f521ccfd23daf3971ff33c05eb7dbecc91b97670ec` | Same |
+| Node source | `22d2519c1686155f3abe1edcfd32b5df5c9c18de` (identical Node source through application 6499e349) | Same |
+| Private-test debug recording | Enabled | Enabled |
+| Inference | Azure `gpt-realtime-2.1-mini`; delegated/post-call `gpt-5.4-mini` | Same |
+| D1 migrations | 0001–0027, preserving historical 0024 | 0001–0023, 0025–0027; never replay 0024 |
+| Billing verification, checkout, charging, carrier ingress, phone purchases | Disabled | Disabled |
+
+PR55's exact reviewed tree passed genuine PR-Agent security/major clearance, local Codex review and CI `37548929634` (all five jobs). Its full Worker suite passed 2,345 tests/104 files, types and build. PR54 passed 150 serial Node tests and both Node checks. Recording required no migration.
+
+The single authorized staging recording call completed in 55 stored seconds with six transcript turns, summary, open callback action, measured realtime/reasoning/transcription/text observations and nonzero generated audio. Its complete customer-projected download contained 6,286 records with strict sequence/count, allowlisted-field/privacy and no-store checks. The captured raw PCM payloads contained 2,461,920 caller bytes and 1,093,440 assistant bytes at 24 kHz; offline WAV extraction additionally inserts timing-gap silence. Anonymous access returned 401, another owner 404 and deletion 200. Both synthetic accounts were deleted.
+
+**The original harness failed** after deletion because the availability response became an empty JSON body and returned 500. PR55 preserves that JSON response instead of processing it as recording lines. The first immediate repaired staging control still returned 500; the cause remains unconfirmed. A later unchanged-source control passed all four checks. These failures are retained separately, not relabeled as passes. Production passed the same four no-inference availability/deletion controls, with its synthetic account deleted; there was no new paid production call.
+
+Production readbacks verified exact Worker/Node identities, protected configuration and credential identities, persistent usage/outbox/cursors, health 200, zero rooms/active calls/restarts. Landing, sign-in, health, robots and sitemap returned 200; served HTML matched built bytes with the production canonical URL. Native in-app browser inspection independently verified the private-test recording disclosure before Start. No physical microphone, speaker, smart-glasses noise or all-voice acceptance is claimed by software-received PCM.
+
+The production rollout used the canonical deployment checks and exact production build, then the corresponding Wrangler command with only `TEST_CALL_DEBUG=true` overridden: the deployment wrapper did not forward this selected flag. The tracked staging/production configuration now retains that already-selected true flag for future canonical deployments; no new recording scope is enabled. Previous rollback pair: Worker `6557299d-198a-420b-a38b-356d682a6ee3`, Node `sha256:8bfde55695150b015a811c408c5f74b87d50e1bdd0ca13ee87c5e7b711336227`. Restore compatible configuration only; preserve current usage/outbox/cursors and additive database state. Do not overwrite live usage with an old configuration backup.
+
+The following sections retain historical rollout evidence and limits. Their earlier versions and missing-recording statements do not describe the current deployment.
+
+## Historical Mini rollout before private recording — 2026-10-07
 
 The managed OpenFon Web application is deployed at **https://openfon.ai** for owner testing, using direct Azure through the existing LiveKit/Node transport. Production deployment is complete; payment, phone provisioning and unrestricted physical-call acceptance are separate unfinished gates. This section supersedes the pending-production statements in the dated pre-rollout checkpoint below.
 
@@ -34,7 +61,7 @@ The one authorized English production call completed in 57 seconds through actua
 
 The original harness **exited 1** because the requested arithmetic answer was missing; it remains a failed probe. Independent offline source review found that this arithmetic expectation conflicted with the fixture's explicit “Take callback messages only” instruction and the compiled business-only/unrelated-question restrictions. The missing answer therefore does not establish a callback-service regression, but arithmetic correctness is not claimed and the model's actual reason remains unknown. Callback-service evidence was assessed separately; the original result was not relabeled. A timed follow-up preceded a shortened final readback; interruption is plausible, but exact provider causality was not captured.
 
-Two earlier staging greeting-stage failures remain unexplained. A later interrupted-greeting call succeeded, which does not prove those failures repaired. The German staging fixture also contained an English reasoning acknowledgement. Software-received PCM does not prove physical audibility, subjective voice identity, smart-glasses restaurant-noise robustness, repeated device calls, all voices or PSTN readiness. LiveKit debug audio recording is not implemented.
+Two earlier staging greeting-stage failures remain unexplained. A later interrupted-greeting call succeeded, which does not prove those failures repaired. The German staging fixture also contained an English reasoning acknowledgement. Software-received PCM does not prove physical audibility, subjective voice identity, smart-glasses restaurant-noise robustness, repeated device calls, all voices or PSTN readiness. LiveKit debug audio recording was not implemented at this historical checkpoint.
 
 ### Operating limits and rollback
 

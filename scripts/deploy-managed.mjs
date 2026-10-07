@@ -97,18 +97,20 @@ export async function verifyRemotePrerequisites(
     return result.result;
   }
   const result = await api(`/d1/database/${databaseId}/query`, {
-    sql: "SELECT name FROM d1_migrations WHERE name IN ('0026_business_actions.sql','0027_commercial.sql')",
+    sql: "SELECT name FROM d1_migrations WHERE name IN ('0026_business_actions.sql','0027_commercial.sql','0028_business_country.sql','0029_phone_eligibility.sql')",
   });
   const names = new Set(result[0]?.results?.map((row) => row.name));
   if (
     !names.has("0026_business_actions.sql") ||
-    !names.has("0027_commercial.sql")
+    !names.has("0027_commercial.sql") ||
+    !names.has("0028_business_country.sql") ||
+    !names.has("0029_phone_eligibility.sql")
   )
     throw Error(
-      "Apply only reviewed migrations 0026 and 0027 after backup and staging acceptance before deploying. This command never applies migrations.",
+      "Apply only reviewed migrations 0026–0029 after backup and staging acceptance before deploying. This command never applies migrations.",
     );
   await api(`/d1/database/${databaseId}/query`, {
-    sql: "SELECT businesses.contact_email,call_action_extractions.token,commercial_payment_writers.token FROM businesses,call_action_extractions,commercial_payment_writers LIMIT 0",
+    sql: "SELECT businesses.contact_email,businesses.country,call_action_extractions.token,commercial_payment_writers.token,commercial_phone_approvals.revision,commercial_phone_quotes.approval_id FROM businesses,call_action_extractions,commercial_payment_writers,commercial_phone_approvals,commercial_phone_quotes LIMIT 0",
   });
   const settings = await api(`/workers/scripts/${config.name}/settings`);
   const secretNames = new Set(

@@ -1,3 +1,5 @@
+import { approvedPhoneSelection, phoneEligibility, CURRENT_PHONE_APPROVAL, QUOTED_PHONE_APPROVAL } from './commercial-phone-eligibility';
+import { validBusinessCountry } from './countries';
 import {
   BillingError,
   providerId,
@@ -14,7 +16,7 @@ export function phoneProvisioningReady(env: CommercialEnv) {
     env.TELNYX_ENABLED === "true" &&
     !!env.TELNYX_API_KEY &&
     !!env.TELNYX_CONNECTION_ID &&
-    /^[A-Z]{2}$/.test(env.TELNYX_PURCHASE_COUNTRY ?? "") &&
+    Boolean(env.TELNYX_PURCHASE_COUNTRY && validBusinessCountry(env.TELNYX_PURCHASE_COUNTRY)) &&
     /^\d+$/.test(env.TELNYX_MAX_SETUP_MINOR ?? "") &&
     /^\d+$/.test(env.TELNYX_MAX_MONTHLY_MINOR ?? "") &&
     /^[A-Z]{3}$/.test(env.TELNYX_PURCHASE_CURRENCY ?? "")
@@ -78,10 +80,7 @@ export async function getPhoneView(env: CommercialEnv, businessId: string) {
     .all();
   return {
     numbers: results.map((row) => ({ ...row, enabled: row.enabled === 1 })),
-    provisioningAvailable: phoneProvisioningReady(env),
-    unavailableReason: phoneProvisioningReady(env)
-      ? null
-      : "Phone setup is not available yet. Your existing web call links still work.",
+    ...await phoneEligibility(env, businessId, phoneProvisioningReady(env)),
   };
 }
 export async function quotePhoneNumbers(
@@ -94,7 +93,7 @@ export async function quotePhoneNumbers(
       (k) => !["country", "areaCode", "type"].includes(k),
     ) ||
     typeof input.country !== "string" ||
-    !/^[A-Z]{2}$/.test(input.country) ||
+    !validBusinessCountry(input.country) ||
     !["local", "toll_free"].includes(input.type as string) ||
     (input.areaCode !== undefined &&
       (typeof input.areaCode !== "string" || !/^\d{1,6}$/.test(input.areaCode)))
@@ -108,6 +107,8 @@ export async function quotePhoneNumbers(
       "Phone setup is not available for this country yet.",
       409,
     );
+  const area = typeof input.areaCode === "string" ? input.areaCode : null;
+  const approval = await approvedPhoneSelection(env,businessId,input.country,input.type as string,area);
   const params = new URLSearchParams({
     "filter[country_code]": input.country,
     "filter[phone_number_type]": input.type as string,
@@ -124,6 +125,14 @@ export async function quotePhoneNumbers(
   const quotes = [];
   for (const n of response.data.slice(0, 5)) {
     if (!e164(n.phone_number) || !n.cost_information) continue;
+    // Reject explicit mismatches. Area-scoped reviews additionally require the
+    // carrier to identify the returned destination code; a filter is not proof.
+    const country = n.country_code ?? n.region_information?.find((r:any)=>r.region_type==='country_code')?.region_name;
+    const numberType = n.phone_number_type;
+    const destination = n.national_destination_code;
+    if ((country !== undefined && country !== input.country) || (numberType !== undefined && numberType !== input.type) ||
+        (approval.area_code !== null && String(destination ?? '') !== approval.area_code) ||
+        (destination !== undefined && area !== null && String(destination) !== area)) continue;
     const setupMinor = quotedMinor(n.cost_information.upfront_cost),
       monthlyMinor = quotedMinor(n.cost_information.monthly_cost),
       currency = n.cost_information.currency;
@@ -139,22 +148,14 @@ export async function quotePhoneNumbers(
     const requirements = [
       "Business and identity requirements may apply before activation.",
     ];
-    await env.DB.prepare(
-      "INSERT INTO commercial_phone_quotes(id,business_id,phone_number,country,number_type,currency,setup_minor,monthly_minor,requirements_json,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
-    )
-      .bind(
-        id,
-        businessId,
-        n.phone_number,
-        input.country,
-        input.type,
-        currency,
-        setupMinor,
-        monthlyMinor,
-        JSON.stringify(requirements),
-        expiresAt,
-      )
-      .run();
+    const inserted = await env.DB.prepare(
+      `INSERT INTO commercial_phone_quotes(id,business_id,phone_number,country,number_type,currency,setup_minor,monthly_minor,requirements_json,expires_at,approval_id,approval_revision,area_code)
+       SELECT ?,b.id,?,?,?,?,?,?,?,?,a.id,a.revision,? FROM commercial_phone_approvals a JOIN businesses b ON b.id=a.business_id
+       WHERE a.id=? AND a.revision=? AND b.id=? AND ${CURRENT_PHONE_APPROVAL}
+       AND a.country=? AND a.number_type=? AND (a.area_code IS NULL OR a.area_code IS ?)`
+    ).bind(id,n.phone_number,input.country,input.type,currency,setupMinor,monthlyMinor,JSON.stringify(requirements),expiresAt,area,
+      approval.id,approval.revision,businessId,input.country,input.type,area).run();
+    if(inserted.meta.changes!==1)throw new BillingError('Your business details or phone review changed. Check your details and search again.',409);
     quotes.push({
       id,
       number: n.phone_number,
@@ -175,8 +176,6 @@ export async function orderPhoneNumber(
   quoteId: unknown,
   assistantId: unknown,
 ) {
-  if (!phoneProvisioningReady(env))
-    throw new BillingError("Phone setup is not available yet.", 409);
   if (!providerId(quoteId) || !providerId(assistantId))
     throw new BillingError("Choose a number and assistant.", 400);
   const existing = await env.DB.prepare(
@@ -185,8 +184,10 @@ export async function orderPhoneNumber(
     .bind(quoteId, businessId)
     .first();
   if (existing) return existing;
+  if (!phoneProvisioningReady(env))
+    throw new BillingError("Phone setup is not available yet.", 409);
   const quote = await env.DB.prepare(
-    "SELECT * FROM commercial_phone_quotes WHERE id=? AND business_id=? AND used_at IS NULL AND expires_at>?",
+    `SELECT q.* FROM commercial_phone_quotes q WHERE q.id=? AND q.business_id=? AND q.used_at IS NULL AND q.expires_at>? AND ${QUOTED_PHONE_APPROVAL}`,
   )
     .bind(quoteId, businessId, new Date().toISOString())
     .first<any>();
@@ -233,6 +234,7 @@ export async function orderPhoneNumber(
         SELECT ?,?,?,q.id,q.phone_number,?,? FROM commercial_phone_quotes q
         WHERE q.id=? AND q.business_id=? AND q.used_at IS NULL AND julianday(q.expires_at)>julianday('now')
         AND q.phone_number=? AND q.country=? AND q.currency=? AND q.setup_minor<=? AND q.monthly_minor<=?
+        AND ${QUOTED_PHONE_APPROVAL}
         AND EXISTS(SELECT 1 FROM assistants WHERE id=? AND business_id=?)
         AND EXISTS(SELECT 1 FROM commercial_accounts WHERE business_id=? AND status='active'
           AND activated_at IS NOT NULL AND julianday(paid_through)>julianday('now')
@@ -280,12 +282,16 @@ export async function orderPhoneNumber(
     );
   const eligible = await env.DB.prepare(
     `SELECT o.id FROM commercial_phone_orders o JOIN commercial_accounts a ON a.business_id=o.business_id
+    JOIN commercial_phone_quotes q ON q.id=o.quote_id AND q.business_id=o.business_id
     WHERE o.id=? AND o.business_id=? AND o.state='pending' AND a.status='active' AND a.activated_at IS NOT NULL
     AND julianday(a.paid_through)>julianday('now') AND (a.retail_stopped_at IS NULL OR julianday(a.retail_stopped_at)>julianday('now'))
     AND NOT EXISTS(SELECT 1 FROM commercial_cancellations c WHERE c.business_id=o.business_id AND julianday(c.term_end)<=julianday('now'))
-    AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs d WHERE d.business_id=o.business_id)`,
+    AND NOT EXISTS(SELECT 1 FROM commercial_deletion_jobs d WHERE d.business_id=o.business_id)
+    AND EXISTS(SELECT 1 FROM assistants ass WHERE ass.id=o.assistant_id AND ass.business_id=o.business_id)
+    AND q.country=? AND q.currency=? AND q.setup_minor<=? AND q.monthly_minor<=? AND julianday(q.expires_at)>julianday('now')
+    AND ${QUOTED_PHONE_APPROVAL}`,
   )
-    .bind(id, businessId)
+    .bind(id, businessId, env.TELNYX_PURCHASE_COUNTRY!, env.TELNYX_PURCHASE_CURRENCY!, Number(env.TELNYX_MAX_SETUP_MINOR), Number(env.TELNYX_MAX_MONTHLY_MINOR))
     .first();
   if (!eligible) {
     // No provider request was made: this reservation is safe to fail locally.

@@ -535,8 +535,8 @@ app.post('/api/me/business', async (c) => {
   const collectionId = `kc_default_${id}`;
   const createStatements = [
     c.env.DB.prepare(
-      `INSERT INTO businesses (id, user_id, slug, name, description, address, phone, website, timezone, hours_json, services_json, faqs_json, closures_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO businesses (id, user_id, slug, name, description, address, phone, website, timezone, hours_json, services_json, faqs_json, closures_json${body.country !== undefined ? ", country" : ""})
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${body.country !== undefined ? ", ?" : ""})`
     ).bind(
       id,
       userId,
@@ -550,7 +550,8 @@ app.post('/api/me/business', async (c) => {
       body.hours_json ?? '[]',
       body.services_json ?? '[]',
       body.faqs_json ?? '[]',
-      body.closures_json ?? '[]'
+      body.closures_json ?? '[]',
+      ...(body.country !== undefined ? [body.country] : [])
     ),
     // A fresh compatibility row is deliberately incomplete, matching the draft
     // assistant. Besides making bootstrap resumable, this gives mixed-version
@@ -620,7 +621,7 @@ app.put('/api/me/business/:id', async (c) => {
   if (b.default_language !== undefined && !/^[a-z]{2}(?:-[A-Za-z]{2,8})?$/.test(b.default_language)) return c.json({error:'Choose a valid language.'},400);
   if (b.contact_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(b.contact_email)) return c.json({error:'Enter a valid contact email.'},400);
   const businessUpdate = c.env.DB.prepare(
-    `UPDATE businesses SET name=?, description=?, address=?, phone=?, website=?, timezone=?, hours_json=?, services_json=?, faqs_json=?, closures_json=?, max_concurrent_calls=?, max_calls_per_day=?${extra.map(key=>`, ${key}=?`).join('')} WHERE id=?`
+    `UPDATE businesses SET name=?, description=?, address=?, phone=?, website=?, timezone=?, hours_json=?, services_json=?, faqs_json=?, closures_json=?, max_concurrent_calls=?, max_calls_per_day=?${extra.map(key=>`, ${key}=?`).join('')}${b.country !== undefined ? ', country=?' : ''} WHERE id=?`
   )
     .bind(
       b.name?.trim() || biz.name,
@@ -636,6 +637,7 @@ app.put('/api/me/business/:id', async (c) => {
       clampCap(b.max_concurrent_calls, biz.max_concurrent_calls, 50),
       clampCap(b.max_calls_per_day, biz.max_calls_per_day, 100_000),
       ...extra.map(key => b[key]),
+      ...(b.country !== undefined ? [b.country] : []),
       biz.id
     );
   if (servicesChanged || faqsChanged) {

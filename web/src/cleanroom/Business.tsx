@@ -12,6 +12,7 @@ import {
 } from "../row-arrays";
 import { readServiceRows, serializeServiceRows } from "../service-rows";
 import { Button, Field, Notice, errorText, useDirtyGuard } from "./ui";
+import { CountrySelect } from "./CountrySelect";
 import { Icon } from "./icons";
 import "./business.css";
 
@@ -19,6 +20,7 @@ const basics = [
   "name",
   "description",
   "address",
+  "country",
   "phone",
   "website",
   "timezone",
@@ -30,6 +32,7 @@ const labels = {
   name: "Business name",
   description: "What you do",
   address: "Address",
+  country: "Business country",
   phone: "Contact phone",
   website: "Website",
   timezone: "Time zone",
@@ -233,7 +236,9 @@ export function Business({
       >
         {basics.map((key) => (
           <Field key={key} label={labels[key]}>
-            {key === "default_language" ? (
+            {key === "country" ? (
+              <CountrySelect value={draft.workspace.country} onChange={country=>change({...draft,workspace:{...draft.workspace,country}})} />
+            ) : key === "default_language" ? (
               <select
                 value={draft.workspace.default_language || "en"}
                 onChange={(e) =>

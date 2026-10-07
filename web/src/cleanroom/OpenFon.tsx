@@ -1,3 +1,4 @@
+import { CountrySelect } from "./CountrySelect";
 /**
  * THESIS: A warm welcome leads to a clear next step, with the selected Brand Identity page as authority.
  * OWN-WORLD: Exact handset-f artwork, Lilita400 short headings, Nunito Sans, blue, butter and paper.
@@ -33,7 +34,7 @@ import { Billing, PhoneNumbers } from "./Commercial";
 import { Dashboard } from "./Dashboard";
 import { Inbox } from "./Inbox";
 import "./managed.css";
-import { VoiceChoices } from "./VoiceChoices";
+import { VoiceChoices, type VoiceCatalog } from "./VoiceChoices";
 import { Welcome } from "./Welcome";
 import { Account } from './Account';
 import { PromptExamples } from './PromptExamples';
@@ -196,10 +197,11 @@ function Auth({ onDone, recovery, onRetry }: {
 function Setup({ onDone }: { onDone: () => void | Promise<void> }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [country, setCountry] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [created, setCreated] = useState(false);
-  useDirtyGuard(!created && Boolean(name.trim() || description.trim()));
+  useDirtyGuard(!created && Boolean(name.trim() || description.trim() || country));
   const pending = useRef(false);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -227,6 +229,7 @@ function Setup({ onDone }: { onDone: () => void | Promise<void> }) {
               await api.createWorkspace({
               name,
               description,
+              country,
               timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
               });
               if (!mounted.current) return;
@@ -264,6 +267,9 @@ function Setup({ onDone }: { onDone: () => void | Promise<void> }) {
             placeholder="We’re a local…"
           />
         </Field>
+        <Field label="Business country" hint="Where your business is based. You can add this later; phone setup will need it.">
+          <CountrySelect value={country} onChange={setCountry} disabled={busy || created} />
+        </Field>
         <Button type="submit" disabled={busy}>
           {busy ? "Preparing your desk…" : created ? "Retry opening your desk" : "Meet your receptionist"}
           <Icon name="arrow" size={18} />
@@ -287,6 +293,7 @@ function Desk({
 }) {
   const [draft, setDraft] = useState<Assistant>(assistant);
   const [legacyVoiceCatalog, setLegacyVoiceCatalog] = useState(false);
+  const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog>({status:"loading",ids:[]});
   const [open, setOpen] = useState<string | null>(
     !assistant.greeting ? "identity" : null,
   );
@@ -330,6 +337,10 @@ function Desk({
     });
   }, [assistant]);
   const dirty = fields.some((k) => draft[k] !== assistant[k]);
+  const savedVoiceIssue = voiceCatalog.status === "loading" ? "Checking voice choices…"
+    : voiceCatalog.status === "error" ? "Open ‘Who answers’ and retry loading voice choices before testing or publishing."
+    : voiceCatalog.status === "ready" && !voiceCatalog.ids.includes(assistant.voice)
+      ? "Choose an available voice in ‘Who answers’ and save it before testing or publishing." : undefined;
   useEffect(() => {
     const prevent = (e: BeforeUnloadEvent) => {
       if (dirty) {
@@ -423,6 +434,7 @@ function Desk({
           </div>
           {error && <Notice error>{error}</Notice>}
           {notice && <Notice>{notice}</Notice>}
+          {savedVoiceIssue && voiceCatalog.status !== "loading" && <Notice>{savedVoiceIssue}</Notice>}
           {job(
             "identity",
             "Who answers",
@@ -458,7 +470,7 @@ function Desk({
                   placeholder="Warm, clear and helpful. Keep answers brief."
                 />
               </Field>
-              <VoiceChoices draft={draft} onChange={editDraft} onLegacyCatalog={setLegacyVoiceCatalog} />
+              <VoiceChoices draft={draft} onChange={editDraft} onLegacyCatalog={setLegacyVoiceCatalog} onCatalog={setVoiceCatalog} />
             </div>,
           )}
           {job(
@@ -554,7 +566,7 @@ function Desk({
             !assistant.persona.trim() ||
             !assistant.language.trim()
               ? "Complete ‘Who answers’ first."
-              : undefined
+              : savedVoiceIssue
           }
           onEnded={refreshCalls}
         />
@@ -596,9 +608,9 @@ function Desk({
         }}>Retry assistant refresh</Button>}
         <Button
           kind="line"
-          disabled={busy || dirty || assistantRefreshPending}
+          disabled={busy || dirty || assistantRefreshPending || (assistant.state !== "active" && Boolean(savedVoiceIssue))}
           onClick={async () => {
-            if (mutation.current || assistantRefreshPending) return;
+            if (mutation.current || assistantRefreshPending || (assistant.state !== "active" && savedVoiceIssue)) return;
             mutation.current = true; setBusy(true);
             setError("");
             try {

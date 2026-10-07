@@ -44,6 +44,7 @@ it('persists independent keys, retains on partial edits, and excludes speech sec
   const other = await (await request(undefined, '/api/me/provider', 's2')).json();
   expect(other).toMatchObject({ tts_provider: 'instance', tts_base_url: '' });
   db.exec(readFileSync(new URL('../migrations/0026_business_actions.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0028_business_country.sql', import.meta.url), 'utf8'));
   const exported = await request(undefined, '/api/me/account/export'); expect(exported.status).toBe(200);
   const text = await exported.text();
   for (const hidden of ['speech-only','speech.example','text-private','stt-private']) expect(text).not.toContain(hidden);

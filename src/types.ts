@@ -62,6 +62,7 @@ export interface Business {
   name: string;
   description: string;
   address: string;
+  country?: string | null;
   phone: string;
   website: string;
   timezone: string;

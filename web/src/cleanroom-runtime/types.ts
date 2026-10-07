@@ -2,6 +2,7 @@
 export interface Account { id: string; email: string; created_at?: string }
 export interface Workspace {
   id: string; user_id: string; slug: string; name: string; description: string;
+  country?: string | null;
   address: string; phone: string; website: string; timezone: string;
   hours_json: string; services_json: string; faqs_json: string; closures_json: string;
   contact_email?: string; default_language?: string; shared_instructions?: string;

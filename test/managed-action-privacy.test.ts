@@ -18,7 +18,7 @@ beforeEach(() => {
 });
 afterEach(() => db.close());
 function migrate() {
-  for (const file of ['0026_business_actions.sql', '0027_commercial.sql']) db.exec(readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8'));
+  for (const file of ['0026_business_actions.sql', '0027_commercial.sql', '0028_business_country.sql']) db.exec(readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8'));
 }
 function seed(id: string, status = 'failed', text = summary, business = 'business') {
   db.database.prepare('INSERT INTO calls(id,business_id,status,intent,summary,environment) VALUES(?,?,?,?,?,?)').run(id,business,status,'booking',text,'live');

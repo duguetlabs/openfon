@@ -1,3 +1,4 @@
+import { countryName } from "./CountrySelect";
 import { useEffect, useRef, useState } from "react";
 import { request, type AssistantSummary } from "../cleanroom-runtime";
 import { Button, Field, Notice, Loading, Empty, errorText } from "./ui";
@@ -373,6 +374,8 @@ interface PhoneConfig {
     enabled?: boolean;
   }[];
   provisioningAvailable: boolean;
+  businessCountry: string | null;
+  offers: { country:string; type:string; areaCode:string|null; status:string; canSearch:boolean }[];
   unavailableReason?: string;
 }
 interface Quote {
@@ -400,7 +403,9 @@ export function PhoneNumbers({
   const [data, setData] = useState<PhoneConfig | null>(null);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [assistant, setAssistant] = useState("");
-  const [country, setCountry] = useState("AT");
+  const [country, setCountry] = useState("");
+  const [numberType, setNumberType] = useState("local");
+  const [areaCode, setAreaCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -412,6 +417,7 @@ export function PhoneNumbers({
       .then((d) => {
         if (active) {
           setData(d);
+          setCountry(current => current || (d.businessCountry && (d.offers ?? []).some(o=>o.country===d.businessCountry) ? d.businessCountry : ""));
           setError("");
         }
       })
@@ -422,8 +428,9 @@ export function PhoneNumbers({
       active = false;
     };
   }, [revision]);
+  const selectedOffer = data?.offers?.find(o=>o.country===country && o.type===numberType && (o.areaCode===null || o.areaCode===areaCode));
   async function search() {
-    if (pending.current) return;
+    if (pending.current || !selectedOffer?.canSearch) return;
     pending.current = true;
     setBusy(true);
     setError("");
@@ -431,7 +438,7 @@ export function PhoneNumbers({
       const result = await request<{ quotes: Quote[] }>(
         "/api/me/phone/quotes",
         "POST",
-        { country, type: "local" },
+        { country, type: numberType, ...(areaCode ? { areaCode } : {}) },
       );
       setQuotes(result.quotes);
       if (!result.quotes.length)
@@ -603,7 +610,7 @@ export function PhoneNumbers({
               <Notice>{data.unavailableReason}</Notice>
             )}
             <div className="of-filter-bar">
-              <Field label="Country">
+              <Field label="Number country">
                 <select
                   value={country}
                   disabled={busy}
@@ -612,11 +619,18 @@ export function PhoneNumbers({
                     setQuotes([]);
                   }}
                 >
-                  <option value="AT">Austria</option>
-                  <option value="DE">Germany</option>
-                  <option value="GB">United Kingdom</option>
-                  <option value="US">United States</option>
+                  <option value="">Choose a number country</option>
+                  {[...new Set((data.offers ?? []).map(o=>o.country))].map(code=><option key={code} value={code}>{countryName(code)}</option>)}
                 </select>
+              </Field>
+              <Field label="Number type">
+                <select value={numberType} disabled={busy} onChange={e=>{setNumberType(e.target.value);setQuotes([]);}}>
+                  {![...new Set((data.offers ?? []).filter(o => o.country === country).map(o => o.type))].includes(numberType) && <option value={numberType}>Choose a number type</option>}
+                  {[...new Set((data.offers ?? []).filter(o => o.country === country).map(o => o.type))].map(type => <option key={type} value={type}>{type === "local" ? "Local number" : "Toll-free number"}</option>)}
+                </select>
+              </Field>
+              <Field label="Area code" hint="If your review is for a specific area, enter that area code.">
+                <input inputMode="numeric" value={areaCode} disabled={busy} maxLength={6} pattern="[0-9]{1,6}" onChange={e=>{setAreaCode(e.target.value);setQuotes([]);}} />
               </Field>
               <Field label="Assistant who answers">
                 <select
@@ -635,15 +649,16 @@ export function PhoneNumbers({
                 </select>
               </Field>
               <Button
-                disabled={busy || !data.provisioningAvailable}
+                disabled={busy || !selectedOffer?.canSearch}
                 onClick={() => void search()}
               >
                 Find a number
               </Button>
             </div>
             <p className="of-help">
-              Publish an assistant first. Some countries require business
-              identity and address verification before activation.
+              Publish an assistant first. Phone requirements are reviewed for your business and chosen region before ordering.
+              {selectedOffer?.status === 'under-review' && ' Your phone requirements are under review.'}
+              {selectedOffer?.status === 'approved' && ' The review for this region is approved; current availability and subscription checks still apply.'}
             </p>
             {quotes.map((q) => (
               <article className="of-dashboard-assistant" key={q.id}>

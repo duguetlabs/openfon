@@ -33,6 +33,7 @@ beforeEach(async ({ task }) => {
   else applyMigrations(db);
   if (task.name !== 'refuses pre-claim live sessions after migration and bootstrap backfill') {
     db.exec(readFileSync(new URL('../migrations/0026_business_actions.sql', import.meta.url), 'utf8'));
+    db.exec(readFileSync(new URL('../migrations/0028_business_country.sql', import.meta.url), 'utf8'));
   }
   env = { ...fakeEnv(), DB: db as unknown as D1Database };
   oldHash = await hashPassword(password);
@@ -502,6 +503,7 @@ describe('account self service', () => {
     for (let i = 0; i < 5; i++) insert.run(`large-${i}`, 'biz-owner', 'large', 'note', 'x'.repeat(1024 * 1024));
     applyMigrations(db, 13, 13); applyMigrations(db, 22, 23); applyMigrations(db, 25, 25);
     db.exec(readFileSync(new URL('../migrations/0026_business_actions.sql', import.meta.url), 'utf8'));
+    db.exec(readFileSync(new URL('../migrations/0028_business_country.sql', import.meta.url), 'utf8'));
     db.database.function('json_object', { varargs: true }, () => { throw new Error('Rejected exports must not construct JSON'); });
     const response = await call('/api/me/account/export');
     expect(response.status).toBe(413);
