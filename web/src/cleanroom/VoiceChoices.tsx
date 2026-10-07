@@ -7,14 +7,17 @@ import {
   type Assistant,
 } from "../cleanroom-runtime";
 import { Field, Notice, errorText } from "./ui";
+export type VoiceCatalog = { status: "loading" | "ready" | "error" | "legacy"; ids: string[] };
 export function VoiceChoices({
   draft,
   onChange,
   onLegacyCatalog,
+  onCatalog,
 }: {
   draft: Assistant;
   onChange: (a: Assistant) => void;
   onLegacyCatalog: (legacy: boolean) => void;
+  onCatalog: (catalog: VoiceCatalog) => void;
 }) {
   const [legacy, setLegacy] = useState(false);
   const [voices, setVoices] = useState<{ id: string; label: string }[]>([]);
@@ -22,12 +25,16 @@ export function VoiceChoices({
   const [busy, setBusy] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [catalogRevision, setCatalogRevision] = useState(0);
   const audio = useRef<HTMLAudioElement | null>(null);
   const requestRef = useRef<AbortController | null>(null);
   const cache = useRef(new Map<string, string>());
   const revision = useRef(0);
   useEffect(() => {
     let active = true;
+    setLoaded(false);
+    setError("");
+    onCatalog({ status: "loading", ids: [] });
     request<{
       voices?: { id: string; label: string }[];
       defaultVoice?: string;
@@ -38,14 +45,19 @@ export function VoiceChoices({
         if (active) {
           const isLegacy = !Array.isArray(result.voices) &&
             Array.isArray(result.native) && Array.isArray(result.azure);
+          if (!isLegacy && !Array.isArray(result.voices)) throw Error("Voice choices could not load. Please retry.");
           setLegacy(isLegacy);
           onLegacyCatalog(isLegacy);
           setVoices(result.voices || []);
           setLoaded(true);
+          onCatalog({ status: isLegacy ? "legacy" : "ready", ids: (result.voices || []).map(v => v.id) });
         }
       })
       .catch((e) => {
-        if (active) setError(errorText(e));
+        if (active) {
+          setError(errorText(e));
+          onCatalog({ status: "error", ids: [] });
+        }
       });
     return () => {
       active = false;
@@ -54,7 +66,7 @@ export function VoiceChoices({
       for (const url of cache.current.values()) URL.revokeObjectURL(url);
       cache.current.clear();
     };
-  }, []);
+  }, [catalogRevision]);
   useEffect(() => {
     revision.current++;
     requestRef.current?.abort();
@@ -170,6 +182,7 @@ export function VoiceChoices({
       </div>
 
       {error && <Notice error>{error}</Notice>}
+      {!loaded && error && <button type="button" className="of-button line" onClick={() => setCatalogRevision(value => value + 1)}>Retry voice choices</button>}
     </div>
   );
 }

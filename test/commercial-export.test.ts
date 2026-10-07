@@ -48,6 +48,7 @@ beforeEach(async () => {
   db = new SqliteD1();
   applyMigrations(db);
   db.exec(readFileSync("migrations/0027_commercial.sql", "utf8"));
+  db.exec(readFileSync("migrations/0028_business_country.sql", "utf8"));
   db.exec(
     `INSERT INTO users(id,email,password_hash) VALUES('u','synthetic@example.invalid','hash');INSERT INTO businesses(id,user_id,slug,name) VALUES('b','u','b','B');INSERT INTO sessions VALUES('session','u','2999-01-01');INSERT INTO commercial_checkout_intents(id,business_id,provider_mode,plan_id,cadence,product_id,usage_product_id,meter_id,event_name,created_at) VALUES('intent','b','test','flex','monthly','product','product','meter','cents','2026-10-05');`,
   );

@@ -648,3 +648,125 @@ test('dashboard Add assistant opens the named creation flow and keeps a cancelle
   expect(assistants).toHaveLength(2);
   await expect(page.getByLabel('Assistant', { exact: true })).toHaveValue(made.id);
 });
+
+// Country/eligibility and catalog controls use the real local account/application;
+// only commercial availability and a historical catalog selection are projected.
+test('business country stays explicit and preserves a later draft during save refresh', async ({ page }) => {
+  await signup(page, 'country-draft');
+  const country = page.getByRole('combobox', { name: /^Business country/ });
+  await expect(country).toHaveValue('');
+  await country.selectOption('AT');
+  const { business } = await createWorkspace(page, 'Country workshop');
+  expect(business.country).toBe('AT');
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(country).toHaveValue('AT');
+  await country.selectOption('DE');
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  let refreshSeen = false;
+  await page.route('**/api/me/bootstrap', async route => {
+    const response = await route.fetch();
+    refreshSeen = true;
+    await held;
+    await route.fulfill({ response });
+  });
+  await page.getByRole('button', { name: 'Save business details', exact: true }).click();
+  await expect.poll(() => refreshSeen).toBe(true);
+  await country.selectOption('CH');
+  release();
+  await expect(page.getByText('Business details saved.')).toBeVisible();
+  await expect(country).toHaveValue('CH');
+  expect((await (await page.request.get('/api/me/bootstrap')).json()).workspace.country).toBe('DE');
+  await page.unroute('**/api/me/bootstrap');
+  await page.getByRole('button', { name: 'Save business details', exact: true }).click();
+  await expect.poll(async () => (await (await page.request.get('/api/me/bootstrap')).json()).workspace.country).toBe('CH');
+});
+
+test('phone market comes from server and area approval gates new searches', async ({ page }) => {
+  await signup(page, 'phone-country');
+  await createWorkspace(page, 'Phone country workshop');
+  await page.route('**/api/me/phone', route => route.fulfill({ json: {
+    provisioningAvailable: true, businessCountry: 'AT', numbers: [],
+    offers: [{ country: 'DE', type: 'local', areaCode: '30', status: 'approved', canSearch: true }],
+  } }));
+  const searches: unknown[] = [];
+  await page.route('**/api/me/phone/quotes', route => {
+    searches.push(route.request().postDataJSON());
+    return route.fulfill({ json: { quotes: [] } });
+  });
+  await page.goto('/settings/phone');
+  const country = page.getByRole('combobox', { name: 'Number country', exact: true });
+  await expect(country).toHaveValue('');
+  await expect(country.locator('option')).toHaveText(['Choose a number country', 'Germany']);
+  await country.selectOption('DE');
+  const find = page.getByRole('button', { name: 'Find a number', exact: true });
+  await expect(find).toBeDisabled();
+  await page.getByLabel(/^Area code/).fill('30');
+  await expect(find).toBeEnabled();
+  await find.click();
+  await expect.poll(() => searches).toEqual([{ country: 'DE', type: 'local', areaCode: '30' }]);
+  await page.getByLabel(/^Area code/).fill('40');
+  await expect(find).toBeDisabled();
+});
+
+test('unsupported saved voice requires an acknowledged save before testing or publishing', async ({ page }) => {
+  await signup(page, 'saved-voice');
+  const { assistant } = await createWorkspace(page, 'Saved voice workshop');
+  expect((await page.request.put(`/api/me/assistants/${assistant.id}`, { data: { name: 'Reception', persona: 'Warm and helpful', language: 'en' } })).ok()).toBe(true);
+  await page.route('**/api/me/voices', route => route.fulfill({ json: { voices: ['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'].map(id => ({ id, label: id })), defaultVoice: 'marin' } }));
+  let saved = false;
+  const writes: unknown[] = [];
+  await page.route(`**/api/me/assistants/${assistant.id}`, async route => {
+    if (route.request().method() === 'PUT') {
+      writes.push(route.request().postDataJSON());
+      const response = await route.fetch();
+      saved = response.ok();
+      await route.fulfill({ response });
+    } else {
+      const response = await route.fetch();
+      await route.fulfill({ json: { ...await response.json(), ...(saved ? {} : { voice: 'arbor' }) } });
+    }
+  });
+  await page.goto(`/assistants/${assistant.id}`);
+  const start = page.getByRole('button', { name: 'Start browser conversation', exact: true });
+  const publish = page.getByRole('button', { name: 'Enable web calls', exact: true });
+  await expect(page.getByText('Choose an available voice in ‘Who answers’ and save it before testing or publishing.', { exact: true }).first()).toBeVisible();
+  await expect(start).toBeDisabled();
+  await expect(publish).toBeDisabled();
+  await whoAnswers(page);
+  const voice = page.getByRole('combobox', { name: 'Voice', exact: true });
+  await expect(voice).toHaveValue('arbor');
+  expect(writes).toEqual([]);
+  await voice.selectOption('cedar');
+  await expect(start).toBeDisabled();
+  await expect(publish).toBeDisabled();
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(start).toBeEnabled();
+  await expect(publish).toBeEnabled();
+  expect(writes).toEqual([{ voice: 'cedar' }]);
+});
+
+test('catalog retry preserves edits and an unavailable catalog never prevents pausing', async ({ page }) => {
+  await signup(page, 'voice-retry');
+  const { assistant } = await createWorkspace(page, 'Voice retry workshop');
+  expect((await page.request.put(`/api/me/assistants/${assistant.id}`, { data: { name: 'Reception', persona: 'Warm and helpful', language: 'en' } })).ok()).toBe(true);
+  expect((await page.request.post(`/api/me/assistants/${assistant.id}/activate`)).ok()).toBe(true);
+  let failures = true;
+  await page.route('**/api/me/voices', async route => {
+    if (failures) return route.fulfill({ status: 503, json: { error: 'Voice choices unavailable. Retry shortly.' } });
+    await route.continue();
+  });
+  await page.goto(`/assistants/${assistant.id}`);
+  await whoAnswers(page);
+  await expect(page.getByRole('button', { name: 'Retry voice choices', exact: true })).toBeVisible();
+  const pause = page.getByRole('button', { name: 'Pause web calls', exact: true });
+  await expect(pause).toBeEnabled();
+  await pause.click();
+  await expect(page.getByRole('button', { name: 'Enable web calls', exact: true })).toBeDisabled();
+  await page.getByLabel('Receptionist name', { exact: true }).fill('Retained draft');
+  failures = false;
+  await page.getByRole('button', { name: 'Retry voice choices', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Voice', exact: true })).toBeEnabled();
+  await expect(page.getByLabel('Receptionist name', { exact: true })).toHaveValue('Retained draft');
+  await expect(page.getByRole('button', { name: 'Start browser conversation', exact: true })).toBeDisabled();
+});

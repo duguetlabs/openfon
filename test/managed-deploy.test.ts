@@ -65,6 +65,8 @@ describe("managed production deployment contract", () => {
               results: [
                 { name: "0026_business_actions.sql" },
                 { name: "0027_commercial.sql" },
+                { name: "0028_business_country.sql" },
+                { name: "0029_phone_eligibility.sql" },
               ],
             },
           ],
@@ -92,4 +94,15 @@ it('canonical candidate selects Mini while only the explicit supported rollback 
  for(const config of [candidate,stage])for(const flag of ['COMMERCIAL_CHARGING_ENABLED','TELNYX_PURCHASES_ENABLED','TELNYX_ENABLED','ASTERISK_ENABLED'])expect(config.vars[flag]).toBe('false');
  candidate.vars.AZURE_OPENAI_LIVE_DEPLOYMENT='gpt-live-1';expect(()=>validateManagedDeployment(candidate,baseline())).not.toThrow();
  candidate.vars.AZURE_OPENAI_LIVE_DEPLOYMENT='custom';expect(()=>validateManagedDeployment(candidate,baseline())).toThrow();
+});
+
+it.each(['0028_business_country.sql','0029_phone_eligibility.sql'])('blocks upload when %s has not been applied',async missing=>{
+ const lookup=vi.fn(async()=>Response.json({success:true,result:[{results:['0026_business_actions.sql','0027_commercial.sql','0028_business_country.sql','0029_phone_eligibility.sql'].filter(name=>name!==missing).map(name=>({name}))}]}));
+ await expect(verifyRemotePrerequisites(parsed(),{CLOUDFLARE_ACCOUNT_ID:'a'.repeat(32),CLOUDFLARE_API_TOKEN:'synthetic'},lookup)).rejects.toThrow('never applies migrations');
+ expect(lookup).toHaveBeenCalledTimes(1);
+});
+
+it('preserves the selected private-test recording flag on both deployment configurations',()=>{
+ expect(parsed().vars.TEST_CALL_DEBUG).toBe('true');
+ expect(unstable_readConfig({config:'wrangler.staging.json'},{hideWarnings:true}).vars.TEST_CALL_DEBUG).toBe('true');
 });

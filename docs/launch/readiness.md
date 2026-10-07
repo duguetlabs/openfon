@@ -1,8 +1,15 @@
 # Release checklist
 
-## Current managed release — 2026-10-07
+## Current recording acceptance — 2026-10-07
 
-OpenFon Web is deployed at **https://openfon.ai** for owner testing with direct Azure Mini voice routing. Production is source `02e867cc76d8d1d9744877fca96e679c9a3f8933`, Worker `6557299d-198a-420b-a38b-356d682a6ee3`, with the same reviewed immutable Node image as staging. [Production preflight](production-preflight.md#current-production-deployment--2026-10-07) records exact identities, migrations, preserved state bindings, runtime checks and rollback limits.
+Production and staging run application `6499e349` and Node image `932c493f` with private-test recording enabled. Exact versions, reviews, CI and retained failures are in [production preflight](production-preflight.md). The one actual synthetic-input staging call produced separate caller/generated-output PCM, transcript, summary and callback action; no physical audibility or all-voice claim follows. The original after-deletion 500 and the first immediate repaired-control 500 remain failures. Later unchanged-source staging and production no-inference controls each passed four checks. No second paid recording call was made.
+
+Country/phone-review and unsupported saved-voice UI changes are currently source/local-validation work, not live deployment. Billing invoice lifecycle, regulatory review, carrier acceptance and device/noise acceptance remain open. No current result authorizes checkout, charging or phone purchases.
+
+
+## Historical Mini rollout before recording — 2026-10-07
+
+OpenFon Web is deployed at **https://openfon.ai** for owner testing with direct Azure Mini voice routing. At this historical checkpoint production was source `02e867cc76d8d1d9744877fca96e679c9a3f8933`, Worker `6557299d-198a-420b-a38b-356d682a6ee3`, with the same reviewed immutable Node image as staging. [Production preflight](production-preflight.md) records exact identities, migrations, preserved state bindings, runtime checks and rollback limits.
 
 PRs 48–52 are merged with required reviews and CI. Latest application validation remains 2,334 Worker tests/103 files, 143 Node tests, types/builds and migration-0027 rehearsal. Fresh production backup, exact additive 0026/0027 import and independent export preserved every old column/row across 20 tables apart from the two intended migration records; integrity and foreign-key checks passed. Canonical deployment, actual running image/configuration, persistent usage ownership and public metadata passed. Native in-app browser inspection verified the public landing/sign-in pages, separately from authenticated or physical-audio testing.
 
@@ -15,7 +22,7 @@ Remaining acceptance and product work:
 - Two earlier greeting-stage failures remain unexplained; successful later calls do not establish a reliability fix. One German staging acknowledgement was English. Physical microphone/playback, smart-glasses restaurant noise, subjective voice identity, repeated device calls, all voices and anonymous public-link calling are not established by the synthetic-PCM owner tests.
 - Dodo invoice aggregation and subscription lifecycle acceptance remain incomplete. Billing verification, checkout and charging stay disabled. Measured provider usage does not prove accurate recurring customer invoices; see [billing and costs](../commercial/billing-and-costs.md).
 - The business-country/server-derived phone eligibility workflow and actual carrier acceptance remain unfinished. Telnyx/Asterisk ingress and phone purchases remain disabled; no number purchase or PSTN spending occurred.
-- LiveKit debug audio recording is not implemented; transcripts persist. No additional paid tests or deployment occur as part of this documentation closeout.
+- Private-test LiveKit debug recording is now implemented and enabled, with seven-day private retention and authenticated download/deletion. See the current recording acceptance above. Physical capture/playback and noise reproduction remain separate acceptance.
 
 The remainder records historical evidence. Older Kataleptic and voice defaults describe those dated releases, not the current managed staging release's routing.
 

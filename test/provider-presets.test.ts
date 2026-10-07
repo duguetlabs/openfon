@@ -54,6 +54,7 @@ it('persists separate capabilities and never returns credentials or crosses work
   expect(other).toMatchObject({ usesInstanceDefault: true, workspaceApiKeyConfigured: false, realtime_api_key_configured: true });
   expect((await request('/api/me/provider', {}, '')).status).toBe(401);
   db.exec(readFileSync(new URL('../migrations/0026_business_actions.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0028_business_country.sql', import.meta.url), 'utf8'));
   const exportResponse = await request('/api/me/account/export');
   expect(exportResponse.status).toBe(200);
   const exported = await exportResponse.text();

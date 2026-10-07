@@ -15,6 +15,8 @@ beforeEach(() => {
   db = new SqliteD1();
   applyMigrations(db);
   db.exec(readFileSync("migrations/0027_commercial.sql", "utf8"));
+  db.exec(readFileSync("migrations/0028_business_country.sql", "utf8"));
+  db.exec(readFileSync("migrations/0029_phone_eligibility.sql", "utf8"));
   db.exec(
     "INSERT INTO users(id,email,password_hash) VALUES('u','u@example.invalid','x'); INSERT INTO businesses(id,user_id,slug,name) VALUES('b','u','b','B'); INSERT INTO assistants(id,business_id,public_slug,name) VALUES('asst','b','asst','A'); INSERT INTO commercial_phone_quotes(id,business_id,phone_number,country,number_type,currency,setup_minor,monthly_minor,requirements_json,expires_at) VALUES('quote','b','+431234567','AT','local','USD',100,100,'[]','2028-01-01');",
   );
@@ -260,6 +262,7 @@ it("recovers and reassigns a rental after its historical assistant was deleted",
   ).toEqual({ assistant_id: "replacement", enabled: 0 });
 });
 function paidPhoneAccount() {
+  db.exec("UPDATE businesses SET country='AT',address='Reviewed address' WHERE id='b'; INSERT INTO commercial_phone_approvals(id,business_id,country,number_type,status,business_name,business_address,business_country,reviewed_at,expires_at) SELECT 'approval',id,'AT','local','approved',name,address,country,'2026-01-01','2999-01-01' FROM businesses WHERE id='b'; UPDATE commercial_phone_quotes SET approval_id='approval',approval_revision=1 WHERE id='quote';");
   db.exec(
     "INSERT INTO commercial_accounts(business_id,provider_mode,customer_id,status,activated_at,paid_through) VALUES('b','test','customer','active','2026-01-01','2999-01-01')",
   );

@@ -63,8 +63,24 @@ independent reasoning usage remains separate. Missing counters are unknown, not
 zero. Separate transcription observations retain provider item/content identity,
 the accepted transcription model and reported tokens or precise duration. They
 are independent of conversation responses and never affect customer call minutes.
-Actual Azure meter/rate and invoice reconciliation remain unverified. These provider observations do not change retail call-duration
+Public model tariffs are verified below; exact deployed SKU mapping and invoice reconciliation remain unverified. These provider observations do not change retail call-duration
 aggregation or establish invoice costs. See [the adapter contract](../managed-mini-voice.md).
+
+### Verified public Azure tariffs
+
+The Azure Retail Prices API returned these **USD per million tokens**, Sweden Central / Global rates. These are public model rates, not an account invoice or a proven deployment SKU mapping. Do not substitute Data Zone, regional, batch or priority prices.
+
+| Model and component | Input | Cached input | Output |
+| --- | ---: | ---: | ---: |
+| gpt-realtime-2.1-mini audio | $10 | $0.30 | $20 |
+| gpt-realtime-2.1-mini text | $0.60 | $0.06 | $2.40 |
+| gpt-5.4-mini text | $0.75 | $0.075 | $4.50 |
+| gpt-4o-mini-transcribe audio | $3 | Not listed | Not applicable |
+| gpt-4o-mini-transcribe text | $1.25 | Not listed | $5 |
+
+Realtime rates are effective 2026-07-01, reasoning 2026-03-01 and transcription 2025-04-01. The transcription API records use 1K-token units; the table converts them to 1M. Source: [Azure Retail Prices API](https://prices.azure.com/api/retail/prices), filtered by `currencyCode=USD`, `armRegionName=swedencentral`, exact model meter and Global SKU.
+
+Compute cost separately for each measured input, cached-input and output modality, subtracting cached tokens from total input before adding the cached charge. Missing counters remain unknown. Azure has no fixed per-minute cost for these token-priced models. Conversation duration and customer retail billing must remain independent of provider token accounting. Resource SKU/region/version confirmation and actual invoice reconciliation are still required before claiming margin.
 
 Telnyx's published Voice API fee is $0.002/min **plus** applicable inbound/outbound SIP fees. Its current billing article describes 60/60 increments and explicitly says six-second increments are no longer offered. Country/rate-deck terms can differ. Retail OpenFon rounding is independent of carrier rounding. Number setup/rental prices require actual `cost_information` quotes and regulatory review.
 
@@ -91,7 +107,7 @@ There is deliberately no customer unlock or automatic expiry. Before operator re
 
 The guarded release can expose billing information while keeping new checkout and automatic usage export disabled. The current acceptance state does **not** authorize setting `COMMERCIAL_BILLING_VERIFIED=true`.
 
-Apply the reviewed `0027_commercial.sql` before deploying code that uses its tables, including paid-coverage intervals, payment writers and usage outboxes. It has not yet been remotely applied at this checkpoint. If an earlier version has already been applied in another environment, create an additive migration; editing an applied migration will not update that database. Retain a protected database backup and the exact Worker version/schema combination in the release preflight. Do not reset existing account, call or provider data.
+Apply the reviewed `0027_commercial.sql` before deploying code that uses its tables, including paid-coverage intervals, payment writers and usage outboxes. It is deployed in both managed environments through 0027; see the current production preflight. Migrations 0028/0029 for business country and reviewed phone eligibility are separate and still pending at this checkpoint. If an earlier version has already been applied in another environment, create an additive migration; editing an applied migration will not update that database. Retain a protected database backup and the exact Worker version/schema combination in the release preflight. Do not reset existing account, call or provider data.
 
 | Setting | Required value or role |
 |---|---|

@@ -1,3 +1,4 @@
+import { validBusinessCountry } from './countries';
 import { HTTPException } from 'hono/http-exception';
 
 // These routes persist scalar workspace fields. TypeScript request generics
@@ -26,6 +27,7 @@ export async function readWorkspaceBody<T>(request: { text(): Promise<string> },
   }
   if (!body || typeof body !== 'object' || Array.isArray(body)) return invalid('Request body must be a JSON object.');
   for (const [key, value] of Object.entries(body)) {
+    if (key === 'country' && !validBusinessCountry(value)) return invalid('Choose a valid business country or leave it unset.');
     if (TEXT_FIELDS.has(key) && typeof value !== 'string') return invalid(`${key} must be text.`);
     if (key === 'apiKey' && value !== null && typeof value !== 'string') return invalid('API key must be a string or null.');
     if (key === 'clearApiKey' && typeof value !== 'boolean') return invalid('clearApiKey must be a boolean.');

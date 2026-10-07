@@ -73,6 +73,6 @@
     "ASTERISK_ENABLED": "false",
     "TELNYX_PURCHASES_ENABLED": "false",
     "COMMERCIAL_CHARGING_ENABLED": "false",
-    "TEST_CALL_DEBUG": "false"
+    "TEST_CALL_DEBUG": "true"
   }
 }
