@@ -63,12 +63,12 @@ independent reasoning usage remains separate. Missing counters are unknown, not
 zero. Separate transcription observations retain provider item/content identity,
 the accepted transcription model and reported tokens or precise duration. They
 are independent of conversation responses and never affect customer call minutes.
-Public model tariffs are verified below; exact deployed SKU mapping and invoice reconciliation remain unverified. These provider observations do not change retail call-duration
+Public model tariffs and their deployed model/region/SKU mapping are verified below; actual consumed-meter and invoice reconciliation remain unverified. These provider observations do not change retail call-duration
 aggregation or establish invoice costs. See [the adapter contract](../managed-mini-voice.md).
 
 ### Verified public Azure tariffs
 
-The Azure Retail Prices API returned these **USD per million tokens**, Sweden Central / Global rates. These are public model rates, not an account invoice or a proven deployment SKU mapping. Do not substitute Data Zone, regional, batch or priority prices.
+The Azure Retail Prices API returned these **USD per million tokens**, Sweden Central / Global rates. The configured deployments match these model/region/SKU identities, as verified below; these rates are not an account invoice. Do not substitute Data Zone, regional, batch or priority prices.
 
 | Model and component | Input | Cached input | Output |
 | --- | ---: | ---: | ---: |
@@ -80,7 +80,17 @@ The Azure Retail Prices API returned these **USD per million tokens**, Sweden Ce
 
 Realtime rates are effective 2026-07-01, reasoning 2026-03-01 and transcription 2025-04-01. The transcription API records use 1K-token units; the table converts them to 1M. Source: [Azure Retail Prices API](https://prices.azure.com/api/retail/prices), filtered by `currencyCode=USD`, `armRegionName=swedencentral`, exact model meter and Global SKU.
 
-Compute cost separately for each measured input, cached-input and output modality, subtracting cached tokens from total input before adding the cached charge. Missing counters remain unknown. Azure has no fixed per-minute cost for these token-priced models. Conversation duration and customer retail billing must remain independent of provider token accounting. Resource SKU/region/version confirmation and actual invoice reconciliation are still required before claiming margin.
+Two authorized read-only Azure metadata requests on 2026-10-07 verified that the configured inference account is an `AIServices` resource in `swedencentral` and that all three deployments use `GlobalStandard` with provisioning state `Succeeded`:
+
+| Deployment/model | Resolved model version |
+| --- | --- |
+| gpt-realtime-2.1-mini | 2026-07-07 |
+| gpt-5.4-mini | 2026-03-17 |
+| gpt-4o-mini-transcribe | 2025-12-15 |
+
+This matches the public **model-level** Global tariffs to the deployed service. Pricing meters do not encode these model versions. It does not establish the account's consumed meter, invoice, discounts, credits, tax or marginal cost; provisioning state also does not substitute for actual audio acceptance.
+
+Compute cost separately for each measured input, cached-input and output modality, subtracting cached tokens from total input before adding the cached charge. Missing counters remain unknown. Azure has no fixed per-minute cost for these token-priced models. Conversation duration and customer retail billing must remain independent of provider token accounting. Actual consumed-meter and invoice reconciliation, including discounts, credits and tax, are still required before claiming margin.
 
 Telnyx's published Voice API fee is $0.002/min **plus** applicable inbound/outbound SIP fees. Its current billing article describes 60/60 increments and explicitly says six-second increments are no longer offered. Country/rate-deck terms can differ. Retail OpenFon rounding is independent of carrier rounding. Number setup/rental prices require actual `cost_information` quotes and regulatory review.
 
@@ -107,7 +117,7 @@ There is deliberately no customer unlock or automatic expiry. Before operator re
 
 The guarded release can expose billing information while keeping new checkout and automatic usage export disabled. The current acceptance state does **not** authorize setting `COMMERCIAL_BILLING_VERIFIED=true`.
 
-Apply the reviewed `0027_commercial.sql` before deploying code that uses its tables, including paid-coverage intervals, payment writers and usage outboxes. It is deployed in both managed environments through 0027; see the current production preflight. Migrations 0028/0029 for business country and reviewed phone eligibility are separate and still pending at this checkpoint. If an earlier version has already been applied in another environment, create an additive migration; editing an applied migration will not update that database. Retain a protected database backup and the exact Worker version/schema combination in the release preflight. Do not reset existing account, call or provider data.
+Apply the reviewed `0027_commercial.sql` before deploying code that uses its tables, including paid-coverage intervals, payment writers and usage outboxes. It is deployed in both managed environments through 0027; see the current production preflight. Migrations 0028/0029 for business country and reviewed phone eligibility are also deployed in both environments, with preservation checks recorded in the production preflight. If an earlier version has already been applied in another environment, create an additive migration; editing an applied migration will not update that database. Retain a protected database backup and the exact Worker version/schema combination in the release preflight. Do not reset existing account, call or provider data.
 
 | Setting | Required value or role |
 |---|---|
