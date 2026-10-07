@@ -1,8 +1,48 @@
 # Production preflight
 
-## Current production deployment — private recording, 2026-10-07
+## Current production deployment — country and saved-voice controls, 2026-10-07
 
-OpenFon Web is deployed at **https://openfon.ai** for owner testing. PRs 54 and 55 added private-test recording and repaired deleted-recording availability responses. Business-country/phone-review changes and saved-voice guidance in this branch are not yet deployed; migrations 0028/0029 remain pending.
+OpenFon Web is deployed at **https://openfon.ai** with explicit business country, reviewed phone eligibility and guidance for unavailable saved voices. PR56 is merged; production and staging run its exact reviewed application tree. This documentation closeout does not redeploy the application or repeat audio/provider tests.
+
+| Item | Production | Staging |
+| --- | --- | --- |
+| Application source | `d15d19d9c5279696e1f8b75b43a245ed6411a729` | Same |
+| Worker version, 100% | `e6269da7-5af7-4677-b2fe-55f117752152` | `c6a26d5b-7a29-40e5-a278-a11b1d3e54de` |
+| Node image | `sha256:932c493f119592eb4b8152f521ccfd23daf3971ff33c05eb7dbecc91b97670ec` | Same, unchanged |
+| Node source | `22d2519c1686155f3abe1edcfd32b5df5c9c18de` | Same; voice-agent tree unchanged through d15d19d |
+| D1 migrations | 0001–0029, preserving historical 0024 | 0001–0023, 0025–0029; never replay 0024 |
+| Private-test recording | Enabled; owned test/web scope and seven-day retention | Same |
+| Billing verification, checkout, charging, carrier ingress, phone purchases | Disabled | Disabled |
+
+The reviewed `ef6de45` and squash merge `d15d19d` have identical trees. Genuine PR-Agent security/major clearance and local Codex review passed; exact CI `37552138416` passed all five jobs with deploy skipped. Full local validation passed 2,381 Worker tests/106 files, both typechecks and build. Five selected browser cases passed: the original run retained three passes and two exact-label fixture failures, with only the affected cases rerun after selector correction. A real review finding about nonexistent carrier response metadata was fixed using the documented exact-match response and re-reviewed before merge. No saved voice was rewritten.
+
+### Data preservation and rollout
+
+Both environments used fresh restricted backups, exact local rehearsals and one explicit 0028/0029 import followed by independent exports. All 45 old table projections were preserved apart from the two intended ledger additions. Existing business countries and quote approval pins remained null, both revision triggers were present, integrity was `ok` and foreign-key violations were zero. No historical 0024 data migration was replayed.
+
+| Evidence SHA256 | Value |
+| --- | --- |
+| Staging backup | `1e846589ad27ec0db85b100c70216970ea0babdd20a073a743003913eac3a7e4` |
+| Production backup | `0006acef8431be541e4b1148ac66ccdbdcf6dae6048a5483b9c8900fc04dee6a` |
+| Exact shared 0028/0029 import | `3726080b3bf6cce8defade0509caabb1da803e954bccdd520944767a749553b8` |
+| Independent staging after-export | `889dfd36dc6b6bc1a22cef10a05d15c2ab44cf3b213e3de03b7f10862632def3` |
+| Independent production after-export | `00af4fda0da2ff25e3b0d171936610efb234d4190a1f24da7d0a06fb81654fc5` |
+
+The initial intended staging export used the unmatched positional name `openfon`; Wrangler resolved the production name despite the staging config. The absent-0024 guard caught this before any mutation. That restricted read-only export and failed attempt remain retained. Corrected commands used binding `DB` after checking the exact configuration/account/database UUID. Production later received its own fresh correctly targeted backup. The local workerd rehearsal's unsupported integrity PRAGMA also remains an original failure; a separate read-only SQLite integrity check passed without repeating its migrations.
+
+After staged acceptance, the canonical production deployment command preserved the tracked recording flag. Node containers, runtime secrets and persistent usage/outbox/cursors were unchanged. Both environments ended healthy with zero active calls/rooms/restarts. Each passed 12 bounded account checks for country changes, invalid country, missing business, closed phone setup, ten compatible voices, customer projection and deletion of the synthetic account. These are no-inference checks; missing-business 404 is not cross-account-isolation evidence.
+
+Landing, sign-in, health, robots and sitemap returned 200 and served HTML matched the exact built index/canonical URL. Native in-app browser inspection of exact staging confirmed that the existing legacy voice was retained, choose-and-save guidance was visible, Start/inactive publication were blocked, unknown business country remained unset and phone setup showed prerequisites without invented markets. No fields, previews or calls were changed in that inspection.
+
+### Remaining limits and rollback
+
+Dodo invoice aggregation/subscription lifecycle acceptance, actual carrier regulatory approval/purchase/rental policy and physical microphone/speaker/noise/all-voice acceptance remain open. Phone eligibility code does not establish an approved business or working carrier service. Public Azure tariffs now match deployed model/region/Global SKU identities; actual consumed-meter/invoice reconciliation remains unverified. See [billing and costs](../commercial/billing-and-costs.md), [phone eligibility](../commercial/phone-eligibility.md) and [readiness](readiness.md).
+
+Prior compatible Worker rollback targets are production `d005e405-6037-4a78-869e-b60b8913aa55` and staging `0531d3b8-d8de-4962-88a1-bb2bda28e4fe`, both source `6499e349`. Node remains the same immutable image. Retain additive 0028/0029 data and current usage/outbox/cursors; do not restore an older database or overwrite live usage as a rollback. Earlier records below are historical, with their original failures and acceptance limits preserved.
+
+## Historical private recording rollout — 2026-10-07
+
+OpenFon Web is deployed at **https://openfon.ai** for owner testing. PRs 54 and 55 added private-test recording and repaired deleted-recording availability responses. At this recording checkpoint, business-country/phone-review changes, saved-voice guidance and migrations 0028/0029 were still pending.
 
 | Item | Production | Staging |
 | --- | --- | --- |

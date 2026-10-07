@@ -1,10 +1,25 @@
 # Release checklist
 
-## Current recording acceptance — 2026-10-07
+## Current managed release — 2026-10-07
+
+Production and staging run `d15d19d`, with business country, reviewed phone eligibility and saved-voice compatibility guidance deployed. Private-test recording remains enabled. Exact Worker/Node identities, review and CI gates, migration preservation, original failures and rollback targets are in [production preflight](production-preflight.md).
+
+The full application suite passed 2,381 tests plus types/build. Five bounded browser cases and 12 no-inference account checks in each environment passed; both synthetic accounts were deleted. Exact staging native inspection confirmed unknown country and the incompatible saved voice remain unchanged while the UI explains the required next action. These checks add no physical-audio, carrier or invoice acceptance.
+
+Remaining release gates:
+
+- Dodo invoice aggregation and subscription lifecycle acceptance, including the outstanding support-dependent verification. Billing verification, checkout and charging remain disabled.
+- Actual business regulatory review, carrier number purchase/rental/termination and PSTN acceptance. Phone eligibility is implemented; no business was marked approved or number purchased by this rollout.
+- Physical microphone/playback, restaurant background noise on smart glasses, repeated device calls, subjective voice identity and all-voice/public-link acceptance. Earlier unexplained greeting-stage failures and mixed-language acknowledgements remain qualified; later successes do not prove them repaired.
+- Actual consumed-meter and invoice reconciliation. Public Azure prices are mapped to the deployed model/region/Global SKU; token tariffs do not establish a fixed per-minute inference cost.
+
+The following sections retain historical evidence and limits; their earlier deployment and pending-recording statements are not the current status.
+
+## Historical recording acceptance — 2026-10-07
 
 Production and staging run application `6499e349` and Node image `932c493f` with private-test recording enabled. Exact versions, reviews, CI and retained failures are in [production preflight](production-preflight.md). The one actual synthetic-input staging call produced separate caller/generated-output PCM, transcript, summary and callback action; no physical audibility or all-voice claim follows. The original after-deletion 500 and the first immediate repaired-control 500 remain failures. Later unchanged-source staging and production no-inference controls each passed four checks. No second paid recording call was made.
 
-Country/phone-review and unsupported saved-voice UI changes are currently source/local-validation work, not live deployment. Billing invoice lifecycle, regulatory review, carrier acceptance and device/noise acceptance remain open. No current result authorizes checkout, charging or phone purchases.
+At that recording checkpoint, country/phone-review and unsupported saved-voice UI changes had not yet been deployed. Billing invoice lifecycle, regulatory review, carrier acceptance and device/noise acceptance remain open. No current result authorizes checkout, charging or phone purchases.
 
 
 ## Historical Mini rollout before recording — 2026-10-07
@@ -294,7 +309,7 @@ This does not promise zero provider failures or replace physical-device tests.
 The initial hotspot DNS cache and precise launch checks are recorded in
 [production preflight](production-preflight.md).
 
-## LiveKit production release (2026-10-03)
+## Historical LiveKit production release (2026-10-03)
 
 PR #42 is merged and deployed to staging and production. It preserves the released layout, brand assets, authentication and business interfaces. Cloudflare retains application/state authority; separate Azure LiveKit and Node services carry browser audio to Kataleptic. See [current versions and rollback](production-preflight.md#current-livekit-deployment--2026-10-03), [worker setup](../../voice-agent/README.md) and [Azure operations](../../voice-agent/deploy/README.md).
 
@@ -317,8 +332,8 @@ PR #42 is merged and deployed to staging and production. It preserves the releas
 - iOS main `c5519d6` is merged with 31 tests, simulator build, exact CI and reviews passed. Signed archive, upload, TestFlight processing/install and device audio remain blocked on Apple authentication while the Mac is locked.
 - Carrier acceptance remains separate; Telnyx and Asterisk ingress stay disabled. Anonymous public-link calling and arbitrary custom providers are not covered by the owner test-call probes.
 
-Debug audio recording is not implemented for the new LiveKit transport; transcript persistence remains. The historical composed local 91-partial/seven-final call used a different credential source from the personal product credential used for these Azure tests. Earlier greeting-silence and farewell failures remain retained with their original outcomes. No synthetic check establishes all-model, all-voice, physical microphone or PSTN acceptance.
+At this historical checkpoint, debug audio recording was not implemented for the new LiveKit transport; transcript persistence remained. The historical composed local 91-partial/seven-final call used a different credential source from the personal product credential used for these Azure tests. Earlier greeting-silence and farewell failures remain retained with their original outcomes. No synthetic check establishes all-model, all-voice, physical microphone or PSTN acceptance.
 
 ### Private LiveKit recording follow-up
 
-LiveKit debug recording source adds owned test/web-only capture using existing seven-day storage and deletion. Production recording remains disabled pending exact staging rollout and bounded actual audio capture/download/deletion validation. Synthetic capture/queue/authorization checks are not physical audio acceptance, and the extraction CLI does not establish current Mini live replay compatibility.
+LiveKit debug recording source adds owned test/web-only capture using existing seven-day storage and deletion. At this source-preparation checkpoint, production recording was disabled pending exact staging rollout and bounded actual audio capture/download/deletion validation. Synthetic capture/queue/authorization checks are not physical audio acceptance, and the extraction CLI does not establish current Mini live replay compatibility.
